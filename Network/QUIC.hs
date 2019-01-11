@@ -153,3 +153,13 @@ decodePacketNumber largestPN truncatedPN pnNbits
     pnMask = pnWin - 1
     candidatePN = (expectedPN .&. complement pnMask)
               .|. fromIntegral truncatedPN
+
+-- c3ff000012508394c8f03e515708 00449f 00000002
+-- c3               -- flags
+-- ff000012         -- version
+-- 50               -- dcil & scil
+-- 8394c8f03e515708 -- dest cid
+-- 00               -- token length
+-- 449f             -- length: decodeInt (dec "449f") = 1183
+-- 00000002         -- encoded packet number
+                    -- decodePacketNumber 0 2 32 = 2 ???
