@@ -135,7 +135,12 @@ decodeCryptoFrame rbuf = do
     cdata <- extractByteString rbuf len
     return $ Crypto off cdata
 
-decodePacketNumber :: Int64 -> Int -> Int -> Int64
+-- https://quicwg.org/base-drafts/draft-ietf-quic-transport.html#sample-packet-number-decoding
+
+type PacketNumber = Int64
+type EncodedPacketNumber = Int
+
+decodePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
 decodePacketNumber largestPN truncatedPN pnNbits
   | candidatePN <= expectedPN - pnHwin = candidatePN + pnWin
   | candidatePN >  expectedPN + pnHwin
