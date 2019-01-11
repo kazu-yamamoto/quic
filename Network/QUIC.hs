@@ -4,6 +4,9 @@
 
 module Network.QUIC where
 
+import Crypto.Cipher.AES
+import Crypto.Cipher.Types
+import Crypto.Error (throwCryptoError)
 import Data.Bits
 import qualified Data.ByteString as B
 import Data.ByteString.Base16
@@ -154,7 +157,11 @@ decodePacketNumber largestPN truncatedPN pnNbits
     candidatePN = (expectedPN .&. complement pnMask)
               .|. fromIntegral truncatedPN
 
--- c3ff000012508394c8f03e515708 00449f 00000002
+
+clientPacketHeader :: ByteString
+clientPacketHeader = dec "c3ff000012508394c8f03e51570800449f00000002"
+
+-- c3ff000012508394c8f03e51570800449f00000002
 -- c3               -- flags
 -- ff000012         -- version
 -- 50               -- dcil & scil
@@ -163,3 +170,36 @@ decodePacketNumber largestPN truncatedPN pnNbits
 -- 449f             -- length: decodeInt (dec "449f") = 1183
 -- 00000002         -- encoded packet number
                     -- decodePacketNumber 0 2 32 = 2 ???
+
+encryptPayload :: ByteString -> ByteString -> PacketNumber -> ByteString -> ByteString -> ByteString
+encryptPayload key iv pn frames header = aes128gcmEncrypt key nonce plain ad
+  where
+    ivLen = B.length iv
+    pnList = loop pn []
+    paddedPnList = replicate (ivLen - length pnList) 0 ++ pnList
+    nonce = B.pack $ zipWith xor (B.unpack iv) paddedPnList
+    plain = frames
+    ad = header
+    loop 0  !ws = ws
+    loop !n !ws = loop (n `shiftR` 8) (fromIntegral n : ws)
+
+aes128gcmEncrypt :: ByteString -> ByteString -> ByteString -> ByteString -> ByteString
+aes128gcmEncrypt key nonce plain ad = snd $ aeadSimpleEncrypt aeadIni ad plain 16
+  where
+    ctx = throwCryptoError (cipherInit key) :: AES128
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+
+aes128gcmDecrypt :: ByteString -> ByteString -> ByteString -> ByteString -> ByteString
+aes128gcmDecrypt key nonce cipher ad = simpleDecrypt aeadIni ad cipher 16
+  where
+    ctx = throwCryptoError $ cipherInit key :: AES128
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+
+simpleDecrypt :: AEAD cipher -> ByteString -> ByteString -> Int -> ByteString
+simpleDecrypt aeadIni header input taglen = output
+  where
+    aead                 = aeadAppendHeader aeadIni header
+    (output, _aeadFinal) = aeadDecrypt aead input
+    _tag                 = aeadFinalize _aeadFinal taglen
+
+-- encode $ encryptPayload ckey civ 2 (clientCRYPTOframe `B.append` B.pack (replicate 963 0)) clientPacketHeader

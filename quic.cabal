@@ -17,8 +17,9 @@ library
   -- other-modules:
   -- other-extensions:
   build-depends:       base >= 4.7 && < 5
-                     , bytestring
                      , base16-bytestring
+                     , bytestring
+                     , cryptonite
                      , network-byte-order
                      , tls
   -- hs-source-dirs:
