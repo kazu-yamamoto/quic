@@ -20,6 +20,7 @@ library
                      , base16-bytestring
                      , bytestring
                      , cryptonite
+                     , memory
                      , network-byte-order
                      , tls
   -- hs-source-dirs:

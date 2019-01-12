@@ -8,6 +8,7 @@ import Crypto.Cipher.AES
 import Crypto.Cipher.Types
 import Crypto.Error (throwCryptoError)
 import Data.Bits
+import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import Data.ByteString.Base16
 import Data.Int (Int64)
@@ -98,7 +99,8 @@ decodeInt bs = withReadBuffer bs decodeInt'
 decodeInt' :: ReadBuffer -> IO Int64
 decodeInt' rbuf = do
     b0 <- read8 rbuf
-    let flag = (b0 .&. 0xc0) `shiftR` 6
+--    let flag = (b0 .&. 0xc0) `shiftR` 6
+    let flag = b0 `shiftR` 6
         b1 = fromIntegral (b0 .&. 0x3f)
     case flag of
       0 -> return b1
@@ -184,10 +186,11 @@ encryptPayload key iv pn frames header = aes128gcmEncrypt key nonce plain ad
     loop !n !ws = loop (n `shiftR` 8) (fromIntegral n : ws)
 
 aes128gcmEncrypt :: ByteString -> ByteString -> ByteString -> ByteString -> ByteString
-aes128gcmEncrypt key nonce plain ad = snd $ aeadSimpleEncrypt aeadIni ad plain 16
+aes128gcmEncrypt key nonce plain ad = cipher `B.append` convert tag
   where
     ctx = throwCryptoError (cipherInit key) :: AES128
     aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+    (AuthTag tag, cipher) = aeadSimpleEncrypt aeadIni ad plain 16
 
 aes128gcmDecrypt :: ByteString -> ByteString -> ByteString -> ByteString -> ByteString
 aes128gcmDecrypt key nonce cipher ad = simpleDecrypt aeadIni ad cipher 16
@@ -202,4 +205,8 @@ simpleDecrypt aeadIni header input taglen = output
     (output, _aeadFinal) = aeadDecrypt aead input
     _tag                 = aeadFinalize _aeadFinal taglen
 
--- encode $ encryptPayload ckey civ 2 (clientCRYPTOframe `B.append` B.pack (replicate 963 0)) clientPacketHeader
+
+clientCRYPTOframePadded :: ByteString
+clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate 963 0)
+
+-- encode $ encryptPayload ckey civ 2 clientCRYPTOframePadded clientPacketHeader
