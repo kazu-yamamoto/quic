@@ -169,7 +169,7 @@ clientPacketHeader = dec "c3ff000012508394c8f03e51570800449f00000002"
 -- 50               -- dcil & scil
 -- 8394c8f03e515708 -- dest cid
 -- 00               -- token length
--- 449f             -- length: decodeInt (dec "449f") = 1183
+-- 449f             -- length: decodeInt (dec "449f") = 1183 = 4 + 1163 + 16
 -- 00000002         -- encoded packet number
                     -- decodePacketNumber 0 2 32 = 2 ???
 
