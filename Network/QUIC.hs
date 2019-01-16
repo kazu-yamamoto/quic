@@ -17,19 +17,22 @@ import Network.TLS
 
 -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#initial-secrets
 
-dec :: ByteString -> ByteString
-dec = fst . decode
+dec16 :: ByteString -> ByteString
+dec16 = fst . decode
+
+enc16 :: ByteString -> ByteString
+enc16 = encode
 
 hash :: Hash
 hash = SHA256
 
 initial_salt :: ByteString
-initial_salt = dec "ef4fb0abb47470c41befcf8031334fae485e09a0"
+initial_salt = dec16 "ef4fb0abb47470c41befcf8031334fae485e09a0"
 
 -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
 
 cid :: ByteString
-cid = dec "8394c8f03e515708"
+cid = dec16 "8394c8f03e515708"
 
 -- "4496d3903d3f97cc5e45ac5790ddc686683c7c0067012bb09d900cc21832d596"
 initial_secret :: ByteString
@@ -74,7 +77,7 @@ data Frame = Padding
            deriving (Eq,Show)
 
 clientCRYPTOframe :: ByteString
-clientCRYPTOframe = dec $ B.concat [
+clientCRYPTOframe = dec16 $ B.concat [
     "060040c4010000c003036660261ff947cea49cce6cfad687f457cf1b14531ba1"
   , "4131a0e8f309a1d0b9c4000006130113031302010000910000000b0009000006"
   , "736572766572ff01000100000a00140012001d00170018001901000101010201"
@@ -85,13 +88,13 @@ clientCRYPTOframe = dec $ B.concat [
   ]
 
 -- |
--- >>> decodeInt (dec "c2197c5eff14e88c")
+-- >>> decodeInt (dec16 "c2197c5eff14e88c")
 -- 151288809941952652
--- >>> decodeInt (dec "9d7f3e7d")
+-- >>> decodeInt (dec16 "9d7f3e7d")
 -- 494878333
--- >>> decodeInt (dec "7bbd")
+-- >>> decodeInt (dec16 "7bbd")
 -- 15293
--- >>> decodeInt (dec "25")
+-- >>> decodeInt (dec16 "25")
 -- 37
 decodeInt :: ByteString -> IO Int64
 decodeInt bs = withReadBuffer bs decodeInt'
@@ -161,7 +164,7 @@ decodePacketNumber largestPN truncatedPN pnNbits
 
 
 clientPacketHeader :: ByteString
-clientPacketHeader = dec "c3ff000012508394c8f03e51570800449f00000002"
+clientPacketHeader = dec16 "c3ff000012508394c8f03e51570800449f00000002"
 
 -- c3ff000012508394c8f03e51570800449f00000002
 -- c3               -- flags
@@ -169,7 +172,7 @@ clientPacketHeader = dec "c3ff000012508394c8f03e51570800449f00000002"
 -- 50               -- dcil & scil
 -- 8394c8f03e515708 -- dest cid
 -- 00               -- token length
--- 449f             -- length: decodeInt (dec "449f") = 1183 = 4 + 1163 + 16
+-- 449f             -- length: decodeInt (dec16 "449f") = 1183 = 4 + 1163 + 16
 -- 00000002         -- encoded packet number
                     -- decodePacketNumber 0 2 32 = 2 ???
 
@@ -209,4 +212,18 @@ simpleDecrypt aeadIni header input taglen = output
 clientCRYPTOframePadded :: ByteString
 clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate 963 0)
 
--- encode $ encryptPayload ckey civ 2 clientCRYPTOframePadded clientPacketHeader
+encryptedPayload :: ByteString
+encryptedPayload = encryptPayload ckey civ 2 clientCRYPTOframePadded clientPacketHeader
+
+-- "0000f3a694c75775b4e546172ce9e047"
+sample :: ByteString
+sample = B.take 16 encryptedPayload
+
+headerProtection :: ByteString -> ByteString -> ByteString
+headerProtection hpKey sampl = ecbEncrypt cipher sampl
+  where
+    cipher = throwCryptoError (cipherInit hpKey) :: AES128
+
+-- "020dbc1958a7df52e6bbc9ebdfd07828"
+mask :: ByteString
+mask = headerProtection chp sample
