@@ -1,6 +1,7 @@
 -- https://quicwg.org/base-drafts/
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BinaryLiterals #-}
 
 module Network.QUIC where
 
@@ -13,7 +14,7 @@ import qualified Data.ByteString as B
 import Data.ByteString.Base16
 import Data.Int (Int64)
 import Network.ByteOrder
-import Network.TLS
+import Network.TLS hiding (Version, RTT0, Header)
 
 -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#initial-secrets
 
@@ -69,12 +70,6 @@ siv = hkdfExpandLabel hash server_initial_secret "quic iv" "" 12
 --"94b9452d2b3c7c7f6da7fdd8593537fd"
 shp :: ByteString
 shp = hkdfExpandLabel hash server_initial_secret "quic hp" "" 16
-
-type Length = Int
-
-data Frame = Padding
-           | Crypto Offset ByteString
-           deriving (Eq,Show)
 
 clientCRYPTOframe :: ByteString
 clientCRYPTOframe = dec16 $ B.concat [
@@ -227,3 +222,56 @@ headerProtection hpKey sampl = ecbEncrypt cipher sampl
 -- "020dbc1958a7df52e6bbc9ebdfd07828"
 mask :: ByteString
 mask = headerProtection chp sample
+
+
+type Length = Int
+
+data Frame = Padding
+           | Crypto Offset ByteString
+           deriving (Eq,Show)
+
+type DCID = ByteString
+type SCID = ByteString
+type RawFlags = Word8
+data PacketType = Initial | RTT0 | Handshake | Retry
+data Version = Draft17 | Negotiation | UnknownVersion Word32
+data Header = NegoHeader DCID SCID
+            | LongHeader PacketType RawFlags Version DCID SCID
+
+decodePacket :: ReadBuffer -> IO ()
+decodePacket rbuf = do
+    flags <- read8 rbuf
+    _ <- if testBit flags 7 then do
+        decodeLongHeader rbuf flags
+      else
+        decodeShortHeader rbuf flags
+    return ()
+
+decodePacketType :: RawFlags -> PacketType
+decodePacketType flags = case flags .&. 0b00110000 of
+    0b00000000 -> Initial
+    0b00010000 -> RTT0
+    0b00100000 -> Handshake
+    _          -> Retry
+
+decodeVersion :: Word32 -> Version
+decodeVersion 0          = Negotiation
+decodeVersion 0xff000011 = Draft17
+decodeVersion w          = UnknownVersion w
+
+decodeLongHeader :: ReadBuffer -> Word8 -> IO Header
+decodeLongHeader rbuf flags = do
+    version <- decodeVersion <$> read32 rbuf
+    dcil <- fromIntegral <$> read8 rbuf
+    scil <- fromIntegral <$> read8 rbuf
+    dcID <- extractByteString rbuf dcil
+    scID <- extractByteString rbuf scil
+    case version of
+      Negotiation -> return $ NegoHeader dcID scID
+      Draft17     -> do
+          let pt = decodePacketType flags
+          return $ LongHeader pt flags version dcID scID
+      UnknownVersion _ -> error "unknown version"
+
+decodeShortHeader :: ReadBuffer -> Word8 -> IO Header
+decodeShortHeader rbuf flags = undefined
