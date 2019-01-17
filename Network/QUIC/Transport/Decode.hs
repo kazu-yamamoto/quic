@@ -87,13 +87,13 @@ decodeCryptoFrame rbuf = do
 
 ----------------------------------------------------------------
 
-decodePacket :: ByteString -> IO Header
+decodePacket :: ByteString -> IO Packet
 decodePacket pkt = withReadBuffer pkt $ \rbuf -> do
     flags <- read8 rbuf
     if testBit flags 7 then do
-        decodeLongHeader rbuf flags
+        decodeLongHeaderPacket rbuf flags
       else
-        decodeShortHeader rbuf flags
+        decodeShortHeaderPacket rbuf flags
 
 decodePacketType :: RawFlags -> PacketType
 decodePacketType flags = case flags .&. 0b00110000 of
@@ -107,8 +107,8 @@ decodeVersion 0          = Negotiation
 decodeVersion 0xff000011 = Draft17
 decodeVersion w          = UnknownVersion w
 
-decodeLongHeader :: ReadBuffer -> Word8 -> IO Header
-decodeLongHeader rbuf flags = do
+decodeLongHeaderPacket :: ReadBuffer -> Word8 -> IO Packet
+decodeLongHeaderPacket rbuf flags = do
     version <- decodeVersion <$> read32 rbuf
     cil <- fromIntegral <$> read8 rbuf
     let dcil = decodeCIL ((cil .&. 0b11110000) `shiftR` 4)
@@ -116,24 +116,30 @@ decodeLongHeader rbuf flags = do
     dcID <- extractByteString rbuf dcil
     scID <- extractByteString rbuf scil
     case version of
-      Negotiation -> return $ NegoHeader dcID scID
+      Negotiation -> decodeVersionNegotiationPacket rbuf dcID scID
       Draft17     -> do
           case decodePacketType flags of
-            Initial -> decodeInitialHeader rbuf flags version dcID scID
+            Initial -> decodeInitialPacket rbuf flags version dcID scID
             _       -> undefined
       UnknownVersion _ -> error "unknown version"
   where
     decodeCIL 0 = 0
     decodeCIL n = n + 3
 
-decodeInitialHeader :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Header
-decodeInitialHeader rbuf flags version dcID scID = do
+decodeInitialPacket :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeInitialPacket rbuf _flags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
-    len <- fromIntegral <$> decodeInt' rbuf
+    _len <- decodeInt' rbuf
     encodedPN <- fromIntegral <$> read32 rbuf
     let pn = decodePacketNumber 0 encodedPN 32 -- fixme
-    return $ InitialHeader flags version dcID scID token len pn
+    return $ InitialPacket version dcID scID token pn []
 
-decodeShortHeader :: ReadBuffer -> Word8 -> IO Header
-decodeShortHeader _rbuf _flags = undefined
+decodeVersionNegotiationPacket :: ReadBuffer -> DCID -> SCID -> IO Packet
+decodeVersionNegotiationPacket rbuf dcID scID = do
+    version <- decodeVersion <$> read32 rbuf
+    -- fixme
+    return $ VersionNegotiationPacket dcID scID [version]
+
+decodeShortHeaderPacket :: ReadBuffer -> Word8 -> IO Packet
+decodeShortHeaderPacket _rbuf _flags = undefined

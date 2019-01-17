@@ -18,9 +18,12 @@ data PacketType = Initial | RTT0 | Handshake | Retry
 data Version = Draft17 | Negotiation | UnknownVersion Word32
              deriving (Eq, Show)
 
-data Header = NegoHeader DCID SCID
-            | InitialHeader RawFlags Version DCID SCID Token Length PacketNumber
-             deriving (Eq, Show)
+data Packet = VersionNegotiationPacket DCID SCID [Version]
+            | InitialPacket Version DCID SCID Token PacketNumber [Frame]
+            | RTT0Packet Version DCID SCID PacketNumber [Frame]
+            | HandshakePacket Version DCID SCID PacketNumber [Frame]
+            | RetryPacket Version DCID SCID DCID Token
+            | ShortPacket DCID PacketNumber [Frame]
 
 data Frame = Padding
            | Crypto Offset ByteString
