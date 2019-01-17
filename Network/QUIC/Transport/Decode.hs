@@ -4,9 +4,11 @@ module Network.QUIC.Transport.Decode where
 
 import Data.Bits
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
 import Data.Int (Int64)
 import Network.ByteOrder
 
+import Network.QUIC.TLS
 import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
@@ -127,14 +129,30 @@ decodeLongHeaderPacket rbuf flags = do
     decodeCIL n = n + 3
 
 decodeInitialPacket :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
-decodeInitialPacket rbuf _flags version dcID scID = do
+decodeInitialPacket rbuf flags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
-    encodedPN <- fromIntegral <$> read32 rbuf  -- fixme 32
-    let pn = decodePacketNumber 0 encodedPN 32 -- fixme 32
-    _encryptedPayload <- extractByteString rbuf len -- fixme: not copy
-    return $ InitialPacket version dcID scID token pn []
+    let secret = clientInitialSecret cipher dcID
+        hpKey = headerProtectionKey cipher secret
+    sample <- takeSample rbuf 16 -- fixme
+    let Just (mask1,mask2) = B.uncons $ headerProtection cipher hpKey sample
+        pnLen = fromIntegral ((flags `xor` mask1) .&. 0b11) + 1
+    encodedPN <- extractByteString rbuf pnLen -- fixme
+    encryptedPayload <- extractByteString rbuf len -- fixme: not copy
+    let key = aeadKey cipher secret
+        iv  = initialVector cipher secret
+        payload = decryptPayload cipher key iv undefined encryptedPayload undefined
+    return $ InitialPacket version dcID scID token 1 {- fixme -} []
+  where
+    cipher = defaultCipher -- fixme
+
+takeSample :: ReadBuffer -> Int -> IO ByteString
+takeSample rbuf len = do
+    ff rbuf 4
+    sample <- extractByteString rbuf len
+    ff rbuf (negate len)
+    return sample
 
 decodeVersionNegotiationPacket :: ReadBuffer -> DCID -> SCID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do

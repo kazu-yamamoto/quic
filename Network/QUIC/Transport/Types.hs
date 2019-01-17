@@ -24,6 +24,7 @@ data Packet = VersionNegotiationPacket DCID SCID [Version]
             | HandshakePacket Version DCID SCID PacketNumber [Frame]
             | RetryPacket Version DCID SCID DCID Token
             | ShortPacket DCID PacketNumber [Frame]
+             deriving (Eq, Show)
 
 data Frame = Padding
            | Crypto Offset ByteString
