@@ -130,9 +130,10 @@ decodeInitialPacket :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO P
 decodeInitialPacket rbuf _flags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
-    _len <- decodeInt' rbuf
-    encodedPN <- fromIntegral <$> read32 rbuf
-    let pn = decodePacketNumber 0 encodedPN 32 -- fixme
+    len <- fromIntegral <$> decodeInt' rbuf
+    encodedPN <- fromIntegral <$> read32 rbuf  -- fixme 32
+    let pn = decodePacketNumber 0 encodedPN 32 -- fixme 32
+    _encryptedPayload <- extractByteString rbuf len -- fixme: not copy
     return $ InitialPacket version dcID scID token pn []
 
 decodeVersionNegotiationPacket :: ReadBuffer -> DCID -> SCID -> IO Packet
