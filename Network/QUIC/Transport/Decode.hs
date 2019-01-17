@@ -142,7 +142,9 @@ decodeInitialPacket rbuf flags version dcID scID = do
     encryptedPayload <- extractByteString rbuf len -- fixme: not copy
     let key = aeadKey cipher secret
         iv  = initialVector cipher secret
-        payload = decryptPayload cipher key iv undefined encryptedPayload undefined
+        header = undefined -- plain header as additional data
+        pn = undefined -- plain packet number
+        payload = decryptPayload cipher key iv pn encryptedPayload header
     return $ InitialPacket version dcID scID token 1 {- fixme -} []
   where
     cipher = defaultCipher -- fixme
