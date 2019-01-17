@@ -53,15 +53,18 @@ headerProtectionKey :: Cipher -> ByteString -> ByteString
 headerProtectionKey = genKey "quic hp"
 
 genKey :: ByteString -> Cipher -> ByteString -> ByteString
-genKey label cipher secret = hkdfExpandLabel hash secret label "" size
+genKey label cipher secret = hkdfExpandLabel hash secret label "" keySize
   where
     hash = cipherHash cipher
-    size = bulkKeySize $ cipherBulk cipher
+    bulk = cipherBulk cipher
+    keySize = bulkKeySize bulk
 
 initialVector :: Cipher -> ByteString -> ByteString
-initialVector cipher secret = hkdfExpandLabel hash secret "quic iv" "" 12 -- fixme
+initialVector cipher secret = hkdfExpandLabel hash secret "quic iv" "" ivSize
   where
     hash = cipherHash cipher
+    bulk = cipherBulk cipher
+    ivSize  = max 8 (bulkIVSize bulk + bulkExplicitIV bulk)
 
 ----------------------------------------------------------------
 
