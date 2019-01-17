@@ -75,7 +75,7 @@ clientPacketHeader :: ByteString
 clientPacketHeader = dec16 "c3ff000012508394c8f03e51570800449f00000002"
 
 -- c3ff000012508394c8f03e51570800449f00000002
--- c3               -- flags
+-- c3 (11000011)    -- flags
 -- ff000012         -- version
 -- 50               -- dcil & scil
 -- 8394c8f03e515708 -- dcid
@@ -96,3 +96,10 @@ sample = B.take 16 encryptedPayload
 -- "020dbc1958a7df52e6bbc9ebdfd07828"
 mask :: ByteString
 mask = headerProtection chp sample
+
+protectedHeader :: ByteString
+-- protectedHeader = dec16 "c1ff000012508394c8f03e51570800449f0dbc195a"
+protectedHeader = dec16 "c1ff000011508394c8f03e51570800449f0dbc195a" -- draft17
+
+encryptedPacket :: ByteString
+encryptedPacket = protectedHeader `B.append` encryptedPayload

@@ -3,7 +3,7 @@
 module Network.QUIC.Transport.Decode where
 
 import Data.Bits
-import Data.ByteString
+import Data.ByteString (ByteString)
 import Data.Int (Int64)
 import Network.ByteOrder
 
@@ -87,14 +87,13 @@ decodeCryptoFrame rbuf = do
 
 ----------------------------------------------------------------
 
-decodePacket :: ReadBuffer -> IO ()
-decodePacket rbuf = do
+decodePacket :: ByteString -> IO Header
+decodePacket pkt = withReadBuffer pkt $ \rbuf -> do
     flags <- read8 rbuf
-    _ <- if testBit flags 7 then do
+    if testBit flags 7 then do
         decodeLongHeader rbuf flags
       else
         decodeShortHeader rbuf flags
-    return ()
 
 decodePacketType :: RawFlags -> PacketType
 decodePacketType flags = case flags .&. 0b00110000 of
@@ -111,16 +110,30 @@ decodeVersion w          = UnknownVersion w
 decodeLongHeader :: ReadBuffer -> Word8 -> IO Header
 decodeLongHeader rbuf flags = do
     version <- decodeVersion <$> read32 rbuf
-    dcil <- fromIntegral <$> read8 rbuf
-    scil <- fromIntegral <$> read8 rbuf
+    cil <- fromIntegral <$> read8 rbuf
+    let dcil = decodeCIL ((cil .&. 0b11110000) `shiftR` 4)
+        scil = decodeCIL (cil .&. 0b1111)
     dcID <- extractByteString rbuf dcil
     scID <- extractByteString rbuf scil
     case version of
       Negotiation -> return $ NegoHeader dcID scID
       Draft17     -> do
-          let pt = decodePacketType flags
-          return $ LongHeader pt flags version dcID scID
+          case decodePacketType flags of
+            Initial -> decodeInitialHeader rbuf flags version dcID scID
+            _       -> undefined
       UnknownVersion _ -> error "unknown version"
+  where
+    decodeCIL 0 = 0
+    decodeCIL n = n + 3
+
+decodeInitialHeader :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Header
+decodeInitialHeader rbuf flags version dcID scID = do
+    tokenLen <- fromIntegral <$> decodeInt' rbuf
+    token <- extractByteString rbuf tokenLen
+    len <- fromIntegral <$> decodeInt' rbuf
+    encodedPN <- fromIntegral <$> read32 rbuf
+    let pn = decodePacketNumber 0 encodedPN 32 -- fixme
+    return $ InitialHeader flags version dcID scID token len pn
 
 decodeShortHeader :: ReadBuffer -> Word8 -> IO Header
-decodeShortHeader rbuf flags = undefined
+decodeShortHeader _rbuf _flags = undefined
