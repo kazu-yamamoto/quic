@@ -44,6 +44,7 @@ spec = do
                   , "05030603020308040805080604010501060102010402050206020202002d0002"
                   , "0101001c00024001"
                   ]
+            -- Draft 18
             let clientPacketHeader = dec16 "c3ff000012508394c8f03e51570800449f00000002"
             -- c3ff000012508394c8f03e51570800449f00000002
             -- c3 (11000011)    -- flags
@@ -65,6 +66,7 @@ spec = do
             let mask = headerProtection defaultCipher chp sample
             mask `shouldBe` Mask (dec16 "020dbc1958a7df52e6bbc9ebdfd07828")
             {-
+            -- Draft 17
             let protectedHeader = dec16 "c1ff000011508394c8f03e51570800449f0dbc195a" -- draft17
             let encryptedPacket = protectedHeader `B.append` encryptedPayload
              -}
