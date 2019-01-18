@@ -133,8 +133,9 @@ decodeInitialPacket rbuf flags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
-    let secret = clientInitialSecret cipher dcID
+    let secret = clientInitialSecret cipher (CID dcID)
         hpKey = headerProtectionKey cipher secret
+{-
     sample <- takeSample rbuf 16 -- fixme
     let Just (mask1,mask2) = B.uncons $ headerProtection cipher hpKey sample
         pnLen = fromIntegral ((flags `xor` mask1) .&. 0b11) + 1
@@ -145,6 +146,7 @@ decodeInitialPacket rbuf flags version dcID scID = do
         header = undefined -- plain header as additional data
         pn = undefined -- plain packet number
         payload = decryptPayload cipher key iv pn encryptedPayload header
+-}
     return $ InitialPacket version dcID scID token 1 {- fixme -} []
   where
     cipher = defaultCipher -- fixme
