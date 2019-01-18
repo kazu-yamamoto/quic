@@ -10,6 +10,7 @@ import Data.List (foldl')
 import Network.ByteOrder
 
 import Network.QUIC.TLS
+import Network.QUIC.Transport.Context
 import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
@@ -139,6 +140,7 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
+    cipher <- getCipher ctx
     let initialSecret = case role ctx of
           Client -> serverInitialSecret -- intentional
           Server -> clientInitialSecret -- intentional
@@ -161,8 +163,6 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     let Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
     frames <- decodeFrames payload
     return $ InitialPacket version dcID scID token pn frames
-  where
-    cipher = defaultCipher -- fixme
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs

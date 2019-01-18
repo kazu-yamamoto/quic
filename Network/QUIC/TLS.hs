@@ -28,6 +28,7 @@ module Network.QUIC.TLS (
   , Sample(..)
   , Mask(..)
   , Nonce(..)
+  , Cipher
   ) where
 
 import Network.TLS.Extra.Cipher

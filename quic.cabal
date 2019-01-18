@@ -16,6 +16,7 @@ library
   exposed-modules:     Network.QUIC
                        Network.QUIC.TLS
                        Network.QUIC.Transport
+                       Network.QUIC.Transport.Context
                        Network.QUIC.Transport.Decode
                        Network.QUIC.Transport.Types
   -- other-modules:
