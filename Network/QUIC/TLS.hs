@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BinaryLiterals #-}
 
 module Network.QUIC.TLS (
     defaultCipher
@@ -22,6 +23,8 @@ module Network.QUIC.TLS (
   , Sample
   , Mask
   , Nonce
+  , Header
+  , unprotectHeader
   ) where
 
 import Network.TLS.Extra.Cipher
@@ -32,7 +35,8 @@ import Data.Bits
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import Network.ByteOrder
-import Network.TLS
+import Network.TLS (Cipher, Hash(..))
+import qualified Network.TLS as TLS
 
 import Network.QUIC.Transport.Types
 
@@ -54,6 +58,7 @@ type AddDat     = ByteString
 type Sample     = ByteString
 type Mask       = ByteString
 type Nonce      = ByteString
+type Header     = ByteString
 
 ----------------------------------------------------------------
 
@@ -69,11 +74,11 @@ serverInitialSecret = initialSecret "server in"
 
 initialSecret :: ByteString -> Cipher -> CID -> Secret
 initialSecret label cipher cid =
-    hkdfExpandLabel hash iniSecret label "" hashSize
+    TLS.hkdfExpandLabel hash iniSecret label "" hashSize
   where
-    hash = cipherHash cipher
-    iniSecret = hkdfExtract hash initialSalt cid
-    hashSize = hashDigestSize hash
+    hash = TLS.cipherHash cipher
+    iniSecret = TLS.hkdfExtract hash initialSalt cid
+    hashSize = TLS.hashDigestSize hash
 
 aeadKey :: Cipher -> Secret -> Key
 aeadKey = genKey "quic key"
@@ -82,18 +87,18 @@ headerProtectionKey :: Cipher -> Secret -> Key
 headerProtectionKey = genKey "quic hp"
 
 genKey :: ByteString -> Cipher -> Secret -> Key
-genKey label cipher secret = hkdfExpandLabel hash secret label "" keySize
+genKey label cipher secret = TLS.hkdfExpandLabel hash secret label "" keySize
   where
-    hash = cipherHash cipher
-    bulk = cipherBulk cipher
-    keySize = bulkKeySize bulk
+    hash = TLS.cipherHash cipher
+    bulk = TLS.cipherBulk cipher
+    keySize = TLS.bulkKeySize bulk
 
 initialVector :: Cipher -> Secret -> IV
-initialVector cipher secret = hkdfExpandLabel hash secret "quic iv" "" ivSize
+initialVector cipher secret = TLS.hkdfExpandLabel hash secret "quic iv" "" ivSize
   where
-    hash = cipherHash cipher
-    bulk = cipherBulk cipher
-    ivSize  = max 8 (bulkIVSize bulk + bulkExplicitIV bulk)
+    hash = TLS.cipherHash cipher
+    bulk = TLS.cipherBulk cipher
+    ivSize  = max 8 (TLS.bulkIVSize bulk + TLS.bulkExplicitIV bulk)
 
 ----------------------------------------------------------------
 
@@ -164,13 +169,25 @@ decryptPayload cipher key iv pn frames header = decrypt key nonce encrypted ad
 ----------------------------------------------------------------
 
 headerProtection :: Cipher -> Key -> Sample -> Mask
-headerProtection cipher hpKey sample = cipherHeaderProtection cipher hpKey sample
+headerProtection cipher key sample = cipherHeaderProtection cipher key sample
 
 cipherHeaderProtection :: Cipher -> Key -> (Sample -> Mask)
-cipherHeaderProtection cipher hpKey
+cipherHeaderProtection cipher key
   | cipher == cipher_TLS13_AES128GCM_SHA256        =
-    ecbEncrypt (throwCryptoError (cipherInit hpKey) :: AES128)
+    ecbEncrypt (throwCryptoError (cipherInit key) :: AES128)
   | cipher == cipher_TLS13_AES128CCM_SHA256        = undefined
   | cipher == cipher_TLS13_AES256GCM_SHA384        = undefined
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = undefined
   | otherwise                                      = error "cipherHeaderProtection"
+
+unprotectHeader :: Cipher -> Header -> Sample -> Key -> (Word8, PacketNumber, Header)
+unprotectHeader cipher protectedAndPad sample key = (flags, pn, header)
+  where
+    mask0 = headerProtection cipher key sample
+    Just (flagMask, maskPN) = B.uncons mask0
+    Just (proFlags, protectedAndPad1) = B.uncons protectedAndPad
+    flags = proFlags `xor` (flagMask .&. 0b1111) -- fixme
+    pnLen = fromIntegral (flags .&. 0b11) + 1
+    (intermediate, pnAndPad) = B.splitAt undefined protectedAndPad1
+    header = B.cons flags (intermediate `B.append` undefined)
+    pn = undefined
