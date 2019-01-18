@@ -93,6 +93,7 @@ decodeCryptoFrame rbuf = do
 decodePacket :: ByteString -> IO Packet
 decodePacket pkt = withReadBuffer pkt $ \rbuf -> do
     flags <- read8 rbuf
+    save rbuf
     if testBit flags 7 then do
         decodeLongHeaderPacket rbuf flags
       else
@@ -140,6 +141,8 @@ decodeInitialPacket rbuf proFlags version dcID scID = do
     len <- fromIntegral <$> decodeInt' rbuf
     let secret = clientInitialSecret cipher (CID dcID)
         hpKey = headerProtectionKey cipher secret
+    slen <- savingSize rbuf
+    unprotected <- extractByteString rbuf (negate slen)
     sample <- takeSample rbuf $ sampleLength cipher
     let Mask mask = protectionMask cipher hpKey sample
     let Just (mask1,mask2) = B.uncons mask
@@ -149,7 +152,7 @@ decodeInitialPacket rbuf proFlags version dcID scID = do
     encryptedPayload <- extractByteString rbuf (len - pnLen)
     let key = aeadKey cipher secret
         iv  = initialVector cipher secret
-        header = B.cons flag (undefined `B.append` bytePN)
+        header = B.cons flag (unprotected `B.append` bytePN)
         pn = calculatePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
         nonce = makeNonce iv bytePN
         Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
