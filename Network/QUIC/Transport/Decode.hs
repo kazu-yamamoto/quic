@@ -155,7 +155,7 @@ decodeInitialPacket rbuf proFlags version dcID scID = do
         header = B.cons flag (unprotected `B.append` bytePN)
         pn = calculatePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
         nonce = makeNonce iv bytePN
-        Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
+    let Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
     frames <- decodeFrames payload
     return $ InitialPacket version dcID scID token pn frames
   where
@@ -168,7 +168,7 @@ takeSample :: ReadBuffer -> Int -> IO Sample
 takeSample rbuf len = do
     ff rbuf 4
     sample <- extractByteString rbuf len
-    ff rbuf (negate len)
+    ff rbuf $ negate (len + 4)
     return $ Sample sample
 
 decodeVersionNegotiationPacket :: ReadBuffer -> DCID -> SCID -> IO Packet
