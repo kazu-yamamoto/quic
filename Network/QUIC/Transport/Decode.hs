@@ -90,14 +90,14 @@ decodeCryptoFrame rbuf = do
 
 ----------------------------------------------------------------
 
-decodePacket :: ByteString -> IO Packet
-decodePacket pkt = withReadBuffer pkt $ \rbuf -> do
+decodePacket :: Context -> ByteString -> IO Packet
+decodePacket ctx pkt = withReadBuffer pkt $ \rbuf -> do
     flags <- read8 rbuf
     save rbuf
     if testBit flags 7 then do
-        decodeLongHeaderPacket rbuf flags
+        decodeLongHeaderPacket ctx rbuf flags
       else
-        decodeShortHeaderPacket rbuf flags
+        decodeShortHeaderPacket ctx rbuf flags
 
 decodePacketType :: RawFlags -> PacketType
 decodePacketType flags = case flags .&. 0b00110000 of
@@ -112,8 +112,8 @@ decodeVersion 0xff000011 = Draft17
 decodeVersion 0xff000012 = Draft18
 decodeVersion w          = UnknownVersion w
 
-decodeLongHeaderPacket :: ReadBuffer -> Word8 -> IO Packet
-decodeLongHeaderPacket rbuf flags = do
+decodeLongHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
+decodeLongHeaderPacket ctx rbuf flags = do
     version <- decodeVersion <$> read32 rbuf
     cil <- fromIntegral <$> read8 rbuf
     let dcil = decodeCIL ((cil .&. 0b11110000) `shiftR` 4)
@@ -122,24 +122,27 @@ decodeLongHeaderPacket rbuf flags = do
     scID <- extractByteString rbuf scil
     case version of
       Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
-      Draft17          -> decodeDraft rbuf flags version dcID scID
-      Draft18          -> decodeDraft rbuf flags version dcID scID
+      Draft17          -> decodeDraft ctx rbuf flags version dcID scID
+      Draft18          -> decodeDraft ctx rbuf flags version dcID scID
       UnknownVersion _ -> error "unknown version"
   where
     decodeCIL 0 = 0
     decodeCIL n = n + 3
 
-decodeDraft :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
-decodeDraft rbuf flags version dcID scID = case decodePacketType flags of
-    Initial -> decodeInitialPacket rbuf flags version dcID scID
+decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeDraft ctx rbuf flags version dcID scID = case decodePacketType flags of
+    Initial -> decodeInitialPacket ctx rbuf flags version dcID scID
     _       -> undefined
 
-decodeInitialPacket :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
-decodeInitialPacket rbuf proFlags version dcID scID = do
+decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
-    let secret = clientInitialSecret cipher (CID dcID)
+    let initialSecret = case role ctx of
+          Client -> serverInitialSecret -- intentional
+          Server -> clientInitialSecret -- intentional
+        secret = initialSecret cipher (CID dcID)
         hpKey = headerProtectionKey cipher secret
     slen <- savingSize rbuf
     unprotected <- extractByteString rbuf (negate slen)
@@ -177,5 +180,5 @@ decodeVersionNegotiationPacket rbuf dcID scID = do
     -- fixme
     return $ VersionNegotiationPacket dcID scID [version]
 
-decodeShortHeaderPacket :: ReadBuffer -> Word8 -> IO Packet
-decodeShortHeaderPacket _rbuf _flags = undefined
+decodeShortHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
+decodeShortHeaderPacket _ctx _rbuf _flags = undefined

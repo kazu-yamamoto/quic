@@ -32,3 +32,16 @@ data Packet = VersionNegotiationPacket DCID SCID [Version]
 data Frame = Padding
            | Crypto Offset ByteString
            deriving (Eq,Show)
+
+data Role = Client | Server deriving (Eq,Show)
+
+data Context = Context {
+    role :: Role
+  }
+
+clientContext :: Context
+clientContext = Context Client
+
+serverContext :: Context
+serverContext = Context Server
+
