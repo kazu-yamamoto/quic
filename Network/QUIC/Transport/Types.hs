@@ -30,5 +30,6 @@ data Packet = VersionNegotiationPacket DCID SCID [Version]
              deriving (Eq, Show)
 
 data Frame = Padding
+           | Ack Int64 Int64 Int64 Int64 -- fixme
            | Crypto Offset ByteString
            deriving (Eq,Show)

@@ -1,4 +1,5 @@
 {-# LANGUAGE BinaryLiterals #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Transport.Decode where
 
@@ -79,6 +80,7 @@ decodeFrame rbuf = do
     b0 <- read8 rbuf
     case b0 of
       0x00 -> return Padding
+      0x02 -> decodeAckFrame rbuf
       0x06 -> decodeCryptoFrame rbuf
       _x   -> error $ show _x
 
@@ -88,6 +90,12 @@ decodeCryptoFrame rbuf = do
     len <- fromIntegral <$> decodeInt' rbuf
     cdata <- extractByteString rbuf len
     return $ Crypto off cdata
+
+-- fixme
+decodeAckFrame :: ReadBuffer -> IO Frame
+decodeAckFrame rbuf =
+    Ack <$> decodeInt' rbuf <*> decodeInt' rbuf <*> decodeInt' rbuf <*> decodeInt' rbuf
+
 
 ----------------------------------------------------------------
 
@@ -141,10 +149,9 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
     cipher <- getCipher ctx
-    let initialSecret = case role ctx of
-          Client -> serverInitialSecret -- intentional
-          Server -> clientInitialSecret -- intentional
-        secret = initialSecret cipher (CID dcID)
+    let secret = case role ctx of
+          Client -> serverInitialSecret cipher (CID $ connectionID ctx)
+          Server -> clientInitialSecret cipher (CID dcID)
         hpKey = headerProtectionKey cipher secret
     slen <- savingSize rbuf
     unprotected <- extractByteString rbuf (negate slen)
