@@ -69,7 +69,7 @@ decodeFrames bs = withReadBuffer bs $ loop id
         ok <- checkSpace rbuf 1
         if ok then do
             frame <- decodeFrame rbuf
-            loop ((frame:) . frames) rbuf
+            loop (frames . (frame:)) rbuf
           else
             return $ frames []
 
