@@ -4,7 +4,7 @@ module Network.QUIC.Transport.Decode where
 
 import Data.Bits
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
+-- import qualified Data.ByteString as B
 import Data.Int (Int64)
 import Network.ByteOrder
 
@@ -107,6 +107,7 @@ decodePacketType flags = case flags .&. 0b00110000 of
 decodeVersion :: Word32 -> Version
 decodeVersion 0          = Negotiation
 decodeVersion 0xff000011 = Draft17
+decodeVersion 0xff000012 = Draft18
 decodeVersion w          = UnknownVersion w
 
 decodeLongHeaderPacket :: ReadBuffer -> Word8 -> IO Packet
@@ -118,15 +119,18 @@ decodeLongHeaderPacket rbuf flags = do
     dcID <- extractByteString rbuf dcil
     scID <- extractByteString rbuf scil
     case version of
-      Negotiation -> decodeVersionNegotiationPacket rbuf dcID scID
-      Draft17     -> do
-          case decodePacketType flags of
-            Initial -> decodeInitialPacket rbuf flags version dcID scID
-            _       -> undefined
+      Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
+      Draft17          -> decodeDraft rbuf flags version dcID scID
+      Draft18          -> decodeDraft rbuf flags version dcID scID
       UnknownVersion _ -> error "unknown version"
   where
     decodeCIL 0 = 0
     decodeCIL n = n + 3
+
+decodeDraft :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeDraft rbuf flags version dcID scID = case decodePacketType flags of
+    Initial -> decodeInitialPacket rbuf flags version dcID scID
+    _       -> undefined
 
 decodeInitialPacket :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
 decodeInitialPacket rbuf flags version dcID scID = do

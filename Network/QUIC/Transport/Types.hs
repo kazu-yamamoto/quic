@@ -15,7 +15,10 @@ type RawFlags = Word8
 data PacketType = Initial | RTT0 | Handshake | Retry
                 deriving (Eq, Show)
 
-data Version = Draft17 | Negotiation | UnknownVersion Word32
+data Version = Negotiation
+             | Draft17
+             | Draft18
+             | UnknownVersion Word32
              deriving (Eq, Show)
 
 data Packet = VersionNegotiationPacket DCID SCID [Version]
