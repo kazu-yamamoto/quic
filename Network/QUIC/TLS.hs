@@ -190,17 +190,3 @@ bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
     ivl = B.unpack iv
     diff = B.length iv - B.length pn
     pnl = replicate diff 0 ++ B.unpack pn
-
-{-
-unprotectHeader :: Cipher -> Header -> Sample -> Key -> (Word8, PacketNumber, Header)
-unprotectHeader cipher protectedAndPad sample key = (flags, pn, header)
-  where
-    mask0 = protectionMask cipher key sample
-    Just (flagMask, maskPN) = B.uncons mask0
-    Just (proFlags, protectedAndPad1) = B.uncons protectedAndPad
-    flags = proFlags `xor` (flagMask .&. 0b1111) -- fixme
-    pnLen = fromIntegral (flags .&. 0b11) + 1
-    (intermediate, pnAndPad) = B.splitAt undefined protectedAndPad1
-    header = B.cons flags (intermediate `B.append` undefined)
-    pn = undefined
--}
