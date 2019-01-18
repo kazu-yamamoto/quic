@@ -17,7 +17,9 @@ spec :: Spec
 spec = do
     -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
     describe "test vector" $ do
-        it "describes examples" $ do
+        it "describes example" $ do
+            ----------------------------------------------------------------
+            -- shared keys
             let dcID = CID (dec16 "8394c8f03e515708")
             let client_initial_secret = clientInitialSecret defaultCipher dcID
             client_initial_secret `shouldBe` Secret (dec16 "8a3515a14ae3c31b9c2d6d5bc58538ca5cd2baa119087143e60887428dcb52f6")
@@ -35,6 +37,9 @@ spec = do
             siv `shouldBe` IV (dec16 "0a82086d32205ba22241d8dc")
             let shp = headerProtectionKey defaultCipher server_initial_secret
             shp `shouldBe` Key (dec16 "94b9452d2b3c7c7f6da7fdd8593537fd")
+
+            ----------------------------------------------------------------
+            -- payload encryption
             let clientCRYPTOframe = dec16 $ B.concat [
                     "060040c4010000c003036660261ff947cea49cce6cfad687f457cf1b14531ba1"
                   , "4131a0e8f309a1d0b9c4000006130113031302010000910000000b0009000006"
@@ -58,10 +63,16 @@ spec = do
                                 -- decodePacketNumber 0 2 32 = 2 ???
 
             let clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate 963 0)
+            let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ 2
             let add = AddDat clientPacketHeader
-            let encryptedPayload = encryptPayload defaultCipher ckey nonce clientCRYPTOframePadded add
-            let sample = Sample (B.take 16 encryptedPayload)
+            let ciphertext = encryptPayload defaultCipher ckey nonce plaintext add
+            let Just plaintext' = decryptPayload defaultCipher ckey nonce ciphertext add
+            plaintext' `shouldBe` plaintext
+
+            ----------------------------------------------------------------
+            -- header protection
+            let sample = Sample (B.take 16 ciphertext)
             sample `shouldBe` Sample (dec16 "0000f3a694c75775b4e546172ce9e047")
             let mask = headerProtection defaultCipher chp sample
             mask `shouldBe` Mask (dec16 "020dbc1958a7df52e6bbc9ebdfd07828")

@@ -114,7 +114,7 @@ cipherEncrypt cipher
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = undefined
   | otherwise                                      = error "cipherEncrypt"
 
-cipherDecrypt :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> PlainText
+cipherDecrypt :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 cipherDecrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmDecrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = undefined
@@ -124,25 +124,21 @@ cipherDecrypt cipher
 
 aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 aes128gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
-    encypted `B.append` convert tag
+    ciphertext `B.append` convert tag
   where
     ctx = throwCryptoError (cipherInit key) :: AES128
     aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
-    (AuthTag tag, encypted) = aeadSimpleEncrypt aeadIni ad plaintext 16
+    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext 16
 
-aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> PlainText
-aes128gcmDecrypt (Key key) (Nonce nonce) encypted ad =
-    simpleDecrypt aeadIni ad encypted 16
+aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
+aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
   where
     ctx = throwCryptoError $ cipherInit key :: AES128
     aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
-
-simpleDecrypt :: AEAD cipher -> AddDat -> CipherText -> Int -> PlainText
-simpleDecrypt aeadIni (AddDat ad) ciphertext taglen = plaintext
-  where
-    aead                    = aeadAppendHeader aeadIni ad
-    (plaintext, _aeadFinal) = aeadDecrypt aead ciphertext
-    _tag                    = aeadFinalize _aeadFinal taglen
+    -- fixme 16
+    (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+    authtag = AuthTag $ convert tag
+    plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
 
 ----------------------------------------------------------------
 
@@ -160,7 +156,7 @@ encryptPayload :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> CipherText
 encryptPayload cipher key nonce plaintext header =
     cipherEncrypt cipher key nonce plaintext header
 
-decryptPayload :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> PlainText
+decryptPayload :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 decryptPayload cipher key nonce ciphertext header =
     cipherDecrypt cipher key nonce ciphertext header
 
