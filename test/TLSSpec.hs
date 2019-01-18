@@ -64,7 +64,7 @@ spec = do
 
             let clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate 963 0)
             let plaintext = clientCRYPTOframePadded
-            let nonce = makeNonce civ 2
+            let nonce = makeNonce civ $ dec16 "00000002"
             let add = AddDat clientPacketHeader
             let ciphertext = encryptPayload defaultCipher ckey nonce plaintext add
             let Just plaintext' = decryptPayload defaultCipher ckey nonce ciphertext add
@@ -74,7 +74,7 @@ spec = do
             -- header protection
             let sample = Sample (B.take 16 ciphertext)
             sample `shouldBe` Sample (dec16 "0000f3a694c75775b4e546172ce9e047")
-            let mask = headerProtection defaultCipher chp sample
+            let mask = protectionMask defaultCipher chp sample
             mask `shouldBe` Mask (dec16 "020dbc1958a7df52e6bbc9ebdfd07828")
             {-
             -- Draft 17

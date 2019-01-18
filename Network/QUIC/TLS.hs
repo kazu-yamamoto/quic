@@ -13,7 +13,9 @@ module Network.QUIC.TLS (
   , encryptPayload
   , decryptPayload
   -- * Header Protection
-  , headerProtection
+  , protectionMask
+  , sampleLength
+  , bsXOR
 --  , unprotectHeader
   -- * Types
   , PlainText
@@ -38,8 +40,6 @@ import qualified Data.ByteString as B
 import Network.ByteOrder
 import Network.TLS (Cipher)
 import qualified Network.TLS as TLS
-
-import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
 
@@ -141,15 +141,10 @@ aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
 
 ----------------------------------------------------------------
 
-makeNonce :: IV -> PacketNumber -> Nonce
+makeNonce :: IV -> ByteString -> Nonce
 makeNonce (IV iv) pn = Nonce nonce
   where
-    ivLen = B.length iv
-    pnList = loop pn []
-    paddedPnList = replicate (ivLen - length pnList) 0 ++ pnList
-    nonce = B.pack $ zipWith xor (B.unpack iv) paddedPnList
-    loop 0 ws = ws
-    loop n ws = loop (n `shiftR` 8) (fromIntegral n : ws)
+    nonce = bsXORpad iv pn
 
 encryptPayload :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> CipherText
 encryptPayload cipher key nonce plaintext header =
@@ -161,8 +156,8 @@ decryptPayload cipher key nonce ciphertext header =
 
 ----------------------------------------------------------------
 
-headerProtection :: Cipher -> Key -> Sample -> Mask
-headerProtection cipher key sample = cipherHeaderProtection cipher key sample
+protectionMask :: Cipher -> Key -> Sample -> Mask
+protectionMask cipher key sample = cipherHeaderProtection cipher key sample
 
 cipherHeaderProtection :: Cipher -> Key -> (Sample -> Mask)
 cipherHeaderProtection cipher key
@@ -178,11 +173,29 @@ aes128ecbEncrypt (Key key) (Sample sample) = Mask mask
     encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES128)
     mask = encrypt sample
 
+sampleLength :: Cipher -> Int
+sampleLength cipher
+  | cipher == cipher_TLS13_AES128GCM_SHA256        = 16
+  | cipher == cipher_TLS13_AES128CCM_SHA256        = 16
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = 16
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = 16
+  | otherwise                                      = error "sampleLength"
+
+bsXOR :: ByteString -> ByteString -> ByteString
+bsXOR bs1 bs2 = B.pack $ map (uncurry xor) $ B.zip bs1 bs2
+
+bsXORpad :: ByteString -> ByteString -> ByteString
+bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
+  where
+    ivl = B.unpack iv
+    diff = B.length iv - B.length pn
+    pnl = replicate diff 0 ++ B.unpack pn
+
 {-
 unprotectHeader :: Cipher -> Header -> Sample -> Key -> (Word8, PacketNumber, Header)
 unprotectHeader cipher protectedAndPad sample key = (flags, pn, header)
   where
-    mask0 = headerProtection cipher key sample
+    mask0 = protectionMask cipher key sample
     Just (flagMask, maskPN) = B.uncons mask0
     Just (proFlags, protectedAndPad1) = B.uncons protectedAndPad
     flags = proFlags `xor` (flagMask .&. 0b1111) -- fixme

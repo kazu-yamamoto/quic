@@ -4,8 +4,9 @@ module Network.QUIC.Transport.Decode where
 
 import Data.Bits
 import Data.ByteString (ByteString)
--- import qualified Data.ByteString as B
+import qualified Data.ByteString as B
 import Data.Int (Int64)
+import Data.List (foldl')
 import Network.ByteOrder
 
 import Network.QUIC.TLS
@@ -45,8 +46,8 @@ decodeInt' rbuf = do
 
 ----------------------------------------------------------------
 
-decodePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
-decodePacketNumber largestPN truncatedPN pnNbits
+calculatePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
+calculatePacketNumber largestPN truncatedPN pnNbits
   | candidatePN <= expectedPN - pnHwin = candidatePN + pnWin
   | candidatePN >  expectedPN + pnHwin
  && candidatePN >  pnWin               = candidatePN - pnWin
@@ -133,34 +134,39 @@ decodeDraft rbuf flags version dcID scID = case decodePacketType flags of
     _       -> undefined
 
 decodeInitialPacket :: ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
-decodeInitialPacket rbuf flags version dcID scID = do
+decodeInitialPacket rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
     let secret = clientInitialSecret cipher (CID dcID)
         hpKey = headerProtectionKey cipher secret
-{-
-    sample <- takeSample rbuf 16 -- fixme
-    let Just (mask1,mask2) = B.uncons $ headerProtection cipher hpKey sample
-        pnLen = fromIntegral ((flags `xor` mask1) .&. 0b11) + 1
-    encodedPN <- extractByteString rbuf pnLen -- fixme
-    encryptedPayload <- extractByteString rbuf len -- fixme: not copy
+    sample <- takeSample rbuf $ sampleLength cipher
+    let Mask mask = protectionMask cipher hpKey sample
+    let Just (mask1,mask2) = B.uncons mask
+        flag = proFlags `xor` (mask1 .&. 0b1111)
+        pnLen = fromIntegral (flag .&. 0b11) + 1
+    bytePN <- bsXOR mask2 <$> extractByteString rbuf pnLen
+    encryptedPayload <- extractByteString rbuf (len - pnLen)
     let key = aeadKey cipher secret
         iv  = initialVector cipher secret
-        header = undefined -- plain header as additional data
-        pn = undefined -- plain packet number
-        payload = decryptPayload cipher key iv pn encryptedPayload header
--}
-    return $ InitialPacket version dcID scID token 1 {- fixme -} []
+        header = B.cons flag (undefined `B.append` bytePN)
+        pn = calculatePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
+        nonce = makeNonce iv bytePN
+        Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
+    frames <- decodeFrames payload
+    return $ InitialPacket version dcID scID token pn frames
   where
     cipher = defaultCipher -- fixme
 
-takeSample :: ReadBuffer -> Int -> IO ByteString
+toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
+toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
+
+takeSample :: ReadBuffer -> Int -> IO Sample
 takeSample rbuf len = do
     ff rbuf 4
     sample <- extractByteString rbuf len
     ff rbuf (negate len)
-    return sample
+    return $ Sample sample
 
 decodeVersionNegotiationPacket :: ReadBuffer -> DCID -> SCID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do
