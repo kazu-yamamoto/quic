@@ -135,7 +135,6 @@ aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
   where
     ctx = throwCryptoError $ cipherInit key :: AES128
     aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
-    -- fixme 16
     (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
     authtag = AuthTag $ convert tag
     plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
