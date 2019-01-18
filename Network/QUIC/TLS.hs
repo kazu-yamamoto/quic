@@ -2,6 +2,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 
 module Network.QUIC.TLS (
+  -- * Payload encryption
     defaultCipher
   , clientInitialSecret
   , serverInitialSecret
@@ -10,8 +11,10 @@ module Network.QUIC.TLS (
   , headerProtectionKey
   , encryptPayload
   , decryptPayload
+  -- * Header Protection
   , headerProtection
-  , Hash(..)
+  , unprotectHeader
+  -- * Types
   , Salt
   , PlainText
   , CipherText
@@ -24,7 +27,6 @@ module Network.QUIC.TLS (
   , Mask
   , Nonce
   , Header
-  , unprotectHeader
   ) where
 
 import Network.TLS.Extra.Cipher
@@ -35,7 +37,7 @@ import Data.Bits
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import Network.ByteOrder
-import Network.TLS (Cipher, Hash(..))
+import Network.TLS (Cipher)
 import qualified Network.TLS as TLS
 
 import Network.QUIC.Transport.Types
