@@ -76,11 +76,16 @@ spec = do
             sample `shouldBe` Sample (dec16 "0000f3a694c75775b4e546172ce9e047")
             let mask = protectionMask defaultCipher chp sample
             mask `shouldBe` Mask (dec16 "020dbc1958a7df52e6bbc9ebdfd07828")
+
+            ----------------------------------------------------------------
+            -- header protection
+            -- Draft 18
             {-
-            -- Draft 17
-            let protectedHeader = dec16 "c1ff000011508394c8f03e51570800449f0dbc195a" -- draft17
-            let encryptedPacket = protectedHeader `B.append` encryptedPayload
-             -}
+            let protectedHeader = dec16 "c1ff000012508394c8f03e51570800449f0dbc195a"
+            let encryptedPacket = protectedHeader `B.append` ciphertext
+            ctx <- serverContext
+            decodePacket ctx encryptedPacket `shouldReturn` VersionNegotiationPacket "a" "b" [Draft18] -- dummy
+            -}
 
 ----------------------------------------------------------------
 
