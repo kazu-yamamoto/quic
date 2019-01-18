@@ -9,6 +9,7 @@ module Network.QUIC.TLS (
   , aeadKey
   , initialVector
   , headerProtectionKey
+  , makeNonce
   , encryptPayload
   , decryptPayload
   -- * Header Protection
@@ -24,6 +25,7 @@ module Network.QUIC.TLS (
   , AddDat(..)
   , Sample(..)
   , Mask(..)
+  , Nonce(..)
   ) where
 
 import Network.TLS.Extra.Cipher
@@ -58,7 +60,6 @@ newtype AddDat = AddDat ByteString deriving (Eq, Show)
 newtype Sample = Sample ByteString deriving (Eq, Show)
 newtype Mask   = Mask   ByteString deriving (Eq, Show)
 newtype Label  = Label  ByteString deriving (Eq, Show)
-
 newtype Nonce  = Nonce  ByteString deriving (Eq, Show)
 
 ----------------------------------------------------------------
@@ -145,29 +146,23 @@ simpleDecrypt aeadIni (AddDat ad) ciphertext taglen = plaintext
 
 ----------------------------------------------------------------
 
-encryptPayload :: Cipher -> Key -> IV -> PacketNumber -> PlainText -> AddDat -> CipherText
-encryptPayload cipher key (IV iv) pn plaintext header =
-    encrypt key nonce plaintext header
+makeNonce :: IV -> PacketNumber -> Nonce
+makeNonce (IV iv) pn = Nonce nonce
   where
-    encrypt = cipherEncrypt cipher
     ivLen = B.length iv
     pnList = loop pn []
     paddedPnList = replicate (ivLen - length pnList) 0 ++ pnList
-    nonce = Nonce $ B.pack $ zipWith xor (B.unpack iv) paddedPnList
+    nonce = B.pack $ zipWith xor (B.unpack iv) paddedPnList
     loop 0 ws = ws
     loop n ws = loop (n `shiftR` 8) (fromIntegral n : ws)
 
-decryptPayload :: Cipher -> Key -> IV -> PacketNumber -> CipherText -> AddDat -> PlainText
-decryptPayload cipher key (IV iv) pn ciphertext header =
-    decrypt key nonce ciphertext header
-  where
-    decrypt = cipherDecrypt cipher
-    ivLen = B.length iv
-    pnList = loop pn []
-    paddedPnList = replicate (ivLen - length pnList) 0 ++ pnList
-    nonce = Nonce $ B.pack $ zipWith xor (B.unpack iv) paddedPnList
-    loop 0 ws = ws
-    loop n ws = loop (n `shiftR` 8) (fromIntegral n : ws)
+encryptPayload :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> CipherText
+encryptPayload cipher key nonce plaintext header =
+    cipherEncrypt cipher key nonce plaintext header
+
+decryptPayload :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> PlainText
+decryptPayload cipher key nonce ciphertext header =
+    cipherDecrypt cipher key nonce ciphertext header
 
 ----------------------------------------------------------------
 

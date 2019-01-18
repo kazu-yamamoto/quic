@@ -57,7 +57,9 @@ spec = do
                                 -- decodePacketNumber 0 2 32 = 2 ???
 
             let clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate 963 0)
-            let encryptedPayload = encryptPayload defaultCipher ckey civ 2 clientCRYPTOframePadded (AddDat clientPacketHeader)
+            let nonce = makeNonce civ 2
+            let add = AddDat clientPacketHeader
+            let encryptedPayload = encryptPayload defaultCipher ckey nonce clientCRYPTOframePadded add
             let sample = Sample (B.take 16 encryptedPayload)
             sample `shouldBe` Sample (dec16 "0000f3a694c75775b4e546172ce9e047")
             let mask = headerProtection defaultCipher chp sample
