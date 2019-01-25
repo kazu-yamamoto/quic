@@ -31,9 +31,8 @@ decodeInt bs = withReadBuffer bs decodeInt'
 decodeInt' :: ReadBuffer -> IO Int64
 decodeInt' rbuf = do
     b0 <- read8 rbuf
---    let flag = (b0 .&. 0xc0) `shiftR` 6
     let flag = b0 `shiftR` 6
-        b1 = fromIntegral (b0 .&. 0x3f)
+        b1 = fromIntegral (b0 .&. 0b00111111)
     case flag of
       0 -> return b1
       1 -> loop b1 1
