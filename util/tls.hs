@@ -6,8 +6,6 @@ import Data.Default.Class
 import Network.TLS
 import Network.TLS.Extra.Cipher
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as C8
-import Data.ByteString.Base16
 import System.Environment
 
 main :: IO ()
