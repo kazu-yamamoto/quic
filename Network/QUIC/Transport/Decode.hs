@@ -51,6 +51,12 @@ decodeInt' rbuf = do
 
 ----------------------------------------------------------------
 
+-- |
+--
+-- >>> decodePacketNumber 0xabe8bc 0x5c02 16 == 0xac5c02
+-- True
+-- >>> decodePacketNumber 0xa82f30ea 0x9b32 16 == 0xa82f9b32
+-- True
 decodePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
 decodePacketNumber largestPN truncatedPN pnNbits
   | candidatePN <= expectedPN - pnHwin = candidatePN + pnWin
