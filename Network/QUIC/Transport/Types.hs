@@ -22,11 +22,11 @@ data Version = Negotiation
              deriving (Eq, Show)
 
 data Packet = VersionNegotiationPacket DCID SCID [Version]
-            | InitialPacket Version DCID SCID Token PacketNumber [Frame]
-            | RTT0Packet Version DCID SCID PacketNumber [Frame]
-            | HandshakePacket Version DCID SCID PacketNumber [Frame]
-            | RetryPacket Version DCID SCID DCID Token
-            | ShortPacket DCID PacketNumber [Frame]
+            | InitialPacket    Version DCID SCID Token PacketNumber [Frame]
+            | RTT0Packet       Version DCID SCID       PacketNumber [Frame]
+            | HandshakePacket  Version DCID SCID       PacketNumber [Frame]
+            | RetryPacket      Version DCID SCID DCID Token
+            | ShortPacket              DCID            PacketNumber [Frame]
              deriving (Eq, Show)
 
 data Frame = Padding
