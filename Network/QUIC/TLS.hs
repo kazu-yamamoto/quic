@@ -2,8 +2,11 @@
 {-# LANGUAGE BinaryLiterals #-}
 
 module Network.QUIC.TLS (
+  -- * TLS
+    tlsClientContext
+  , tlsServerContext
   -- * Payload encryption
-    defaultCipher
+  , defaultCipher
   , clientInitialSecret
   , serverInitialSecret
   , aeadKey
@@ -31,16 +34,18 @@ module Network.QUIC.TLS (
   , Cipher
   ) where
 
-import Network.TLS.Extra.Cipher
 import Crypto.Cipher.AES
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError)
 import Data.Bits
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
+import Data.Default.Class
 import Network.ByteOrder
 import Network.TLS (Cipher)
 import qualified Network.TLS as TLS
+import qualified Network.TLS.Extra.Cipher as TLS
+import Network.TLS.Extra.Cipher
 
 ----------------------------------------------------------------
 
@@ -191,3 +196,54 @@ bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
     ivl = B.unpack iv
     diff = B.length iv - B.length pn
     pnl = replicate diff 0 ++ B.unpack pn
+
+----------------------------------------------------------------
+
+tlsClientContext :: TLS.HostName -> IO (TLS.Context, TLS.ClientParams)
+tlsClientContext hostname = do
+    ctx <- TLS.contextNew backend cparams
+    return (ctx, cparams)
+  where
+    backend = TLS.Backend (return ())
+                          (return ())
+                          (\_ -> return ()) (\_ -> return "")
+    supported = def {
+        TLS.supportedVersions = [TLS.TLS13]
+      , TLS.supportedCiphers = TLS.ciphersuite_strong
+      }
+    cshared = def {
+       TLS.sharedValidationCache = TLS.ValidationCache (\_ _ _ -> return TLS.ValidationCachePass) (\_ _ _ -> return ())
+      }
+    debug = def {
+        TLS.debugKeyLogger = putStrLn -- fixme
+      }
+    cparams = (TLS.defaultParamsClient hostname "") {
+        TLS.clientSupported = supported
+      , TLS.clientDebug = debug
+      , TLS.clientShared = cshared
+      }
+
+tlsServerContext :: FilePath -> FilePath -> IO (TLS.Context, TLS.ServerParams)
+tlsServerContext key cert = do
+    Right cred <- TLS.credentialLoadX509 cert key
+    let sshared = def {
+            TLS.sharedCredentials = TLS.Credentials [cred]
+          }
+    let sparams = def {
+        TLS.serverSupported = supported
+      , TLS.serverDebug = debug
+      , TLS.serverShared = sshared
+      }
+    ctx <- TLS.contextNew backend sparams
+    return (ctx, sparams)
+  where
+    backend = TLS.Backend (return ())
+                          (return ())
+                          (\_ -> return ()) (\_ -> return "")
+    supported = def {
+        TLS.supportedVersions = [TLS.TLS13]
+      , TLS.supportedCiphers = TLS.ciphersuite_strong
+      }
+    debug = def {
+        TLS.debugKeyLogger = putStrLn -- fixme
+      }

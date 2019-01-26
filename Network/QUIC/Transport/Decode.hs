@@ -149,8 +149,8 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     len <- fromIntegral <$> decodeInt' rbuf
     cipher <- getCipher ctx
     let secret = case role ctx of
-          Client -> serverInitialSecret cipher (CID $ connectionID ctx)
-          Server -> clientInitialSecret cipher (CID dcID)
+          Client _ -> serverInitialSecret cipher (CID $ connectionID ctx)
+          Server _ -> clientInitialSecret cipher (CID dcID)
         hpKey = headerProtectionKey cipher secret
     slen <- savingSize rbuf
     unprotected <- extractByteString rbuf (negate slen)

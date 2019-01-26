@@ -5,6 +5,7 @@ module Main where
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16
 import Network.TLS
+import System.Environment
 
 import Network.QUIC
 
@@ -16,12 +17,13 @@ enc16 = encode
 
 main :: IO ()
 main = do
-    server
+    [key, cert] <- getArgs
+    server key cert
     client
 
-server :: IO ()
-server = do
-    ctx <- serverContext "\x41\x6c\x50\xc4\x3e\x23\x48\x7c"
+server :: FilePath -> FilePath -> IO ()
+server key cert = do
+    ctx <- serverContext key cert "\x41\x6c\x50\xc4\x3e\x23\x48\x7c"
     InitialPacket _ver _dcid _scid _pn _token frames <- decodePacket ctx clientInitial
     let f (Crypto _ _) = True
         f _            = False
@@ -31,7 +33,7 @@ server = do
 
 client :: IO ()
 client = do
-    ctx <- clientContext "\x41\x6c\x50\xc4\x3e\x23\x48\x7c"
+    ctx <- clientContext "www.mew.org" "\x41\x6c\x50\xc4\x3e\x23\x48\x7c"
     InitialPacket _ver _dcid _scid _pn _token frames <- decodePacket ctx serverInitial
     let Crypto _off bs:_ = frames
     let Right sh = decodeHandshakes13 bs
