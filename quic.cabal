@@ -18,6 +18,7 @@ library
                        Network.QUIC.Transport
                        Network.QUIC.Transport.Context
                        Network.QUIC.Transport.Decode
+                       Network.QUIC.Transport.Encode
                        Network.QUIC.Transport.Types
                        Network.QUIC.Utils
   -- other-modules:
