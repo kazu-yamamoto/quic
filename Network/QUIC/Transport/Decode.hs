@@ -51,8 +51,8 @@ decodeInt' rbuf = do
 
 ----------------------------------------------------------------
 
-calculatePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
-calculatePacketNumber largestPN truncatedPN pnNbits
+decodePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
+decodePacketNumber largestPN truncatedPN pnNbits
   | candidatePN <= expectedPN - pnHwin = candidatePN + pnWin
   | candidatePN >  expectedPN + pnHwin
  && candidatePN >  pnWin               = candidatePN - pnWin
@@ -168,7 +168,7 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     let key = aeadKey cipher secret
         iv  = initialVector cipher secret
         header = B.cons flag (unprotected `B.append` bytePN)
-        pn = calculatePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
+        pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
         nonce = makeNonce iv bytePN
     let Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
     frames <- decodeFrames payload
