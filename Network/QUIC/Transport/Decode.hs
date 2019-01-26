@@ -14,6 +14,10 @@ import Network.QUIC.TLS
 import Network.QUIC.Transport.Context
 import Network.QUIC.Transport.Types
 
+-- $setup
+-- >>> :set -XOverloadedStrings
+-- >>> import Network.QUIC.Utils
+
 ----------------------------------------------------------------
 
 -- |

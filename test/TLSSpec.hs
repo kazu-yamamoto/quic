@@ -86,11 +86,3 @@ spec = do
             ctx <- serverContext
             decodePacket ctx encryptedPacket `shouldReturn` VersionNegotiationPacket "a" "b" [Draft18] -- dummy
             -}
-
-----------------------------------------------------------------
-
-dec16 :: ByteString -> ByteString
-dec16 = fst . decode
-
-enc16 :: ByteString -> ByteString
-enc16 = encode
