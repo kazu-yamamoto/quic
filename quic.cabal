@@ -17,8 +17,10 @@ library
                        Network.QUIC.TLS
                        Network.QUIC.Transport
                        Network.QUIC.Transport.Context
-                       Network.QUIC.Transport.Decode
-                       Network.QUIC.Transport.Encode
+                       Network.QUIC.Transport.Frame
+                       Network.QUIC.Transport.Integer
+                       Network.QUIC.Transport.Packet
+                       Network.QUIC.Transport.PacketNumber
                        Network.QUIC.Transport.Types
                        Network.QUIC.Utils
   -- other-modules:
@@ -42,7 +44,8 @@ test-suite spec
   hs-source-dirs:       test
   ghc-options:          -Wall
   main-is:              Spec.hs
-  other-modules:        TLSSpec
+  other-modules:        PacketSpec
+                        TLSSpec
   build-depends:        base >= 4 && < 5
                       , base16-bytestring
                       , bytestring

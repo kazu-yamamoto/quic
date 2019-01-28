@@ -1,106 +1,22 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Transport.Encode where
+module Network.QUIC.Transport.Packet where
 
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.IORef
-import Data.Int (Int64)
-import Network.ByteOrder
+import Data.List (foldl')
 import Foreign.Ptr
+import Network.ByteOrder
 
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Context
+import Network.QUIC.Transport.Frame
+import Network.QUIC.Transport.Integer
 import Network.QUIC.Transport.Types
-
--- $setup
--- >>> :set -XOverloadedStrings
--- >>> import Network.QUIC.Utils
-
-----------------------------------------------------------------
-
--- |
--- >>> enc16 <$> encodeInt 151288809941952652
--- "c2197c5eff14e88c"
--- >>> enc16 <$> encodeInt 494878333
--- "9d7f3e7d"
--- >>> enc16 <$> encodeInt 15293
--- "7bbd"
--- >>> enc16 <$> encodeInt 37
--- "25"
-encodeInt :: Int64  -> IO ByteString
-encodeInt i = withWriteBuffer 8 $ \wbuf -> encodeInt' wbuf i
-
-encodeInt' :: WriteBuffer -> Int64 -> IO ()
-encodeInt' wbuf i
-  | i <=         63 = do
-        let [w0] = decomp 1 [] i
-        write8 wbuf w0
-  | i <=      16383 = do
-        let [w0,w1] = decomp 2 [] i
-        write8 wbuf (w0 .|. 0b01000000)
-        write8 wbuf w1
-  | i <= 1073741823 = do
-        let [w0,w1,w2,w3] = decomp 4 [] i
-        write8 wbuf (w0 .|. 0b10000000)
-        write8 wbuf w1
-        write8 wbuf w2
-        write8 wbuf w3
-  | otherwise       = do
-        let [w0,w1,w2,w3,w4,w5,w6,w7] = decomp 8 [] i
-        write8 wbuf (w0 .|. 0b11000000)
-        write8 wbuf w1
-        write8 wbuf w2
-        write8 wbuf w3
-        write8 wbuf w4
-        write8 wbuf w5
-        write8 wbuf w6
-        write8 wbuf w7
-
-encodeInt'2 :: Buffer -> Int64 -> IO ()
-encodeInt'2 wbuf i = do
-    let [w0,w1] = decomp 2 [] i
-    poke8 (w0 .|. 0b01000000) wbuf 0
-    poke8 w1 wbuf 1
-
-decomp :: Int -> [Word8] -> Int64 -> [Word8]
-decomp 0 ws _ = ws
-decomp n ws x = decomp (n-1) (w:ws) x'
-  where
-    x' = x `shiftR` 8
-    w  = fromIntegral x
-
-----------------------------------------------------------------
-
--- from draft18. We cannot use becase 32 is hard-coded in our impl.
--- encodePacketNumber 0xabe8bc 0xac5c02 == (0x5c02,16)
--- encodePacketNumber 0xa82f30ea 0xa82f9b32 == (0x9b32,16)
-encodePacketNumber :: PacketNumber -> PacketNumber -> (EncodedPacketNumber, Int)
-encodePacketNumber _largestPN pn = (diff, 32)
-  where
-    diff = fromIntegral (pn .&. 0xffffffff)
-
-----------------------------------------------------------------
-
-encodeFrames :: [Frame] -> IO ByteString
-encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
-  mapM_ (encodeFrame wbuf) frames
-
-encodeFrame :: WriteBuffer -> Frame -> IO ()
-encodeFrame wbuf Padding = write8 wbuf 0x00
-encodeFrame wbuf (Crypto off cdata) = do
-    write8 wbuf 0x06
-    encodeInt' wbuf $ fromIntegral off
-    encodeInt' wbuf $ fromIntegral $ B.length cdata
-    copyByteString wbuf cdata
-encodeFrame wbuf (Ack la ad arc far) = do
-    write8 wbuf 0x02
-    encodeInt' wbuf la
-    encodeInt' wbuf ad
-    encodeInt' wbuf arc
-    encodeInt' wbuf far
+import Network.QUIC.Transport.PacketNumber
 
 ----------------------------------------------------------------
 
@@ -215,3 +131,99 @@ protectHeader ctx headerBeg pnBeg secret payload = do
 
 encodeShortHeader :: IO Word32
 encodeShortHeader = undefined
+
+----------------------------------------------------------------
+
+decodePacket :: Context -> ByteString -> IO (Packet, ByteString)
+decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
+    flags <- read8 rbuf
+    save rbuf
+    pkt <- if testBit flags 7 then do
+             decodeLongHeaderPacket ctx rbuf flags
+           else
+             decodeShortHeaderPacket ctx rbuf flags
+    siz <- savingSize rbuf
+    let remaining = B.drop (siz + 1) bin
+    return (pkt, remaining)
+
+decodePacketType :: RawFlags -> PacketType
+decodePacketType flags = case flags .&. 0b00110000 of
+    0b00000000 -> Initial
+    0b00010000 -> RTT0
+    0b00100000 -> Handshake
+    _          -> Retry
+
+decodeVersion :: Word32 -> Version
+decodeVersion 0          = Negotiation
+decodeVersion 0xff000011 = Draft17
+decodeVersion 0xff000012 = Draft18
+decodeVersion w          = UnknownVersion w
+
+decodeLongHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
+decodeLongHeaderPacket ctx rbuf flags = do
+    version <- decodeVersion <$> read32 rbuf
+    cil <- fromIntegral <$> read8 rbuf
+    let dcil = decodeCIL ((cil .&. 0b11110000) `shiftR` 4)
+        scil = decodeCIL (cil .&. 0b1111)
+    dcID <- extractByteString rbuf dcil
+    scID <- extractByteString rbuf scil
+    case version of
+      Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
+      Draft17          -> decodeDraft ctx rbuf flags version dcID scID
+      Draft18          -> decodeDraft ctx rbuf flags version dcID scID
+      UnknownVersion _ -> error "unknown version"
+  where
+    decodeCIL 0 = 0
+    decodeCIL n = n + 3
+
+decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeDraft ctx rbuf flags version dcID scID = case decodePacketType flags of
+    Initial -> decodeInitialPacket ctx rbuf flags version dcID scID
+    _       -> undefined
+
+decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeInitialPacket ctx rbuf proFlags version dcID scID = do
+    tokenLen <- fromIntegral <$> decodeInt' rbuf
+    token <- extractByteString rbuf tokenLen
+    len <- fromIntegral <$> decodeInt' rbuf
+    cipher <- getCipher ctx
+    let secret = case role ctx of
+          Client _ -> serverInitialSecret cipher (CID $ connectionID ctx)
+          Server _ -> clientInitialSecret cipher (CID dcID)
+        hpKey = headerProtectionKey cipher secret
+    slen <- savingSize rbuf
+    unprotected <- extractByteString rbuf (negate slen)
+    sample <- takeSample rbuf $ sampleLength cipher
+    let Mask mask = protectionMask cipher hpKey sample
+    let Just (mask1,mask2) = B.uncons mask
+        flag = proFlags `xor` (mask1 .&. 0b1111)
+        pnLen = fromIntegral (flag .&. 0b11) + 1
+    bytePN <- bsXOR mask2 <$> extractByteString rbuf pnLen
+    encryptedPayload <- extractByteString rbuf (len - pnLen)
+    let key = aeadKey cipher secret
+        iv  = initialVector cipher secret
+        header = B.cons flag (unprotected `B.append` bytePN)
+        pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
+        nonce = makeNonce iv bytePN
+    let Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
+    frames <- decodeFrames payload
+    return $ InitialPacket version dcID scID token pn frames
+
+toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
+toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
+
+takeSample :: ReadBuffer -> Int -> IO Sample
+takeSample rbuf len = do
+    ff rbuf 4
+    sample <- extractByteString rbuf len
+    ff rbuf $ negate (len + 4)
+    return $ Sample sample
+
+decodeVersionNegotiationPacket :: ReadBuffer -> DCID -> SCID -> IO Packet
+decodeVersionNegotiationPacket rbuf dcID scID = do
+    version <- decodeVersion <$> read32 rbuf
+    -- fixme
+    return $ VersionNegotiationPacket dcID scID [version]
+
+decodeShortHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
+decodeShortHeaderPacket _ctx _rbuf _flags = undefined
