@@ -4,9 +4,7 @@
 
 module TLSSpec where
 
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Data.ByteString.Base16
 import Test.Hspec
 
 import Network.QUIC
