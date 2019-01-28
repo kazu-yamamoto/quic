@@ -20,6 +20,35 @@ import Network.QUIC.Transport.PacketNumber
 
 ----------------------------------------------------------------
 
+encodeVersion :: Version -> Word32
+encodeVersion Negotiation        = 0
+encodeVersion Draft17            = 0xff000011
+encodeVersion Draft18            = 0xff000012
+encodeVersion (UnknownVersion w) = w
+
+decodeVersion :: Word32 -> Version
+decodeVersion 0          = Negotiation
+decodeVersion 0xff000011 = Draft17
+decodeVersion 0xff000012 = Draft18
+decodeVersion w          = UnknownVersion w
+
+----------------------------------------------------------------
+
+encodePacketType :: RawFlags -> PacketType -> RawFlags
+encodePacketType flags Initial   = flags
+encodePacketType flags RTT0      = flags .|. 0b00010000
+encodePacketType flags Handshake = flags .|. 0b00100000
+encodePacketType flags Retry     = flags .|. 0b00110000
+
+decodePacketType :: RawFlags -> PacketType
+decodePacketType flags = case flags .&. 0b00110000 of
+    0b00000000 -> Initial
+    0b00010000 -> RTT0
+    0b00100000 -> Handshake
+    _          -> Retry
+
+----------------------------------------------------------------
+
 -- fixme: using encryptPayload
 
 encodePacket :: Context -> Packet -> IO ByteString
@@ -77,18 +106,6 @@ encodePacket' ctx wbuf (ShortPacket _ _ frames) = do
     write32 wbuf epn
 --    protectHeader
 
-encodePacketType :: RawFlags -> PacketType -> RawFlags
-encodePacketType flags Initial   = flags
-encodePacketType flags RTT0      = flags .|. 0b00010000
-encodePacketType flags Handshake = flags .|. 0b00100000
-encodePacketType flags Retry     = flags .|. 0b00110000
-
-encodeVersion :: Version -> Word32
-encodeVersion Negotiation        = 0
-encodeVersion Draft17            = 0xff000011
-encodeVersion Draft18            = 0xff000012
-encodeVersion (UnknownVersion w) = w
-
 encodeLongHeader :: Context -> WriteBuffer
                  -> Word8 -> Version -> DCID -> SCID
                  -> PacketNumber
@@ -145,19 +162,6 @@ decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
     siz <- savingSize rbuf
     let remaining = B.drop (siz + 1) bin
     return (pkt, remaining)
-
-decodePacketType :: RawFlags -> PacketType
-decodePacketType flags = case flags .&. 0b00110000 of
-    0b00000000 -> Initial
-    0b00010000 -> RTT0
-    0b00100000 -> Handshake
-    _          -> Retry
-
-decodeVersion :: Word32 -> Version
-decodeVersion 0          = Negotiation
-decodeVersion 0xff000011 = Draft17
-decodeVersion 0xff000012 = Draft18
-decodeVersion w          = UnknownVersion w
 
 decodeLongHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
 decodeLongHeaderPacket ctx rbuf flags = do
