@@ -58,7 +58,6 @@ spec = do
             -- 449f             -- length: decodeInt (dec16 "449f")
                                 -- = 1183 = 4 + 1163 + 16
             -- 00000002         -- encoded packet number
-                                -- decodePacketNumber 0 2 32 = 2 ???
 
             let clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate 963 0)
             let plaintext = clientCRYPTOframePadded
@@ -74,13 +73,3 @@ spec = do
             sample `shouldBe` Sample (dec16 "0000f3a694c75775b4e546172ce9e047")
             let mask = protectionMask defaultCipher chp sample
             mask `shouldBe` Mask (dec16 "020dbc1958a7df52e6bbc9ebdfd07828")
-
-            ----------------------------------------------------------------
-            -- header protection
-            -- Draft 18
-            {-
-            let protectedHeader = dec16 "c1ff000012508394c8f03e51570800449f0dbc195a"
-            let encryptedPacket = protectedHeader `B.append` ciphertext
-            ctx <- serverContext
-            decodePacket ctx encryptedPacket `shouldReturn` VersionNegotiationPacket "a" "b" [Draft18] -- dummy
-            -}
