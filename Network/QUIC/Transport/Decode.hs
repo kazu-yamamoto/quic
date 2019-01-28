@@ -108,14 +108,17 @@ decodeAckFrame rbuf =
 
 ----------------------------------------------------------------
 
-decodePacket :: Context -> ByteString -> IO Packet
-decodePacket ctx pkt = withReadBuffer pkt $ \rbuf -> do
+decodePacket :: Context -> ByteString -> IO (Packet, ByteString)
+decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
     flags <- read8 rbuf
     save rbuf
-    if testBit flags 7 then do
-        decodeLongHeaderPacket ctx rbuf flags
-      else
-        decodeShortHeaderPacket ctx rbuf flags
+    pkt <- if testBit flags 7 then do
+             decodeLongHeaderPacket ctx rbuf flags
+           else
+             decodeShortHeaderPacket ctx rbuf flags
+    siz <- savingSize rbuf
+    let remaining = B.drop (siz + 1) bin
+    return (pkt, remaining)
 
 decodePacketType :: RawFlags -> PacketType
 decodePacketType flags = case flags .&. 0b00110000 of
