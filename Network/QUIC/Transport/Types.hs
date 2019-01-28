@@ -5,7 +5,7 @@ import Network.ByteOrder
 
 type Length = Int
 type PacketNumber = Int64
-type EncodedPacketNumber = Int
+type EncodedPacketNumber = Word32
 
 type DCID = ByteString
 type SCID = ByteString
