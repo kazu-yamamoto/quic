@@ -49,6 +49,24 @@ decodePacketType flags = case flags .&. 0b00110000 of
 
 ----------------------------------------------------------------
 
+encrypt :: Cipher -> Secret -> PlainText -> ByteString -> ByteString -> CipherText
+encrypt cipher secret plaintext header bytePN =
+    encryptPayload cipher key nonce plaintext (AddDat header)
+  where
+    key = aeadKey cipher secret
+    iv  = initialVector cipher secret
+    nonce = makeNonce iv bytePN
+
+decrypt :: Cipher -> Secret -> CipherText -> ByteString -> ByteString -> Maybe PlainText
+decrypt cipher secret ciphertext header bytePN =
+    decryptPayload cipher key nonce ciphertext (AddDat header)
+  where
+    key = aeadKey cipher secret
+    iv  = initialVector cipher secret
+    nonce = makeNonce iv bytePN
+
+----------------------------------------------------------------
+
 -- fixme: using encryptPayload
 
 encodePacket :: Context -> Packet -> IO ByteString
@@ -71,16 +89,16 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     headerEnd <- currentOffset wbuf
     let bytePN = bytestring32 epn
     cipher <- getCipher ctx
-    payload <- encodeFrames frames
-    let len = B.length payload + 4 + 16 -- fixme
+    plaintext <- encodeFrames frames
+    let len = B.length plaintext + 4 + 16 -- fixme
     encodeInt'2 lenOff $ fromIntegral len
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     let secret = case role ctx of
           Client _ -> clientInitialSecret dcID
           Server _ -> serverInitialSecret (connectionID ctx)
-    let encryptedPayload = encrypt cipher secret payload header bytePN
-    copyByteString wbuf encryptedPayload
-    protectHeader ctx headerBeg pnBeg secret encryptedPayload
+    let ciphertext = encrypt cipher secret plaintext header bytePN
+    copyByteString wbuf ciphertext
+    protectHeader ctx headerBeg pnBeg secret ciphertext
 encodePacket' ctx wbuf (RTT0Packet ver dcid scid _ frames) = do
     _headerOff <- currentOffset wbuf
     pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
@@ -147,13 +165,6 @@ protectHeader ctx headerBeg pnBeg secret payload = do
 encodeShortHeader :: IO Word32
 encodeShortHeader = undefined
 
-encrypt :: Cipher -> Secret -> PlainText -> ByteString -> ByteString -> CipherText
-encrypt cipher secret payload header bytePN = encryptPayload cipher key nonce payload (AddDat header)
-  where
-    key = aeadKey cipher secret
-    iv  = initialVector cipher secret
-    nonce = makeNonce iv bytePN
-
 ----------------------------------------------------------------
 
 decodePacket :: Context -> ByteString -> IO (Packet, ByteString)
@@ -210,13 +221,10 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
         flag = proFlags `xor` (mask1 .&. 0b1111)
         pnLen = fromIntegral (flag .&. 0b11) + 1
     bytePN <- bsXOR mask2 <$> extractByteString rbuf pnLen
-    encryptedPayload <- extractByteString rbuf (len - pnLen)
-    let key = aeadKey cipher secret
-        iv  = initialVector cipher secret
-        header = B.cons flag (unprotected `B.append` bytePN)
+    ciphertext <- extractByteString rbuf (len - pnLen)
+    let header = B.cons flag (unprotected `B.append` bytePN)
         pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
-        nonce = makeNonce iv bytePN
-    let Just payload = decryptPayload cipher key nonce encryptedPayload (AddDat header)
+    let Just payload = decrypt cipher secret ciphertext header bytePN
     frames <- decodeFrames payload
     return $ InitialPacket version dcID scID token pn frames
 
