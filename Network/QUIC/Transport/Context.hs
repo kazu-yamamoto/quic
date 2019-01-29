@@ -52,3 +52,17 @@ getCipher ctx = readIORef (usedCipher ctx)
 
 setCipher :: Context -> Cipher -> IO ()
 setCipher ctx cipher = writeIORef (usedCipher ctx) cipher
+
+txInitialSecret :: Context -> Secret
+txInitialSecret ctx = do
+    let (cis, sis) = initialSecret ctx
+    case role ctx of
+      Client _ -> cis
+      Server _ -> sis
+
+rxInitialSecret :: Context -> Secret
+rxInitialSecret ctx = do
+    let (cis, sis) = initialSecret ctx
+    case role ctx of
+      Client _ -> sis
+      Server _ -> cis

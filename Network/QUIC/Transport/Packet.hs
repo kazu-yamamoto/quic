@@ -88,14 +88,12 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     write32 wbuf epn -- assuming 4byte encoded packet number
     headerEnd <- currentOffset wbuf
     let bytePN = bytestring32 epn
-    cipher <- getCipher ctx
     plaintext <- encodeFrames frames
     let len = B.length plaintext + 4 + 16 -- fixme
     encodeInt'2 lenOff $ fromIntegral len
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
-    let secret = case role ctx of
-          Client _ -> clientInitialSecret dcID
-          Server _ -> serverInitialSecret (connectionID ctx)
+    let cipher = defaultCipher
+    let secret = txInitialSecret ctx
     let ciphertext = encrypt cipher secret plaintext header bytePN
     copyByteString wbuf ciphertext
     protectHeader ctx headerBeg pnBeg secret ciphertext
@@ -208,10 +206,8 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
-    cipher <- getCipher ctx
-    let secret = case role ctx of
-          Client _ -> serverInitialSecret (connectionID ctx)
-          Server _ -> clientInitialSecret dcID
+    let cipher = defaultCipher
+    let secret = rxInitialSecret ctx
         hpKey = headerProtectionKey cipher secret
     slen <- savingSize rbuf
     unprotected <- extractByteString rbuf (negate slen)
