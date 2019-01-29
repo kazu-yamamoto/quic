@@ -12,22 +12,25 @@ data Role = Client TLS.ClientParams
 
 data Context = Context {
     role :: Role
-  , tlsConetxt :: TLS.Context
-  , connectionID :: ByteString
-  , usedCipher :: IORef Cipher
+  , tlsConetxt     :: TLS.Context
+  , connectionID   :: ByteString
+  , usedCipher     :: IORef Cipher
   -- intentionally using the single space for packet numbers.
-  , packetNumber :: IORef PacketNumber
+  , packetNumber   :: IORef PacketNumber
+  , earlyKey       :: IORef (Maybe TLS.Key13)
+  , handshakeKey   :: IORef (Maybe TLS.Key13)
+  , applicationKey :: IORef (Maybe TLS.Key13)
   }
 
 clientContext :: TLS.HostName -> ByteString -> IO Context
 clientContext hostname cid = do
     (tlsctx, cparams) <- tlsClientContext hostname
-    Context (Client cparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0
+    Context (Client cparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0 <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing
 
 serverContext :: FilePath -> FilePath -> ByteString -> IO Context
 serverContext key cert cid = do
     (tlsctx, sparams) <- tlsServerContext key cert
-    Context (Server sparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0
+    Context (Server sparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0 <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
