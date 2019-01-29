@@ -76,12 +76,9 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     encodeInt'2 lenOff $ fromIntegral len
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     let secret = case role ctx of
-          Client _ -> clientInitialSecret cipher dcID
-          Server _ -> serverInitialSecret cipher (connectionID ctx)
-    let key = aeadKey cipher secret
-        iv  = initialVector cipher secret
-        nonce = makeNonce iv bytePN
-    let encryptedPayload = encryptPayload cipher key nonce payload (AddDat header)
+          Client _ -> clientInitialSecret dcID
+          Server _ -> serverInitialSecret (connectionID ctx)
+    let encryptedPayload = encrypt cipher secret payload header bytePN
     copyByteString wbuf encryptedPayload
     protectHeader ctx headerBeg pnBeg secret encryptedPayload
 encodePacket' ctx wbuf (RTT0Packet ver dcid scid _ frames) = do
@@ -150,6 +147,13 @@ protectHeader ctx headerBeg pnBeg secret payload = do
 encodeShortHeader :: IO Word32
 encodeShortHeader = undefined
 
+encrypt :: Cipher -> Secret -> PlainText -> ByteString -> ByteString -> CipherText
+encrypt cipher secret payload header bytePN = encryptPayload cipher key nonce payload (AddDat header)
+  where
+    key = aeadKey cipher secret
+    iv  = initialVector cipher secret
+    nonce = makeNonce iv bytePN
+
 ----------------------------------------------------------------
 
 decodePacket :: Context -> ByteString -> IO (Packet, ByteString)
@@ -195,8 +199,8 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     len <- fromIntegral <$> decodeInt' rbuf
     cipher <- getCipher ctx
     let secret = case role ctx of
-          Client _ -> serverInitialSecret cipher (connectionID ctx)
-          Server _ -> clientInitialSecret cipher (dcID)
+          Client _ -> serverInitialSecret (connectionID ctx)
+          Server _ -> clientInitialSecret dcID
         hpKey = headerProtectionKey cipher secret
     slen <- savingSize rbuf
     unprotected <- extractByteString rbuf (negate slen)

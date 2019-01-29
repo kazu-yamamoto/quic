@@ -19,7 +19,7 @@ spec = do
             ----------------------------------------------------------------
             -- shared keys
             let dcID = CID (dec16 "8394c8f03e515708")
-            let client_initial_secret = clientInitialSecret defaultCipher dcID
+            let client_initial_secret = clientInitialSecret dcID
             client_initial_secret `shouldBe` Secret (dec16 "8a3515a14ae3c31b9c2d6d5bc58538ca5cd2baa119087143e60887428dcb52f6")
             let ckey = aeadKey defaultCipher client_initial_secret
             ckey `shouldBe` Key (dec16 "98b0d7e5e7a402c67c33f350fa65ea54")
@@ -27,7 +27,7 @@ spec = do
             civ `shouldBe` IV (dec16 "19e94387805eb0b46c03a788")
             let chp = headerProtectionKey defaultCipher client_initial_secret
             chp `shouldBe` Key (dec16 "0edd982a6ac527f2eddcbb7348dea5d7")
-            let server_initial_secret = serverInitialSecret defaultCipher dcID
+            let server_initial_secret = serverInitialSecret dcID
             server_initial_secret `shouldBe` Secret (dec16 "47b2eaea6c266e32c0697a9e2a898bdf5c4fb3e5ac34f0e549bf2c58581a3811")
             let skey = aeadKey defaultCipher server_initial_secret
             skey `shouldBe` Key (dec16 "9a8be902a9bdd91d16064ca118045fb4")

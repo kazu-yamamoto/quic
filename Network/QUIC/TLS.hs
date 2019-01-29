@@ -75,15 +75,16 @@ newtype Nonce  = Nonce  ByteString deriving (Eq, Show)
 initialSalt :: Salt
 initialSalt = "\xef\x4f\xb0\xab\xb4\x74\x70\xc4\x1b\xef\xcf\x80\x31\x33\x4f\xae\x48\x5e\x09\xa0"
 
-clientInitialSecret :: Cipher -> CID -> Secret
+clientInitialSecret :: CID -> Secret
 clientInitialSecret = initialSecret (Label "client in")
 
-serverInitialSecret :: Cipher -> CID -> Secret
+serverInitialSecret :: CID -> Secret
 serverInitialSecret = initialSecret (Label "server in")
 
-initialSecret :: Label -> Cipher -> CID -> Secret
-initialSecret (Label label) cipher (CID cid) = Secret secret
+initialSecret :: Label -> CID -> Secret
+initialSecret (Label label) (CID cid) = Secret secret
   where
+    cipher    = defaultCipher
     hash      = TLS.cipherHash cipher
     iniSecret = TLS.hkdfExtract hash initialSalt cid
     hashSize  = TLS.hashDigestSize hash
