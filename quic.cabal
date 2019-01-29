@@ -30,6 +30,7 @@ library
                      , bytestring
                      , cryptonite
                      , memory
+                     , network
                      , network-byte-order
                      , tls
                      , data-default-class
