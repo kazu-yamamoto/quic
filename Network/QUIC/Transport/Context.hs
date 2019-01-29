@@ -1,7 +1,7 @@
 module Network.QUIC.Transport.Context where
 
 import Data.IORef
-import Data.ByteString
+-- import Data.ByteString
 import qualified Network.TLS as TLS
 
 import Network.QUIC.TLS
@@ -13,24 +13,25 @@ data Role = Client TLS.ClientParams
 data Context = Context {
     role :: Role
   , tlsConetxt     :: TLS.Context
-  , connectionID   :: ByteString
+  , connectionID   :: CID
   , usedCipher     :: IORef Cipher
   -- intentionally using the single space for packet numbers.
   , packetNumber   :: IORef PacketNumber
-  , earlyKey       :: IORef (Maybe TLS.Key13)
-  , handshakeKey   :: IORef (Maybe TLS.Key13)
-  , applicationKey :: IORef (Maybe TLS.Key13)
+  , initialSecret     :: IORef (Maybe (Secret, Secret))
+  , earlySecret       :: IORef (Maybe TLS.SecretTriple)
+  , handshakeSecret   :: IORef (Maybe TLS.SecretTriple)
+  , applicationSecret :: IORef (Maybe TLS.SecretTriple)
   }
 
-clientContext :: TLS.HostName -> ByteString -> IO Context
+clientContext :: TLS.HostName -> CID -> IO Context
 clientContext hostname cid = do
     (tlsctx, cparams) <- tlsClientContext hostname
-    Context (Client cparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0 <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing
+    Context (Client cparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0 <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing
 
-serverContext :: FilePath -> FilePath -> ByteString -> IO Context
+serverContext :: FilePath -> FilePath -> CID -> IO Context
 serverContext key cert cid = do
     (tlsctx, sparams) <- tlsServerContext key cert
-    Context (Server sparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0 <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing
+    Context (Server sparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0 <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
@@ -44,6 +45,13 @@ tlsServerParams ctx = case role ctx of
 
 getCipher :: Context -> IO Cipher
 getCipher ctx = readIORef (usedCipher ctx)
+
+setNego :: Context -> Cipher -> IO ()
+setNego ctx cipher = do
+    setCipher ctx cipher
+    let cis = clientInitialSecret cipher (connectionID ctx)
+        sis = clientInitialSecret cipher (connectionID ctx)
+    writeIORef (initialSecret ctx) $ Just (cis, sis)
 
 setCipher :: Context -> Cipher -> IO ()
 setCipher ctx cipher = writeIORef (usedCipher ctx) cipher

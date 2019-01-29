@@ -12,7 +12,7 @@ spec = do
     -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
     describe "test vector" $ do
         it "describes example" $ do
-            let dcid = dec16 "8394c8f03e515708"
+            let dcid = CID $ dec16 "8394c8f03e515708"
             cctx <- clientContext "example.jp" dcid
             sctx <- serverContext "test/serverkey.pem" "test/servercert.pem"  dcid
             (pkt, _) <- decodePacket sctx clientInitialPacketBinary

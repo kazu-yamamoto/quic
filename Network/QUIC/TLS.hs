@@ -47,6 +47,8 @@ import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra.Cipher as TLS
 import Network.TLS.Extra.Cipher
 
+import Network.QUIC.Transport.Types
+
 ----------------------------------------------------------------
 
 defaultCipher :: Cipher
@@ -60,7 +62,6 @@ type Salt       = ByteString
 
 newtype Key    = Key    ByteString deriving (Eq, Show)
 newtype IV     = IV     ByteString deriving (Eq, Show)
-newtype CID    = CID    ByteString deriving (Eq, Show)
 newtype Secret = Secret ByteString deriving (Eq, Show)
 newtype AddDat = AddDat ByteString deriving (Eq, Show)
 newtype Sample = Sample ByteString deriving (Eq, Show)

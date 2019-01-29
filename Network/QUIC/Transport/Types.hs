@@ -7,8 +7,7 @@ type Length = Int
 type PacketNumber = Int64
 type EncodedPacketNumber = Word32
 
-type DCID = ByteString
-type SCID = ByteString
+newtype CID = CID ByteString deriving (Eq, Show)
 type Token = ByteString
 type RawFlags = Word8
 
@@ -21,12 +20,12 @@ data Version = Negotiation
              | UnknownVersion Word32
              deriving (Eq, Show)
 
-data Packet = VersionNegotiationPacket DCID SCID [Version]
-            | InitialPacket    Version DCID SCID Token PacketNumber [Frame]
-            | RTT0Packet       Version DCID SCID       PacketNumber [Frame]
-            | HandshakePacket  Version DCID SCID       PacketNumber [Frame]
-            | RetryPacket      Version DCID SCID DCID Token
-            | ShortPacket              DCID            PacketNumber [Frame]
+data Packet = VersionNegotiationPacket CID CID [Version]
+            | InitialPacket    Version CID CID Token PacketNumber [Frame]
+            | RTT0Packet       Version CID CID       PacketNumber [Frame]
+            | HandshakePacket  Version CID CID       PacketNumber [Frame]
+            | RetryPacket      Version CID CID CID Token
+            | ShortPacket              CID            PacketNumber [Frame]
              deriving (Eq, Show)
 
 data Frame = Padding

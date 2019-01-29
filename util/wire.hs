@@ -3,17 +3,10 @@
 module Main where
 
 import Data.ByteString (ByteString)
-import Data.ByteString.Base16
 import Network.TLS
 import System.Environment
 
 import Network.QUIC
-
-dec16 :: ByteString -> ByteString
-dec16 = fst . decode
-
-enc16 :: ByteString -> ByteString
-enc16 = encode
 
 main :: IO ()
 main = do
@@ -23,8 +16,8 @@ main = do
 
 server :: FilePath -> FilePath -> IO ()
 server key cert = do
-    ctx <- serverContext key cert "\x41\x6c\x50\xc4\x3e\x23\x48\x7c"
-    InitialPacket _ver _dcid _scid _pn _token frames <- decodePacket ctx clientInitial
+    ctx <- serverContext key cert (CID "\x41\x6c\x50\xc4\x3e\x23\x48\x7c")
+    (InitialPacket _ver _dcid _scid _pn _token frames, _) <- decodePacket ctx clientInitial
     let f (Crypto _ _) = True
         f _            = False
     let Crypto _off bs:_ = filter f frames
@@ -33,8 +26,8 @@ server key cert = do
 
 client :: IO ()
 client = do
-    ctx <- clientContext "www.mew.org" "\x41\x6c\x50\xc4\x3e\x23\x48\x7c"
-    InitialPacket _ver _dcid _scid _pn _token frames <- decodePacket ctx serverInitial
+    ctx <- clientContext "www.mew.org" (CID "\x41\x6c\x50\xc4\x3e\x23\x48\x7c")
+    (InitialPacket _ver _dcid _scid _pn _token frames, _) <- decodePacket ctx serverInitial
     let Crypto _off bs:_ = frames
     let Right sh = decodeHandshakes13 bs
     print sh

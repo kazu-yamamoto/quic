@@ -76,8 +76,8 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     encodeInt'2 lenOff $ fromIntegral len
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     let secret = case role ctx of
-          Client _ -> clientInitialSecret cipher (CID dcID)
-          Server _ -> serverInitialSecret cipher (CID $ connectionID ctx)
+          Client _ -> clientInitialSecret cipher dcID
+          Server _ -> serverInitialSecret cipher (connectionID ctx)
     let key = aeadKey cipher secret
         iv  = initialVector cipher secret
         nonce = makeNonce iv bytePN
@@ -108,10 +108,10 @@ encodePacket' ctx wbuf (ShortPacket _ _ frames) = do
 --    protectHeader
 
 encodeLongHeader :: Context -> WriteBuffer
-                 -> Word8 -> Version -> DCID -> SCID
+                 -> Word8 -> Version -> CID -> CID
                  -> PacketNumber
                  -> IO EncodedPacketNumber
-encodeLongHeader _ctx wbuf flags ver dcid scid pn = do
+encodeLongHeader _ctx wbuf flags ver (CID dcid) (CID scid) pn = do
     let (epn, pnLen) = encodePacketNumber 0 {- dummy -} pn
     let pp = fromIntegral ((pnLen `div` 8) - 1)
     let flags' = 0b11000000 .|. flags .|. pp
@@ -170,8 +170,8 @@ decodeLongHeaderPacket ctx rbuf flags = do
     cil <- fromIntegral <$> read8 rbuf
     let dcil = decodeCIL ((cil .&. 0b11110000) `shiftR` 4)
         scil = decodeCIL (cil .&. 0b1111)
-    dcID <- extractByteString rbuf dcil
-    scID <- extractByteString rbuf scil
+    dcID <- CID <$> extractByteString rbuf dcil
+    scID <- CID <$> extractByteString rbuf scil
     case version of
       Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
       Draft17          -> decodeDraft ctx rbuf flags version dcID scID
@@ -181,22 +181,22 @@ decodeLongHeaderPacket ctx rbuf flags = do
     decodeCIL 0 = 0
     decodeCIL n = n + 3
 
-decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeDraft ctx rbuf flags version dcID scID = case decodePacketType flags of
     Initial   -> decodeInitialPacket ctx rbuf flags version dcID scID
     RTT0      -> undefined
     Handshake -> undefined -- xxx
     Retry     -> undefined
 
-decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
+decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
     cipher <- getCipher ctx
     let secret = case role ctx of
-          Client _ -> serverInitialSecret cipher (CID $ connectionID ctx)
-          Server _ -> clientInitialSecret cipher (CID dcID)
+          Client _ -> serverInitialSecret cipher (connectionID ctx)
+          Server _ -> clientInitialSecret cipher (dcID)
         hpKey = headerProtectionKey cipher secret
     slen <- savingSize rbuf
     unprotected <- extractByteString rbuf (negate slen)
@@ -226,7 +226,7 @@ takeSample rbuf len = do
     ff rbuf $ negate (len + 4)
     return $ Sample sample
 
-decodeVersionNegotiationPacket :: ReadBuffer -> DCID -> SCID -> IO Packet
+decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do
     version <- decodeVersion <$> read32 rbuf
     -- fixme
