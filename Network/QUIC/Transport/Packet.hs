@@ -73,21 +73,50 @@ decrypt cipher secret ciphertext header pn =
 
 protectHeader :: Buffer -> Buffer -> Cipher -> Secret -> CipherText -> IO ()
 protectHeader headerBeg pnBeg cipher secret ciphertext = do
-    let sample = Sample $ B.take (sampleLength cipher) ciphertext
-    let hpKey = headerProtectionKey cipher secret
-        Mask mask = protectionMask cipher hpKey sample
-    flag <- peek8 headerBeg 0
-    let protectecFlag = flag `xor` ((mask `B.index` 0) .&. 0b00001111)
+    flags <- peek8 headerBeg 0
+    let protectecFlag = flags `xor` ((mask `B.index` 0) .&. 0b00001111)
     poke8 protectecFlag headerBeg 0
-    suffle mask 0
-    suffle mask 1
-    suffle mask 2
-    suffle mask 3
+    suffle 0
+    suffle 1
+    suffle 2
+    suffle 3
   where
-    suffle mask n = do
+    sample = Sample $ B.take (sampleLength cipher) ciphertext
+    hpKey = headerProtectionKey cipher secret
+    Mask mask = protectionMask cipher hpKey sample
+    suffle n = do
         p0 <- peek8 pnBeg n
         let pp0 = p0 `xor` (mask `B.index` (n + 1))
         poke8 pp0 pnBeg n
+
+unprotectHeader :: ReadBuffer -> Cipher -> Secret -> Word8
+                -> IO (ByteString, Word8, PacketNumber, Int)
+unprotectHeader rbuf cipher secret proFlags = do
+    -- the cursor is just after the unprotected part of header
+    slen <- savingSize rbuf
+    unprotected <- extractByteString rbuf (negate slen)
+    sample <- takeSample $ sampleLength cipher
+    let Mask mask = protectionMask cipher hpKey sample
+    let Just (mask1,mask2) = B.uncons mask
+        flags = proFlags `xor` (mask1 .&. 0b1111)
+        pnLen = fromIntegral (flags .&. 0b11) + 1
+    bytePN <- bsXOR mask2 <$> extractByteString rbuf pnLen
+    let header = B.cons flags (unprotected `B.append` bytePN)
+    let pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
+    return (header, flags, pn, pnLen)
+    -- the cursor is just after packet number
+  where
+    hpKey = headerProtectionKey cipher secret
+
+    toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
+    toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
+
+    takeSample :: Int -> IO Sample
+    takeSample len = do
+        ff rbuf 4
+        sample <- extractByteString rbuf len
+        ff rbuf $ negate (len + 4)
+        return $ Sample sample
 
 ----------------------------------------------------------------
 
@@ -214,32 +243,12 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     token <- extractByteString rbuf tokenLen
     len <- fromIntegral <$> decodeInt' rbuf
     let cipher = defaultCipher
-    let secret = rxInitialSecret ctx
-        hpKey = headerProtectionKey cipher secret
-    slen <- savingSize rbuf
-    unprotected <- extractByteString rbuf (negate slen)
-    sample <- takeSample rbuf $ sampleLength cipher
-    let Mask mask = protectionMask cipher hpKey sample
-    let Just (mask1,mask2) = B.uncons mask
-        flag = proFlags `xor` (mask1 .&. 0b1111)
-        pnLen = fromIntegral (flag .&. 0b11) + 1
-    bytePN <- bsXOR mask2 <$> extractByteString rbuf pnLen
+        secret = rxInitialSecret ctx
+    (header, _flags, pn, pnLen) <- unprotectHeader rbuf cipher secret proFlags
     ciphertext <- extractByteString rbuf (len - pnLen)
-    let header = B.cons flag (unprotected `B.append` bytePN)
-        pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
     let Just payload = decrypt cipher secret ciphertext header pn
     frames <- decodeFrames payload
     return $ InitialPacket version dcID scID token pn frames
-
-toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
-toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
-
-takeSample :: ReadBuffer -> Int -> IO Sample
-takeSample rbuf len = do
-    ff rbuf 4
-    sample <- extractByteString rbuf len
-    ff rbuf $ negate (len + 4)
-    return $ Sample sample
 
 decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do
