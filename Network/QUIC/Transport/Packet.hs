@@ -71,9 +71,8 @@ decrypt cipher secret ciphertext header pn =
 
 ----------------------------------------------------------------
 
-protectHeader :: Context -> Buffer -> Buffer -> Secret -> CipherText -> IO ()
-protectHeader ctx headerBeg pnBeg secret ciphertext = do
-    cipher <- readIORef $ usedCipher ctx
+protectHeader :: Buffer -> Buffer -> Cipher -> Secret -> CipherText -> IO ()
+protectHeader headerBeg pnBeg cipher secret ciphertext = do
     let sample = Sample $ B.take (sampleLength cipher) ciphertext
     let hpKey = headerProtectionKey cipher secret
         Mask mask = protectionMask cipher hpKey sample
@@ -123,7 +122,7 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
         secret = txInitialSecret ctx
     let ciphertext = encrypt cipher secret plaintext header pn
     copyByteString wbuf ciphertext
-    protectHeader ctx headerBeg pnBeg secret ciphertext
+    protectHeader headerBeg pnBeg cipher secret ciphertext
 encodePacket' ctx wbuf (RTT0Packet ver dcid scid _ frames) = do
     _headerOff <- currentOffset wbuf
     pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
