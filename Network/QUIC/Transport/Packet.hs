@@ -49,21 +49,46 @@ decodePacketType flags = case flags .&. 0b00110000 of
 
 ----------------------------------------------------------------
 
-encrypt :: Cipher -> Secret -> PlainText -> ByteString -> ByteString -> CipherText
-encrypt cipher secret plaintext header bytePN =
+encrypt :: Cipher -> Secret -> PlainText -> ByteString -> PacketNumber
+        -> CipherText
+encrypt cipher secret plaintext header pn =
     encryptPayload cipher key nonce plaintext (AddDat header)
   where
-    key = aeadKey cipher secret
-    iv  = initialVector cipher secret
-    nonce = makeNonce iv bytePN
+    key    = aeadKey cipher secret
+    iv     = initialVector cipher secret
+    nonce  = makeNonce iv bytePN
+    bytePN = bytestring64 (fromIntegral pn)
 
-decrypt :: Cipher -> Secret -> CipherText -> ByteString -> ByteString -> Maybe PlainText
-decrypt cipher secret ciphertext header bytePN =
+decrypt :: Cipher -> Secret -> CipherText -> ByteString -> PacketNumber
+        -> Maybe PlainText
+decrypt cipher secret ciphertext header pn =
     decryptPayload cipher key nonce ciphertext (AddDat header)
   where
-    key = aeadKey cipher secret
-    iv  = initialVector cipher secret
-    nonce = makeNonce iv bytePN
+    key    = aeadKey cipher secret
+    iv     = initialVector cipher secret
+    nonce  = makeNonce iv bytePN
+    bytePN = bytestring64 (fromIntegral pn)
+
+----------------------------------------------------------------
+
+protectHeader :: Context -> Buffer -> Buffer -> Secret -> CipherText -> IO ()
+protectHeader ctx headerBeg pnBeg secret ciphertext = do
+    cipher <- readIORef $ usedCipher ctx
+    let sample = Sample $ B.take (sampleLength cipher) ciphertext
+    let hpKey = headerProtectionKey cipher secret
+        Mask mask = protectionMask cipher hpKey sample
+    flag <- peek8 headerBeg 0
+    let protectecFlag = flag `xor` ((mask `B.index` 0) .&. 0b00001111)
+    poke8 protectecFlag headerBeg 0
+    suffle mask 0
+    suffle mask 1
+    suffle mask 2
+    suffle mask 3
+  where
+    suffle mask n = do
+        p0 <- peek8 pnBeg n
+        let pp0 = p0 `xor` (mask `B.index` (n + 1))
+        poke8 pp0 pnBeg n
 
 ----------------------------------------------------------------
 
@@ -77,6 +102,7 @@ encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
 encodePacket' _ctx _wbuf (VersionNegotiationPacket _ _ _) =
     undefined
 encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
+
     headerBeg <- currentOffset wbuf
     epn <- encodeLongHeader ctx wbuf 0b00000000 ver dcID scID pn
     encodeInt' wbuf $ fromIntegral $ B.length token
@@ -87,14 +113,15 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     pnBeg <- currentOffset wbuf
     write32 wbuf epn -- assuming 4byte encoded packet number
     headerEnd <- currentOffset wbuf
-    let bytePN = bytestring32 epn
+
     plaintext <- encodeFrames frames
     let len = B.length plaintext + 4 + 16 -- fixme
     encodeInt'2 lenOff $ fromIntegral len
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
+
     let cipher = defaultCipher
-    let secret = txInitialSecret ctx
-    let ciphertext = encrypt cipher secret plaintext header bytePN
+        secret = txInitialSecret ctx
+    let ciphertext = encrypt cipher secret plaintext header pn
     copyByteString wbuf ciphertext
     protectHeader ctx headerBeg pnBeg secret ciphertext
 encodePacket' ctx wbuf (RTT0Packet ver dcid scid _ frames) = do
@@ -140,25 +167,6 @@ encodeLongHeader _ctx wbuf flags ver (CID dcid) (CID scid) pn = do
   where
     encodeCIL 0 = 0
     encodeCIL n = n - 3
-
-protectHeader :: Context -> Buffer -> Buffer -> Secret -> ByteString -> IO ()
-protectHeader ctx headerBeg pnBeg secret payload = do
-    cipher <- readIORef $ usedCipher ctx
-    let sample = Sample $ B.take (sampleLength cipher) payload
-    let key = headerProtectionKey cipher secret
-        Mask mask = protectionMask cipher key sample
-    flag <- peek8 headerBeg 0
-    let protectecFlag = flag `xor` ((mask `B.index` 0) .&. 0b00001111)
-    poke8 protectecFlag headerBeg 0
-    suffle mask 0
-    suffle mask 1
-    suffle mask 2
-    suffle mask 3
-  where
-    suffle mask n = do
-        p0 <- peek8 pnBeg n
-        let pp0 = p0 `xor` (mask `B.index` (n + 1))
-        poke8 pp0 pnBeg n
 
 encodeShortHeader :: IO Word32
 encodeShortHeader = undefined
@@ -220,7 +228,7 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     ciphertext <- extractByteString rbuf (len - pnLen)
     let header = B.cons flag (unprotected `B.append` bytePN)
         pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
-    let Just payload = decrypt cipher secret ciphertext header bytePN
+    let Just payload = decrypt cipher secret ciphertext header pn
     frames <- decodeFrames payload
     return $ InitialPacket version dcID scID token pn frames
 
