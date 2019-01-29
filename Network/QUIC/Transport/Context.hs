@@ -14,7 +14,7 @@ data Context = Context {
     role :: Role
   , tlsConetxt :: TLS.Context
   , connectionID :: ByteString
-  , cipherRef :: IORef Cipher
+  , usedCipher :: IORef Cipher
   , initialSpace :: IORef PacketNumber
   , handshakeSpace :: IORef PacketNumber
   , appDataSpace :: IORef PacketNumber
@@ -49,7 +49,7 @@ tlsServerParams ctx = case role ctx of
   Client _       -> error "tlsServerParams"
 
 getCipher :: Context -> IO Cipher
-getCipher ctx = readIORef (cipherRef ctx)
+getCipher ctx = readIORef (usedCipher ctx)
 
 setCipher :: Context -> Cipher -> IO ()
-setCipher ctx cipher = writeIORef (cipherRef ctx) cipher
+setCipher ctx cipher = writeIORef (usedCipher ctx) cipher

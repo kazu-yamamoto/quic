@@ -129,7 +129,7 @@ encodeLongHeader _ctx wbuf flags ver dcid scid pn = do
 
 protectHeader :: Context -> Buffer -> Buffer -> Secret -> ByteString -> IO ()
 protectHeader ctx headerBeg pnBeg secret payload = do
-    cipher <- readIORef $ cipherRef ctx
+    cipher <- readIORef $ usedCipher ctx
     let sample = Sample $ B.take (sampleLength cipher) payload
     let key = headerProtectionKey cipher secret
         Mask mask = protectionMask cipher key sample
