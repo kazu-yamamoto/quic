@@ -86,12 +86,13 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     protectHeader ctx headerBeg pnBeg secret encryptedPayload
 encodePacket' ctx wbuf (RTT0Packet ver dcid scid _ frames) = do
     _headerOff <- currentOffset wbuf
-    pn <- atomicModifyIORef' (appDataSpace ctx) $ \n -> (n+1,n)
+    pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
     _ <- encodeLongHeader ctx wbuf 0b00010000 ver dcid scid pn
     mapM_ (encodeFrame wbuf) frames
 --    protectHeader ctx headerOff sampleOff undefined
 encodePacket' ctx wbuf (HandshakePacket ver dcid scid _ frames) = do
-    pn <- atomicModifyIORef' (handshakeSpace ctx) $ \n -> (n+1,n)
+    -- xxx
+    pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
     _ <- encodeLongHeader ctx wbuf 0b00100000 ver dcid scid pn
     mapM_ (encodeFrame wbuf) frames
 --    protectHeader
@@ -100,7 +101,7 @@ encodePacket' ctx wbuf (RetryPacket ver dcid scid _ _) = do
     write32 wbuf epn
 --    protectHeader
 encodePacket' ctx wbuf (ShortPacket _ _ frames) = do
-    _pn <- atomicModifyIORef' (appDataSpace ctx) $ \n -> (n+1,n)
+    _pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
     epn <- encodeShortHeader
     mapM_ (encodeFrame wbuf) frames
     write32 wbuf epn
@@ -182,8 +183,10 @@ decodeLongHeaderPacket ctx rbuf flags = do
 
 decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
 decodeDraft ctx rbuf flags version dcID scID = case decodePacketType flags of
-    Initial -> decodeInitialPacket ctx rbuf flags version dcID scID
-    _       -> undefined
+    Initial   -> decodeInitialPacket ctx rbuf flags version dcID scID
+    RTT0      -> undefined
+    Handshake -> undefined -- xxx
+    Retry     -> undefined
 
 decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> DCID -> SCID -> IO Packet
 decodeInitialPacket ctx rbuf proFlags version dcID scID = do

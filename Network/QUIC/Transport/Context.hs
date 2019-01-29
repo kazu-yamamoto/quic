@@ -15,28 +15,19 @@ data Context = Context {
   , tlsConetxt :: TLS.Context
   , connectionID :: ByteString
   , usedCipher :: IORef Cipher
-  , initialSpace :: IORef PacketNumber
-  , handshakeSpace :: IORef PacketNumber
-  , appDataSpace :: IORef PacketNumber
+  -- intentionally using the single space for packet numbers.
+  , packetNumber :: IORef PacketNumber
   }
 
 clientContext :: TLS.HostName -> ByteString -> IO Context
 clientContext hostname cid = do
     (tlsctx, cparams) <- tlsClientContext hostname
-    ref <- newIORef defaultCipher
-    iref <- newIORef 0
-    href <- newIORef 0
-    aref <- newIORef 0
-    return $ Context (Client cparams) tlsctx cid ref iref href aref
+    Context (Client cparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0
 
 serverContext :: FilePath -> FilePath -> ByteString -> IO Context
 serverContext key cert cid = do
     (tlsctx, sparams) <- tlsServerContext key cert
-    ref <- newIORef defaultCipher
-    iref <- newIORef 0
-    href <- newIORef 0
-    aref <- newIORef 0
-    return $ Context (Server sparams) tlsctx cid ref iref href aref
+    Context (Server sparams) tlsctx cid <$> newIORef defaultCipher <*> newIORef 0
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
