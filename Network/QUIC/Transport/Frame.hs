@@ -33,7 +33,7 @@ decodeFrames :: ByteString -> IO [Frame]
 decodeFrames bs = withReadBuffer bs $ loop id
   where
     loop frames rbuf = do
-        ok <- checkSpace rbuf 1
+        ok <- (>= 1) <$> remainingSize rbuf
         if ok then do
             frame <- decodeFrame rbuf
             loop (frames . (frame:)) rbuf
