@@ -203,18 +203,18 @@ encodeShortHeader = undefined
 
 decodePacket :: Context -> ByteString -> IO (Packet, ByteString)
 decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
-    flags <- read8 rbuf
+    proFlags <- read8 rbuf
     save rbuf
-    pkt <- if testBit flags 7 then do
-             decodeLongHeaderPacket ctx rbuf flags
+    pkt <- if testBit proFlags 7 then do
+             decodeLongHeaderPacket ctx rbuf proFlags
            else
-             decodeShortHeaderPacket ctx rbuf flags
+             decodeShortHeaderPacket ctx rbuf proFlags
     siz <- savingSize rbuf
     let remaining = B.drop (siz + 1) bin
     return (pkt, remaining)
 
 decodeLongHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
-decodeLongHeaderPacket ctx rbuf flags = do
+decodeLongHeaderPacket ctx rbuf proFlags = do
     version <- decodeVersion <$> read32 rbuf
     cil <- fromIntegral <$> read8 rbuf
     let dcil = decodeCIL ((cil .&. 0b11110000) `shiftR` 4)
@@ -223,18 +223,18 @@ decodeLongHeaderPacket ctx rbuf flags = do
     scID <- CID <$> extractByteString rbuf scil
     case version of
       Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
-      Draft17          -> decodeDraft ctx rbuf flags version dcID scID
-      Draft18          -> decodeDraft ctx rbuf flags version dcID scID
+      Draft17          -> decodeDraft ctx rbuf proFlags version dcID scID
+      Draft18          -> decodeDraft ctx rbuf proFlags version dcID scID
       UnknownVersion _ -> error "unknown version"
   where
     decodeCIL 0 = 0
     decodeCIL n = n + 3
 
 decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeDraft ctx rbuf flags version dcID scID = case decodePacketType flags of
-    Initial   -> decodeInitialPacket ctx rbuf flags version dcID scID
+decodeDraft ctx rbuf proFlags version dcID scID = case decodePacketType proFlags of
+    Initial   -> decodeInitialPacket ctx rbuf proFlags version dcID scID
     RTT0      -> undefined
-    Handshake -> undefined -- xxx
+    Handshake -> decodeHandshakePacket ctx rbuf proFlags version dcID scID
     Retry     -> undefined
 
 decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
@@ -249,6 +249,17 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     let Just payload = decrypt cipher secret ciphertext header pn
     frames <- decodeFrames payload
     return $ InitialPacket version dcID scID token pn frames
+
+decodeHandshakePacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeHandshakePacket ctx rbuf proFlags version dcID scID = do
+    len <- fromIntegral <$> decodeInt' rbuf
+    cipher <- getCipher ctx
+    secret <- rxHandshakeSecret ctx
+    (header, _flags, pn, pnLen) <- unprotectHeader rbuf cipher secret proFlags
+    ciphertext <- extractByteString rbuf (len - pnLen)
+    let Just payload = decrypt cipher secret ciphertext header pn
+    frames <- decodeFrames payload
+    return $ HandshakePacket version dcID scID pn frames
 
 decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do

@@ -54,15 +54,33 @@ setCipher :: Context -> Cipher -> IO ()
 setCipher ctx cipher = writeIORef (usedCipher ctx) cipher
 
 txInitialSecret :: Context -> Secret
-txInitialSecret ctx = do
-    let (cis, sis) = initialSecret ctx
-    case role ctx of
-      Client _ -> cis
-      Server _ -> sis
+txInitialSecret ctx = case role ctx of
+    Client _ -> cis
+    Server _ -> sis
+  where
+    (cis, sis) = initialSecret ctx
 
 rxInitialSecret :: Context -> Secret
-rxInitialSecret ctx = do
-    let (cis, sis) = initialSecret ctx
+rxInitialSecret ctx = case role ctx of
+    Client _ -> sis
+    Server _ -> cis
+  where
+    (cis, sis) = initialSecret ctx
+
+txHandshakeSecret :: Context -> IO Secret
+txHandshakeSecret ctx = do
+    Just st <- readIORef (handshakeSecret ctx)
     case role ctx of
-      Client _ -> sis
-      Server _ -> cis
+      Client _ -> let TLS.ClientHandshakeSecret s = TLS.triClient st
+                  in return $ Secret s
+      Server _ -> let TLS.ServerHandshakeSecret s = TLS.triServer st
+                  in return $ Secret s
+
+rxHandshakeSecret :: Context -> IO Secret
+rxHandshakeSecret ctx = do
+    Just st <- readIORef (handshakeSecret ctx)
+    case role ctx of
+      Client _ -> let TLS.ServerHandshakeSecret s = TLS.triServer st
+                  in return $ Secret s
+      Server _ -> let TLS.ClientHandshakeSecret s = TLS.triClient st
+                  in return $ Secret s
