@@ -32,6 +32,8 @@ module Network.QUIC.TLS (
   , Mask(..)
   , Nonce(..)
   , Cipher
+  , HandshakeCheck(..)
+  , handshakeCheck
   ) where
 
 import Crypto.Cipher.AES
@@ -249,3 +251,33 @@ tlsServerContext key cert = do
     debug = def {
         TLS.debugKeyLogger = putStrLn -- fixme
       }
+
+----------------------------------------------------------------
+
+data HandshakeCheck = Start
+                    | Cont !Word8 !Word32
+                    | Done
+                    deriving Show
+
+handshakeCheck :: Word8 -> ByteString -> HandshakeCheck -> IO HandshakeCheck
+handshakeCheck styp bs ck = withReadBuffer bs $ \rbuf -> loop rbuf ck
+  where
+    loop _    Done  = error "handshakeCheck Done"
+    loop rbuf Start = do
+        typ <- read8 rbuf
+        len <- read24 rbuf
+        rlen <- fromIntegral <$> remainingSize rbuf
+        case rlen `compare` len of
+          EQ | typ == styp -> return Done
+             | otherwise   -> return Start
+          GT | typ == styp -> error "handshakeCheck Start"
+             | otherwise   -> ff rbuf (fromIntegral len) >> loop rbuf Start
+          LT               -> return $ Cont typ (len - rlen)
+    loop rbuf (Cont typ skipLen) = do
+        rlen <- fromIntegral <$> remainingSize rbuf
+        case rlen `compare` skipLen of
+          EQ | typ == styp -> return Done
+             | otherwise   -> return Start
+          GT | typ == styp -> error "handshakeCheck Cont"
+             | otherwise   -> ff rbuf (fromIntegral skipLen) >> loop rbuf Start
+          LT               -> return $ Cont typ (skipLen - rlen)
