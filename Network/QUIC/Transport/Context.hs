@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Network.QUIC.Transport.Context where
 
 import Data.IORef
@@ -13,8 +15,9 @@ data Role = Client TLS.ClientParams
 data Context = Context {
     role :: Role
   , tlsConetxt        :: TLS.Context
-  , connectionID      :: CID -- fixme
+  , myCID             :: CID
   , initialSecret     :: (Secret, Secret)
+  , peerCID           :: IORef CID
   , usedCipher        :: IORef Cipher
   , earlySecret       :: IORef (Maybe TLS.SecretTriple)
   , handshakeSecret   :: IORef (Maybe TLS.SecretTriple)
@@ -23,19 +26,22 @@ data Context = Context {
   , packetNumber      :: IORef PacketNumber
   }
 
+emptyCID :: CID
+emptyCID = CID ""
+
 clientContext :: TLS.HostName -> CID -> IO Context
 clientContext hostname cid = do
     (tlsctx, cparams) <- tlsClientContext hostname
     let cis = clientInitialSecret cid
         sis = serverInitialSecret cid
-    Context (Client cparams) tlsctx cid (cis, sis) <$> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
+    Context (Client cparams) tlsctx cid (cis, sis) <$> newIORef emptyCID <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
 serverContext :: FilePath -> FilePath -> CID -> IO Context
 serverContext key cert cid = do
     (tlsctx, sparams) <- tlsServerContext key cert
     let cis = clientInitialSecret cid
         sis = serverInitialSecret cid
-    Context (Server sparams) tlsctx cid (cis, sis) <$> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
+    Context (Server sparams) tlsctx cid (cis, sis) <$> newIORef emptyCID <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
