@@ -24,12 +24,16 @@ encodeVersion :: Version -> Word32
 encodeVersion Negotiation        = 0
 encodeVersion Draft17            = 0xff000011
 encodeVersion Draft18            = 0xff000012
+encodeVersion Draft19            = 0xff000013
+encodeVersion Draft20            = 0xff000014
 encodeVersion (UnknownVersion w) = w
 
 decodeVersion :: Word32 -> Version
 decodeVersion 0          = Negotiation
 decodeVersion 0xff000011 = Draft17
 decodeVersion 0xff000012 = Draft18
+decodeVersion 0xff000013 = Draft19
+decodeVersion 0xff000014 = Draft20
 decodeVersion w          = UnknownVersion w
 
 ----------------------------------------------------------------
@@ -223,9 +227,8 @@ decodeLongHeaderPacket ctx rbuf proFlags = do
     scID <- CID <$> extractByteString rbuf scil
     case version of
       Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
-      Draft17          -> decodeDraft ctx rbuf proFlags version dcID scID
-      Draft18          -> decodeDraft ctx rbuf proFlags version dcID scID
       UnknownVersion _ -> error "unknown version"
+      _DraftXX         -> decodeDraft ctx rbuf proFlags version dcID scID
   where
     decodeCIL 0 = 0
     decodeCIL n = n + 3
