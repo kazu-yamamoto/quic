@@ -15,17 +15,20 @@ encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
 
 encodeFrame :: WriteBuffer -> Frame -> IO ()
 encodeFrame wbuf Padding = write8 wbuf 0x00
+encodeFrame wbuf Ping = write8 wbuf 0x01
 encodeFrame wbuf (Crypto off cdata) = do
     write8 wbuf 0x06
     encodeInt' wbuf $ fromIntegral off
     encodeInt' wbuf $ fromIntegral $ B.length cdata
     copyByteString wbuf cdata
-encodeFrame wbuf (Ack la ad arc far) = do
+encodeFrame wbuf (Ack largest delay range1 ranges) = do
     write8 wbuf 0x02
-    encodeInt' wbuf la
-    encodeInt' wbuf ad
-    encodeInt' wbuf arc
-    encodeInt' wbuf far
+    encodeInt' wbuf largest
+    encodeInt' wbuf $ fromIntegral delay
+    encodeInt' wbuf $ fromIntegral $ length ranges
+    encodeInt' wbuf $ fromIntegral $ range1
+    -- fixme: ranges
+encodeFrame _wbuf (Stream _sid _off _dat _fin) = undefined
 
 ----------------------------------------------------------------
 
@@ -45,8 +48,10 @@ decodeFrame rbuf = do
     b0 <- read8 rbuf
     case b0 of
       0x00 -> return Padding
+      0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
       0x06 -> decodeCryptoFrame rbuf
+      x | 0x08 <= x && x <= 0x0f -> decodeStreamFrame rbuf
       _x   -> error $ show _x
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
@@ -56,7 +61,14 @@ decodeCryptoFrame rbuf = do
     cdata <- extractByteString rbuf len
     return $ Crypto off cdata
 
--- fixme
 decodeAckFrame :: ReadBuffer -> IO Frame
-decodeAckFrame rbuf =
-    Ack <$> decodeInt' rbuf <*> decodeInt' rbuf <*> decodeInt' rbuf <*> decodeInt' rbuf
+decodeAckFrame rbuf = do
+    largest <- decodeInt' rbuf
+    delay   <- fromIntegral <$> decodeInt' rbuf
+    _count  <- (fromIntegral <$> decodeInt' rbuf) :: IO Int
+    range1  <- fromIntegral <$> decodeInt' rbuf
+    -- fixme: ranges
+    return $ Ack largest delay range1 []
+
+decodeStreamFrame :: ReadBuffer -> IO Frame
+decodeStreamFrame = undefined

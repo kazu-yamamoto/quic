@@ -5,6 +5,7 @@ import Network.ByteOrder
 
 type Length = Int
 type PacketNumber = Int64
+type StreamID = Int64
 type EncodedPacketNumber = Word32
 
 newtype CID = CID ByteString deriving (Eq, Show)
@@ -27,10 +28,19 @@ data Packet = VersionNegotiationPacket CID CID [Version]
             | RTT0Packet       Version CID CID       PacketNumber [Frame]
             | HandshakePacket  Version CID CID       PacketNumber [Frame]
             | RetryPacket      Version CID CID CID Token
-            | ShortPacket              CID            PacketNumber [Frame]
+            | ShortPacket              CID           PacketNumber [Frame]
              deriving (Eq, Show)
 
+type Delay = Int
+type Range = Int
+type Gap   = Int
+type CryptoData = ByteString
+type StreamData = ByteString
+type Fin = Bool
+
 data Frame = Padding
-           | Ack Int64 Int64 Int64 Int64 -- fixme
-           | Crypto Offset ByteString
+           | Ping
+           | Ack PacketNumber Delay Range [(Gap,Range)]
+           | Crypto Offset CryptoData
+           | Stream StreamID Offset StreamData Fin
            deriving (Eq,Show)
