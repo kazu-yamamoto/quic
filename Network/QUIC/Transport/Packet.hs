@@ -132,29 +132,29 @@ encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
 encodePacket' _ctx _wbuf (VersionNegotiationPacket _ _ _) =
     undefined
 encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
+    -- pre process
+    plaintext <- encodeFrames frames
+    let len = B.length plaintext + 4 + 16 -- fixme: 4 bytes PN + crypto overhead
     headerBeg <- currentOffset wbuf
     -- flag ... src conn id
     epn <- encodeLongHeader ctx wbuf 0b00000000 ver dcID scID pn
     -- token
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
-    -- length
-    lenOff <- currentOffset wbuf
-    ff wbuf 2 -- assuming 2byte length
+    -- length: assuming 2byte length
+    encodeInt'2 wbuf $ fromIntegral len
     pnBeg <- currentOffset wbuf
-    -- packet number
-    write32 wbuf epn -- assuming 4byte encoded packet number
+    -- packet number: assuming 4byte encoded packet number
+    write32 wbuf epn
+    -- post process
     headerEnd <- currentOffset wbuf
-
-    plaintext <- encodeFrames frames
-    let len = B.length plaintext + 4 + 16 -- fixme
-    encodeInt'2 lenOff $ fromIntegral len
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
-
+    -- payload
     let cipher = defaultCipher
         secret = txInitialSecret ctx
     let ciphertext = encrypt cipher secret plaintext header pn
     copyByteString wbuf ciphertext
+    -- protecting header
     protectHeader headerBeg pnBeg cipher secret ciphertext
 encodePacket' ctx wbuf (RTT0Packet ver dcid scid _ frames) = do
     _headerOff <- currentOffset wbuf

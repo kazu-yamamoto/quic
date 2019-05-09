@@ -52,11 +52,11 @@ encodeInt' wbuf i
         write8 wbuf w6
         write8 wbuf w7
 
-encodeInt'2 :: Buffer -> Int64 -> IO ()
+encodeInt'2 :: WriteBuffer -> Int64 -> IO ()
 encodeInt'2 wbuf i = do
     let [w0,w1] = decomp 2 [] i
-    poke8 (w0 .|. 0b01000000) wbuf 0
-    poke8 w1 wbuf 1
+    write8 wbuf (w0 .|. 0b01000000)
+    write8 wbuf w1
 
 decomp :: Int -> [Word8] -> Int64 -> [Word8]
 decomp 0 ws _ = ws
