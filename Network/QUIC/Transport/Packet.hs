@@ -85,15 +85,16 @@ protectHeader headerBeg pnBeg cipher secret ciphertext = do
     flags <- peek8 headerBeg 0
     let protectecFlag = flags `xor` ((mask `B.index` 0) .&. flagBits flags)
     poke8 protectecFlag headerBeg 0
-    suffle 0
-    suffle 1
-    suffle 2
-    suffle 3
+    -- assuming 4byte encoded packet number
+    shuffle 0
+    shuffle 1
+    shuffle 2
+    shuffle 3
   where
     sample = Sample $ B.take (sampleLength cipher) ciphertext
     hpKey = headerProtectionKey cipher secret
     Mask mask = protectionMask cipher hpKey sample
-    suffle n = do
+    shuffle n = do
         p0 <- peek8 pnBeg n
         let pp0 = p0 `xor` (mask `B.index` (n + 1))
         poke8 pp0 pnBeg n
