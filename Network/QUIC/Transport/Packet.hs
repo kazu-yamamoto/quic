@@ -75,10 +75,15 @@ decrypt cipher secret ciphertext header pn =
 
 ----------------------------------------------------------------
 
+flagBits :: Word8 -> Word8
+flagBits flags
+  | flags .&. 0x80 == 0x80 = 0b00001111 -- long header
+  | otherwise              = 0b00011111 -- short header
+
 protectHeader :: Buffer -> Buffer -> Cipher -> Secret -> CipherText -> IO ()
 protectHeader headerBeg pnBeg cipher secret ciphertext = do
     flags <- peek8 headerBeg 0
-    let protectecFlag = flags `xor` ((mask `B.index` 0) .&. 0b00001111)
+    let protectecFlag = flags `xor` ((mask `B.index` 0) .&. flagBits flags)
     poke8 protectecFlag headerBeg 0
     suffle 0
     suffle 1
@@ -102,7 +107,7 @@ unprotectHeader rbuf cipher secret proFlags = do
     sample <- takeSample $ sampleLength cipher
     let Mask mask = protectionMask cipher hpKey sample
     let Just (mask1,mask2) = B.uncons mask
-        flags = proFlags `xor` (mask1 .&. 0b1111)
+        flags = proFlags `xor` (mask1 .&. flagBits proFlags)
         pnLen = fromIntegral (flags .&. 0b11) + 1
     bytePN <- bsXOR mask2 <$> extractByteString rbuf pnLen
     let header = B.cons flags (unprotected `B.append` bytePN)
