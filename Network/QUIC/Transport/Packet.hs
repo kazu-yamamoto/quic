@@ -158,7 +158,7 @@ encodePacket' _ctx _wbuf (VersionNegotiationPacket _ _ _) =
 encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     -- flag ... src conn id
     headerBeg <- currentOffset wbuf
-    epn <- encodeLongHeader ctx wbuf 0b00000000 ver dcID scID pn
+    epn <- encodeLongHeader ctx wbuf Initial ver dcID scID pn
     -- token
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
@@ -167,18 +167,18 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     encodeFrameInShort wbuf frames secret pn epn headerBeg
 encodePacket' ctx wbuf (RTT0Packet ver dcid scid pn frames) = do
     _headerOff <- currentOffset wbuf
-    _ <- encodeLongHeader ctx wbuf 0b00010000 ver dcid scid pn
+    _ <- encodeLongHeader ctx wbuf RTT0 ver dcid scid pn
     mapM_ (encodeFrame wbuf) frames
 --    protectHeader ctx headerOff sampleOff undefined
 encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     -- flag ... src conn id
     headerBeg <- currentOffset wbuf
-    epn <- encodeLongHeader ctx wbuf 0b00100000 ver dcID scID pn
+    epn <- encodeLongHeader ctx wbuf Handshake ver dcID scID pn
     -- length .. payload
     secret <- txHandshakeSecret ctx
     encodeFrameInShort wbuf frames secret pn epn headerBeg
 encodePacket' ctx wbuf (RetryPacket ver dcid scid _ _) = do
-    epn <- encodeLongHeader ctx wbuf 0b00110000 ver dcid scid undefined
+    epn <- encodeLongHeader ctx wbuf Retry ver dcid scid undefined
     write32 wbuf epn
 --    protectHeader
 encodePacket' _ctx wbuf (ShortPacket _ _pn frames) = do
@@ -188,13 +188,13 @@ encodePacket' _ctx wbuf (ShortPacket _ _pn frames) = do
 --    protectHeader
 
 encodeLongHeader :: Context -> WriteBuffer
-                 -> Word8 -> Version -> CID -> CID
+                 -> PacketType -> Version -> CID -> CID
                  -> PacketNumber
                  -> IO EncodedPacketNumber
-encodeLongHeader _ctx wbuf flags ver (CID dcid) (CID scid) pn = do
+encodeLongHeader _ctx wbuf pkttyp ver (CID dcid) (CID scid) pn = do
     let (epn, pnLen) = encodePacketNumber 0 {- dummy -} pn
     let pp = fromIntegral ((pnLen `div` 8) - 1)
-    let flags' = 0b11000000 .|. flags .|. pp
+    let flags' = encodePacketType (0b11000000 .|. pp) pkttyp
     write8 wbuf flags'
     write32 wbuf $ encodeVersion ver
     let dcil = fromIntegral $ B.length dcid
