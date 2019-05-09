@@ -6,7 +6,6 @@ module Network.QUIC.Transport.Packet where
 import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Data.IORef
 import Data.List (foldl')
 import Foreign.Ptr
 import Network.ByteOrder
@@ -134,20 +133,11 @@ encodePacket :: Context -> Packet -> IO ByteString
 encodePacket ctx pkt = withWriteBuffer 2048 $ \wbuf ->
   encodePacket' ctx wbuf pkt
 
-encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
-encodePacket' _ctx _wbuf (VersionNegotiationPacket _ _ _) =
-    undefined
-encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
-    -- pre process
+encodeFrameInShort :: WriteBuffer -> [Frame] -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> IO ()
+encodeFrameInShort wbuf frames secret pn epn headerBeg = do
+    -- length: assuming 2byte length
     plaintext <- encodeFrames frames
     let len = B.length plaintext + 4 + 16 -- fixme: 4 bytes PN + crypto overhead
-    headerBeg <- currentOffset wbuf
-    -- flag ... src conn id
-    epn <- encodeLongHeader ctx wbuf 0b00000000 ver dcID scID pn
-    -- token
-    encodeInt' wbuf $ fromIntegral $ B.length token
-    copyByteString wbuf token
-    -- length: assuming 2byte length
     encodeInt'2 wbuf $ fromIntegral len
     pnBeg <- currentOffset wbuf
     -- packet number: assuming 4byte encoded packet number
@@ -157,29 +147,41 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     -- payload
     let cipher = defaultCipher
-        secret = txInitialSecret ctx
     let ciphertext = encrypt cipher secret plaintext header pn
     copyByteString wbuf ciphertext
     -- protecting header
     protectHeader headerBeg pnBeg cipher secret ciphertext
-encodePacket' ctx wbuf (RTT0Packet ver dcid scid _ frames) = do
+
+encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
+encodePacket' _ctx _wbuf (VersionNegotiationPacket _ _ _) =
+    undefined
+encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
+    -- flag ... src conn id
+    headerBeg <- currentOffset wbuf
+    epn <- encodeLongHeader ctx wbuf 0b00000000 ver dcID scID pn
+    -- token
+    encodeInt' wbuf $ fromIntegral $ B.length token
+    copyByteString wbuf token
+    -- length .. payload
+    let secret = txInitialSecret ctx
+    encodeFrameInShort wbuf frames secret pn epn headerBeg
+encodePacket' ctx wbuf (RTT0Packet ver dcid scid pn frames) = do
     _headerOff <- currentOffset wbuf
-    pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
     _ <- encodeLongHeader ctx wbuf 0b00010000 ver dcid scid pn
     mapM_ (encodeFrame wbuf) frames
 --    protectHeader ctx headerOff sampleOff undefined
-encodePacket' ctx wbuf (HandshakePacket ver dcid scid _ frames) = do
-    -- xxx
-    pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
-    _ <- encodeLongHeader ctx wbuf 0b00100000 ver dcid scid pn
-    mapM_ (encodeFrame wbuf) frames
---    protectHeader
+encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
+    -- flag ... src conn id
+    headerBeg <- currentOffset wbuf
+    epn <- encodeLongHeader ctx wbuf 0b00100000 ver dcID scID pn
+    -- length .. payload
+    secret <- txHandshakeSecret ctx
+    encodeFrameInShort wbuf frames secret pn epn headerBeg
 encodePacket' ctx wbuf (RetryPacket ver dcid scid _ _) = do
     epn <- encodeLongHeader ctx wbuf 0b00110000 ver dcid scid undefined
     write32 wbuf epn
 --    protectHeader
-encodePacket' ctx wbuf (ShortPacket _ _ frames) = do
-    _pn <- atomicModifyIORef' (packetNumber ctx) $ \n -> (n+1,n)
+encodePacket' _ctx wbuf (ShortPacket _ _pn frames) = do
     epn <- encodeShortHeader
     mapM_ (encodeFrame wbuf) frames
     write32 wbuf epn
