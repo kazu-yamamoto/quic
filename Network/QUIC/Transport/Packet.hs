@@ -124,8 +124,6 @@ unprotectHeader rbuf cipher secret proFlags = do
 
 ----------------------------------------------------------------
 
--- fixme: using encryptPayload
-
 encodePacket :: Context -> Packet -> IO ByteString
 encodePacket ctx pkt = withWriteBuffer 2048 $ \wbuf ->
   encodePacket' ctx wbuf pkt
@@ -134,15 +132,17 @@ encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
 encodePacket' _ctx _wbuf (VersionNegotiationPacket _ _ _) =
     undefined
 encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
-
     headerBeg <- currentOffset wbuf
+    -- flag ... src conn id
     epn <- encodeLongHeader ctx wbuf 0b00000000 ver dcID scID pn
+    -- token
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
+    -- length
     lenOff <- currentOffset wbuf
-    -- assuming 2byte length
-    ff wbuf 2
+    ff wbuf 2 -- assuming 2byte length
     pnBeg <- currentOffset wbuf
+    -- packet number
     write32 wbuf epn -- assuming 4byte encoded packet number
     headerEnd <- currentOffset wbuf
 
