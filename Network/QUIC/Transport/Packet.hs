@@ -268,6 +268,19 @@ decodeLongHeaderPacket ctx rbuf proFlags = do
     decodeCIL 0 = 0
     decodeCIL n = n + 3
 
+decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
+decodeVersionNegotiationPacket rbuf dcID scID = do
+    siz <- remainingSize rbuf
+    vers <- decodeVersions siz id
+    return $ VersionNegotiationPacket dcID scID vers
+  where
+    decodeVersions siz vers
+      | siz <  0  = error "decodeVersionNegotiationPacket"
+      | siz == 0  = return $ vers []
+      | otherwise = do
+            ver <- decodeVersion <$> read32 rbuf
+            decodeVersions (siz - 4) ((ver :) . vers)
+
 decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeDraft ctx rbuf proFlags version dcID scID = case decodePacketType proFlags of
     Initial   -> decodeInitialPacket ctx rbuf proFlags version dcID scID
@@ -298,12 +311,6 @@ decodeHandshakePacket ctx rbuf proFlags version dcID scID = do
     let Just payload = decrypt cipher secret ciphertext header pn
     frames <- decodeFrames payload
     return $ HandshakePacket version dcID scID pn frames
-
-decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
-decodeVersionNegotiationPacket rbuf dcID scID = do
-    version <- decodeVersion <$> read32 rbuf
-    -- fixme
-    return $ VersionNegotiationPacket dcID scID [version]
 
 decodeShortHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
 decodeShortHeaderPacket _ctx _rbuf _flags = undefined
