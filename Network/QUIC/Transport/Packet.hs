@@ -133,8 +133,90 @@ encodePacket :: Context -> Packet -> IO ByteString
 encodePacket ctx pkt = withWriteBuffer 2048 $ \wbuf ->
   encodePacket' ctx wbuf pkt
 
-encodeFrameInShort :: WriteBuffer -> [Frame] -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> IO ()
-encodeFrameInShort wbuf frames secret pn epn headerBeg = do
+encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
+encodePacket' _ctx wbuf (VersionNegotiationPacket dcID scID vers) = do
+    -- flag
+    write8 wbuf 0b10000000
+    -- ver .. scID
+    encodeLongHeader wbuf Negotiation dcID scID
+    -- vers
+    mapM_ (write32 wbuf . encodeVersion) vers
+    -- no header protection
+
+encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
+    -- flag ... scID
+    headerBeg <- currentOffset wbuf
+    epn <- encodeLongHeaderPP ctx wbuf Initial ver dcID scID pn
+    -- token
+    encodeInt' wbuf $ fromIntegral $ B.length token
+    copyByteString wbuf token
+    -- length .. payload
+    let secret = txInitialSecret ctx
+    encodeFrameInLong wbuf frames secret pn epn headerBeg
+
+encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
+    -- flag ... scID
+    headerBeg <- currentOffset wbuf
+    epn <- encodeLongHeaderPP ctx wbuf RTT0 ver dcID scID pn
+    -- length .. payload
+    secret <- undefined ctx
+    encodeFrameInLong wbuf frames secret pn epn headerBeg
+
+encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
+    -- flag ... scid
+    headerBeg <- currentOffset wbuf
+    epn <- encodeLongHeaderPP ctx wbuf Handshake ver dcID scID pn
+    -- length .. payload
+    secret <- txHandshakeSecret ctx
+    encodeFrameInLong wbuf frames secret pn epn headerBeg
+
+encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
+    let dcil = fromIntegral $ B.length odcid
+        flags = encodePacketType (0b11000000 .|. encodeCIL dcil) Retry
+    write8 wbuf flags
+    encodeLongHeader wbuf ver dcID scID
+    copyByteString wbuf odcid
+    copyByteString wbuf token
+    -- no header protection
+
+encodePacket' _ctx wbuf (ShortPacket _dcid _pn frames) = do
+    -- flag ... dcid conn id
+    _headerBeg <- currentOffset wbuf
+    epn <- encodeShortHeader
+    mapM_ (encodeFrame wbuf) frames
+    write32 wbuf epn
+--    protectHeader
+
+encodeLongHeader :: WriteBuffer
+                 -> Version -> CID -> CID
+                 -> IO ()
+encodeLongHeader wbuf ver (CID dcid) (CID scid) = do
+    write32 wbuf $ encodeVersion ver
+    let dcil = fromIntegral $ B.length dcid
+        scil = fromIntegral $ B.length scid
+        cil = (encodeCIL dcil `shiftL` 4) .|. encodeCIL scil
+    write8 wbuf cil
+    copyByteString wbuf dcid
+    copyByteString wbuf scid
+
+encodeCIL :: Word8 -> Word8
+encodeCIL 0 = 0
+encodeCIL n = n - 3
+
+encodeLongHeaderPP :: Context -> WriteBuffer
+                   -> PacketType -> Version -> CID -> CID
+                   -> PacketNumber
+                   -> IO EncodedPacketNumber
+encodeLongHeaderPP _ctx wbuf pkttyp ver dcID scID pn = do
+    let (epn, pnLen) = encodePacketNumber 0 {- dummy -} pn
+        pp = fromIntegral ((pnLen `div` 8) - 1)
+        flags' = encodePacketType (0b11000000 .|. pp) pkttyp
+    write8 wbuf flags'
+    encodeLongHeader wbuf ver dcID scID
+    return epn
+
+encodeFrameInLong :: WriteBuffer -> [Frame] -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> IO ()
+encodeFrameInLong wbuf frames secret pn epn headerBeg = do
     -- length: assuming 2byte length
     plaintext <- encodeFrames frames
     let len = B.length plaintext + 4 + 16 -- fixme: 4 bytes PN + crypto overhead
@@ -151,62 +233,6 @@ encodeFrameInShort wbuf frames secret pn epn headerBeg = do
     copyByteString wbuf ciphertext
     -- protecting header
     protectHeader headerBeg pnBeg cipher secret ciphertext
-
-encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
-encodePacket' _ctx _wbuf (VersionNegotiationPacket _ _ _) =
-    undefined
-encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
-    -- flag ... src conn id
-    headerBeg <- currentOffset wbuf
-    epn <- encodeLongHeader ctx wbuf Initial ver dcID scID pn
-    -- token
-    encodeInt' wbuf $ fromIntegral $ B.length token
-    copyByteString wbuf token
-    -- length .. payload
-    let secret = txInitialSecret ctx
-    encodeFrameInShort wbuf frames secret pn epn headerBeg
-encodePacket' ctx wbuf (RTT0Packet ver dcid scid pn frames) = do
-    _headerOff <- currentOffset wbuf
-    _ <- encodeLongHeader ctx wbuf RTT0 ver dcid scid pn
-    mapM_ (encodeFrame wbuf) frames
---    protectHeader ctx headerOff sampleOff undefined
-encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
-    -- flag ... src conn id
-    headerBeg <- currentOffset wbuf
-    epn <- encodeLongHeader ctx wbuf Handshake ver dcID scID pn
-    -- length .. payload
-    secret <- txHandshakeSecret ctx
-    encodeFrameInShort wbuf frames secret pn epn headerBeg
-encodePacket' ctx wbuf (RetryPacket ver dcid scid _ _) = do
-    epn <- encodeLongHeader ctx wbuf Retry ver dcid scid undefined
-    write32 wbuf epn
---    protectHeader
-encodePacket' _ctx wbuf (ShortPacket _ _pn frames) = do
-    epn <- encodeShortHeader
-    mapM_ (encodeFrame wbuf) frames
-    write32 wbuf epn
---    protectHeader
-
-encodeLongHeader :: Context -> WriteBuffer
-                 -> PacketType -> Version -> CID -> CID
-                 -> PacketNumber
-                 -> IO EncodedPacketNumber
-encodeLongHeader _ctx wbuf pkttyp ver (CID dcid) (CID scid) pn = do
-    let (epn, pnLen) = encodePacketNumber 0 {- dummy -} pn
-    let pp = fromIntegral ((pnLen `div` 8) - 1)
-    let flags' = encodePacketType (0b11000000 .|. pp) pkttyp
-    write8 wbuf flags'
-    write32 wbuf $ encodeVersion ver
-    let dcil = fromIntegral $ B.length dcid
-        scil = fromIntegral $ B.length scid
-        cil = (encodeCIL dcil `shiftL` 4) .|. scil
-    write8 wbuf cil
-    copyByteString wbuf dcid
-    copyByteString wbuf scid
-    return epn
-  where
-    encodeCIL 0 = 0
-    encodeCIL n = n - 3
 
 encodeShortHeader :: IO Word32
 encodeShortHeader = undefined
