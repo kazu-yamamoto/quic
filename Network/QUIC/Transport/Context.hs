@@ -84,3 +84,21 @@ rxHandshakeSecret ctx = do
                   in return $ Secret s
       Server _ -> let TLS.ClientHandshakeSecret s = TLS.triClient st
                   in return $ Secret s
+
+txApplicationSecret :: Context -> IO Secret
+txApplicationSecret ctx = do
+    Just st <- readIORef (applicationSecret ctx)
+    case role ctx of
+      Client _ -> let TLS.ClientApplicationSecret0 s = TLS.triClient st
+                  in return $ Secret s
+      Server _ -> let TLS.ServerApplicationSecret0 s = TLS.triServer st
+                  in return $ Secret s
+
+rxApplicationSecret :: Context -> IO Secret
+rxApplicationSecret ctx = do
+    Just st <- readIORef (applicationSecret ctx)
+    case role ctx of
+      Client _ -> let TLS.ServerApplicationSecret0 s = TLS.triServer st
+                  in return $ Secret s
+      Server _ -> let TLS.ClientApplicationSecret0 s = TLS.triClient st
+                  in return $ Secret s

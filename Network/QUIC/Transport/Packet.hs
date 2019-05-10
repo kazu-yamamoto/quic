@@ -152,7 +152,7 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     copyByteString wbuf token
     -- length .. payload
     let secret = txInitialSecret ctx
-    encodeFrameInLong wbuf frames secret pn epn headerBeg
+    protectPayloadHeader wbuf frames secret pn epn headerBeg
 
 encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
     -- flag ... scID
@@ -160,7 +160,7 @@ encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
     epn <- encodeLongHeaderPP ctx wbuf RTT0 ver dcID scID pn
     -- length .. payload
     secret <- undefined ctx
-    encodeFrameInLong wbuf frames secret pn epn headerBeg
+    protectPayloadHeader wbuf frames secret pn epn headerBeg
 
 encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     -- flag ... scid
@@ -168,7 +168,7 @@ encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     epn <- encodeLongHeaderPP ctx wbuf Handshake ver dcID scID pn
     -- length .. payload
     secret <- txHandshakeSecret ctx
-    encodeFrameInLong wbuf frames secret pn epn headerBeg
+    protectPayloadHeader wbuf frames secret pn epn headerBeg
 
 encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
     let dcil = fromIntegral $ B.length odcid
@@ -179,13 +179,17 @@ encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
     copyByteString wbuf token
     -- no header protection
 
-encodePacket' _ctx wbuf (ShortPacket _dcid _pn frames) = do
-    -- flag ... dcid conn id
-    _headerBeg <- currentOffset wbuf
-    epn <- encodeShortHeader
-    mapM_ (encodeFrame wbuf) frames
-    write32 wbuf epn
---    protectHeader
+encodePacket' ctx wbuf (ShortPacket (CID dcid) pn frames) = do
+    -- flag
+    let (epn, pnLen) = encodePacketNumber 0 {- dummy -} pn
+        pp = fromIntegral ((pnLen `div` 8) - 1)
+        flags = 0b01000000 .|. pp -- fixme: K flag
+    headerBeg <- currentOffset wbuf
+    write8 wbuf flags
+    -- dcID
+    copyByteString wbuf dcid
+    secret <- txApplicationSecret ctx
+    protectPayloadHeader wbuf frames secret pn epn headerBeg
 
 encodeLongHeader :: WriteBuffer
                  -> Version -> CID -> CID
@@ -215,8 +219,8 @@ encodeLongHeaderPP _ctx wbuf pkttyp ver dcID scID pn = do
     encodeLongHeader wbuf ver dcID scID
     return epn
 
-encodeFrameInLong :: WriteBuffer -> [Frame] -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> IO ()
-encodeFrameInLong wbuf frames secret pn epn headerBeg = do
+protectPayloadHeader :: WriteBuffer -> [Frame] -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> IO ()
+protectPayloadHeader wbuf frames secret pn epn headerBeg = do
     -- length: assuming 2byte length
     plaintext <- encodeFrames frames
     let len = B.length plaintext + 4 + 16 -- fixme: 4 bytes PN + crypto overhead
@@ -233,9 +237,6 @@ encodeFrameInLong wbuf frames secret pn epn headerBeg = do
     copyByteString wbuf ciphertext
     -- protecting header
     protectHeader headerBeg pnBeg cipher secret ciphertext
-
-encodeShortHeader :: IO Word32
-encodeShortHeader = undefined
 
 ----------------------------------------------------------------
 
