@@ -283,34 +283,46 @@ decodeVersionNegotiationPacket rbuf dcID scID = do
 
 decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeDraft ctx rbuf proFlags version dcID scID = case decodePacketType proFlags of
-    Initial   -> decodeInitialPacket ctx rbuf proFlags version dcID scID
-    RTT0      -> undefined
+    Initial   -> decodeInitialPacket   ctx rbuf proFlags version dcID scID
+    RTT0      -> decodeRTT0Packet      ctx rbuf proFlags version dcID scID
     Handshake -> decodeHandshakePacket ctx rbuf proFlags version dcID scID
-    Retry     -> undefined
+    Retry     -> decodeRetryPacket     ctx rbuf proFlags version dcID scID
 
 decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
-    len <- fromIntegral <$> decodeInt' rbuf
     let cipher = defaultCipher
         secret = rxInitialSecret ctx
-    (header, _flags, pn, pnLen) <- unprotectHeader rbuf cipher secret proFlags
-    ciphertext <- extractByteString rbuf (len - pnLen)
-    let Just payload = decrypt cipher secret ciphertext header pn
-    frames <- decodeFrames payload
+    (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ InitialPacket version dcID scID token pn frames
+
+decodeRTT0Packet :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeRTT0Packet ctx rbuf proFlags version dcID scID = do
+    cipher <- getCipher ctx
+    secret <- undefined ctx
+    (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
+    return $ RTT0Packet version dcID scID pn frames
 
 decodeHandshakePacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeHandshakePacket ctx rbuf proFlags version dcID scID = do
-    len <- fromIntegral <$> decodeInt' rbuf
     cipher <- getCipher ctx
     secret <- rxHandshakeSecret ctx
-    (header, _flags, pn, pnLen) <- unprotectHeader rbuf cipher secret proFlags
+    (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
+    return $ HandshakePacket version dcID scID pn frames
+
+-- length .. payload
+unprotectHeaderPayload :: ReadBuffer -> Word8 -> Cipher -> Secret -> IO (RawFlags, PacketNumber, [Frame])
+unprotectHeaderPayload rbuf proFlags cipher secret = do
+    len <- fromIntegral <$> decodeInt' rbuf
+    (header, flags, pn, pnLen) <- unprotectHeader rbuf cipher secret proFlags
     ciphertext <- extractByteString rbuf (len - pnLen)
     let Just payload = decrypt cipher secret ciphertext header pn
     frames <- decodeFrames payload
-    return $ HandshakePacket version dcID scID pn frames
+    return (flags, pn, frames)
+
+decodeRetryPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeRetryPacket = undefined
 
 decodeShortHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
 decodeShortHeaderPacket _ctx _rbuf _flags = undefined
