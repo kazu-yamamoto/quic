@@ -21,7 +21,7 @@ main = do
 quicClient :: String -> Socket -> SockAddr -> IO ()
 quicClient host s peer = do
     let dcid = CID (dec16 "416c50c43e23487c")
-    ctx <- clientContext host dcid
+    ctx <- clientContext Draft22 host dcid
 
     (iniBin, exts) <- createClientInitial ctx dcid
     void $ sendTo s iniBin peer
@@ -39,7 +39,7 @@ createClientInitial :: Context -> CID -> IO (ByteString, Handshake13)
 createClientInitial ctx dcid = do
     (ch, chbin) <- makeClientHello13 cparams tlsctx
     let frames = Crypto 0 chbin :  replicate 963 Padding
-    let iniPkt = InitialPacket Draft20 dcid (CID "") "" 0 frames
+    let iniPkt = InitialPacket Draft22 dcid (CID "") "" 0 frames
     iniBin <- encodePacket ctx iniPkt
     return (iniBin, ch)
   where
@@ -48,11 +48,11 @@ createClientInitial ctx dcid = do
 
 handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString
 handleServerInitial ctx shBin ch = do
-    (InitialPacket Draft20 _ _ _ _ [Crypto _ sh, _ack], eefinBin) <- decodePacket ctx shBin
+    (InitialPacket Draft22 _ _ _ _ [Crypto _ sh, _ack], eefinBin) <- decodePacket ctx shBin
     (cipher, handSecret, _resuming) <- handleServerHello13 cparams tlsctx ch sh
     setCipher ctx cipher
     writeIORef (handshakeSecret ctx) $ Just handSecret
-    (HandshakePacket Draft20 _ _ _ [Crypto _ eefin0], _) <- decodePacket ctx eefinBin
+    (HandshakePacket Draft22 _ _ _ [Crypto _ eefin0], _) <- decodePacket ctx eefinBin
 
     return eefin0
   where
@@ -69,7 +69,7 @@ recvEefin1Bin ctx s bs = do
     finished = 20
     loop cont build = do
         (bin, _) <- recvFrom s 2048
-        (HandshakePacket Draft20 _ _ _ [Crypto _ eefin], _fixme) <- decodePacket ctx bin
+        (HandshakePacket Draft22 _ _ _ [Crypto _ eefin], _fixme) <- decodePacket ctx bin
         check <- handshakeCheck finished eefin cont
         let build' = build . (eefin :)
         case check of
