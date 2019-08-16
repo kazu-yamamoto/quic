@@ -16,10 +16,12 @@ data PacketType = Initial | RTT0 | Handshake | Retry
                 deriving (Eq, Show)
 
 data Version = Negotiation
-             | Draft17
              | Draft18
              | Draft19
              | Draft20
+             | Draft21
+             | Draft22
+             | Draft23
              | UnknownVersion Word32
              deriving (Eq, Show)
 

@@ -73,22 +73,30 @@ newtype Nonce  = Nonce  ByteString deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
+initialSalt :: Version -> Salt
 -- "ef4fb0abb47470c41befcf8031334fae485e09a0"
-initialSalt :: Salt
-initialSalt = "\xef\x4f\xb0\xab\xb4\x74\x70\xc4\x1b\xef\xcf\x80\x31\x33\x4f\xae\x48\x5e\x09\xa0"
+initialSalt Draft18 = "\xef\x4f\xb0\xab\xb4\x74\x70\xc4\x1b\xef\xcf\x80\x31\x33\x4f\xae\x48\x5e\x09\xa0"
+initialSalt Draft19 = "\xef\x4f\xb0\xab\xb4\x74\x70\xc4\x1b\xef\xcf\x80\x31\x33\x4f\xae\x48\x5e\x09\xa0"
+initialSalt Draft20 = "\xef\x4f\xb0\xab\xb4\x74\x70\xc4\x1b\xef\xcf\x80\x31\x33\x4f\xae\x48\x5e\x09\xa0"
+-- "7fbcdb0e7c66bbe9193a96cd21519ebd7a02644a"
+initialSalt Draft21 = "\x7f\xbc\xdb\x0e\x7c\x66\xbb\xe9\x19\x3a\x96\xcd\x21\x51\x9e\xbd\x7a\x02\x64\x4a"
+initialSalt Draft22 = "\x7f\xbc\xdb\x0e\x7c\x66\xbb\xe9\x19\x3a\x96\xcd\x21\x51\x9e\xbd\x7a\x02\x64\x4a"
+-- "c3eef712c72ebb5a11a7d2432bb46365bef9f502"
+initialSalt Draft23 = "\xc3\xee\xf7\x12\xc7\x2e\xbb\x5a\x11\xa7\xd2\x43\x2b\xb4\x63\x65\xbe\xf9\xf5\x02"
+initialSalt _       = error "initialSalt"
 
-clientInitialSecret :: CID -> Secret
+clientInitialSecret :: Version -> CID -> Secret
 clientInitialSecret = initialSecret (Label "client in")
 
-serverInitialSecret :: CID -> Secret
+serverInitialSecret :: Version -> CID -> Secret
 serverInitialSecret = initialSecret (Label "server in")
 
-initialSecret :: Label -> CID -> Secret
-initialSecret (Label label) (CID cid) = Secret secret
+initialSecret :: Label -> Version -> CID -> Secret
+initialSecret (Label label) ver (CID cid) = Secret secret
   where
     cipher    = defaultCipher
     hash      = TLS.cipherHash cipher
-    iniSecret = TLS.hkdfExtract hash initialSalt cid
+    iniSecret = TLS.hkdfExtract hash (initialSalt ver) cid
     hashSize  = TLS.hashDigestSize hash
     secret    = TLS.hkdfExpandLabel hash iniSecret label "" hashSize
 

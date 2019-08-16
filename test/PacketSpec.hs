@@ -13,8 +13,8 @@ spec = do
     describe "test vector" $ do
         it "describes example" $ do
             let dcid = CID $ dec16 "8394c8f03e515708"
-            cctx <- clientContext "example.jp" dcid
-            sctx <- serverContext "test/serverkey.pem" "test/servercert.pem"  dcid
+            cctx <- clientContext Draft20 "example.jp" dcid
+            sctx <- serverContext Draft20 "test/serverkey.pem" "test/servercert.pem"  dcid
             (pkt, _) <- decodePacket sctx clientInitialPacketBinary
             clientInitialPacketBinary' <- encodePacket cctx pkt
             clientInitialPacketBinary' `shouldBe` clientInitialPacketBinary

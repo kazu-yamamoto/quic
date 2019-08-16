@@ -29,18 +29,18 @@ data Context = Context {
 emptyCID :: CID
 emptyCID = CID ""
 
-clientContext :: TLS.HostName -> CID -> IO Context
-clientContext hostname cid = do
+clientContext :: Version -> TLS.HostName -> CID -> IO Context
+clientContext ver hostname cid = do
     (tlsctx, cparams) <- tlsClientContext hostname
-    let cis = clientInitialSecret cid
-        sis = serverInitialSecret cid
+    let cis = clientInitialSecret ver cid
+        sis = serverInitialSecret ver cid
     Context (Client cparams) tlsctx cid (cis, sis) <$> newIORef emptyCID <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
-serverContext :: FilePath -> FilePath -> CID -> IO Context
-serverContext key cert cid = do
+serverContext :: Version -> FilePath -> FilePath -> CID -> IO Context
+serverContext ver key cert cid = do
     (tlsctx, sparams) <- tlsServerContext key cert
-    let cis = clientInitialSecret cid
-        sis = serverInitialSecret cid
+    let cis = clientInitialSecret ver cid
+        sis = serverInitialSecret ver cid
     Context (Server sparams) tlsctx cid (cis, sis) <$> newIORef emptyCID <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
 tlsClientParams :: Context -> TLS.ClientParams

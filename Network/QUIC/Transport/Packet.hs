@@ -21,18 +21,22 @@ import Network.QUIC.Transport.PacketNumber
 
 encodeVersion :: Version -> Word32
 encodeVersion Negotiation        = 0
-encodeVersion Draft17            = 0xff000011
 encodeVersion Draft18            = 0xff000012
 encodeVersion Draft19            = 0xff000013
 encodeVersion Draft20            = 0xff000014
+encodeVersion Draft21            = 0xff000015
+encodeVersion Draft22            = 0xff000016
+encodeVersion Draft23            = 0xff000017
 encodeVersion (UnknownVersion w) = w
 
 decodeVersion :: Word32 -> Version
 decodeVersion 0          = Negotiation
-decodeVersion 0xff000011 = Draft17
 decodeVersion 0xff000012 = Draft18
 decodeVersion 0xff000013 = Draft19
 decodeVersion 0xff000014 = Draft20
+decodeVersion 0xff000015 = Draft21
+decodeVersion 0xff000016 = Draft22
+decodeVersion 0xff000017 = Draft23
 decodeVersion w          = UnknownVersion w
 
 ----------------------------------------------------------------
@@ -262,7 +266,7 @@ decodeLongHeaderPacket ctx rbuf proFlags = do
     scID <- CID <$> extractByteString rbuf scil
     case version of
       Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
-      UnknownVersion _ -> error "unknown version"
+      UnknownVersion v -> error $ "unknown version " ++ show v
       _DraftXX         -> decodeDraft ctx rbuf proFlags version dcID scID
   where
     decodeCIL 0 = 0
