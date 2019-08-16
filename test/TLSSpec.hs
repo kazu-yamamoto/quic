@@ -36,10 +36,12 @@ spec = do
             let shp = headerProtectionKey defaultCipher server_initial_secret
             shp `shouldBe` Key (dec16 "94b9452d2b3c7c7f6da7fdd8593537fd")
 
-        it "describes the examples of Client Initial draft 18" $ do
-            let ckey = Key (dec16 "98b0d7e5e7a402c67c33f350fa65ea54")
-                civ  = IV  (dec16 "19e94387805eb0b46c03a788")
-                chp  = Key (dec16 "0edd982a6ac527f2eddcbb7348dea5d7")
+        it "describes the examples of Client Initial draft 23" $ do
+            let dcID = CID (dec16 "8394c8f03e515708")
+                client_initial_secret = clientInitialSecret Draft23 dcID
+                ckey = aeadKey defaultCipher client_initial_secret
+                civ = initialVector defaultCipher client_initial_secret
+                chp = headerProtectionKey defaultCipher client_initial_secret
             ----------------------------------------------------------------
             -- payload encryption
             let clientCRYPTOframe = dec16 $ B.concat [
@@ -51,18 +53,24 @@ spec = do
                   , "05030603020308040805080604010501060102010402050206020202002d0002"
                   , "0101001c00024001"
                   ]
-            let clientPacketHeader = dec16 "c3ff000012508394c8f03e51570800449f00000002"
-            -- c3ff000012508394c8f03e51570800449f00000002
+            let clientPacketHeader = dec16 "c3ff000017088394c8f03e5157080000449e00000002"
+            -- c3ff00001708 8394c8f03e5157080000449e00000002
             -- c3 (11000011)    -- flags
-            -- ff000012         -- version
-            -- 50               -- dcil & scil
+            -- ff000017         -- version draft 23
+            -- 08               -- dcid len
             -- 8394c8f03e515708 -- dcid
+            -- 00               -- scid len
             -- 00               -- token length
-            -- 449f             -- length: decodeInt (dec16 "449f")
-                                -- = 1183 = 4 + 1163 + 16
+            -- 449e             -- length: decodeInt (dec16 "449e")
+                                -- 1182 = 4 + 1162 + 16 (fixme)
             -- 00000002         -- encoded packet number
 
-            let clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate 963 0)
+            bodyLen <- fromIntegral <$> decodeInt (dec16 "449e")
+            let padLen = bodyLen
+                       - 4  -- packet number length
+                       - 16 -- GCM encrypt expansion
+                       - B.length clientCRYPTOframe
+                clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate padLen 0)
             let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ $ dec16 "00000002"
             let add = AddDat clientPacketHeader
@@ -73,6 +81,6 @@ spec = do
             ----------------------------------------------------------------
             -- header protection
             let sample = Sample (B.take 16 ciphertext)
-            sample `shouldBe` Sample (dec16 "0000f3a694c75775b4e546172ce9e047")
-            let mask = protectionMask defaultCipher chp sample
-            mask `shouldBe` Mask (dec16 "020dbc1958a7df52e6bbc9ebdfd07828")
+            sample `shouldBe` Sample (dec16 "535064a4268a0d9d7b1c9d250ae35516")
+            let Mask mask = protectionMask defaultCipher chp sample
+            B.take 5 mask `shouldBe` dec16 "833b343aaa"
