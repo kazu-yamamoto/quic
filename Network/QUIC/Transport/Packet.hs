@@ -175,10 +175,11 @@ encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     protectPayloadHeader wbuf frames secret pn epn headerBeg
 
 encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
-    let dcil = fromIntegral $ B.length odcid
-        flags = encodePacketType (0b11000000 .|. encodeCIL dcil) Retry
+    let flags = encodePacketType 0b11000000 Retry
     write8 wbuf flags
     encodeLongHeader wbuf ver dcID scID
+    let odcidlen = fromIntegral $ B.length odcid
+    write8 wbuf odcidlen
     copyByteString wbuf odcid
     copyByteString wbuf token
     -- no header protection
@@ -200,16 +201,12 @@ encodeLongHeader :: WriteBuffer
                  -> IO ()
 encodeLongHeader wbuf ver (CID dcid) (CID scid) = do
     write32 wbuf $ encodeVersion ver
-    let dcil = fromIntegral $ B.length dcid
-        scil = fromIntegral $ B.length scid
-        cil = (encodeCIL dcil `shiftL` 4) .|. encodeCIL scil
-    write8 wbuf cil
+    let dcidlen = fromIntegral $ B.length dcid
+    write8 wbuf dcidlen
     copyByteString wbuf dcid
+    let scidlen = fromIntegral $ B.length scid
+    write8 wbuf scidlen
     copyByteString wbuf scid
-
-encodeCIL :: Word8 -> Word8
-encodeCIL 0 = 0
-encodeCIL n = n - 3
 
 encodeLongHeaderPP :: Context -> WriteBuffer
                    -> PacketType -> Version -> CID -> CID
@@ -259,18 +256,14 @@ decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
 decodeLongHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
 decodeLongHeaderPacket ctx rbuf proFlags = do
     version <- decodeVersion <$> read32 rbuf
-    cil <- fromIntegral <$> read8 rbuf
-    let dcil = decodeCIL ((cil .&. 0b11110000) `shiftR` 4)
-        scil = decodeCIL (cil .&. 0b1111)
-    dcID <- CID <$> extractByteString rbuf dcil
-    scID <- CID <$> extractByteString rbuf scil
+    dcIDlen <- fromIntegral <$> read8 rbuf
+    dcID <- CID <$> extractByteString rbuf dcIDlen
+    scIDlen <- fromIntegral <$> read8 rbuf
+    scID <- CID <$> extractByteString rbuf scIDlen
     case version of
       Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
       UnknownVersion v -> error $ "unknown version " ++ show v
       _DraftXX         -> decodeDraft ctx rbuf proFlags version dcID scID
-  where
-    decodeCIL 0 = 0
-    decodeCIL n = n + 3
 
 decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do
