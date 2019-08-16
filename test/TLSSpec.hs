@@ -15,7 +15,7 @@ spec :: Spec
 spec = do
     -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
     describe "test vector" $ do
-        it "describes example" $ do
+        it "describes the examples of Keys" $ do
             ----------------------------------------------------------------
             -- shared keys
             let dcID = CID (dec16 "8394c8f03e515708")
@@ -36,6 +36,10 @@ spec = do
             let shp = headerProtectionKey defaultCipher server_initial_secret
             shp `shouldBe` Key (dec16 "94b9452d2b3c7c7f6da7fdd8593537fd")
 
+        it "describes the examples of Client Initial draft 18" $ do
+            let ckey = Key (dec16 "98b0d7e5e7a402c67c33f350fa65ea54")
+                civ  = IV  (dec16 "19e94387805eb0b46c03a788")
+                chp  = Key (dec16 "0edd982a6ac527f2eddcbb7348dea5d7")
             ----------------------------------------------------------------
             -- payload encryption
             let clientCRYPTOframe = dec16 $ B.concat [
@@ -47,7 +51,6 @@ spec = do
                   , "05030603020308040805080604010501060102010402050206020202002d0002"
                   , "0101001c00024001"
                   ]
-            -- Draft 18
             let clientPacketHeader = dec16 "c3ff000012508394c8f03e51570800449f00000002"
             -- c3ff000012508394c8f03e51570800449f00000002
             -- c3 (11000011)    -- flags
