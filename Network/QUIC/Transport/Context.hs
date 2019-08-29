@@ -19,9 +19,9 @@ data Context = Context {
   , initialSecret     :: (Secret, Secret)
   , peerCID           :: IORef CID
   , usedCipher        :: IORef Cipher
-  , earlySecret       :: IORef (Maybe TLS.SecretTriple)
-  , handshakeSecret   :: IORef (Maybe TLS.SecretTriple)
-  , applicationSecret :: IORef (Maybe TLS.SecretTriple)
+  , earlySecret       :: IORef (Maybe (TLS.SecretTriple TLS.EarlySecret))
+  , handshakeSecret   :: IORef (Maybe (TLS.SecretTriple TLS.HandshakeSecret))
+  , applicationSecret :: IORef (Maybe (TLS.SecretTriple TLS.ApplicationSecret))
   -- intentionally using the single space for packet numbers.
   , packetNumber      :: IORef PacketNumber
   }
@@ -77,34 +77,34 @@ txHandshakeSecret :: Context -> IO Secret
 txHandshakeSecret ctx = do
     Just st <- readIORef (handshakeSecret ctx)
     case role ctx of
-      Client _ -> let TLS.ClientHandshakeSecret s = TLS.triClient st
+      Client _ -> let TLS.ClientTrafficSecret s = TLS.triClient st
                   in return $ Secret s
-      Server _ -> let TLS.ServerHandshakeSecret s = TLS.triServer st
+      Server _ -> let TLS.ServerTrafficSecret s = TLS.triServer st
                   in return $ Secret s
 
 rxHandshakeSecret :: Context -> IO Secret
 rxHandshakeSecret ctx = do
     Just st <- readIORef (handshakeSecret ctx)
     case role ctx of
-      Client _ -> let TLS.ServerHandshakeSecret s = TLS.triServer st
+      Client _ -> let TLS.ServerTrafficSecret s = TLS.triServer st
                   in return $ Secret s
-      Server _ -> let TLS.ClientHandshakeSecret s = TLS.triClient st
+      Server _ -> let TLS.ClientTrafficSecret s = TLS.triClient st
                   in return $ Secret s
 
 txApplicationSecret :: Context -> IO Secret
 txApplicationSecret ctx = do
     Just st <- readIORef (applicationSecret ctx)
     case role ctx of
-      Client _ -> let TLS.ClientApplicationSecret0 s = TLS.triClient st
+      Client _ -> let TLS.ClientTrafficSecret s = TLS.triClient st
                   in return $ Secret s
-      Server _ -> let TLS.ServerApplicationSecret0 s = TLS.triServer st
+      Server _ -> let TLS.ServerTrafficSecret s = TLS.triServer st
                   in return $ Secret s
 
 rxApplicationSecret :: Context -> IO Secret
 rxApplicationSecret ctx = do
     Just st <- readIORef (applicationSecret ctx)
     case role ctx of
-      Client _ -> let TLS.ServerApplicationSecret0 s = TLS.triServer st
+      Client _ -> let TLS.ServerTrafficSecret s = TLS.triServer st
                   in return $ Secret s
-      Server _ -> let TLS.ClientApplicationSecret0 s = TLS.triClient st
+      Server _ -> let TLS.ClientTrafficSecret s = TLS.triClient st
                   in return $ Secret s
