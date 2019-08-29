@@ -16,7 +16,7 @@ main = do
 
 server :: FilePath -> FilePath -> IO ()
 server key cert = do
-    ctx <- serverContext key cert (CID "\x41\x6c\x50\xc4\x3e\x23\x48\x7c")
+    ctx <- serverContext Draft20 key cert (CID "\x41\x6c\x50\xc4\x3e\x23\x48\x7c")
     (InitialPacket _ver _dcid _scid _pn _token frames, _) <- decodePacket ctx clientInitial
     let f (Crypto _ _) = True
         f _            = False
@@ -26,7 +26,7 @@ server key cert = do
 
 client :: IO ()
 client = do
-    ctx <- clientContext "www.mew.org" (CID "\x41\x6c\x50\xc4\x3e\x23\x48\x7c")
+    ctx <- clientContext Draft20 "www.mew.org" (CID "\x41\x6c\x50\xc4\x3e\x23\x48\x7c")
     (InitialPacket _ver _dcid _scid _pn _token frames, _) <- decodePacket ctx serverInitial
     let Crypto _off bs:_ = frames
     let Right sh = decodeHandshakes13 bs
