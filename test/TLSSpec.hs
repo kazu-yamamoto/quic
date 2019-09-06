@@ -19,22 +19,22 @@ spec = do
             ----------------------------------------------------------------
             -- shared keys
             let dcID = CID (dec16 "8394c8f03e515708")
-            let client_initial_secret = clientInitialSecret Draft20 dcID
-            client_initial_secret `shouldBe` Secret (dec16 "8a3515a14ae3c31b9c2d6d5bc58538ca5cd2baa119087143e60887428dcb52f6")
+            let client_initial_secret = clientInitialSecret Draft23 dcID
+            client_initial_secret `shouldBe` Secret (dec16 "fda3953aecc040e48b34e27ef87de3a6098ecf0e38b7e032c5c57bcbd5975b84")
             let ckey = aeadKey defaultCipher client_initial_secret
-            ckey `shouldBe` Key (dec16 "98b0d7e5e7a402c67c33f350fa65ea54")
+            ckey `shouldBe` Key (dec16 "af7fd7efebd21878ff66811248983694")
             let civ = initialVector defaultCipher client_initial_secret
-            civ `shouldBe` IV (dec16 "19e94387805eb0b46c03a788")
+            civ `shouldBe` IV (dec16 "8681359410a70bb9c92f0420")
             let chp = headerProtectionKey defaultCipher client_initial_secret
-            chp `shouldBe` Key (dec16 "0edd982a6ac527f2eddcbb7348dea5d7")
-            let server_initial_secret = serverInitialSecret Draft20 dcID
-            server_initial_secret `shouldBe` Secret (dec16 "47b2eaea6c266e32c0697a9e2a898bdf5c4fb3e5ac34f0e549bf2c58581a3811")
+            chp `shouldBe` Key (dec16 "a980b8b4fb7d9fbc13e814c23164253d")
+            let server_initial_secret = serverInitialSecret Draft23 dcID
+            server_initial_secret `shouldBe` Secret (dec16 "554366b81912ff90be41f17e8022213090ab17d8149179bcadf222f29ff2ddd5")
             let skey = aeadKey defaultCipher server_initial_secret
-            skey `shouldBe` Key (dec16 "9a8be902a9bdd91d16064ca118045fb4")
+            skey `shouldBe` Key (dec16 "5d51da9ee897a21b2659ccc7e5bfa577")
             let siv = initialVector defaultCipher server_initial_secret
-            siv `shouldBe` IV (dec16 "0a82086d32205ba22241d8dc")
+            siv `shouldBe` IV (dec16 "5e5ae651fd1e8495af13508b")
             let shp = headerProtectionKey defaultCipher server_initial_secret
-            shp `shouldBe` Key (dec16 "94b9452d2b3c7c7f6da7fdd8593537fd")
+            shp `shouldBe` Key (dec16 "a8ed82e6664f865aedf6106943f95fb8")
 
         it "describes the examples of Client Initial draft 23" $ do
             let dcID = CID (dec16 "8394c8f03e515708")
