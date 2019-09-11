@@ -20,10 +20,11 @@ main = do
 
 quicClient :: String -> Socket -> SockAddr -> IO ()
 quicClient host s peer = do
-    let dcid = CID (dec16 "416c50c43e23487c")
-    ctx <- clientContext Draft22 host dcid
+    let peercid = CID (dec16 "416c50c43e23487c")
+        mycid = CID (dec16 "0001020304050607")
+    ctx <- clientContext Draft22 host mycid peercid
 
-    (iniBin, exts) <- createClientInitial ctx dcid
+    (iniBin, exts) <- createClientInitial ctx
     void $ sendTo s iniBin peer
 
     (shBin, _) <- recvFrom s 2048
@@ -35,11 +36,13 @@ quicClient host s peer = do
     -- xxx creating ack
     void $ sendTo s iniBin2 peer
 
-createClientInitial :: Context -> CID -> IO (ByteString, Handshake13)
-createClientInitial ctx dcid = do
+createClientInitial :: Context -> IO (ByteString, Handshake13)
+createClientInitial ctx = do
     (ch, chbin) <- makeClientHello13 cparams tlsctx
     let frames = Crypto 0 chbin :  replicate 963 Padding
-    let iniPkt = InitialPacket Draft22 dcid (CID "") "" 0 frames
+        mycid = myCID ctx
+    peercid <- readIORef $ peerCID ctx
+    let iniPkt = InitialPacket Draft22 peercid mycid "" 0 frames
     iniBin <- encodePacket ctx iniPkt
     return (iniBin, ch)
   where

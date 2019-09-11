@@ -26,22 +26,19 @@ data Context = Context {
   , packetNumber      :: IORef PacketNumber
   }
 
-emptyCID :: CID
-emptyCID = CID ""
-
-clientContext :: Version -> TLS.HostName -> CID -> IO Context
-clientContext ver hostname cid = do
+clientContext :: Version -> TLS.HostName -> CID -> CID -> IO Context
+clientContext ver hostname mycid peercid = do
     (tlsctx, cparams) <- tlsClientContext hostname
-    let cis = clientInitialSecret ver cid
-        sis = serverInitialSecret ver cid
-    Context (Client cparams) tlsctx cid (cis, sis) <$> newIORef emptyCID <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
+    let cis = clientInitialSecret ver peercid
+        sis = serverInitialSecret ver peercid
+    Context (Client cparams) tlsctx mycid (cis, sis) <$> newIORef peercid <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
-serverContext :: Version -> FilePath -> FilePath -> CID -> IO Context
-serverContext ver key cert cid = do
+serverContext :: Version -> FilePath -> FilePath -> CID -> CID -> IO Context
+serverContext ver key cert mycid peercid = do
     (tlsctx, sparams) <- tlsServerContext key cert
-    let cis = clientInitialSecret ver cid
-        sis = serverInitialSecret ver cid
-    Context (Server sparams) tlsctx cid (cis, sis) <$> newIORef emptyCID <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
+    let cis = clientInitialSecret ver peercid
+        sis = serverInitialSecret ver peercid
+    Context (Server sparams) tlsctx mycid (cis, sis) <$> newIORef peercid <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
