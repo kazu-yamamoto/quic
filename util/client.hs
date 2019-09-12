@@ -20,9 +20,7 @@ main = do
 
 quicClient :: String -> Socket -> SockAddr -> IO ()
 quicClient host s peer = do
-    let peercid = CID (dec16 "416c50c43e23487c")
-        mycid = CID (dec16 "0001020304050607")
-    ctx <- clientContext Draft22 host mycid peercid
+    ctx <- clientContext Draft22 host
 
     (iniBin, exts) <- createClientInitial ctx
     void $ sendTo s iniBin peer
