@@ -28,8 +28,8 @@ data Context = Context {
   }
 
 clientContext :: Version -> TLS.HostName -> IO Context
-clientContext ver hostname = do
-    (tlsctx, cparams) <- tlsClientContext hostname
+clientContext ver serverName = do
+    (tlsctx, cparams) <- tlsClientContext serverName
     mycid <- CID <$> getRandomBytes 8 -- fixme: hard-coding
     peercid <- CID <$> getRandomBytes 8 -- fixme: hard-coding
     let cis = clientInitialSecret ver peercid

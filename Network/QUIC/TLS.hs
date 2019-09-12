@@ -212,7 +212,7 @@ bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
 ----------------------------------------------------------------
 
 tlsClientContext :: TLS.HostName -> IO (TLS.Context, TLS.ClientParams)
-tlsClientContext hostname = do
+tlsClientContext serverName = do
     ctx <- TLS.contextNew backend cparams
     return (ctx, cparams)
   where
@@ -229,7 +229,7 @@ tlsClientContext hostname = do
     debug = def {
         TLS.debugKeyLogger = putStrLn -- fixme
       }
-    cparams = (TLS.defaultParamsClient hostname "") {
+    cparams = (TLS.defaultParamsClient serverName "") {
         TLS.clientSupported = supported
       , TLS.clientDebug = debug
       , TLS.clientShared = cshared
