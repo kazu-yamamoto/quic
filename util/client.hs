@@ -15,15 +15,15 @@ import System.Environment
 
 main :: IO ()
 main = do
-    [host,port] <- getArgs
-    runUDPClient host port $ quicClient host
+    [serverName,port] <- getArgs
+    runUDPClient serverName port $ quicClient serverName
 
 quicClient :: String -> Socket -> SockAddr -> IO ()
-quicClient host s peer = do
-    ctx <- clientContext Draft22 host
+quicClient serverName s peerAddr = do
+    ctx <- clientContext Draft22 serverName
 
     (iniBin, exts) <- createClientInitial ctx
-    void $ sendTo s iniBin peer
+    void $ sendTo s iniBin peerAddr
 
     (shBin, _) <- recvFrom s 2048
     eefin0 <- handleServerInitial ctx shBin exts
@@ -32,7 +32,7 @@ quicClient host s peer = do
 
     iniBin2 <- createClientInitial2 ctx eefins
     -- xxx creating ack
-    void $ sendTo s iniBin2 peer
+    void $ sendTo s iniBin2 peerAddr
 
 createClientInitial :: Context -> IO (ByteString, Handshake13)
 createClientInitial ctx = do
