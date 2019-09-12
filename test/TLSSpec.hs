@@ -65,7 +65,7 @@ spec = do
                                 -- 1182 = 4 + 1162 + 16 (fixme)
             -- 00000002         -- encoded packet number
 
-            bodyLen <- fromIntegral <$> decodeInt (dec16 "449e")
+            let bodyLen = fromIntegral $ decodeInt (dec16 "449e")
             let padLen = bodyLen
                        - 4  -- packet number length
                        - 16 -- GCM encrypt expansion

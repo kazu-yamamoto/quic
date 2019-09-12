@@ -7,6 +7,7 @@ import Data.Bits
 import Data.ByteString (ByteString)
 import Data.Int (Int64)
 import Network.ByteOrder
+import System.IO.Unsafe (unsafeDupablePerformIO)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
@@ -15,16 +16,18 @@ import Network.ByteOrder
 ----------------------------------------------------------------
 
 -- |
--- >>> enc16 <$> encodeInt 151288809941952652
+-- >>> enc16 $ encodeInt 151288809941952652
 -- "c2197c5eff14e88c"
--- >>> enc16 <$> encodeInt 494878333
+-- >>> enc16 $ encodeInt 494878333
 -- "9d7f3e7d"
--- >>> enc16 <$> encodeInt 15293
+-- >>> enc16 $ encodeInt 15293
 -- "7bbd"
--- >>> enc16 <$> encodeInt 37
+-- >>> enc16 $ encodeInt 37
 -- "25"
-encodeInt :: Int64  -> IO ByteString
-encodeInt i = withWriteBuffer 8 $ \wbuf -> encodeInt' wbuf i
+encodeInt :: Int64  -> ByteString
+encodeInt i = unsafeDupablePerformIO $
+    withWriteBuffer 8 $ \wbuf -> encodeInt' wbuf i
+{-# NOINLINE encodeInt #-}
 
 encodeInt' :: WriteBuffer -> Int64 -> IO ()
 encodeInt' wbuf i
@@ -76,8 +79,9 @@ decomp n ws x = decomp (n-1) (w:ws) x'
 -- 15293
 -- >>> decodeInt (dec16 "25")
 -- 37
-decodeInt :: ByteString -> IO Int64
-decodeInt bs = withReadBuffer bs decodeInt'
+decodeInt :: ByteString -> Int64
+decodeInt bs = unsafeDupablePerformIO $ withReadBuffer bs decodeInt'
+{-# NOINLINE decodeInt #-}
 
 decodeInt' :: ReadBuffer -> IO Int64
 decodeInt' rbuf = do
