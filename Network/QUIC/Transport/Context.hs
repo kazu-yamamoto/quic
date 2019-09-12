@@ -19,7 +19,7 @@ data Context = Context {
   , initialSecret     :: (Secret, Secret)
   , peerCID           :: IORef CID
   , usedCipher        :: IORef Cipher
-  , earlySecret       :: IORef (Maybe (TLS.SecretTriple TLS.EarlySecret))
+  , earlySecret       :: IORef (Maybe (TLS.SecretPair TLS.EarlySecret))
   , handshakeSecret   :: IORef (Maybe (TLS.SecretTriple TLS.HandshakeSecret))
   , applicationSecret :: IORef (Maybe (TLS.SecretTriple TLS.ApplicationSecret))
   -- intentionally using the single space for packet numbers.
