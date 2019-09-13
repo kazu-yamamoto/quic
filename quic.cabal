@@ -21,6 +21,7 @@ library
                        Network.QUIC.Transport.Integer
                        Network.QUIC.Transport.Packet
                        Network.QUIC.Transport.PacketNumber
+                       Network.QUIC.Transport.Parameters
                        Network.QUIC.Transport.Types
                        Network.QUIC.Utils
   -- other-modules:
