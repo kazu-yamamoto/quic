@@ -38,9 +38,23 @@ quicClient serverName s peerAddr = do
     -- xxx creating ack
     void $ sendTo s iniBin2 peerAddr
 
+
+exampleParameters :: Parameters
+exampleParameters = defaultParameters {
+    maxStreamDataBidiLocal  =  262144
+  , maxStreamDataBidiRemote =  262144
+  , maxStreamDataUni        =  262144
+  , maxData                 = 1048576
+  , maxStreamsBidi          =       1
+  , maxStreamsUni           =     100
+  , idleTimeout             =   30000
+  , activeConnectionIdLimit =       7
+  }
+
 createClientInitial :: Context -> IO (ByteString, Handshake13)
 createClientInitial ctx = do
-    (ch, chbin) <- makeClientHello13 cparams tlsctx []
+    let params = encodeParametersList $ diffParameters exampleParameters
+    (ch, chbin) <- makeClientHello13 cparams tlsctx [ExtensionRaw 0xffa5 params]
     let frames = Crypto 0 chbin :  replicate 963 Padding
         mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
