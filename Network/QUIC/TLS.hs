@@ -211,28 +211,32 @@ bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
 
 ----------------------------------------------------------------
 
-tlsClientContext :: TLS.HostName -> IO (TLS.Context, TLS.ClientParams)
-tlsClientContext serverName = do
+tlsClientContext :: TLS.HostName -> [Cipher] -> IO (Maybe [ByteString]) -> IO (TLS.Context, TLS.ClientParams)
+tlsClientContext serverName ciphers suggestALPN  = do
     ctx <- TLS.contextNew backend cparams
     return (ctx, cparams)
   where
     backend = TLS.Backend (return ())
                           (return ())
                           (\_ -> return ()) (\_ -> return "")
-    supported = def {
-        TLS.supportedVersions = [TLS.TLS13]
-      , TLS.supportedCiphers = TLS.ciphersuite_strong
-      }
-    cshared = def {
-       TLS.sharedValidationCache = TLS.ValidationCache (\_ _ _ -> return TLS.ValidationCachePass) (\_ _ _ -> return ())
+    cparams = (TLS.defaultParamsClient serverName "") {
+        TLS.clientDebug     = debug
+      , TLS.clientHooks     = hook
+      , TLS.clientShared    = cshared
+      , TLS.clientSupported = supported
       }
     debug = def {
         TLS.debugKeyLogger = putStrLn -- fixme
       }
-    cparams = (TLS.defaultParamsClient serverName "") {
-        TLS.clientSupported = supported
-      , TLS.clientDebug = debug
-      , TLS.clientShared = cshared
+    hook = def {
+        TLS.onSuggestALPN = suggestALPN
+      }
+    cshared = def {
+       TLS.sharedValidationCache = TLS.ValidationCache (\_ _ _ -> return TLS.ValidationCachePass) (\_ _ _ -> return ())
+      }
+    supported = def {
+        TLS.supportedVersions = [TLS.TLS13]
+      , TLS.supportedCiphers  = ciphers
       }
 
 tlsServerContext :: FilePath -> FilePath -> IO (TLS.Context, TLS.ServerParams)

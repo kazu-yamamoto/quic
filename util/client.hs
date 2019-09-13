@@ -20,8 +20,12 @@ main = do
 
 quicClient :: String -> Socket -> SockAddr -> IO ()
 quicClient serverName s peerAddr = do
-    ctx <- clientContext Draft22 serverName
-
+    let conf = defaultClientConfig {
+            ccVersion    = Draft22
+          , ccServerName = serverName
+          , ccALPN       = return $ Just ["h3-22"]
+          }
+    ctx <- clientContext conf
     (iniBin, exts) <- createClientInitial ctx
     void $ sendTo s iniBin peerAddr
 
@@ -36,7 +40,7 @@ quicClient serverName s peerAddr = do
 
 createClientInitial :: Context -> IO (ByteString, Handshake13)
 createClientInitial ctx = do
-    (ch, chbin) <- makeClientHello13 cparams tlsctx
+    (ch, chbin) <- makeClientHello13 cparams tlsctx []
     let frames = Crypto 0 chbin :  replicate 963 Padding
         mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx

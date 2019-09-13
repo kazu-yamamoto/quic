@@ -1,11 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Transport.Context where
 
 import Crypto.Random (getRandomBytes)
+import Data.ByteString (ByteString)
 import Data.IORef
 -- import Data.ByteString
 import qualified Network.TLS as TLS
+import qualified Network.TLS.Extra.Cipher as TLS
 
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Types
@@ -27,23 +30,45 @@ data Context = Context {
   , packetNumber      :: IORef PacketNumber
   }
 
-clientContext :: Version -> TLS.HostName -> IO Context
-clientContext ver serverName = do
-    (tlsctx, cparams) <- tlsClientContext serverName
-    mycid <- CID <$> getRandomBytes 8 -- fixme: hard-coding
-    peercid <- CID <$> getRandomBytes 8 -- fixme: hard-coding
-    let cis = clientInitialSecret ver peercid
-        sis = serverInitialSecret ver peercid
+data ClientConfig = ClientConfig {
+    ccVersion    :: Version
+  , ccServerName :: TLS.HostName
+  , ccPeerCID    :: Maybe CID -- for the test purpose
+  , ccMyCID      :: Maybe CID -- for the test purpose
+  , ccALPN       :: IO (Maybe [ByteString])
+  , ccCiphers    :: [TLS.Cipher]
+  }
+
+defaultClientConfig :: ClientConfig
+defaultClientConfig = ClientConfig {
+    ccVersion    = Draft22
+  , ccServerName = "127.0.0.1"
+  , ccPeerCID    = Nothing
+  , ccMyCID      = Nothing
+  , ccALPN       = return Nothing
+  , ccCiphers    = TLS.ciphersuite_strong
+  }
+
+clientContext :: ClientConfig -> IO Context
+clientContext ClientConfig{..} = do
+    (tlsctx, cparams) <- tlsClientContext ccServerName ccCiphers ccALPN
+    mycid <- case ccMyCID of
+      Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
+      Just cid -> return cid
+    peercid <- case ccPeerCID of
+      Nothing -> CID <$> getRandomBytes 8 -- fixme: hard-coding
+      Just cid -> return cid
+    let cis = clientInitialSecret ccVersion peercid
+        sis = serverInitialSecret ccVersion peercid
     Context (Client cparams) tlsctx mycid (cis, sis) <$> newIORef peercid <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
-serverContext :: Version -> FilePath -> FilePath -> IO Context
-serverContext ver key cert = do
+serverContext :: Version -> CID -> FilePath -> FilePath -> IO Context
+serverContext ver mycid key cert = do
     (tlsctx, sparams) <- tlsServerContext key cert
-    mycid <- CID <$> getRandomBytes 8 -- fixme: hard-coding
-    peercid <- CID <$> getRandomBytes 8 -- fixme: hard-coding
-    let cis = clientInitialSecret ver peercid
-        sis = serverInitialSecret ver peercid
-    Context (Server sparams) tlsctx mycid (cis, sis) <$> newIORef peercid <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
+    let cis = clientInitialSecret ver mycid
+        sis = serverInitialSecret ver mycid
+    -- fixme: CID ""
+    Context (Server sparams) tlsctx mycid (cis, sis) <$> newIORef (CID "") <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
