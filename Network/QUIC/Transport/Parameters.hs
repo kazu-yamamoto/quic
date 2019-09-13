@@ -154,8 +154,8 @@ diff params label key enc
     val = label params
     val0 = label defaultParameters
 
-diffParameter :: Parameters -> ParametersList
-diffParameter p = catMaybes [
+diffParameters :: Parameters -> ParametersList
+diffParameters p = catMaybes [
     diff p originalConnectionId    ParametersOriginalConnectionId    fromJust
   , diff p idleTimeout             ParametersIdleTimeout             encInt
   , diff p stateLessResetToken     ParametersStateLessResetToken     fromJust
@@ -185,5 +185,29 @@ encodeParametersList kvs = unsafeDupablePerformIO $
         write16 wbuf $ fromIntegral $ BS.length v
         copyByteString wbuf v
 
-decodeParametersList :: ByteString -> ParametersList
-decodeParametersList = undefined
+decodeParametersList :: ByteString -> Maybe ParametersList
+decodeParametersList bs = unsafeDupablePerformIO $
+    withReadBuffer bs $ \rbuf -> do
+        len <- read16 rbuf
+        if len /= (len0 - 2) then
+            return Nothing
+          else
+            go rbuf id
+  where
+    len0 = fromIntegral $ BS.length bs
+    go rbuf build = do
+       rest1 <- remainingSize rbuf
+       if rest1 == 0 then
+          return $ Just (build [])
+       else if rest1 < 4 then
+          return Nothing
+        else do
+          key <- read16 rbuf
+          len <- read16 rbuf
+          case toParametersKeyId key of
+             Nothing -> do
+               ff rbuf $ fromIntegral len
+               go rbuf build
+             Just keyid -> do
+               val <- extractByteString rbuf $ fromIntegral len
+               go rbuf (build . ((keyid,val):))
