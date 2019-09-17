@@ -26,12 +26,12 @@ quicClient serverName s peerAddr = do
           , ccALPN       = return $ Just ["h3-22"]
           }
     ctx <- clientContext conf
-    (iniBin, exts) <- createClientInitial ctx
+    (iniBin, ch) <- createClientInitial ctx
     void $ sendTo s iniBin peerAddr
 
     let receive = fst <$> recvFrom s 2048
     shBin <- receive
-    eefins <- handleServerInitial ctx shBin exts receive
+    eefins <- handleServerInitial ctx shBin ch receive
 
     iniBin2 <- createClientInitial2 ctx eefins
     getNegotiatedProtocol (tlsConetxt ctx) >>= print
