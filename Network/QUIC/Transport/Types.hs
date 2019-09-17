@@ -1,14 +1,21 @@
 module Network.QUIC.Transport.Types where
 
+import qualified Data.ByteString.Char8 as C8
 import Data.Int (Int64)
 import Network.ByteOrder
+
+import Network.QUIC.Utils
 
 type Length = Int
 type PacketNumber = Int64
 type StreamID = Int64
 type EncodedPacketNumber = Word32
 
-newtype CID = CID ByteString deriving (Eq, Show)
+newtype CID = CID ByteString deriving (Eq)
+
+instance Show CID where
+    show (CID cid) = C8.unpack $ enc16 cid
+
 type Token = ByteString
 type RawFlags = Word8
 
