@@ -29,10 +29,9 @@ quicClient serverName s peerAddr = do
     (iniBin, exts) <- createClientInitial ctx
     void $ sendTo s iniBin peerAddr
 
-    (shBin, _) <- recvFrom s 2048
-    eefin0 <- handleServerInitial ctx shBin exts
-
-    eefins <- recvEefin1Bin ctx s eefin0
+    let receive = fst <$> recvFrom s 2048
+    shBin <- receive
+    eefins <- handleServerInitial ctx shBin exts receive
 
     iniBin2 <- createClientInitial2 ctx eefins
     -- xxx creating ack
@@ -54,7 +53,7 @@ exampleParameters = defaultParameters {
 createClientInitial :: Context -> IO (ByteString, Handshake13)
 createClientInitial ctx = do
     let params = encodeParametersList $ diffParameters exampleParameters
-    (ch, chbin) <- makeClientHello13 cparams tlsctx [ExtensionRaw 0xffa5 params]
+    (ch, chbin) <- makeClientHello13 cparams tlsctx params
     let frames = Crypto 0 chbin :  replicate 963 Padding
         mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
@@ -65,21 +64,33 @@ createClientInitial ctx = do
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
 
-handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString
-handleServerInitial ctx shBin ch = do
+handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString -> IO ByteString
+handleServerInitial ctx shBin ch receive = do
     (InitialPacket Draft22 _ _ _ _ [Crypto _ sh, _ack], eefinBin) <- decodePacket ctx shBin
     (cipher, handSecret, _resuming) <- handleServerHello13 cparams tlsctx ch sh
     setCipher ctx cipher
     writeIORef (handshakeSecret ctx) $ Just handSecret
-    (HandshakePacket Draft22 _ _ _ [Crypto _ eefin0], _) <- decodePacket ctx eefinBin
-
-    return eefin0
+    (HandshakePacket Draft22 dcid scid _pn [Crypto _ eefin0], _) <- decodePacket ctx eefinBin
+    when (dcid /= myCID ctx) $ error "DCID is not the same"
+    peercid <- readIORef $ peerCID ctx
+    when (scid /= peercid) $ do
+        putStrLn $ "Change peer CID to " ++ show peercid
+        writeIORef (peerCID ctx) scid
+    eefins <- recvEefin1Bin ctx eefin0 receive
+    let ehs = decodeHandshakes13 eefins
+    case ehs of
+      Right []     -> error "handleServerInitial []"
+      Right (ee:_) -> case handleServerEncryptedExtensions ee of
+        Nothing -> error "No QUIC params"
+        Just bs -> print $ decodeParametersList bs
+      Left e       -> print e
+    return eefins
   where
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
 
-recvEefin1Bin :: Context -> Socket -> ByteString -> IO ByteString
-recvEefin1Bin ctx s bs = do
+recvEefin1Bin :: Context -> ByteString -> IO ByteString -> IO ByteString
+recvEefin1Bin ctx bs receive = do
     check <- handshakeCheck finished bs Start
     case check of
       Done -> return bs
@@ -87,12 +98,12 @@ recvEefin1Bin ctx s bs = do
   where
     finished = 20
     loop cont build = do
-        (bin, _) <- recvFrom s 2048
+        bin <- receive
         (HandshakePacket Draft22 _ _ _ [Crypto _ eefin], _fixme) <- decodePacket ctx bin
         check <- handshakeCheck finished eefin cont
         let build' = build . (eefin :)
         case check of
-          Done -> return $ B.concat $ build' []
+          Done  -> return $ B.concat $ build' []
           cont' -> loop cont' build'
 
 createClientInitial2 :: Context -> ByteString -> IO ByteString
