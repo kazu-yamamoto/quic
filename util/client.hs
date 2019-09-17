@@ -34,7 +34,7 @@ quicClient serverName s peerAddr = do
     eefins <- handleServerInitial ctx shBin exts receive
 
     iniBin2 <- createClientInitial2 ctx eefins
-    -- xxx creating ack
+    getNegotiatedProtocol (tlsConetxt ctx) >>= print
     void $ sendTo s iniBin2 peerAddr
 
 
@@ -82,7 +82,7 @@ handleServerInitial ctx shBin ch receive = do
       Right []     -> error "handleServerInitial []"
       Right (ee:_) -> case handleServerEncryptedExtensions ee of
         Nothing -> error "No QUIC params"
-        Just bs -> print $ decodeParametersList bs
+        Just bs -> print $ decodeParametersList bs -- fixme: updating params
       Left e       -> print e
     return eefins
   where
@@ -108,13 +108,15 @@ recvEefin1Bin ctx bs receive = do
 
 createClientInitial2 :: Context -> ByteString -> IO ByteString
 createClientInitial2 ctx eefin = do
-    -- makeing Initial: ACK
     Just handSecret <- readIORef $ handshakeSecret ctx
     (crypto, appSecret) <- makeClientFinished13 cparams tlsctx eefin handSecret False
-    -- making Handshake: crypto + ACK
     writeIORef (applicationSecret ctx) $ Just appSecret
-    -- making 1-RTT: stream
-    return crypto
+    let mycid = myCID ctx
+    peercid <- readIORef $ peerCID ctx
+    -- fixme: ACK
+    let pkt = HandshakePacket Draft22 peercid mycid 0 [Crypto 0 crypto]
+    bin <- encodePacket ctx pkt
+    return bin
   where
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
