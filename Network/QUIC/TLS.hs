@@ -128,7 +128,7 @@ cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> CipherText
 cipherEncrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmEncrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
-  | cipher == cipher_TLS13_AES256GCM_SHA384        = error "cipher_TLS13_AES256GCM_SHA384"
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256gcmEncrypt
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
   | otherwise                                      = error "cipherEncrypt"
 
@@ -136,7 +136,7 @@ cipherDecrypt :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainTe
 cipherDecrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmDecrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
-  | cipher == cipher_TLS13_AES256GCM_SHA384        = error "cipher_TLS13_AES256GCM_SHA384"
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256gcmDecrypt
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
   | otherwise                                      = error "cipherDecrypt"
 
@@ -152,6 +152,23 @@ aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
   where
     ctx = throwCryptoError $ cipherInit key :: AES128
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+    (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+    authtag = AuthTag $ convert tag
+    plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
+
+aes256gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
+aes256gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
+    ciphertext `B.append` convert tag
+  where
+    ctx = throwCryptoError (cipherInit key) :: AES256
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext 16
+
+aes256gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
+aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
+  where
+    ctx = throwCryptoError $ cipherInit key :: AES256
     aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
     (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
     authtag = AuthTag $ convert tag
@@ -181,7 +198,7 @@ cipherHeaderProtection :: Cipher -> Key -> (Sample -> Mask)
 cipherHeaderProtection cipher key
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128ecbEncrypt key
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
-  | cipher == cipher_TLS13_AES256GCM_SHA384        = error "cipher_TLS13_AES256GCM_SHA384"
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256ecbEncrypt key
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
   | otherwise                                      = error "cipherHeaderProtection"
 
@@ -189,6 +206,12 @@ aes128ecbEncrypt :: Key -> Sample -> Mask
 aes128ecbEncrypt (Key key) (Sample sample) = Mask mask
   where
     encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES128)
+    mask = encrypt sample
+
+aes256ecbEncrypt :: Key -> Sample -> Mask
+aes256ecbEncrypt (Key key) (Sample sample) = Mask mask
+  where
+    encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES256)
     mask = encrypt sample
 
 sampleLength :: Cipher -> Int
