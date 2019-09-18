@@ -5,6 +5,7 @@ module Main where
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Network.QUIC
 import Network.Run.UDP
@@ -31,9 +32,9 @@ quicClient serverName s peerAddr = do
 
     let receive = fst <$> recvFrom s 2048
     shBin <- receive
-    eefins <- handleServerInitial ctx shBin ch receive
+    (pn0, pn1, eefins) <- handleServerInitial ctx shBin ch receive
 
-    iniBin2 <- createClientInitial2 ctx eefins
+    iniBin2 <- createClientInitial2 ctx pn0 pn1 eefins
     getNegotiatedProtocol (tlsConetxt ctx) >>= print
     void $ sendTo s iniBin2 peerAddr
 
@@ -64,18 +65,18 @@ createClientInitial ctx = do
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
 
-handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString -> IO ByteString
+handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString -> IO (PacketNumber, PacketNumber, ByteString)
 handleServerInitial ctx shBin ch receive = do
-    (InitialPacket Draft22 _ _ _ _ [Crypto _ sh, _ack], eefinBin) <- decodePacket ctx shBin
-    (cipher, handSecret, _resuming) <- handleServerHello13 cparams tlsctx ch sh
-    setCipher ctx cipher
-    writeIORef (handshakeSecret ctx) $ Just handSecret
-    (HandshakePacket Draft22 dcid scid _pn [Crypto _ eefin0], _) <- decodePacket ctx eefinBin
-    when (dcid /= myCID ctx) $ error "DCID is not the same"
+    (InitialPacket Draft22 dcid0 scid0 _tkn0 pn0 frames, eefinBin) <- decodePacket ctx shBin
+    when (dcid0 /= myCID ctx) $ error "DCID is not the same"
     peercid <- readIORef $ peerCID ctx
-    when (scid /= peercid) $ do
-        putStrLn $ "Change peer CID to " ++ show peercid
-        writeIORef (peerCID ctx) scid
+    when (scid0 /= peercid) $ do
+        putStrLn $ "Change peer CID from " ++ show peercid ++ " to " ++ show scid0
+        writeIORef (peerCID ctx) scid0
+    mapM_ handle frames
+    (HandshakePacket Draft22 dcid1 scid1 pn1 [Crypto _ eefin0], _rest) <- decodePacket ctx eefinBin
+    when (dcid1 /= myCID ctx) $ error "DCID is not the same"
+    when (scid1 /= scid0) $ error "SCID is not the same"
     eefins <- recvEefin1Bin ctx eefin0 receive
     let ehs = decodeHandshakes13 eefins
     case ehs of
@@ -84,10 +85,20 @@ handleServerInitial ctx shBin ch receive = do
         Nothing -> error "No QUIC params"
         Just bs -> print $ decodeParametersList bs -- fixme: updating params
       Left e       -> print e
-    return eefins
+    return (pn0, pn1, eefins)
   where
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
+    handle Padding = return ()
+    handle (ConnectionClose _errcode reason) = do
+        C8.putStrLn reason
+        error "ConnectionClose"
+    handle (Crypto _off sh) = do
+        (cipher, handSecret, _resuming) <- handleServerHello13 cparams tlsctx ch sh
+        setCipher ctx cipher
+        writeIORef (handshakeSecret ctx) $ Just handSecret
+    handle (Ack _ _ _ _) = return ()
+    handle _frame        = error $ show _frame
 
 recvEefin1Bin :: Context -> ByteString -> IO ByteString -> IO ByteString
 recvEefin1Bin ctx bs receive = do
@@ -106,17 +117,19 @@ recvEefin1Bin ctx bs receive = do
           Done  -> return $ B.concat $ build' []
           cont' -> loop cont' build'
 
-createClientInitial2 :: Context -> ByteString -> IO ByteString
-createClientInitial2 ctx eefin = do
+createClientInitial2 :: Context -> PacketNumber -> PacketNumber -> ByteString -> IO ByteString
+createClientInitial2 ctx pn0 pn1 eefin = do
+    let mycid = myCID ctx
+    peercid <- readIORef $ peerCID ctx
+    let iniPkt = InitialPacket Draft22 peercid mycid "" 1 [Ack pn0 0 0 []]
+    bin0 <- encodePacket ctx iniPkt
     Just handSecret <- readIORef $ handshakeSecret ctx
     (crypto, appSecret) <- makeClientFinished13 cparams tlsctx eefin handSecret False
     writeIORef (applicationSecret ctx) $ Just appSecret
-    let mycid = myCID ctx
-    peercid <- readIORef $ peerCID ctx
     -- fixme: ACK
-    let pkt = HandshakePacket Draft22 peercid mycid 0 [Crypto 0 crypto]
-    bin <- encodePacket ctx pkt
-    return bin
+    let hndPkt = HandshakePacket Draft22 peercid mycid 0 [Crypto 0 crypto, Ack pn1 0 0 []]
+    bin1 <- encodePacket ctx hndPkt
+    return (B.concat [bin0, bin1])
   where
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
