@@ -46,10 +46,12 @@ type Gap   = Int
 type CryptoData = ByteString
 type StreamData = ByteString
 type Fin = Bool
+type ErrorCode = Int
 
 data Frame = Padding
            | Ping
            | Ack PacketNumber Delay Range [(Gap,Range)]
            | Crypto Offset CryptoData
            | Stream StreamID Offset StreamData Fin
+           | ConnectionClose ErrorCode ByteString
            deriving (Eq,Show)

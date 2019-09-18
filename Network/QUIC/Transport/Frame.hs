@@ -29,6 +29,7 @@ encodeFrame wbuf (Ack largest delay range1 ranges) = do
     encodeInt' wbuf $ fromIntegral $ range1
     -- fixme: ranges
 encodeFrame _wbuf (Stream _sid _off _dat _fin) = undefined
+encodeFrame _wbuf (ConnectionClose _ _) = undefined
 
 ----------------------------------------------------------------
 
@@ -52,6 +53,7 @@ decodeFrame rbuf = do
       0x02 -> decodeAckFrame rbuf
       0x06 -> decodeCryptoFrame rbuf
       x | 0x08 <= x && x <= 0x0f -> decodeStreamFrame rbuf
+      0x1c -> decodeConnectionCloseFrame rbuf
       _x   -> error $ show _x
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
@@ -72,3 +74,10 @@ decodeAckFrame rbuf = do
 
 decodeStreamFrame :: ReadBuffer -> IO Frame
 decodeStreamFrame = undefined
+
+decodeConnectionCloseFrame  :: ReadBuffer -> IO Frame
+decodeConnectionCloseFrame rbuf = do
+    errcode <- fromIntegral <$> decodeInt' rbuf
+    len <- fromIntegral <$> decodeInt' rbuf
+    reason <- extractByteString rbuf len
+    return $ ConnectionClose errcode reason
