@@ -127,17 +127,17 @@ initialVector cipher (Secret secret) = IV iv
 cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> CipherText
 cipherEncrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmEncrypt
-  | cipher == cipher_TLS13_AES128CCM_SHA256        = undefined
-  | cipher == cipher_TLS13_AES256GCM_SHA384        = undefined
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = undefined
+  | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = error "cipher_TLS13_AES256GCM_SHA384"
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
   | otherwise                                      = error "cipherEncrypt"
 
 cipherDecrypt :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 cipherDecrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmDecrypt
-  | cipher == cipher_TLS13_AES128CCM_SHA256        = undefined
-  | cipher == cipher_TLS13_AES256GCM_SHA384        = undefined
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = undefined
+  | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = error "cipher_TLS13_AES256GCM_SHA384"
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
   | otherwise                                      = error "cipherDecrypt"
 
 aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
@@ -180,9 +180,9 @@ protectionMask cipher key sample = cipherHeaderProtection cipher key sample
 cipherHeaderProtection :: Cipher -> Key -> (Sample -> Mask)
 cipherHeaderProtection cipher key
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128ecbEncrypt key
-  | cipher == cipher_TLS13_AES128CCM_SHA256        = undefined
-  | cipher == cipher_TLS13_AES256GCM_SHA384        = undefined
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = undefined
+  | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = error "cipher_TLS13_AES256GCM_SHA384"
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
   | otherwise                                      = error "cipherHeaderProtection"
 
 aes128ecbEncrypt :: Key -> Sample -> Mask
