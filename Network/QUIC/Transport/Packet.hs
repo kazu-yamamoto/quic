@@ -75,10 +75,13 @@ decrypt cipher secret ciphertext header pn =
 
 ----------------------------------------------------------------
 
+isLong :: Word8 -> Bool
+isLong flags = flags .&. 0x80 == 0x80
+
 flagBits :: Word8 -> Word8
 flagBits flags
-  | flags .&. 0x80 == 0x80 = 0b00001111 -- long header
-  | otherwise              = 0b00011111 -- short header
+  | isLong flags = 0b00001111 -- long header
+  | otherwise    = 0b00011111 -- short header
 
 protectHeader :: Buffer -> Buffer -> Cipher -> Secret -> CipherText -> IO ()
 protectHeader headerBeg pnBeg cipher secret ciphertext = do
@@ -308,9 +311,17 @@ decodeHandshakePacket ctx rbuf proFlags version dcID scID = do
 -- length .. payload
 unprotectHeaderPayload :: ReadBuffer -> Word8 -> Cipher -> Secret -> IO (RawFlags, PacketNumber, [Frame])
 unprotectHeaderPayload rbuf proFlags cipher secret = do
-    len <- fromIntegral <$> decodeInt' rbuf
+    let long = isLong proFlags
+    len <- if long then
+             fromIntegral <$> decodeInt' rbuf
+           else
+             return 0
     (header, flags, pn, pnLen) <- unprotectHeader rbuf cipher secret proFlags
-    ciphertext <- extractByteString rbuf (len - pnLen)
+    pktSiz <- if long then
+                return (len - pnLen)
+              else
+                remainingSize rbuf
+    ciphertext <- extractByteString rbuf pktSiz
     let Just payload = decrypt cipher secret ciphertext header pn
     frames <- decodeFrames payload
     return (flags, pn, frames)
@@ -319,4 +330,12 @@ decodeRetryPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID 
 decodeRetryPacket = undefined
 
 decodeShortHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
-decodeShortHeaderPacket _ctx _rbuf _flags = undefined
+decodeShortHeaderPacket ctx rbuf proFlags = do
+    let mycid@(CID my) = myCID ctx
+        idlen = B.length my
+    dcID <- CID <$> extractByteString rbuf idlen
+    when (mycid /= dcID) $ error "decodeShortHeaderPacket"
+    cipher <- getCipher ctx
+    secret <- rxApplicationSecret ctx
+    (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
+    return $ ShortPacket dcID pn frames
