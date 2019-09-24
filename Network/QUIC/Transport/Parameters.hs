@@ -2,14 +2,10 @@
 
 module Network.QUIC.Transport.Parameters where
 
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import Data.List (foldl')
-import Data.Maybe (catMaybes, fromJust)
-import Data.Word
-import Network.ByteOrder
 import System.IO.Unsafe (unsafeDupablePerformIO)
+import qualified Data.ByteString as BS
 
+import Network.QUIC.Imports
 import Network.QUIC.Transport.Integer
 
 type ParametersList = [(ParametersKeyId,ParametersValue)]

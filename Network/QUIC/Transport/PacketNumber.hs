@@ -1,7 +1,6 @@
 module Network.QUIC.Transport.PacketNumber where
 
-import Data.Bits
-
+import Network.QUIC.Imports
 import Network.QUIC.Transport.Types
 
 

@@ -3,11 +3,9 @@
 
 module Network.QUIC.Transport.Integer where
 
-import Data.Bits
-import Data.ByteString (ByteString)
-import Data.Int (Int64)
-import Network.ByteOrder
 import System.IO.Unsafe (unsafeDupablePerformIO)
+
+import Network.QUIC.Imports
 
 -- $setup
 -- >>> :set -XOverloadedStrings

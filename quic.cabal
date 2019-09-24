@@ -24,7 +24,8 @@ library
                        Network.QUIC.Transport.Parameters
                        Network.QUIC.Transport.Types
                        Network.QUIC.Utils
-  -- other-modules:
+  other-modules:
+                       Network.QUIC.Imports
   -- other-extensions:
   build-depends:       base >= 4.7 && < 5
                      , base16-bytestring

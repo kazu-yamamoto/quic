@@ -39,16 +39,15 @@ module Network.QUIC.TLS (
 import Crypto.Cipher.AES
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError)
-import Data.Bits
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import Data.Default.Class
-import Network.ByteOrder
 import Network.TLS (Cipher)
 import qualified Network.TLS as TLS
-import qualified Network.TLS.Extra.Cipher as TLS
 import Network.TLS.Extra.Cipher
+import qualified Network.TLS.Extra.Cipher as TLS
 
+import Network.QUIC.Imports
 import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------

@@ -1,10 +1,8 @@
 module Network.QUIC.Transport.Types where
 
 import qualified Data.ByteString.Char8 as C8
-import Data.Int (Int64)
-import Network.ByteOrder
 
-import Network.QUIC.Utils
+import Network.QUIC.Imports
 
 type Length = Int
 type PacketNumber = Int64

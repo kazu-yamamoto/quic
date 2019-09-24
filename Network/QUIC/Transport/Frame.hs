@@ -1,9 +1,8 @@
 module Network.QUIC.Transport.Frame where
 
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Network.ByteOrder
 
+import Network.QUIC.Imports
 import Network.QUIC.Transport.Types
 import Network.QUIC.Transport.Integer
 

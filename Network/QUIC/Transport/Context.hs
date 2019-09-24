@@ -4,12 +4,11 @@
 module Network.QUIC.Transport.Context where
 
 import Crypto.Random (getRandomBytes)
-import Data.ByteString (ByteString)
 import Data.IORef
--- import Data.ByteString
 import qualified Network.TLS as TLS
 import qualified Network.TLS.Extra.Cipher as TLS
 
+import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Types
 

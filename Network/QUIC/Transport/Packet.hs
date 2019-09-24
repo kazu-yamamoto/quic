@@ -3,19 +3,16 @@
 
 module Network.QUIC.Transport.Packet where
 
-import Data.Bits
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import Data.List (foldl')
 import Foreign.Ptr
-import Network.ByteOrder
 
+import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Context
 import Network.QUIC.Transport.Frame
 import Network.QUIC.Transport.Integer
-import Network.QUIC.Transport.Types
 import Network.QUIC.Transport.PacketNumber
+import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
 
