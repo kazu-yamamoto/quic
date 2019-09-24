@@ -22,9 +22,9 @@ main = do
 quicClient :: String -> Socket -> SockAddr -> IO ()
 quicClient serverName s peerAddr = do
     let conf = defaultClientConfig {
-            ccVersion    = Draft22
+            ccVersion    = Draft23
           , ccServerName = serverName
-          , ccALPN       = return $ Just ["h3-22"]
+          , ccALPN       = return $ Just ["h3-23"]
           }
     ctx <- clientContext conf
     (iniBin, ch) <- createClientInitial ctx
@@ -58,7 +58,7 @@ createClientInitial ctx = do
     let frames = Crypto 0 chbin :  replicate 963 Padding
         mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
-    let iniPkt = InitialPacket Draft22 peercid mycid "" 0 frames
+    let iniPkt = InitialPacket Draft23 peercid mycid "" 0 frames
     iniBin <- encodePacket ctx iniPkt
     return (iniBin, ch)
   where
@@ -67,14 +67,14 @@ createClientInitial ctx = do
 
 handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString -> IO (PacketNumber, PacketNumber, ByteString)
 handleServerInitial ctx shBin ch receive = do
-    (InitialPacket Draft22 dcid0 scid0 _tkn0 pn0 frames, eefinBin) <- decodePacket ctx shBin
+    (InitialPacket Draft23 dcid0 scid0 _tkn0 pn0 frames, eefinBin) <- decodePacket ctx shBin
     when (dcid0 /= myCID ctx) $ error "DCID is not the same"
     peercid <- readIORef $ peerCID ctx
     when (scid0 /= peercid) $ do
         putStrLn $ "Change peer CID from " ++ show peercid ++ " to " ++ show scid0
         writeIORef (peerCID ctx) scid0
     mapM_ handle frames
-    (HandshakePacket Draft22 dcid1 scid1 pn1 [Crypto _ eefin0], _rest) <- decodePacket ctx eefinBin
+    (HandshakePacket Draft23 dcid1 scid1 pn1 [Crypto _ eefin0], _rest) <- decodePacket ctx eefinBin
     when (dcid1 /= myCID ctx) $ error "DCID is not the same"
     when (scid1 /= scid0) $ error "SCID is not the same"
     eefins <- recvEefin1Bin ctx eefin0 receive
@@ -110,7 +110,7 @@ recvEefin1Bin ctx bs receive = do
     finished = 20
     loop cont build = do
         bin <- receive
-        (HandshakePacket Draft22 _ _ _ [Crypto _ eefin], _fixme) <- decodePacket ctx bin
+        (HandshakePacket Draft23 _ _ _ [Crypto _ eefin], _fixme) <- decodePacket ctx bin
         check <- handshakeCheck finished eefin cont
         let build' = build . (eefin :)
         case check of
@@ -121,13 +121,13 @@ createClientInitial2 :: Context -> PacketNumber -> PacketNumber -> ByteString ->
 createClientInitial2 ctx pn0 pn1 eefin = do
     let mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
-    let iniPkt = InitialPacket Draft22 peercid mycid "" 1 [Ack pn0 0 0 []]
+    let iniPkt = InitialPacket Draft23 peercid mycid "" 1 [Ack pn0 0 0 []]
     bin0 <- encodePacket ctx iniPkt
     Just handSecret <- readIORef $ handshakeSecret ctx
     (crypto, appSecret) <- makeClientFinished13 cparams tlsctx eefin handSecret False
     writeIORef (applicationSecret ctx) $ Just appSecret
     -- fixme: ACK
-    let hndPkt = HandshakePacket Draft22 peercid mycid 0 [Crypto 0 crypto, Ack pn1 0 0 []]
+    let hndPkt = HandshakePacket Draft23 peercid mycid 0 [Crypto 0 crypto, Ack pn1 0 0 []]
     bin1 <- encodePacket ctx hndPkt
     return (B.concat [bin0, bin1])
   where
