@@ -9,7 +9,7 @@ import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Network.QUIC
 import Network.Run.UDP
-import Network.Socket
+import Network.Socket hiding (Stream)
 import Network.Socket.ByteString
 import Network.TLS hiding (Context)
 import System.Environment
@@ -32,12 +32,14 @@ quicClient serverName s peerAddr = do
 
     let receive = fst <$> recvFrom s 2048
     shBin <- receive
-    (pn0, pn1, eefins) <- handleServerInitial ctx shBin ch receive
-
-    iniBin2 <- createClientInitial2 ctx pn0 pn1 eefins
+    (pnI, pnH, eefins, rest) <- handleServerInitial ctx shBin ch receive
+    iniBin2 <- createClientInitial2 ctx pnI pnH eefins
     getNegotiatedProtocol (tlsConetxt ctx) >>= print
     void $ sendTo s iniBin2 peerAddr
-
+    when (rest /= "") (decodePacket ctx rest >>= print)
+    receive >>= decodePacket ctx >>= print
+    receive >>= decodePacket ctx >>= print
+    receive >>= decodePacket ctx >>= print
 
 exampleParameters :: Parameters
 exampleParameters = defaultParameters {
@@ -65,19 +67,19 @@ createClientInitial ctx = do
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
 
-handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString -> IO (PacketNumber, PacketNumber, ByteString)
+handleServerInitial :: Context -> ByteString -> Handshake13 -> IO ByteString -> IO (PacketNumber, PacketNumber, ByteString, ByteString)
 handleServerInitial ctx shBin ch receive = do
-    (InitialPacket Draft23 dcid0 scid0 _tkn0 pn0 frames, eefinBin) <- decodePacket ctx shBin
+    (InitialPacket Draft23 dcid0 scid0 _tkn0 pnI frames, hdskPktBin0) <- decodePacket ctx shBin
     when (dcid0 /= myCID ctx) $ error "DCID is not the same"
     peercid <- readIORef $ peerCID ctx
     when (scid0 /= peercid) $ do
         putStrLn $ "Change peer CID from " ++ show peercid ++ " to " ++ show scid0
         writeIORef (peerCID ctx) scid0
     mapM_ handle frames
-    (HandshakePacket Draft23 dcid1 scid1 pn1 [Crypto _ eefin0], _rest) <- decodePacket ctx eefinBin
+    (HandshakePacket Draft23 dcid1 scid1 pnH0 [Crypto _ eefin0], "") <- decodePacket ctx hdskPktBin0
     when (dcid1 /= myCID ctx) $ error "DCID is not the same"
     when (scid1 /= scid0) $ error "SCID is not the same"
-    eefins <- recvEefin1Bin ctx eefin0 receive
+    (eefins,pnH,rest) <- recvEefin1Bin ctx eefin0 pnH0 receive
     let ehs = decodeHandshakes13 eefins
     case ehs of
       Right []     -> error "handleServerInitial []"
@@ -85,7 +87,7 @@ handleServerInitial ctx shBin ch receive = do
         Nothing -> error "No QUIC params"
         Just bs -> print $ decodeParametersList bs -- fixme: updating params
       Left e       -> print e
-    return (pn0, pn1, eefins)
+    return (pnI, pnH, eefins, rest)
   where
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
@@ -100,36 +102,38 @@ handleServerInitial ctx shBin ch receive = do
     handle (Ack _ _ _ _) = return ()
     handle _frame        = error $ show _frame
 
-recvEefin1Bin :: Context -> ByteString -> IO ByteString -> IO ByteString
-recvEefin1Bin ctx bs receive = do
-    check <- handshakeCheck finished bs Start
+recvEefin1Bin :: Context -> ByteString -> PacketNumber -> IO ByteString -> IO (ByteString, PacketNumber, ByteString)
+recvEefin1Bin ctx eefin0 pnH0 receive = do
+    check <- handshakeCheck finished eefin0 Start
     case check of
-      Done -> return bs
-      cont -> loop cont (bs :)
+      Done -> return (eefin0, pnH0, "")
+      cont -> loop cont (eefin0 :)
   where
     finished = 20
     loop cont build = do
         bin <- receive
-        (HandshakePacket Draft23 _ _ _ [Crypto _ eefin], _fixme) <- decodePacket ctx bin
+        (HandshakePacket Draft23 _ _ pnH [Crypto _ eefin], rest) <- decodePacket ctx bin
         check <- handshakeCheck finished eefin cont
         let build' = build . (eefin :)
         case check of
-          Done  -> return $ B.concat $ build' []
-          cont' -> loop cont' build'
+          Done  -> return (B.concat $ build' [], pnH, rest)
+          cont' -> loop cont' build' -- rest should be ""
 
 createClientInitial2 :: Context -> PacketNumber -> PacketNumber -> ByteString -> IO ByteString
-createClientInitial2 ctx pn0 pn1 eefin = do
+createClientInitial2 ctx pnI pnH eefin = do
     let mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
-    let iniPkt = InitialPacket Draft23 peercid mycid "" 1 [Ack pn0 0 0 []]
+    let iniPkt = InitialPacket Draft23 peercid mycid "" 1 [Ack pnI 0 0 []]
     bin0 <- encodePacket ctx iniPkt
     Just handSecret <- readIORef $ handshakeSecret ctx
     (crypto, appSecret) <- makeClientFinished13 cparams tlsctx eefin handSecret False
     writeIORef (applicationSecret ctx) $ Just appSecret
     -- fixme: ACK
-    let hndPkt = HandshakePacket Draft23 peercid mycid 0 [Crypto 0 crypto, Ack pn1 0 0 []]
+    let hndPkt = HandshakePacket Draft23 peercid mycid 0 [Crypto 0 crypto, Ack pnH 0 2 []] --fixme: first ack range
     bin1 <- encodePacket ctx hndPkt
-    return (B.concat [bin0, bin1])
+    let appPkt = ShortPacket peercid 0 [Stream 0 0 "GET /\r\n" True]
+    bin2 <- encodePacket ctx appPkt
+    return (B.concat [bin0, bin1, bin2])
   where
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
