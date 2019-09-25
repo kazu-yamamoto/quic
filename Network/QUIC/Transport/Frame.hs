@@ -27,7 +27,13 @@ encodeFrame wbuf (Ack largest delay range1 ranges) = do
     encodeInt' wbuf $ fromIntegral $ length ranges
     encodeInt' wbuf $ fromIntegral $ range1
     -- fixme: ranges
-encodeFrame _wbuf (Stream _sid _off _dat _fin) = undefined
+encodeFrame wbuf (Stream sid _off dat _fin) = do
+    -- fixme
+    write8 wbuf (0x08 .|. 0x02 .|. 0x01)
+    encodeInt' wbuf sid
+    encodeInt' wbuf $ fromIntegral $ B.length dat
+    copyByteString wbuf dat
+encodeFrame _wbuf (NewConnectionID _ _ _ _) = undefined
 encodeFrame _wbuf (ConnectionClose _ _) = undefined
 
 ----------------------------------------------------------------
@@ -51,7 +57,12 @@ decodeFrame rbuf = do
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
       0x06 -> decodeCryptoFrame rbuf
-      x | 0x08 <= x && x <= 0x0f -> decodeStreamFrame rbuf
+      x | 0x08 <= x && x <= 0x0f -> do
+              let off = testBit x 3
+                  len = testBit x 2
+                  fin = testBit x 1
+              decodeStreamFrame rbuf off len fin
+      0x18 -> decodeNewConnectionID rbuf
       0x1c -> decodeConnectionCloseFrame rbuf
       _x   -> error $ show _x
 
@@ -71,8 +82,20 @@ decodeAckFrame rbuf = do
     -- fixme: ranges
     return $ Ack largest delay range1 []
 
-decodeStreamFrame :: ReadBuffer -> IO Frame
-decodeStreamFrame = undefined
+decodeStreamFrame :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
+decodeStreamFrame rbuf hasOff hasLen fin = do
+    sID <- decodeInt' rbuf
+    off <- if hasOff then
+             fromIntegral <$> decodeInt' rbuf
+           else
+             return 0
+    dat <- if hasLen then do
+             len <- fromIntegral <$> decodeInt' rbuf
+             extractByteString rbuf len
+           else do
+             len <- remainingSize rbuf
+             extractByteString rbuf len
+    return $ Stream sID off dat fin
 
 decodeConnectionCloseFrame  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrame rbuf = do
@@ -80,3 +103,12 @@ decodeConnectionCloseFrame rbuf = do
     len <- fromIntegral <$> decodeInt' rbuf
     reason <- extractByteString rbuf len
     return $ ConnectionClose errcode reason
+
+decodeNewConnectionID :: ReadBuffer -> IO Frame
+decodeNewConnectionID rbuf = do
+    seqNum <- fromIntegral <$> decodeInt' rbuf
+    rpt <- fromIntegral <$> decodeInt' rbuf
+    cidLen <- fromIntegral <$> read8 rbuf
+    cID <- CID <$> extractByteString rbuf cidLen
+    token <- extractByteString rbuf 16
+    return $ NewConnectionID seqNum rpt cID token

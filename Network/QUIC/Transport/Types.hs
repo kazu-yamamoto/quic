@@ -51,5 +51,6 @@ data Frame = Padding
            | Ack PacketNumber Delay Range [(Gap,Range)]
            | Crypto Offset CryptoData
            | Stream StreamID Offset StreamData Fin
+           | NewConnectionID Int Int CID ByteString
            | ConnectionClose ErrorCode ByteString
            deriving (Eq,Show)
