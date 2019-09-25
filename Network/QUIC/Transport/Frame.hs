@@ -27,6 +27,7 @@ encodeFrame wbuf (Ack largest delay range1 ranges) = do
     encodeInt' wbuf $ fromIntegral $ length ranges
     encodeInt' wbuf $ fromIntegral $ range1
     -- fixme: ranges
+encodeFrame _wbuf (NewToken _) = undefined
 encodeFrame wbuf (Stream sid _off dat _fin) = do
     -- fixme
     write8 wbuf (0x08 .|. 0x02 .|. 0x01)
@@ -57,6 +58,7 @@ decodeFrame rbuf = do
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
       0x06 -> decodeCryptoFrame rbuf
+      0x07 -> decodeNewToken rbuf
       x | 0x08 <= x && x <= 0x0f -> do
               let off = testBit x 3
                   len = testBit x 2
@@ -81,6 +83,12 @@ decodeAckFrame rbuf = do
     range1  <- fromIntegral <$> decodeInt' rbuf
     -- fixme: ranges
     return $ Ack largest delay range1 []
+
+decodeNewToken :: ReadBuffer -> IO Frame
+decodeNewToken rbuf = do
+    len <- fromIntegral <$> decodeInt' rbuf
+    token <- extractByteString rbuf len
+    return $ NewToken token
 
 decodeStreamFrame :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
 decodeStreamFrame rbuf hasOff hasLen fin = do

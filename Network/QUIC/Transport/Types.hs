@@ -50,6 +50,7 @@ data Frame = Padding
            | Ping
            | Ack PacketNumber Delay Range [(Gap,Range)]
            | Crypto Offset CryptoData
+           | NewToken Token
            | Stream StreamID Offset StreamData Fin
            | NewConnectionID Int Int CID ByteString
            | ConnectionClose ErrorCode ByteString
