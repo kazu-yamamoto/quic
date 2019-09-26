@@ -65,7 +65,8 @@ decodeFrame rbuf = do
                   fin = testBit x 1
               decodeStreamFrame rbuf off len fin
       0x18 -> decodeNewConnectionID rbuf
-      0x1c -> decodeConnectionCloseFrame rbuf
+      0x1c -> decodeConnectionCloseFrame rbuf -- QUIC layer error
+      0x1d -> decodeConnectionCloseFrame rbuf -- Application layer error
       _x   -> error $ show _x
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
