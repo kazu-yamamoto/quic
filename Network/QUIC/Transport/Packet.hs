@@ -156,7 +156,8 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     copyByteString wbuf token
     -- length .. payload
     let secret = txInitialSecret ctx
-    protectPayloadHeader wbuf frames secret pn epn headerBeg True
+        cipher = defaultCipher
+    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg True
 
 encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
     -- flag ... scID
@@ -164,7 +165,8 @@ encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
     epn <- encodeLongHeaderPP ctx wbuf RTT0 ver dcID scID pn
     -- length .. payload
     secret <- undefined ctx
-    protectPayloadHeader wbuf frames secret pn epn headerBeg True
+    cipher <- getCipher ctx
+    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg True
 
 encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     -- flag ... scid
@@ -172,7 +174,8 @@ encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     epn <- encodeLongHeaderPP ctx wbuf Handshake ver dcID scID pn
     -- length .. payload
     secret <- txHandshakeSecret ctx
-    protectPayloadHeader wbuf frames secret pn epn headerBeg True
+    cipher <- getCipher ctx
+    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg True
 
 encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
     let flags = encodePacketType 0b11000000 Retry
@@ -194,7 +197,8 @@ encodePacket' ctx wbuf (ShortPacket (CID dcid) pn frames) = do
     -- dcID
     copyByteString wbuf dcid
     secret <- txApplicationSecret ctx
-    protectPayloadHeader wbuf frames secret pn epn headerBeg False
+    cipher <- getCipher ctx
+    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg False
 
 encodeLongHeader :: WriteBuffer
                  -> Version -> CID -> CID
@@ -220,8 +224,8 @@ encodeLongHeaderPP _ctx wbuf pkttyp ver dcID scID pn = do
     encodeLongHeader wbuf ver dcID scID
     return epn
 
-protectPayloadHeader :: WriteBuffer -> [Frame] -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> Bool -> IO ()
-protectPayloadHeader wbuf frames secret pn epn headerBeg long = do
+protectPayloadHeader :: WriteBuffer -> [Frame] -> Cipher -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> Bool -> IO ()
+protectPayloadHeader wbuf frames cipher secret pn epn headerBeg long = do
     -- length: assuming 2byte length
     plaintext <- encodeFrames frames
     when long $ do
@@ -235,7 +239,6 @@ protectPayloadHeader wbuf frames secret pn epn headerBeg long = do
     headerEnd <- currentOffset wbuf
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     -- payload
-    let cipher = defaultCipher
     let ciphertext = encrypt cipher secret plaintext header pn
     copyByteString wbuf ciphertext
     -- protecting header
