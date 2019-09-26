@@ -12,7 +12,7 @@ type EncodedPacketNumber = Word32
 newtype CID = CID ByteString deriving (Eq)
 
 instance Show CID where
-    show (CID cid) = C8.unpack $ enc16 cid
+    show (CID cid) = "CID=" ++ C8.unpack (enc16 cid)
 
 type Token = ByteString
 type RawFlags = Word8

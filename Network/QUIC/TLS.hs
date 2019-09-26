@@ -41,6 +41,7 @@ import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 import Data.Default.Class
 import Network.TLS (Cipher)
 import qualified Network.TLS as TLS
@@ -61,14 +62,31 @@ type PlainText  = ByteString
 type CipherText = ByteString
 type Salt       = ByteString
 
-newtype Key    = Key    ByteString deriving (Eq, Show)
-newtype IV     = IV     ByteString deriving (Eq, Show)
-newtype Secret = Secret ByteString deriving (Eq, Show)
-newtype AddDat = AddDat ByteString deriving (Eq, Show)
-newtype Sample = Sample ByteString deriving (Eq, Show)
-newtype Mask   = Mask   ByteString deriving (Eq, Show)
-newtype Label  = Label  ByteString deriving (Eq, Show)
-newtype Nonce  = Nonce  ByteString deriving (Eq, Show)
+newtype Key    = Key    ByteString deriving (Eq)
+newtype IV     = IV     ByteString deriving (Eq)
+newtype Secret = Secret ByteString deriving (Eq)
+newtype AddDat = AddDat ByteString deriving (Eq)
+newtype Sample = Sample ByteString deriving (Eq)
+newtype Mask   = Mask   ByteString deriving (Eq)
+newtype Label  = Label  ByteString deriving (Eq)
+newtype Nonce  = Nonce  ByteString deriving (Eq)
+
+instance Show Key where
+    show (Key x) = "Key=" ++ C8.unpack (enc16 x)
+instance Show IV where
+    show (IV x) = "IV=" ++ C8.unpack (enc16 x)
+instance Show Secret where
+    show (Secret x) = "Secret=" ++ C8.unpack (enc16 x)
+instance Show AddDat where
+    show (AddDat x) = "AddDat=" ++ C8.unpack (enc16 x)
+instance Show Sample where
+    show (Sample x) = "Sample=" ++ C8.unpack (enc16 x)
+instance Show Mask where
+    show (Mask x) = "Mask=" ++ C8.unpack (enc16 x)
+instance Show Label where
+    show (Label x) = "Label=" ++ C8.unpack (enc16 x)
+instance Show Nonce where
+    show (Nonce x) = "Nonce=" ++ C8.unpack (enc16 x)
 
 ----------------------------------------------------------------
 
