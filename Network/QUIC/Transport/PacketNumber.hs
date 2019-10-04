@@ -6,14 +6,22 @@ import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
 
--- from draft18. We cannot use becase 32 is hard-coded in our impl.
--- encodePacketNumber 0xabe8bc 0xac5c02 == (0x5c02,16)
--- encodePacketNumber 0xa82f30ea 0xa82f9b32 == (0x9b32,16)
+-- |
+--
+-- >>> encodePacketNumber 0xabe8bc 0xac5c02 == (0x5c02,2)
+-- True
+-- >>> encodePacketNumber 0xa82f30ea 0xa82f9b32 == (0x9b32,2)
+-- True
 encodePacketNumber :: PacketNumber -> PacketNumber -> (EncodedPacketNumber, Int)
-encodePacketNumber _largestPN pn = (diff, 32)
+encodePacketNumber largestPN pn = (diff, bytes)
   where
-    diff = fromIntegral (pn .&. 0xffffffff)
-
+    enoughRange = (pn - largestPN) * 2
+    (pnMask, bytes)
+      | enoughRange <      256 = (0x000000ff, 1)
+      | enoughRange <    65536 = (0x0000ffff, 2)
+      | enoughRange < 16777216 = (0x00ffffff, 3)
+      | otherwise              = (0xffffffff, 4)
+    diff = fromIntegral (pn .&. pnMask)
 
 ----------------------------------------------------------------
 
