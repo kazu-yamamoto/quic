@@ -83,18 +83,22 @@ flagBits flags
   | isLong flags = 0b00001111 -- long header
   | otherwise    = 0b00011111 -- short header
 
-protectHeader :: Buffer -> Buffer -> Cipher -> Secret -> CipherText -> IO ()
-protectHeader headerBeg pnBeg cipher secret ciphertext = do
+protectHeader :: Buffer -> Buffer -> Int -> Cipher -> Secret -> CipherText -> IO ()
+protectHeader headerBeg pnBeg epnLen cipher secret ciphertext = do
     flags <- peek8 headerBeg 0
     let protectecFlag = flags `xor` ((mask `B.index` 0) .&. flagBits flags)
     poke8 protectecFlag headerBeg 0
-    -- assuming 4byte encoded packet number
     shuffle 0
-    shuffle 1
-    shuffle 2
-    shuffle 3
+    when (epnLen >= 2) $ shuffle 1
+    when (epnLen >= 3) $ shuffle 2
+    when (epnLen == 4) $ shuffle 3
   where
-    sample = Sample $ B.take (sampleLength cipher) ciphertext
+    ciphertext'
+      | epnLen == 1 = B.drop 3 ciphertext
+      | epnLen == 2 = B.drop 2 ciphertext
+      | epnLen == 3 = B.drop 1 ciphertext
+      | otherwise   = ciphertext
+    sample = Sample $ B.take (sampleLength cipher) ciphertext'
     hpKey = headerProtectionKey cipher secret
     Mask mask = protectionMask cipher hpKey sample
     shuffle n = do
@@ -126,10 +130,13 @@ unprotectHeader rbuf cipher secret proFlags = do
 
     takeSample :: Int -> IO Sample
     takeSample len = do
-        ff rbuf 4
+        ff rbuf maxEPNLen
         sample <- extractByteString rbuf len
-        ff rbuf $ negate (len + 4)
+        ff rbuf $ negate (len + maxEPNLen)
         return $ Sample sample
+
+maxEPNLen :: Int
+maxEPNLen = 4
 
 ----------------------------------------------------------------
 
@@ -150,32 +157,32 @@ encodePacket' _ctx wbuf (VersionNegotiationPacket dcID scID vers) = do
 encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     -- flag ... scID
     headerBeg <- currentOffset wbuf
-    epn <- encodeLongHeaderPP ctx wbuf Initial ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf Initial ver dcID scID pn
     -- token
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
     -- length .. payload
     let secret = txInitialSecret ctx
         cipher = defaultCipher
-    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg True
+    protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
 encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
     -- flag ... scID
     headerBeg <- currentOffset wbuf
-    epn <- encodeLongHeaderPP ctx wbuf RTT0 ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf RTT0 ver dcID scID pn
     -- length .. payload
     secret <- undefined ctx
     cipher <- getCipher ctx
-    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg True
+    protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
 encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     -- flag ... scid
     headerBeg <- currentOffset wbuf
-    epn <- encodeLongHeaderPP ctx wbuf Handshake ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf Handshake ver dcID scID pn
     -- length .. payload
     secret <- txHandshakeSecret ctx
     cipher <- getCipher ctx
-    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg True
+    protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
 encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
     let flags = encodePacketType 0b11000000 Retry
@@ -189,8 +196,8 @@ encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
 
 encodePacket' ctx wbuf (ShortPacket (CID dcid) pn frames) = do
     -- flag
-    let (epn, pnLen) = encodePacketNumber 0 {- dummy -} pn
-        pp = fromIntegral ((pnLen `div` 8) - 1)
+    let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
+        pp = fromIntegral (epnLen - 1)
         flags = 0b01000000 .|. pp -- fixme: K flag
     headerBeg <- currentOffset wbuf
     write8 wbuf flags
@@ -198,7 +205,7 @@ encodePacket' ctx wbuf (ShortPacket (CID dcid) pn frames) = do
     copyByteString wbuf dcid
     secret <- txApplicationSecret ctx
     cipher <- getCipher ctx
-    protectPayloadHeader wbuf frames cipher secret pn epn headerBeg False
+    protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg False
 
 encodeLongHeader :: WriteBuffer
                  -> Version -> CID -> CID
@@ -215,26 +222,31 @@ encodeLongHeader wbuf ver (CID dcid) (CID scid) = do
 encodeLongHeaderPP :: Context -> WriteBuffer
                    -> PacketType -> Version -> CID -> CID
                    -> PacketNumber
-                   -> IO EncodedPacketNumber
+                   -> IO (EncodedPacketNumber, Int)
 encodeLongHeaderPP _ctx wbuf pkttyp ver dcID scID pn = do
-    let (epn, pnLen) = encodePacketNumber 0 {- dummy -} pn
-        pp = fromIntegral ((pnLen `div` 8) - 1)
+    let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
+        pp = fromIntegral (pnLen - 1)
         flags' = encodePacketType (0b11000000 .|. pp) pkttyp
     write8 wbuf flags'
     encodeLongHeader wbuf ver dcID scID
-    return epn
+    return el
 
-protectPayloadHeader :: WriteBuffer -> [Frame] -> Cipher -> Secret -> PacketNumber -> EncodedPacketNumber -> Buffer -> Bool -> IO ()
-protectPayloadHeader wbuf frames cipher secret pn epn headerBeg long = do
-    -- length: assuming 2byte length
+protectPayloadHeader :: WriteBuffer -> [Frame] -> Cipher -> Secret -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Bool -> IO ()
+protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg long = do
     plaintext <- encodeFrames frames
     when long $ do
-        -- fixme: 4 bytes PN + crypto overhead
-        let len = B.length plaintext + 4 + 16
+        let len = epnLen + B.length plaintext + 16 -- fixme: crypto overhead
+        -- length: assuming 2byte length
         encodeInt'2 wbuf $ fromIntegral len
     pnBeg <- currentOffset wbuf
-    -- packet number: assuming 4byte encoded packet number
-    write32 wbuf epn
+    if epnLen == 1 then
+        write8  wbuf $ fromIntegral epn
+      else if epnLen == 2 then
+        write16 wbuf $ fromIntegral epn
+      else if epnLen == 3 then
+        write24 wbuf epn
+      else
+        write32 wbuf epn
     -- post process
     headerEnd <- currentOffset wbuf
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
@@ -242,7 +254,7 @@ protectPayloadHeader wbuf frames cipher secret pn epn headerBeg long = do
     let ciphertext = encrypt cipher secret plaintext header pn
     copyByteString wbuf ciphertext
     -- protecting header
-    protectHeader headerBeg pnBeg cipher secret ciphertext
+    protectHeader headerBeg pnBeg epnLen cipher secret ciphertext
 
 ----------------------------------------------------------------
 
