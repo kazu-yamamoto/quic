@@ -112,11 +112,11 @@ unprotectHeader rbuf cipher secret proFlags = do
     let Mask mask = protectionMask cipher hpKey sample
     let Just (mask1,mask2) = B.uncons mask
         flags = proFlags `xor` (mask1 .&. flagBits proFlags)
-        pnLen = fromIntegral (flags .&. 0b11) + 1
-    bytePN <- bsXOR mask2 <$> extractByteString rbuf pnLen
+        epnLen = fromIntegral (flags .&. 0b11) + 1
+    bytePN <- bsXOR mask2 <$> extractByteString rbuf epnLen
     let header = B.cons flags (unprotected `B.append` bytePN)
-    let pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) (pnLen * 8)
-    return (header, flags, pn, pnLen)
+    let pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) epnLen
+    return (header, flags, pn, epnLen)
     -- the cursor is just after packet number
   where
     hpKey = headerProtectionKey cipher secret
@@ -321,9 +321,9 @@ unprotectHeaderPayload rbuf proFlags cipher secret = do
              fromIntegral <$> decodeInt' rbuf
            else
              return 0
-    (header, flags, pn, pnLen) <- unprotectHeader rbuf cipher secret proFlags
+    (header, flags, pn, epnLen) <- unprotectHeader rbuf cipher secret proFlags
     pktSiz <- if long then
-                return (len - pnLen)
+                return (len - epnLen)
               else
                 remainingSize rbuf
     ciphertext <- extractByteString rbuf pktSiz
