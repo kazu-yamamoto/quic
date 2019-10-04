@@ -22,7 +22,8 @@ spec = do
             sctx <- serverContext Draft23 dcid "test/serverkey.pem" "test/servercert.pem"
             (pkt, _) <- decodePacket sctx clientInitialPacketBinary
             clientInitialPacketBinary' <- encodePacket cctx pkt
-            clientInitialPacketBinary' `shouldBe` clientInitialPacketBinary
+            (pkt', _) <- decodePacket sctx clientInitialPacketBinary'
+            pkt `shouldBe` pkt'
 
 clientInitialPacketBinary :: ByteString
 clientInitialPacketBinary = dec16 $ B.concat [
