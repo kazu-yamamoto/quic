@@ -19,7 +19,7 @@ encodePacketNumber largestPN pn = (diff, bytes)
   where
     enoughRange = (pn - largestPN) * 2
     (pnMask, bytes)
-      | enoughRange <      256 = (0x000000ff, 1)
+--      | enoughRange <      256 = (0x000000ff, 1)
       | enoughRange <    65536 = (0x0000ffff, 2)
       | enoughRange < 16777216 = (0x00ffffff, 3)
       | otherwise              = (0xffffffff, 4)
