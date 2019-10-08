@@ -183,3 +183,21 @@ rxApplicationSecret ctx = do
 
 getPacketNumber :: Context -> IO PacketNumber
 getPacketNumber ctx = atomicModifyIORef' (packetNumber ctx) (\pn -> ((pn + 1), pn))
+
+addInitialPNs :: Context -> PacketNumber -> IO ()
+addInitialPNs ctx p = atomicModifyIORef' (initialPNs ctx) (\ps -> (p:ps, ()))
+
+clearInitialPNs :: Context -> IO [PacketNumber]
+clearInitialPNs ctx = atomicModifyIORef' (initialPNs ctx) (\ps -> ([], ps))
+
+addHandshakePNs :: Context -> PacketNumber -> IO ()
+addHandshakePNs ctx p = atomicModifyIORef' (handshakePNs ctx) (\ps -> (p:ps, ()))
+
+clearHandshakePNs :: Context -> IO [PacketNumber]
+clearHandshakePNs ctx = atomicModifyIORef' (handshakePNs ctx) (\ps -> ([], ps))
+
+addApplicationPNs :: Context -> PacketNumber -> IO ()
+addApplicationPNs ctx p = atomicModifyIORef' (applicationPNs ctx) (\ps -> (p:ps, ()))
+
+clearApplicationPNs :: Context -> IO [PacketNumber]
+clearApplicationPNs ctx = atomicModifyIORef' (applicationPNs ctx) (\ps -> ([], ps))
