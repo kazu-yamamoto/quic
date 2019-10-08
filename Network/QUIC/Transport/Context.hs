@@ -27,8 +27,12 @@ data Context = Context {
   , earlySecret       :: IORef (Maybe (TLS.SecretPair TLS.EarlySecret))
   , handshakeSecret   :: IORef (Maybe (TLS.SecretTriple TLS.HandshakeSecret))
   , applicationSecret :: IORef (Maybe (TLS.SecretTriple TLS.ApplicationSecret))
-  -- intentionally using the single space for packet numbers.
+  -- my packet numbers intentionally using the single space
   , packetNumber      :: IORef PacketNumber
+  -- peer's packet numbers
+  , initialPNs        :: IORef [PacketNumber]
+  , handshakePNs      :: IORef [PacketNumber]
+  , applicationPNs    :: IORef [PacketNumber]
   }
 
 data ClientConfig = ClientConfig {
@@ -72,6 +76,9 @@ clientContext ClientConfig{..} = do
         <*> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef 0
+        <*> newIORef []
+        <*> newIORef []
+        <*> newIORef []
 
 data ServerConfig = ServerConfig {
     scVersion    :: Version
@@ -94,6 +101,9 @@ serverContext ServerConfig{..} = do
         <*> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef 0
+        <*> newIORef []
+        <*> newIORef []
+        <*> newIORef []
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
@@ -160,3 +170,6 @@ rxApplicationSecret ctx = do
                   in return $ Secret s
       Server _ -> let TLS.ClientTrafficSecret s = TLS.triClient st
                   in return $ Secret s
+
+getPacketNumber :: Context -> IO PacketNumber
+getPacketNumber ctx = atomicModifyIORef' (packetNumber ctx) (\pn -> ((pn + 1), pn))

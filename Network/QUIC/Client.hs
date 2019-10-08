@@ -44,7 +44,8 @@ createClientInitial ctx = do
     let frames = Crypto 0 chbin :  replicate 963 Padding
         mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
-    let iniPkt = InitialPacket Draft23 peercid mycid "" 0 frames
+    mypnI <- getPacketNumber ctx
+    let iniPkt = InitialPacket Draft23 peercid mycid "" mypnI frames
     iniBin <- encodePacket ctx iniPkt
     return (iniBin, ch)
   where
@@ -113,19 +114,22 @@ createClientInitial2 :: Context -> PacketNumber -> [PacketNumber] -> ByteString 
 createClientInitial2 ctx pnI pnHs eefin = do
     let mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
+    mypnI <- getPacketNumber ctx
     let ackI = Ack pnI 0 0 []
-        iniPkt = InitialPacket Draft23 peercid mycid "" 1 [ackI]
+        iniPkt = InitialPacket Draft23 peercid mycid "" mypnI [ackI]
     bin0 <- encodePacket ctx iniPkt
     Just handSecret <- readIORef $ handshakeSecret ctx
     (crypto, appSecret) <- makeClientFinished13 cparams tlsctx eefin handSecret False
     writeIORef (applicationSecret ctx) $ Just appSecret
     -- fixme: ACK
+    mypnH <- getPacketNumber ctx
     let largestACK = last pnHs
         range1 = length pnHs - 1
         ackH = Ack largestACK 0 range1 []
-        hndPkt = HandshakePacket Draft23 peercid mycid 0 [Crypto 0 crypto, ackH]
+        hndPkt = HandshakePacket Draft23 peercid mycid mypnH [Crypto 0 crypto, ackH]
     bin1 <- encodePacket ctx hndPkt
-    let appPkt = ShortPacket peercid 0 [Stream 0 0 "GET /\r\n" True]
+    mypnA <- getPacketNumber ctx
+    let appPkt = ShortPacket peercid mypnA [Stream 0 0 "GET /\r\n" True]
     bin2 <- encodePacket ctx appPkt
     return (B.concat [bin0, bin1, bin2])
   where
