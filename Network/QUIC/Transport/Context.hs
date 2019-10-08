@@ -20,6 +20,8 @@ data Context = Context {
   , tlsConetxt        :: TLS.Context
   , myCID             :: CID
   , initialSecret     :: (Secret, Secret)
+  , ctxSend           :: ByteString -> IO ()
+  , ctxRecv           :: IO ByteString
   , peerCID           :: IORef CID
   , usedCipher        :: IORef Cipher
   , earlySecret       :: IORef (Maybe (TLS.SecretPair TLS.EarlySecret))
@@ -36,6 +38,8 @@ data ClientConfig = ClientConfig {
   , ccMyCID      :: Maybe CID -- for the test purpose
   , ccALPN       :: IO (Maybe [ByteString])
   , ccCiphers    :: [TLS.Cipher]
+  , ccSend       :: ByteString -> IO ()
+  , ccRecv       :: IO ByteString
   }
 
 defaultClientConfig :: ClientConfig
@@ -46,6 +50,8 @@ defaultClientConfig = ClientConfig {
   , ccMyCID      = Nothing
   , ccALPN       = return Nothing
   , ccCiphers    = TLS.ciphersuite_strong
+  , ccSend       = \_ -> return ()
+  , ccRecv       = return ""
   }
 
 clientContext :: ClientConfig -> IO Context
@@ -59,15 +65,35 @@ clientContext ClientConfig{..} = do
       Just cid -> return cid
     let cis = clientInitialSecret ccVersion peercid
         sis = serverInitialSecret ccVersion peercid
-    Context (Client cparams) tlsctx mycid (cis, sis) <$> newIORef peercid <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
+    Context (Client cparams) tlsctx mycid (cis, sis) ccSend ccRecv
+        <$> newIORef peercid
+        <*> newIORef defaultCipher
+        <*> newIORef Nothing
+        <*> newIORef Nothing
+        <*> newIORef Nothing
+        <*> newIORef 0
 
-serverContext :: Version -> CID -> FilePath -> FilePath -> IO Context
-serverContext ver mycid key cert = do
-    (tlsctx, sparams) <- tlsServerContext key cert
-    let cis = clientInitialSecret ver mycid
-        sis = serverInitialSecret ver mycid
-    -- fixme: CID ""
-    Context (Server sparams) tlsctx mycid (cis, sis) <$> newIORef (CID "") <*> newIORef defaultCipher <*> newIORef Nothing <*> newIORef Nothing <*> newIORef Nothing <*> newIORef 0
+data ServerConfig = ServerConfig {
+    scVersion    :: Version
+  , scMyCID      :: CID
+  , scKey        :: FilePath
+  , scCert       :: FilePath
+  , scSend       :: ByteString -> IO ()
+  , scRecv       :: IO ByteString
+  }
+
+serverContext :: ServerConfig -> IO Context
+serverContext ServerConfig{..} = do
+    (tlsctx, sparams) <- tlsServerContext scKey scCert
+    let cis = clientInitialSecret scVersion scMyCID
+        sis = serverInitialSecret scVersion scMyCID
+    Context (Server sparams) tlsctx scMyCID (cis, sis) scSend scRecv
+        <$> newIORef (CID "") -- fixme
+        <*> newIORef defaultCipher
+        <*> newIORef Nothing
+        <*> newIORef Nothing
+        <*> newIORef Nothing
+        <*> newIORef 0
 
 tlsClientParams :: Context -> TLS.ClientParams
 tlsClientParams ctx = case role ctx of
