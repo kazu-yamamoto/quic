@@ -48,7 +48,7 @@ data ClientConfig = ClientConfig {
 
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
-    ccVersion    = Draft22
+    ccVersion    = Draft23
   , ccServerName = "127.0.0.1"
   , ccPeerCID    = Nothing
   , ccMyCID      = Nothing
@@ -87,6 +87,16 @@ data ServerConfig = ServerConfig {
   , scCert       :: FilePath
   , scSend       :: ByteString -> IO ()
   , scRecv       :: IO ByteString
+  }
+
+defaultServerConfig :: ServerConfig
+defaultServerConfig = ServerConfig {
+    scVersion    = Draft23
+  , scMyCID      = CID ""
+  , scKey        = "serverkey.pem"
+  , scCert       = "servercert.pem"
+  , scSend       = \_ -> return ()
+  , scRecv       = return ""
   }
 
 serverContext :: ServerConfig -> IO Context
