@@ -1,6 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Client (handshake) where
+module Network.QUIC.Client (
+    handshake
+  , sendData
+  , recvData
+  ) where
 
 import Network.QUIC.Imports
 import Network.QUIC.TLS
@@ -9,7 +13,7 @@ import Network.QUIC.Transport
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
-import Network.TLS hiding (Context, handshake)
+import Network.TLS hiding (Context, handshake, sendData, recvData)
 
 constructInitialPacket :: Context -> [Frame] -> IO ByteString
 constructInitialPacket ctx frames = do
@@ -56,7 +60,6 @@ handshake ctx = do
     getNegotiatedProtocol (tlsConetxt ctx) >>= print
     ctxSend ctx iniBin2
     processPacket ctx rest
-    ctxRecv ctx >>= processPacket ctx
 
 processPacket :: Context -> ByteString -> IO ()
 processPacket _ "" = return ()
@@ -168,11 +171,19 @@ createClientInitial2 ctx eefin = do
     (crypto, appSecret) <- makeClientFinished13 cparams tlsctx eefin handSecret False
     writeIORef (applicationSecret ctx) $ Just appSecret
     bin1 <- constructHandshakePacket ctx [Crypto 0 crypto]
-    bin2 <- constructShortPacket ctx [Stream 0 0 "GET /\r\n" True]
-    return (B.concat [bin0, bin1, bin2])
+    return (B.concat [bin0, bin1])
   where
     cparams = tlsClientParams ctx
     tlsctx = tlsConetxt ctx
+
+sendData :: Context -> ByteString -> IO ()
+sendData ctx bs = do
+    bin <- constructShortPacket ctx [Stream 0 0 bs True]
+    ctxSend ctx bin
+
+recvData :: Context -> IO ()
+recvData ctx = do
+    ctxRecv ctx >>= processPacket ctx
 
 -- |
 -- >>> constructAskFrame [9]
