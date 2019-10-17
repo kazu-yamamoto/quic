@@ -18,9 +18,11 @@ quicClient serverName s peerAddr = do
     let conf = defaultClientConfig {
             ccVersion    = Draft23
           , ccServerName = serverName
-          , ccALPN       = return $ Just ["hq-23"]
+--          , ccALPN       = return $ Just ["hq-23"]
+          , ccALPN       = return $ Just ["h3-23"]
           , ccSend       = \bs -> sendTo s bs peerAddr >> return ()
           , ccRecv       = fst <$> recvFrom s 2048
+          , ccParams     = exampleParameters
           }
     ctx <- clientContext conf
     handshake ctx

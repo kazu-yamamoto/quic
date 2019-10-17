@@ -207,3 +207,15 @@ decodeParametersList bs = unsafeDupablePerformIO $
              Just keyid -> do
                val <- extractByteString rbuf $ fromIntegral len
                go rbuf (build . ((keyid,val):))
+
+exampleParameters :: Parameters
+exampleParameters = defaultParameters {
+    maxStreamDataBidiLocal  =  262144
+  , maxStreamDataBidiRemote =  262144
+  , maxStreamDataUni        =  262144
+  , maxData                 = 1048576
+  , maxStreamsBidi          =       1
+  , maxStreamsUni           =     100
+  , idleTimeout             =   30000
+  , activeConnectionIdLimit =       7
+  }

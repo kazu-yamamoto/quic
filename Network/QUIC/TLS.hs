@@ -1,10 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE BinaryLiterals #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.TLS (
   -- * TLS
-    tlsClientContext
-  , tlsServerContext
+    tlsClientController
+  , tlsServerController
   -- * Payload encryption
   , defaultCipher
   , clientInitialSecret
@@ -32,8 +32,6 @@ module Network.QUIC.TLS (
   , Mask(..)
   , Nonce(..)
   , Cipher
-  , HandshakeCheck(..)
-  , handshakeCheck
   ) where
 
 import Crypto.Cipher.AES
@@ -43,10 +41,9 @@ import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import Data.Default.Class
-import Network.TLS (Cipher)
-import qualified Network.TLS as TLS
+import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
-import qualified Network.TLS.Extra.Cipher as TLS
+import Network.TLS.QUIC
 
 import Network.QUIC.Imports
 import Network.QUIC.Transport.Types
@@ -112,10 +109,10 @@ initialSecret :: Label -> Version -> CID -> Secret
 initialSecret (Label label) ver (CID cid) = Secret secret
   where
     cipher    = defaultCipher
-    hash      = TLS.cipherHash cipher
-    iniSecret = TLS.hkdfExtract hash (initialSalt ver) cid
-    hashSize  = TLS.hashDigestSize hash
-    secret    = TLS.hkdfExpandLabel hash iniSecret label "" hashSize
+    hash      = cipherHash cipher
+    iniSecret = hkdfExtract hash (initialSalt ver) cid
+    hashSize  = hashDigestSize hash
+    secret    = hkdfExpandLabel hash iniSecret label "" hashSize
 
 aeadKey :: Cipher -> Secret -> Key
 aeadKey = genKey (Label "quic key")
@@ -126,18 +123,18 @@ headerProtectionKey = genKey (Label "quic hp")
 genKey :: Label -> Cipher -> Secret -> Key
 genKey (Label label) cipher (Secret secret) = Key key
   where
-    hash    = TLS.cipherHash cipher
-    bulk    = TLS.cipherBulk cipher
-    keySize = TLS.bulkKeySize bulk
-    key     = TLS.hkdfExpandLabel hash secret label "" keySize
+    hash    = cipherHash cipher
+    bulk    = cipherBulk cipher
+    keySize = bulkKeySize bulk
+    key     = hkdfExpandLabel hash secret label "" keySize
 
 initialVector :: Cipher -> Secret -> IV
 initialVector cipher (Secret secret) = IV iv
   where
-    hash   = TLS.cipherHash cipher
-    bulk   = TLS.cipherBulk cipher
-    ivSize = max 8 (TLS.bulkIVSize bulk + TLS.bulkExplicitIV bulk)
-    iv     = TLS.hkdfExpandLabel hash secret "quic iv" "" ivSize
+    hash   = cipherHash cipher
+    bulk   = cipherBulk cipher
+    ivSize = max 8 (bulkIVSize bulk + bulkExplicitIV bulk)
+    iv     = hkdfExpandLabel hash secret "quic iv" "" ivSize
 
 ----------------------------------------------------------------
 
@@ -251,85 +248,51 @@ bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
 
 ----------------------------------------------------------------
 
-tlsClientContext :: TLS.HostName -> [Cipher] -> IO (Maybe [ByteString]) -> IO (TLS.Context, TLS.ClientParams)
-tlsClientContext serverName ciphers suggestALPN  = do
-    ctx <- TLS.contextNew backend cparams
-    return (ctx, cparams)
+tlsClientController :: String -> [Cipher]
+                    -> IO (Maybe [ByteString]) -> ByteString
+                    -> IO ClientController
+tlsClientController serverName ciphers suggestALPN quicParams =
+    newQUICClient cparams
   where
-    backend = TLS.Backend (return ())
-                          (return ())
-                          (\_ -> return ()) (\_ -> return "")
-    cparams = (TLS.defaultParamsClient serverName "") {
-        TLS.clientDebug     = debug
-      , TLS.clientHooks     = hook
-      , TLS.clientShared    = cshared
-      , TLS.clientSupported = supported
+    cparams = (defaultParamsClient serverName "") {
+        clientDebug     = debug
+      , clientHooks     = hook
+      , clientShared    = cshared
+      , clientSupported = supported
       }
     debug = def {
-        TLS.debugKeyLogger = putStrLn -- fixme
+        debugKeyLogger = putStrLn -- fixme
       }
     hook = def {
-        TLS.onSuggestALPN = suggestALPN
+        onSuggestALPN = suggestALPN
       }
     cshared = def {
-       TLS.sharedValidationCache = TLS.ValidationCache (\_ _ _ -> return TLS.ValidationCachePass) (\_ _ _ -> return ())
+        sharedValidationCache = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
+      , sharedExtensions = [ExtensionRaw 0xffa5 quicParams]
       }
     supported = def {
-        TLS.supportedVersions = [TLS.TLS13]
-      , TLS.supportedCiphers  = ciphers
+        supportedVersions = [TLS13]
+      , supportedCiphers  = ciphers
       }
 
-tlsServerContext :: FilePath -> FilePath -> IO (TLS.Context, TLS.ServerParams)
-tlsServerContext key cert = do
-    Right cred <- TLS.credentialLoadX509 cert key
+tlsServerController :: FilePath -> FilePath
+                    -> IO ServerController
+tlsServerController key cert = do
+    Right cred <- credentialLoadX509 cert key
     let sshared = def {
-            TLS.sharedCredentials = TLS.Credentials [cred]
+            sharedCredentials = Credentials [cred]
           }
     let sparams = def {
-        TLS.serverSupported = supported
-      , TLS.serverDebug = debug
-      , TLS.serverShared = sshared
+        serverSupported = supported
+      , serverDebug = debug
+      , serverShared = sshared
       }
-    ctx <- TLS.contextNew backend sparams
-    return (ctx, sparams)
+    newQUICServer sparams
   where
-    backend = TLS.Backend (return ())
-                          (return ())
-                          (\_ -> return ()) (\_ -> return "")
     supported = def {
-        TLS.supportedVersions = [TLS.TLS13]
-      , TLS.supportedCiphers = TLS.ciphersuite_strong
+        supportedVersions = [TLS13]
+      , supportedCiphers = ciphersuite_strong
       }
     debug = def {
-        TLS.debugKeyLogger = putStrLn -- fixme
+        debugKeyLogger = putStrLn -- fixme
       }
-
-----------------------------------------------------------------
-
-data HandshakeCheck = Start
-                    | Cont !Word8 !Word32
-                    | Done
-                    deriving Show
-
-handshakeCheck :: Word8 -> ByteString -> HandshakeCheck -> IO HandshakeCheck
-handshakeCheck styp bs ck = withReadBuffer bs $ \rbuf -> loop rbuf ck
-  where
-    loop _    Done  = error "handshakeCheck Done"
-    loop rbuf Start = do
-        typ <- read8 rbuf
-        len <- read24 rbuf
-        rlen <- fromIntegral <$> remainingSize rbuf
-        case rlen `compare` len of
-          EQ | typ == styp -> return Done
-             | otherwise   -> return Start
-          GT | typ == styp -> error "handshakeCheck Start"
-             | otherwise   -> ff rbuf (fromIntegral len) >> loop rbuf Start
-          LT               -> return $ Cont typ (len - rlen)
-    loop rbuf (Cont typ skipLen) = do
-        rlen <- fromIntegral <$> remainingSize rbuf
-        case rlen `compare` skipLen of
-          EQ | typ == styp -> return Done
-             | otherwise   -> return Start
-          GT | typ == styp -> error "handshakeCheck Cont"
-             | otherwise   -> ff rbuf (fromIntegral skipLen) >> loop rbuf Start
-          LT               -> return $ Cont typ (skipLen - rlen)
