@@ -160,9 +160,10 @@ handleServerHandshake ctx bs0 = loop bs0
           SendClientFinished cf exts alpn appSecrets -> do
               case exts of
                 [ExtensionRaw 0xffa5 params] -> do
-                    -- fixme: alpn and params to ctx
+                    -- fixme: alpn
                     print alpn
-                    print $ decodeParametersList params
+                    let Just plist = decodeParametersList params
+                    setPeerParameters ctx plist
                 _ -> return ()
               writeIORef (applicationSecret ctx) $ Just appSecrets
               return (cf, rest)

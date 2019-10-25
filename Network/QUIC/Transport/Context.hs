@@ -26,6 +26,8 @@ data Context = Context {
   , initialSecret     :: (Secret, Secret)
   , ctxSend           :: ByteString -> IO ()
   , ctxRecv           :: IO ByteString
+  , myParams          :: Parameters
+  , peerParams        :: IORef Parameters
   , peerCID           :: IORef CID
   , usedCipher        :: IORef Cipher
   , handshakeSecret   :: IORef (Maybe (TrafficSecrets HandshakeSecret))
@@ -76,8 +78,9 @@ clientContext ClientConfig{..} = do
       Just cid -> return cid
     let cis = clientInitialSecret ccVersion peercid
         sis = serverInitialSecret ccVersion peercid
-    Context (Client controller) mycid (cis, sis) ccSend ccRecv
-        <$> newIORef peercid
+    Context (Client controller) mycid (cis, sis) ccSend ccRecv ccParams
+        <$> newIORef defaultParameters
+        <*> newIORef peercid
         <*> newIORef defaultCipher
         <*> newIORef Nothing
         <*> newIORef Nothing
@@ -94,6 +97,7 @@ data ServerConfig = ServerConfig {
   , scCert       :: FilePath
   , scSend       :: ByteString -> IO ()
   , scRecv       :: IO ByteString
+  , scParams     :: Parameters
   }
 
 defaultServerConfig :: ServerConfig
@@ -104,6 +108,7 @@ defaultServerConfig = ServerConfig {
   , scCert       = "servercert.pem"
   , scSend       = \_ -> return ()
   , scRecv       = return ""
+  , scParams     = defaultParameters
   }
 
 serverContext :: ServerConfig -> IO Context
@@ -111,8 +116,9 @@ serverContext ServerConfig{..} = do
     controller <- tlsServerController scKey scCert
     let cis = clientInitialSecret scVersion scMyCID
         sis = serverInitialSecret scVersion scMyCID
-    Context (Server controller) scMyCID (cis, sis) scSend scRecv
-        <$> newIORef (CID "") -- fixme
+    Context (Server controller) scMyCID (cis, sis) scSend scRecv scParams
+        <$> newIORef defaultParameters
+        <*> newIORef (CID "") -- fixme
         <*> newIORef defaultCipher
         <*> newIORef Nothing
         <*> newIORef Nothing
@@ -195,3 +201,8 @@ tlsClientHandshake :: Context -> ClientController
 tlsClientHandshake ctx = case role ctx of
   Client controller -> controller
   _ -> error "tlsClientHandshake"
+
+setPeerParameters :: Context -> ParametersList -> IO ()
+setPeerParameters Context{..} plist = do
+    def <- readIORef peerParams
+    writeIORef peerParams $ updateParameters def plist
