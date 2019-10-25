@@ -39,6 +39,7 @@ data Context = Context {
   , handshakePNs      :: IORef [PacketNumber]
   , applicationPNs    :: IORef [PacketNumber]
   , cryptoOffset      :: IORef Offset
+  , negotiatedProto   :: IORef (Maybe ByteString)
   }
 
 data ClientConfig = ClientConfig {
@@ -89,6 +90,7 @@ clientContext ClientConfig{..} = do
         <*> newIORef []
         <*> newIORef []
         <*> newIORef 0
+        <*> newIORef Nothing
 
 data ServerConfig = ServerConfig {
     scVersion    :: Version
@@ -127,6 +129,7 @@ serverContext ServerConfig{..} = do
         <*> newIORef []
         <*> newIORef []
         <*> newIORef 0
+        <*> newIORef Nothing
 
 getCipher :: Context -> IO Cipher
 getCipher ctx = readIORef (usedCipher ctx)
@@ -206,3 +209,6 @@ setPeerParameters :: Context -> ParametersList -> IO ()
 setPeerParameters Context{..} plist = do
     def <- readIORef peerParams
     writeIORef peerParams $ updateParameters def plist
+
+setNegotiatedProto :: Context -> Maybe ByteString -> IO ()
+setNegotiatedProto Context{..} malpn = writeIORef negotiatedProto malpn

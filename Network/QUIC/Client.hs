@@ -158,10 +158,9 @@ handleServerHandshake ctx bs0 = loop bs0
               bs1 <- ctxRecv ctx
               loop (rest `B.append` bs1)
           SendClientFinished cf exts alpn appSecrets -> do
+              setNegotiatedProto ctx alpn
               case exts of
                 [ExtensionRaw 0xffa5 params] -> do
-                    -- fixme: alpn
-                    print alpn
                     let Just plist = decodeParametersList params
                     setPeerParameters ctx plist
                 _ -> return ()
