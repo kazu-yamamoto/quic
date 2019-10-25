@@ -268,7 +268,7 @@ tlsClientController serverName ciphers suggestALPN quicParams =
       }
     cshared = def {
         sharedValidationCache = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
-      , sharedExtensions = [ExtensionRaw 0xffa5 quicParams]
+      , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters quicParams]
       }
     supported = def {
         supportedVersions = [TLS13]
