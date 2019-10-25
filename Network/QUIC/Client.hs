@@ -68,7 +68,6 @@ handshake ctx = do
     si <- ctxRecv ctx
     (cf, rest) <- handleServerInitial ctx si
     ci2 <- createClientInitial2 ctx cf
---    getNegotiatedProtocol (tlsConetxt ctx) >>= print
     ctxSend ctx ci2
     processPacket ctx rest
 
@@ -81,15 +80,16 @@ processPacket ctx bin = do
     case pkt of
       InitialPacket   _ _ _ _ pn fs -> do
           addInitialPNs ctx pn
-          print fs
+          putStrLn $ "I: " ++ show fs
           constructInitialPacket ctx [] >>= ctxSend ctx
       HandshakePacket _ _ _   pn fs -> do
           addHandshakePNs ctx pn
-          print fs
+          putStrLn $ "H: " ++ show fs
           constructHandshakePacket ctx [] >>= ctxSend ctx
       ShortPacket     _       pn fs -> do
           addApplicationPNs ctx pn
-          print fs
+          putStrLn $ "S: " ++ show fs
+          -- fixme new session ticket
           constructShortPacket ctx [] >>= ctxSend ctx
       _                              -> undefined
     processPacket ctx rest
@@ -157,9 +157,11 @@ handleServerHandshake ctx bs0 = loop bs0
           ClientNeedsMore -> do
               bs1 <- ctxRecv ctx
               loop (rest `B.append` bs1)
-          SendClientFinished cf exts _alpn appSecrets -> do
+          SendClientFinished cf exts alpn appSecrets -> do
               case exts of
                 [ExtensionRaw 0xffa5 params] -> do
+                    -- fixme: alpn and params to ctx
+                    print alpn
                     print $ decodeParametersList params
                 _ -> return ()
               writeIORef (applicationSecret ctx) $ Just appSecrets
