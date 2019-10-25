@@ -260,9 +260,10 @@ tlsClientController serverName ciphers suggestALPN quicParams =
       , clientShared    = cshared
       , clientSupported = supported
       }
-    debug = def {
-        debugKeyLogger = putStrLn -- fixme
-      }
+    debug = def
+--    debug = def {
+--        debugKeyLogger = putStrLn
+--      }
     hook = def {
         onSuggestALPN = suggestALPN
       }
@@ -293,6 +294,7 @@ tlsServerController key cert = do
         supportedVersions = [TLS13]
       , supportedCiphers = ciphersuite_strong
       }
-    debug = def {
-        debugKeyLogger = putStrLn -- fixme
-      }
+    debug = def
+--    debug = def {
+--        debugKeyLogger = putStrLn
+--      }
