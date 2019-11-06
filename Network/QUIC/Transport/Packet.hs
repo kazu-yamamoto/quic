@@ -38,18 +38,18 @@ decodeVersion w          = UnknownVersion w
 
 ----------------------------------------------------------------
 
-encodePacketType :: RawFlags -> PacketType -> RawFlags
-encodePacketType flags Initial   = flags
-encodePacketType flags RTT0      = flags .|. 0b00010000
-encodePacketType flags Handshake = flags .|. 0b00100000
-encodePacketType flags Retry     = flags .|. 0b00110000
+encodePacketType :: RawFlags -> LongHeaderPacketType -> RawFlags
+encodePacketType flags LHInitial   = flags
+encodePacketType flags LHRTT0      = flags .|. 0b00010000
+encodePacketType flags LHHandshake = flags .|. 0b00100000
+encodePacketType flags LHRetry     = flags .|. 0b00110000
 
-decodePacketType :: RawFlags -> PacketType
+decodePacketType :: RawFlags -> LongHeaderPacketType
 decodePacketType flags = case flags .&. 0b00110000 of
-    0b00000000 -> Initial
-    0b00010000 -> RTT0
-    0b00100000 -> Handshake
-    _          -> Retry
+    0b00000000 -> LHInitial
+    0b00010000 -> LHRTT0
+    0b00100000 -> LHHandshake
+    _          -> LHRetry
 
 ----------------------------------------------------------------
 
@@ -157,7 +157,7 @@ encodePacket' _ctx wbuf (VersionNegotiationPacket dcID scID vers) = do
 encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     -- flag ... scID
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf Initial ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf LHInitial ver dcID scID pn
     -- token
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
@@ -169,7 +169,7 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
 encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
     -- flag ... scID
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf RTT0 ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf LHRTT0 ver dcID scID pn
     -- length .. payload
     secret <- undefined ctx
     cipher <- getCipher ctx
@@ -178,14 +178,14 @@ encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
 encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     -- flag ... scid
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf Handshake ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf LHHandshake ver dcID scID pn
     -- length .. payload
     secret <- txHandshakeSecret ctx
     cipher <- getCipher ctx
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
 encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
-    let flags = encodePacketType 0b11000000 Retry
+    let flags = encodePacketType 0b11000000 LHRetry
     write8 wbuf flags
     encodeLongHeader wbuf ver dcID scID
     let odcidlen = fromIntegral $ B.length odcid
@@ -220,7 +220,7 @@ encodeLongHeader wbuf ver (CID dcid) (CID scid) = do
     copyByteString wbuf scid
 
 encodeLongHeaderPP :: Context -> WriteBuffer
-                   -> PacketType -> Version -> CID -> CID
+                   -> LongHeaderPacketType -> Version -> CID -> CID
                    -> PacketNumber
                    -> IO (EncodedPacketNumber, Int)
 encodeLongHeaderPP _ctx wbuf pkttyp ver dcID scID pn = do
@@ -297,10 +297,10 @@ decodeVersionNegotiationPacket rbuf dcID scID = do
 
 decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeDraft ctx rbuf proFlags version dcID scID = case decodePacketType proFlags of
-    Initial   -> decodeInitialPacket   ctx rbuf proFlags version dcID scID
-    RTT0      -> decodeRTT0Packet      ctx rbuf proFlags version dcID scID
-    Handshake -> decodeHandshakePacket ctx rbuf proFlags version dcID scID
-    Retry     -> decodeRetryPacket     ctx rbuf proFlags version dcID scID
+    LHInitial   -> decodeInitialPacket   ctx rbuf proFlags version dcID scID
+    LHRTT0      -> decodeRTT0Packet      ctx rbuf proFlags version dcID scID
+    LHHandshake -> decodeHandshakePacket ctx rbuf proFlags version dcID scID
+    LHRetry     -> decodeRetryPacket     ctx rbuf proFlags version dcID scID
 
 decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeInitialPacket ctx rbuf proFlags version dcID scID = do

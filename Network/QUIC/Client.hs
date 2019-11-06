@@ -16,48 +16,33 @@ import Network.TLS.QUIC
 
 ----------------------------------------------------------------
 
-constructCryptoFrame :: Context -> CryptoData -> IO Frame
-constructCryptoFrame ctx crypto = do
+cryptFrameInitial :: Context -> CryptoData -> IO Frame
+cryptFrameInitial ctx crypto = do
     let len = B.length crypto
     off' <- atomicModifyIORef' (cryptoOffset ctx) (\off -> (off+len, off))
     return $ Crypto off' crypto
 
 ----------------------------------------------------------------
 
-constructInitialPacket :: Context -> [Frame] -> IO ByteString
-constructInitialPacket ctx frames = do
+construct :: Context -> PacketType -> [Frame] -> IO ByteString
+construct ctx pt frames = do
     let mycid = myCID ctx
     peercid <- readIORef $ peerCID ctx
     mypn <- getPacketNumber ctx
-    pns <- clearInitialPNs ctx
+    pns <- case pt of
+      Initial   -> clearInitialPNs ctx
+      Handshake -> clearHandshakePNs ctx
+      Short     -> clearApplicationPNs ctx
+      _         -> error "construct"
     let frames'
           | pns == [] = frames
           | otherwise = constructAskFrame pns : frames
-    let iniPkt = InitialPacket Draft23 peercid mycid "" mypn frames'
-    encodePacket ctx iniPkt
-
-constructHandshakePacket :: Context -> [Frame] -> IO ByteString
-constructHandshakePacket ctx frames = do
-    let mycid = myCID ctx
-    peercid <- readIORef $ peerCID ctx
-    mypn <- getPacketNumber ctx
-    pns <- clearHandshakePNs ctx
-    let frames'
-          | pns == [] = frames
-          | otherwise = constructAskFrame pns : frames
-    let hndPkt = HandshakePacket Draft23 peercid mycid mypn frames'
-    encodePacket ctx hndPkt
-
-constructShortPacket :: Context -> [Frame] -> IO ByteString
-constructShortPacket ctx frames = do
-    peercid <- readIORef $ peerCID ctx
-    mypn <- getPacketNumber ctx
-    pns <- clearApplicationPNs ctx
-    let frames'
-          | pns == [] = frames
-          | otherwise = constructAskFrame pns : frames
-    let appPkt = ShortPacket peercid mypn frames'
-    encodePacket ctx appPkt
+    let pkt = case pt of
+          Initial   -> InitialPacket   Draft23 peercid mycid "" mypn frames'
+          Handshake -> HandshakePacket Draft23 peercid mycid    mypn frames'
+          Short     -> ShortPacket             peercid          mypn frames'
+          _         -> error "construct"
+    encodePacket ctx pkt
 
 ----------------------------------------------------------------
 
@@ -81,16 +66,16 @@ processPacket ctx bin = do
       InitialPacket   _ _ _ _ pn fs -> do
           addInitialPNs ctx pn
           putStrLn $ "I: " ++ show fs
-          constructInitialPacket ctx [] >>= ctxSend ctx
+          construct ctx Initial [] >>= ctxSend ctx
       HandshakePacket _ _ _   pn fs -> do
           addHandshakePNs ctx pn
           putStrLn $ "H: " ++ show fs
-          constructHandshakePacket ctx [] >>= ctxSend ctx
+          construct ctx Handshake [] >>= ctxSend ctx
       ShortPacket     _       pn fs -> do
           addApplicationPNs ctx pn
           putStrLn $ "S: " ++ show fs
           -- fixme new session ticket
-          constructShortPacket ctx [] >>= ctxSend ctx
+          construct ctx Short [] >>= ctxSend ctx
       _                              -> undefined
     processPacket ctx rest
 
@@ -99,9 +84,9 @@ processPacket ctx bin = do
 createClientInitial :: Context -> IO ByteString
 createClientInitial ctx = do
     SendClientHello ch _ <- tlsClientHandshake ctx $ GetClientHello
-    cframe <- constructCryptoFrame ctx ch
+    cframe <- cryptFrameInitial ctx ch
     let frames = cframe :  replicate 963 Padding
-    constructInitialPacket ctx frames
+    construct ctx Initial frames
 
 handleServerInitial :: Context -> ByteString -> IO (ByteString,ByteString)
 handleServerInitial ctx si = do
@@ -123,9 +108,9 @@ handleServerInitial ctx si = do
     case mx of
       Nothing -> handleServerHandshake ctx rest
       Just tlsch -> do
-          cframe <- constructCryptoFrame ctx tlsch
+          cframe <- cryptFrameInitial ctx tlsch
           let frames1 = cframe :  replicate 963 Padding
-          ci <- constructInitialPacket ctx frames1
+          ci <- construct ctx Initial frames1
           ctxSend ctx ci
           si1 <- ctxRecv ctx
           handleServerInitial ctx si1
@@ -170,14 +155,14 @@ handleServerHandshake ctx bs0 = loop bs0
 
 createClientInitial2 :: Context -> ByteString -> IO ByteString
 createClientInitial2 ctx tlscf = do
-    bin0 <- constructInitialPacket ctx []
+    bin0 <- construct ctx Initial []
     let cframe = Crypto 0 tlscf -- fixme
-    bin1 <- constructHandshakePacket ctx [cframe]
+    bin1 <- construct ctx Handshake [cframe]
     return (B.concat [bin0, bin1])
 
 sendData :: Context -> ByteString -> IO ()
 sendData ctx bs = do
-    bin <- constructShortPacket ctx [Stream 0 0 bs True]
+    bin <- construct ctx Short [Stream 0 0 bs True]
     ctxSend ctx bin
 
 recvData :: Context -> IO ()

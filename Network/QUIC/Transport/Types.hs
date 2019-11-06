@@ -17,7 +17,7 @@ instance Show CID where
 type Token = ByteString
 type RawFlags = Word8
 
-data PacketType = Initial | RTT0 | Handshake | Retry
+data LongHeaderPacketType = LHInitial | LHRTT0 | LHHandshake | LHRetry
                 deriving (Eq, Show)
 
 data Version = Negotiation
@@ -29,6 +29,9 @@ data Version = Negotiation
              | Draft23
              | UnknownVersion Word32
              deriving (Eq, Show)
+
+data PacketType = Initial | RTT0 | Handshake | Retry | Short
+                deriving (Eq, Show)
 
 data Packet = VersionNegotiationPacket CID CID [Version]
             | InitialPacket    Version CID CID Token PacketNumber [Frame]
