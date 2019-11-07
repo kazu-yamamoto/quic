@@ -20,28 +20,6 @@ data Role = Client ClientController
 type GetHandshake = IO ByteString
 type PutHandshake = ByteString -> IO ()
 
-data Context = Context {
-    role              :: Role
-  , myCID             :: CID
-  , initialSecret     :: (Secret, Secret)
-  , ctxSend           :: ByteString -> IO ()
-  , ctxRecv           :: IO ByteString
-  , myParams          :: Parameters
-  , peerParams        :: IORef Parameters
-  , peerCID           :: IORef CID
-  , usedCipher        :: IORef Cipher
-  , handshakeSecret   :: IORef (Maybe (TrafficSecrets HandshakeSecret))
-  , applicationSecret :: IORef (Maybe (TrafficSecrets ApplicationSecret))
-  -- my packet numbers intentionally using the single space
-  , packetNumber      :: IORef PacketNumber
-  -- peer's packet numbers
-  , initialPNs        :: IORef [PacketNumber]
-  , handshakePNs      :: IORef [PacketNumber]
-  , applicationPNs    :: IORef [PacketNumber]
-  , cryptoOffset      :: IORef Offset
-  , negotiatedProto   :: IORef (Maybe ByteString)
-  }
-
 data ClientConfig = ClientConfig {
     ccVersion    :: Version
   , ccServerName :: HostName
@@ -67,30 +45,7 @@ defaultClientConfig = ClientConfig {
   , ccParams     = defaultParameters
   }
 
-clientContext :: ClientConfig -> IO Context
-clientContext ClientConfig{..} = do
-    let params = encodeParametersList $ diffParameters ccParams
-    controller <- tlsClientController ccServerName ccCiphers ccALPN params
-    mycid <- case ccMyCID of
-      Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
-      Just cid -> return cid
-    peercid <- case ccPeerCID of
-      Nothing -> CID <$> getRandomBytes 8 -- fixme: hard-coding
-      Just cid -> return cid
-    let cis = clientInitialSecret ccVersion peercid
-        sis = serverInitialSecret ccVersion peercid
-    Context (Client controller) mycid (cis, sis) ccSend ccRecv ccParams
-        <$> newIORef defaultParameters
-        <*> newIORef peercid
-        <*> newIORef defaultCipher
-        <*> newIORef Nothing
-        <*> newIORef Nothing
-        <*> newIORef 0
-        <*> newIORef []
-        <*> newIORef []
-        <*> newIORef []
-        <*> newIORef 0
-        <*> newIORef Nothing
+----------------------------------------------------------------
 
 data ServerConfig = ServerConfig {
     scVersion    :: Version
@@ -113,97 +68,181 @@ defaultServerConfig = ServerConfig {
   , scParams     = defaultParameters
   }
 
+----------------------------------------------------------------
+
+data PhaseState a = PhaseState {
+    receivedPacketNumbers :: [PacketNumber]
+  , cryptoOffSet :: Offset
+  , secrets :: (Maybe (TrafficSecrets a))
+  }
+
+defaultPhaseState :: PhaseState a
+defaultPhaseState = PhaseState [] 0 Nothing
+
+----------------------------------------------------------------
+
+data Context = Context {
+    role              :: Role
+  , myCID             :: CID
+  , ctxSend           :: ByteString -> IO ()
+  , ctxRecv           :: IO ByteString
+  , myParams          :: Parameters
+  , peerParams        :: IORef Parameters
+  , peerCID           :: IORef CID
+  , usedCipher        :: IORef Cipher
+  , negotiatedProto   :: IORef (Maybe ByteString)
+  -- my packet numbers intentionally using the single space
+  , packetNumber      :: IORef PacketNumber
+  -- peer's packet numbers
+  , initialState      :: IORef (Maybe (PhaseState InitialSecret))
+  , handshakeState    :: IORef (Maybe (PhaseState HandshakeSecret))
+  , applicationState  :: IORef (Maybe (PhaseState ApplicationSecret))
+  }
+
+newContext :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Context
+newContext rl mid peercid send recv myparam isecs =
+    Context rl mid send recv myparam
+        <$> newIORef defaultParameters
+        <*> newIORef peercid
+        <*> newIORef defaultCipher
+        <*> newIORef Nothing
+        <*> newIORef 0
+        <*> newIORef (Just defaultPhaseState { secrets = Just isecs } )
+        <*> newIORef (Just defaultPhaseState)
+        <*> newIORef (Just defaultPhaseState)
+
+clientContext :: ClientConfig -> IO Context
+clientContext ClientConfig{..} = do
+    let params = encodeParametersList $ diffParameters ccParams
+    controller <- tlsClientController ccServerName ccCiphers ccALPN params
+    mycid <- case ccMyCID of
+      Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
+      Just cid -> return cid
+    peercid <- case ccPeerCID of
+      Nothing -> CID <$> getRandomBytes 8 -- fixme: hard-coding
+      Just cid -> return cid
+    let isecs = initialSecrets ccVersion peercid
+    newContext (Client controller) mycid peercid ccSend ccRecv ccParams isecs
+
 serverContext :: ServerConfig -> IO Context
 serverContext ServerConfig{..} = do
     controller <- tlsServerController scKey scCert
-    let cis = clientInitialSecret scVersion scMyCID
-        sis = serverInitialSecret scVersion scMyCID
-    Context (Server controller) scMyCID (cis, sis) scSend scRecv scParams
-        <$> newIORef defaultParameters
-        <*> newIORef (CID "") -- fixme
-        <*> newIORef defaultCipher
-        <*> newIORef Nothing
-        <*> newIORef Nothing
-        <*> newIORef 0
-        <*> newIORef []
-        <*> newIORef []
-        <*> newIORef []
-        <*> newIORef 0
-        <*> newIORef Nothing
+    let isecs = initialSecrets scVersion scMyCID
+        peercid = CID "" -- fixme
+    newContext (Server controller) scMyCID peercid scSend scRecv scParams isecs
 
-getCipher :: Context -> IO Cipher
-getCipher ctx = readIORef (usedCipher ctx)
+----------------------------------------------------------------
 
-setCipher :: Context -> Cipher -> IO ()
-setCipher ctx cipher = writeIORef (usedCipher ctx) cipher
-
-txInitialSecret :: Context -> Secret
-txInitialSecret ctx = case role ctx of
-    Client _ -> cis
-    Server _ -> sis
+setHandshakeSecrets :: Context -> TrafficSecrets HandshakeSecret -> IO ()
+setHandshakeSecrets ctx secs = modifyIORef (handshakeState ctx) f
   where
-    (cis, sis) = initialSecret ctx
+    f Nothing  = Nothing
+    f (Just s) = Just s { secrets = Just secs }
 
-rxInitialSecret :: Context -> Secret
-rxInitialSecret ctx = case role ctx of
-    Client _ -> sis
-    Server _ -> cis
+setApplicationSecrets :: Context -> TrafficSecrets ApplicationSecret -> IO ()
+setApplicationSecrets ctx secs = modifyIORef (applicationState ctx) f
   where
-    (cis, sis) = initialSecret ctx
+    f Nothing  = Nothing
+    f (Just s) = Just s { secrets = Just secs }
+
+----------------------------------------------------------------
+
+txInitialSecret :: Context -> IO Secret
+txInitialSecret ctx = do
+    Just state <- readIORef (initialState ctx)
+    let Just (ClientTrafficSecret c, ServerTrafficSecret s) = secrets state
+    return $ Secret $ case role ctx of
+      Client _ -> c
+      Server _ -> s
+
+rxInitialSecret :: Context -> IO Secret
+rxInitialSecret ctx = do
+    Just state <- readIORef (initialState ctx)
+    let Just (ClientTrafficSecret c, ServerTrafficSecret s) = secrets state
+    return $ Secret $ case role ctx of
+      Client _ -> s
+      Server _ -> c
 
 txHandshakeSecret :: Context -> IO Secret
 txHandshakeSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (handshakeSecret ctx)
+    Just state <- readIORef (handshakeState ctx)
+    let Just (ClientTrafficSecret c, ServerTrafficSecret s) = secrets state
     return $ Secret $ case role ctx of
       Client _ -> c
       Server _ -> s
 
 rxHandshakeSecret :: Context -> IO Secret
 rxHandshakeSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (handshakeSecret ctx)
+    Just state <- readIORef (handshakeState ctx)
+    let Just (ClientTrafficSecret c, ServerTrafficSecret s) = secrets state
     return $ Secret $ case role ctx of
       Client _ -> s
       Server _ -> c
 
 txApplicationSecret :: Context -> IO Secret
 txApplicationSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (applicationSecret ctx)
+    Just state <- readIORef (applicationState ctx)
+    let Just (ClientTrafficSecret c, ServerTrafficSecret s) = secrets state
     return $ Secret $ case role ctx of
       Client _ -> c
       Server _ -> s
 
 rxApplicationSecret :: Context -> IO Secret
 rxApplicationSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (applicationSecret ctx)
+    Just state <- readIORef (applicationState ctx)
+    let Just (ClientTrafficSecret c, ServerTrafficSecret s) = secrets state
     return $ Secret $ case role ctx of
       Client _ -> s
       Server _ -> c
 
+----------------------------------------------------------------
+
 getPacketNumber :: Context -> IO PacketNumber
 getPacketNumber ctx = atomicModifyIORef' (packetNumber ctx) (\pn -> ((pn + 1), pn))
 
+----------------------------------------------------------------
+
+addPNs :: PacketNumber -> Maybe (PhaseState a) -> (Maybe (PhaseState a), ())
+addPNs _ Nothing      = (Nothing, ())
+addPNs p (Just state) = (Just state { receivedPacketNumbers = p : receivedPacketNumbers state}, ())
+
+clearPNs :: Maybe (PhaseState a) -> (Maybe (PhaseState a), [PacketNumber])
+clearPNs Nothing      = (Nothing, [])
+clearPNs (Just state) = (Just state { receivedPacketNumbers = [] }, receivedPacketNumbers state)
+
 addInitialPNs :: Context -> PacketNumber -> IO ()
-addInitialPNs ctx p = atomicModifyIORef' (initialPNs ctx) (\ps -> (p:ps, ()))
+addInitialPNs ctx p =  atomicModifyIORef' (initialState ctx) $ addPNs p
 
 clearInitialPNs :: Context -> IO [PacketNumber]
-clearInitialPNs ctx = atomicModifyIORef' (initialPNs ctx) (\ps -> ([], ps))
+clearInitialPNs ctx = atomicModifyIORef' (initialState ctx) clearPNs
 
 addHandshakePNs :: Context -> PacketNumber -> IO ()
-addHandshakePNs ctx p = atomicModifyIORef' (handshakePNs ctx) (\ps -> (p:ps, ()))
+addHandshakePNs ctx p = atomicModifyIORef' (handshakeState ctx) $ addPNs p
 
 clearHandshakePNs :: Context -> IO [PacketNumber]
-clearHandshakePNs ctx = atomicModifyIORef' (handshakePNs ctx) (\ps -> ([], ps))
+clearHandshakePNs ctx = atomicModifyIORef' (handshakeState ctx)  clearPNs
 
 addApplicationPNs :: Context -> PacketNumber -> IO ()
-addApplicationPNs ctx p = atomicModifyIORef' (applicationPNs ctx) (\ps -> (p:ps, ()))
+addApplicationPNs ctx p = atomicModifyIORef' (applicationState ctx) $ addPNs p
 
 clearApplicationPNs :: Context -> IO [PacketNumber]
-clearApplicationPNs ctx = atomicModifyIORef' (applicationPNs ctx) (\ps -> ([], ps))
+clearApplicationPNs ctx = atomicModifyIORef' (applicationState ctx) clearPNs
 
-tlsClientHandshake :: Context -> ClientController
-tlsClientHandshake ctx = case role ctx of
-  Client controller -> controller
-  _ -> error "tlsClientHandshake"
+----------------------------------------------------------------
+
+modifyCryptoOffset :: Context -> Offset -> IO Offset
+modifyCryptoOffset ctx len = atomicModifyIORef' (initialState ctx) modify
+  where
+    modify Nothing = error "modifyCryptoOffset"
+    modify (Just s) =( Just s { cryptoOffSet = cryptoOffSet s + len}, cryptoOffSet s)
+
+----------------------------------------------------------------
+
+getCipher :: Context -> IO Cipher
+getCipher ctx = readIORef (usedCipher ctx)
+
+setCipher :: Context -> Cipher -> IO ()
+setCipher ctx cipher = writeIORef (usedCipher ctx) cipher
 
 setPeerParameters :: Context -> ParametersList -> IO ()
 setPeerParameters Context{..} plist = do
@@ -212,3 +251,8 @@ setPeerParameters Context{..} plist = do
 
 setNegotiatedProto :: Context -> Maybe ByteString -> IO ()
 setNegotiatedProto Context{..} malpn = writeIORef negotiatedProto malpn
+
+tlsClientHandshake :: Context -> ClientController
+tlsClientHandshake ctx = case role ctx of
+  Client controller -> controller
+  _ -> error "tlsClientHandshake"

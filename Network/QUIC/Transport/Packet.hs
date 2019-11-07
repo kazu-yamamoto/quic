@@ -162,8 +162,8 @@ encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
     -- length .. payload
-    let secret = txInitialSecret ctx
-        cipher = defaultCipher
+    secret <- txInitialSecret ctx
+    let cipher = defaultCipher
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
 encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
@@ -306,8 +306,8 @@ decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CI
 decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
+    secret <- rxInitialSecret ctx
     let cipher = defaultCipher
-        secret = rxInitialSecret ctx
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ InitialPacket version dcID scID token pn frames
 

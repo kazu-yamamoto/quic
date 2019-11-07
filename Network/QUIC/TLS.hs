@@ -7,6 +7,7 @@ module Network.QUIC.TLS (
   , tlsServerController
   -- * Payload encryption
   , defaultCipher
+  , initialSecrets
   , clientInitialSecret
   , serverInitialSecret
   , aeadKey
@@ -32,6 +33,10 @@ module Network.QUIC.TLS (
   , Mask(..)
   , Nonce(..)
   , Cipher
+  , InitialSecret
+  , TrafficSecrets
+  , ClientTrafficSecret(..)
+  , ServerTrafficSecret(..)
   ) where
 
 import Crypto.Cipher.AES
@@ -99,14 +104,19 @@ initialSalt Draft22 = "\x7f\xbc\xdb\x0e\x7c\x66\xbb\xe9\x19\x3a\x96\xcd\x21\x51\
 initialSalt Draft23 = "\xc3\xee\xf7\x12\xc7\x2e\xbb\x5a\x11\xa7\xd2\x43\x2b\xb4\x63\x65\xbe\xf9\xf5\x02"
 initialSalt _       = error "initialSalt"
 
-clientInitialSecret :: Version -> CID -> Secret
-clientInitialSecret = initialSecret (Label "client in")
+data InitialSecret
 
-serverInitialSecret :: Version -> CID -> Secret
-serverInitialSecret = initialSecret (Label "server in")
+initialSecrets :: Version -> CID -> TrafficSecrets InitialSecret
+initialSecrets v c = (clientInitialSecret v c, serverInitialSecret v c)
 
-initialSecret :: Label -> Version -> CID -> Secret
-initialSecret (Label label) ver (CID cid) = Secret secret
+clientInitialSecret :: Version -> CID -> ClientTrafficSecret InitialSecret
+clientInitialSecret v c = ClientTrafficSecret $ initialSecret (Label "client in") v c
+
+serverInitialSecret :: Version -> CID -> ServerTrafficSecret InitialSecret
+serverInitialSecret v c = ServerTrafficSecret $ initialSecret (Label "server in") v c
+
+initialSecret :: Label -> Version -> CID -> ByteString
+initialSecret (Label label) ver (CID cid) = secret
   where
     cipher    = defaultCipher
     hash      = cipherHash cipher

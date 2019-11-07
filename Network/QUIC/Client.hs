@@ -19,8 +19,8 @@ import Network.TLS.QUIC
 cryptFrameInitial :: Context -> CryptoData -> IO Frame
 cryptFrameInitial ctx crypto = do
     let len = B.length crypto
-    off' <- atomicModifyIORef' (cryptoOffset ctx) (\off -> (off+len, off))
-    return $ Crypto off' crypto
+    off <- modifyCryptoOffset ctx len
+    return $ Crypto off crypto
 
 ----------------------------------------------------------------
 
@@ -123,7 +123,7 @@ handleServerInitial ctx si = do
         ctl <- tlsClientHandshake ctx $ PutServerHello sh
         case ctl of
           RecvServerHello cipher handSecrets -> do
-              writeIORef (handshakeSecret ctx) $ Just handSecrets
+              setHandshakeSecrets ctx handSecrets
               setCipher ctx cipher
           SendClientHello tlsch _ -> do
               writeIORef ref $ Just tlsch
@@ -149,7 +149,7 @@ handleServerHandshake ctx bs0 = loop bs0
                     let Just plist = decodeParametersList params
                     setPeerParameters ctx plist
                 _ -> return ()
-              writeIORef (applicationSecret ctx) $ Just appSecrets
+              setApplicationSecrets ctx appSecrets
               return (cf, rest)
           _ -> error "handleServerHandshake"
 
