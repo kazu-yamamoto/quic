@@ -58,3 +58,8 @@ data Frame = Padding
            | NewConnectionID Int Int CID ByteString
            | ConnectionClose ErrorCode ByteString
            deriving (Eq,Show)
+
+data EncryptionLevel = InitialLevel
+                     | HandshakeLevel
+                     | ApplicationLevel
+                     deriving (Eq, Ord, Show)

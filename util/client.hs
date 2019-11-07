@@ -7,6 +7,7 @@ import Network.Run.UDP
 import Network.Socket hiding (Stream)
 import Network.Socket.ByteString
 import System.Environment
+import qualified Data.ByteString.Char8 as C8
 
 main :: IO ()
 main = do
@@ -26,6 +27,5 @@ quicClient serverName s peerAddr = do
           }
     ctx <- clientContext conf
     handshake ctx
-    recvData ctx
     sendData ctx "GET /index.html\r\n"
-    recvData ctx
+    recvData ctx >>= C8.putStrLn
