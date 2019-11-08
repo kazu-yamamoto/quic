@@ -26,6 +26,7 @@ quicServer s bs0 cert key = do
           , scRecv       = NSB.recv s 2048
           , scParams     = exampleParameters
           , scClientIni  = bs0
+          , scALPN       = Just (\_ -> return "hq-23")
           }
     mctx <- serverContext conf
     case mctx of
