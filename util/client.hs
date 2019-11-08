@@ -2,12 +2,13 @@
 
 module Main where
 
+import Control.Monad
+import qualified Data.ByteString.Char8 as C8
 import Network.QUIC
 import Network.Run.UDP
 import Network.Socket hiding (Stream)
 import Network.Socket.ByteString
 import System.Environment
-import qualified Data.ByteString.Char8 as C8
 
 main :: IO ()
 main = do
@@ -21,7 +22,7 @@ quicClient serverName s peerAddr = do
           , ccServerName = serverName
 --          , ccALPN       = return $ Just ["hq-23"]
           , ccALPN       = return $ Just ["h3-23"]
-          , ccSend       = \bs -> sendTo s bs peerAddr >> return ()
+          , ccSend       = \bs -> void $ sendTo s bs peerAddr
           , ccRecv       = fst <$> recvFrom s 2048
           , ccParams     = exampleParameters
           }
