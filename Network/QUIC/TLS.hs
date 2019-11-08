@@ -287,11 +287,13 @@ tlsClientController serverName ciphers suggestALPN quicParams =
       }
 
 tlsServerController :: FilePath -> FilePath
+                    -> ByteString
                     -> IO ServerController
-tlsServerController key cert = do
+tlsServerController key cert quicParams = do
     Right cred <- credentialLoadX509 cert key
     let sshared = def {
             sharedCredentials = Credentials [cred]
+          , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters quicParams]
           }
     let sparams = def {
         serverSupported = supported

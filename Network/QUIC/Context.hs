@@ -146,7 +146,8 @@ clientContext ClientConfig{..} = do
 
 serverContext :: ServerConfig -> IO (Maybe Context)
 serverContext ServerConfig{..} = do
-    controller <- tlsServerController scKey scCert
+    let params = encodeParametersList $ diffParameters scParams
+    controller <- tlsServerController scKey scCert params
     mcids <- analyzeLongHeaderPacket scClientIni
     case mcids of
       Nothing -> return Nothing
