@@ -281,3 +281,9 @@ checkEncryptionLevel :: Context -> EncryptionLevel -> IO ()
 checkEncryptionLevel ctx level = atomically $ do
     l <- readTVar $ encryptionLevel ctx
     check (l >= level)
+
+readClearClientInitial :: Context -> IO ByteString
+readClearClientInitial Context{..} = do
+    bs <- readIORef clientInitial
+    writeIORef clientInitial "" -- fixme
+    return bs

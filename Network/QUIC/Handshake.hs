@@ -39,16 +39,16 @@ sendClientHelloAndRecvServerHello ctx = do
     SendClientHello ch0 _ <- tlsClientControl ctx $ GetClientHello
     sendCryptoData ctx Initial ch0
     (Initial, sh0) <- recvCryptoData ctx
-    ctl0 <- tlsClientControl ctx $ PutServerHello sh0
-    case ctl0 of
+    state0 <- tlsClientControl ctx $ PutServerHello sh0
+    case state0 of
       RecvServerHello cipher hndSecs -> do
           setHandshakeSecrets ctx hndSecs
           setCipher ctx cipher
       SendClientHello ch1 _ -> do
           sendCryptoData ctx Initial ch1
           (Initial, sh1) <- recvCryptoData ctx
-          ctl1 <- tlsClientControl ctx $ PutServerHello sh1
-          case ctl1 of
+          state1 <- tlsClientControl ctx $ PutServerHello sh1
+          case state1 of
             RecvServerHello cipher hndSecs -> do
                 setHandshakeSecrets ctx hndSecs
                 setCipher ctx cipher
@@ -60,17 +60,13 @@ recvServerFinishedSendClientFinished ctx = loop
   where
     loop = do
         (Handshake, eesf) <- recvCryptoData ctx
-        ctl <- tlsClientControl ctx $ PutServerFinished eesf
-        case ctl of
+        state <- tlsClientControl ctx $ PutServerFinished eesf
+        case state of
           ClientNeedsMore -> do
               loop
           SendClientFinished cf exts alpn appSecs -> do
               setNegotiatedProto ctx alpn
-              case exts of
-                [ExtensionRaw 0xffa5 params] -> do
-                    let Just plist = decodeParametersList params
-                    setPeerParameters ctx plist
-                _ -> return ()
+              setParameters ctx exts
               setApplicationSecrets ctx appSecs
               sendCryptoData ctx Handshake cf
           _ -> error "putServerFinished"
@@ -78,4 +74,35 @@ recvServerFinishedSendClientFinished ctx = loop
 ----------------------------------------------------------------
 
 handshakeServer :: Context -> IO ()
-handshakeServer _ctx = undefined
+handshakeServer ctx = do
+    ch <- readClearClientInitial ctx
+    state <- tlsServerControl ctx $ PutClientHello ch
+    sh <- case state of
+      SendRequestRetry hrr -> do
+          sendCryptoData ctx Initial hrr
+          (Initial, ch1) <- recvCryptoData ctx
+          SendServerHello sh0 exts cipher _ hndSecs <- tlsServerControl ctx $ PutClientHello ch1
+          setHandshakeSecrets ctx hndSecs
+          setCipher ctx cipher
+          setParameters ctx exts
+          return sh0
+      SendServerHello sh0 exts cipher _ hndSecs -> do
+          setHandshakeSecrets ctx hndSecs
+          setCipher ctx cipher
+          setParameters ctx exts
+          return sh0
+      _ -> error "handshakeServer"
+    sendCryptoData ctx Initial sh
+    SendServerFinished sf alpn appSecs <- tlsServerControl ctx GetServerFinished
+    setNegotiatedProto ctx alpn
+    setApplicationSecrets ctx appSecs
+    sendCryptoData ctx Handshake sf
+    (Handshake, cf) <- recvCryptoData ctx
+    SendSessionTicket nst <- tlsServerControl ctx $ PutClientFinished cf
+    sendCryptoData ctx Short nst
+
+setParameters :: Context -> [ExtensionRaw] -> IO ()
+setParameters ctx [ExtensionRaw 0xffa5 params] = do
+    let Just plist = decodeParametersList params
+    setPeerParameters ctx plist
+setParameters _ _ = return ()
