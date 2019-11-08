@@ -2,7 +2,7 @@
 
 module Main where
 
-import Control.Monad (void)
+import Control.Monad (void, forever)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
 import Network.QUIC
@@ -32,5 +32,6 @@ quicServer s bs0 cert key = do
       Nothing -> putStrLn "Client Initial is broken"
       Just ctx -> do
           handshake ctx
-          recvData ctx >>= C8.putStrLn
-          sendData ctx "<html><body>Hello world!</body></html>"
+          forever $ do
+              recvData ctx >>= C8.putStrLn
+              sendData ctx "<html><body>Hello world!</body></html>"
