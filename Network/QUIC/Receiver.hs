@@ -11,7 +11,13 @@ import Network.QUIC.Imports
 import Network.QUIC.Transport
 
 receiver :: Context -> IO ()
-receiver ctx = loop
+receiver ctx = do
+    mbs <- readClearClientInitial ctx
+    case mbs of
+        Nothing -> loop
+        Just bs -> do
+            processPackets ctx bs
+            loop
   where
     loop = forever $ do
         bs <- ctxRecv ctx

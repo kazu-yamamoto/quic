@@ -4,10 +4,11 @@ module Main where
 
 import Control.Monad
 import qualified Data.ByteString.Char8 as C8
+import Data.IORef
 import Network.QUIC
 import Network.Run.UDP
 import Network.Socket hiding (Stream)
-import Network.Socket.ByteString
+import qualified Network.Socket.ByteString as NSB
 import System.Environment
 
 main :: IO ()
@@ -17,13 +18,21 @@ main = do
 
 quicClient :: String -> Socket -> SockAddr -> IO ()
 quicClient serverName s peerAddr = do
+    ref <- newIORef peerAddr
+    let recv = do
+            (bs, peer) <- NSB.recvFrom s 2048
+            writeIORef ref peer
+            return bs
+        send bs = do
+            peer <- readIORef ref
+            void $ NSB.sendTo s bs peer
     let conf = defaultClientConfig {
             ccVersion    = Draft23
           , ccServerName = serverName
 --          , ccALPN       = return $ Just ["hq-23"]
           , ccALPN       = return $ Just ["h3-23"]
-          , ccSend       = \bs -> void $ sendTo s bs peerAddr
-          , ccRecv       = fst <$> recvFrom s 2048
+          , ccSend       = send
+          , ccRecv       = recv
           , ccParams     = exampleParameters
           }
     ctx <- clientContext conf

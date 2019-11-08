@@ -75,7 +75,7 @@ recvServerFinishedSendClientFinished ctx = loop
 
 handshakeServer :: Context -> IO ()
 handshakeServer ctx = do
-    ch <- readClearClientInitial ctx
+    (Initial, ch) <- recvCryptoData ctx
     state <- tlsServerControl ctx $ PutClientHello ch
     sh <- case state of
       SendRequestRetry hrr -> do

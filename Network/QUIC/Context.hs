@@ -110,7 +110,7 @@ data Context = Context {
   , handshakeState   :: IORef PhaseState
   , applicationState :: IORef PhaseState
   , encryptionLevel  :: TVar EncryptionLevel
-  , clientInitial    :: IORef ByteString
+  , clientInitial    :: IORef (Maybe ByteString)
   }
 
 newContext :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Context
@@ -129,7 +129,7 @@ newContext rl mid peercid send recv myparam isecs =
         <*> newIORef defaultPhaseState
         <*> newIORef defaultPhaseState
         <*> newTVarIO InitialLevel
-        <*> newIORef ""
+        <*> newIORef Nothing
 
 clientContext :: ClientConfig -> IO Context
 clientContext ClientConfig{..} = do
@@ -153,7 +153,7 @@ serverContext ServerConfig{..} = do
       Just (mycid, peercid) -> do
           let isecs = initialSecrets scVersion mycid
           ctx <- newContext (Server controller) mycid peercid scSend scRecv scParams isecs
-          writeIORef (clientInitial ctx) scClientIni
+          writeIORef (clientInitial ctx) (Just scClientIni)
           return $ Just ctx
 
 ----------------------------------------------------------------
@@ -282,8 +282,8 @@ checkEncryptionLevel ctx level = atomically $ do
     l <- readTVar $ encryptionLevel ctx
     check (l >= level)
 
-readClearClientInitial :: Context -> IO ByteString
+readClearClientInitial :: Context -> IO (Maybe ByteString)
 readClearClientInitial Context{..} = do
-    bs <- readIORef clientInitial
-    writeIORef clientInitial "" -- fixme
-    return bs
+    mbs <- readIORef clientInitial
+    writeIORef clientInitial Nothing
+    return mbs
