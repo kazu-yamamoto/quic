@@ -22,6 +22,7 @@ library
                        Network.QUIC.TLS
                        Network.QUIC.Transport
                        Network.QUIC.Transport.Frame
+                       Network.QUIC.Transport.Header
                        Network.QUIC.Transport.Integer
                        Network.QUIC.Transport.Packet
                        Network.QUIC.Transport.PacketNumber

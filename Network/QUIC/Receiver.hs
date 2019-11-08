@@ -4,7 +4,6 @@
 module Network.QUIC.Receiver where
 
 import Control.Concurrent.STM
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 
 import Network.QUIC.Context
@@ -23,14 +22,7 @@ processPackets ctx bs0 = loop bs0
   where
     loop "" = return ()
     loop bs = do
-        let w = B.head bs
-            level
-              | isLong w  = case decodePacketType w of
-                  LHInitial   -> InitialLevel
-                  LHRetry     -> InitialLevel
-                  LHHandshake -> HandshakeLevel
-                  _           -> undefined
-              | otherwise     = ApplicationLevel
+        let level = packetEncryptionLevel bs
         checkEncryptionLevel ctx level
         (pkt, rest) <- decodePacket ctx bs
         processPacket ctx pkt
@@ -44,7 +36,7 @@ processPacket ctx (InitialPacket   _ _ _ _ pn fs) = do
 processPacket ctx (HandshakePacket _ _ peercid   pn fs) = do
       addPNs ctx Handshake pn
       putStrLn $ "H: " ++ show fs
-      setPeerCID ctx peercid -- fixme: Role
+      when (isClient ctx) $ setPeerCID ctx peercid
       mapM_ (processFrame ctx Handshake) fs
 processPacket ctx (ShortPacket     _       pn fs) = do
       addPNs ctx Short pn

@@ -12,8 +12,9 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Imports
 import Network.QUIC.TLS
-import Network.QUIC.Transport.Types
+import Network.QUIC.Transport.Header
 import Network.QUIC.Transport.Parameters
+import Network.QUIC.Transport.Types
 
 data Role = Client ClientController
           | Server ServerController
@@ -50,23 +51,23 @@ defaultClientConfig = ClientConfig {
 
 data ServerConfig = ServerConfig {
     scVersion    :: Version
-  , scMyCID      :: CID
   , scKey        :: FilePath
   , scCert       :: FilePath
   , scSend       :: ByteString -> IO ()
   , scRecv       :: IO ByteString
   , scParams     :: Parameters
+  , scClientIni  :: ByteString
   }
 
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
     scVersion    = Draft23
-  , scMyCID      = CID ""
   , scKey        = "serverkey.pem"
   , scCert       = "servercert.pem"
   , scSend       = \_ -> return ()
   , scRecv       = return ""
   , scParams     = defaultParameters
+  , scClientIni  = ""
   }
 
 ----------------------------------------------------------------
@@ -109,6 +110,7 @@ data Context = Context {
   , handshakeState   :: IORef PhaseState
   , applicationState :: IORef PhaseState
   , encryptionLevel  :: TVar EncryptionLevel
+  , clientInitial    :: IORef ByteString
   }
 
 newContext :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Context
@@ -127,6 +129,7 @@ newContext rl mid peercid send recv myparam isecs =
         <*> newIORef defaultPhaseState
         <*> newIORef defaultPhaseState
         <*> newTVarIO InitialLevel
+        <*> newIORef ""
 
 clientContext :: ClientConfig -> IO Context
 clientContext ClientConfig{..} = do
@@ -136,17 +139,22 @@ clientContext ClientConfig{..} = do
       Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
       Just cid -> return cid
     peercid <- case ccPeerCID of
-      Nothing -> CID <$> getRandomBytes 8 -- fixme: hard-coding
+      Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
       Just cid -> return cid
     let isecs = initialSecrets ccVersion peercid
     newContext (Client controller) mycid peercid ccSend ccRecv ccParams isecs
 
-serverContext :: ServerConfig -> IO Context
+serverContext :: ServerConfig -> IO (Maybe Context)
 serverContext ServerConfig{..} = do
     controller <- tlsServerController scKey scCert
-    let isecs = initialSecrets scVersion scMyCID
-        peercid = CID "" -- fixme
-    newContext (Server controller) scMyCID peercid scSend scRecv scParams isecs
+    mcids <- analyzeLongHeaderPacket scClientIni
+    case mcids of
+      Nothing -> return Nothing
+      Just (mycid, peercid) -> do
+          let isecs = initialSecrets scVersion mycid
+          ctx <- newContext (Server controller) mycid peercid scSend scRecv scParams isecs
+          writeIORef (clientInitial ctx) scClientIni
+          return $ Just ctx
 
 ----------------------------------------------------------------
 
@@ -251,10 +259,15 @@ setPeerParameters Context{..} plist = do
 setNegotiatedProto :: Context -> Maybe ByteString -> IO ()
 setNegotiatedProto Context{..} malpn = writeIORef negotiatedProto malpn
 
-tlsClientHandshake :: Context -> ClientController
-tlsClientHandshake ctx = case role ctx of
+tlsClientControl :: Context -> ClientController
+tlsClientControl ctx = case role ctx of
   Client controller -> controller
-  _ -> error "tlsClientHandshake"
+  _ -> error "tlsClientController"
+
+tlsServerControl :: Context -> ServerController
+tlsServerControl ctx = case role ctx of
+  Server controller -> controller
+  _ -> error "tlsServerController"
 
 setPeerCID :: Context -> CID -> IO ()
 setPeerCID Context{..} pcid = writeIORef peerCID pcid

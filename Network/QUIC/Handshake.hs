@@ -22,14 +22,24 @@ handshake :: Context -> IO ()
 handshake ctx = do
     _ <- forkIO $ sender ctx
     _ <- forkIO $ receiver ctx
-    handshakeClient ctx
+    if isClient ctx then
+        handshakeClient ctx
+      else
+        handshakeServer ctx
+
+----------------------------------------------------------------
+
+handshakeClient :: Context -> IO ()
+handshakeClient ctx = do
+    sendClientHelloAndRecvServerHello ctx
+    recvServerFinishedSendClientFinished ctx
 
 sendClientHelloAndRecvServerHello :: Context -> IO ()
 sendClientHelloAndRecvServerHello ctx = do
-    SendClientHello ch0 _ <- tlsClientHandshake ctx $ GetClientHello
+    SendClientHello ch0 _ <- tlsClientControl ctx $ GetClientHello
     sendCryptoData ctx Initial ch0
     (Initial, sh0) <- recvCryptoData ctx
-    ctl0 <- tlsClientHandshake ctx $ PutServerHello sh0
+    ctl0 <- tlsClientControl ctx $ PutServerHello sh0
     case ctl0 of
       RecvServerHello cipher hndSecs -> do
           setHandshakeSecrets ctx hndSecs
@@ -37,7 +47,7 @@ sendClientHelloAndRecvServerHello ctx = do
       SendClientHello ch1 _ -> do
           sendCryptoData ctx Initial ch1
           (Initial, sh1) <- recvCryptoData ctx
-          ctl1 <- tlsClientHandshake ctx $ PutServerHello sh1
+          ctl1 <- tlsClientControl ctx $ PutServerHello sh1
           case ctl1 of
             RecvServerHello cipher hndSecs -> do
                 setHandshakeSecrets ctx hndSecs
@@ -50,7 +60,7 @@ recvServerFinishedSendClientFinished ctx = loop
   where
     loop = do
         (Handshake, eesf) <- recvCryptoData ctx
-        ctl <- tlsClientHandshake ctx $ PutServerFinished eesf
+        ctl <- tlsClientControl ctx $ PutServerFinished eesf
         case ctl of
           ClientNeedsMore -> do
               loop
@@ -65,7 +75,7 @@ recvServerFinishedSendClientFinished ctx = loop
               sendCryptoData ctx Handshake cf
           _ -> error "putServerFinished"
 
-handshakeClient :: Context -> IO ()
-handshakeClient ctx = do
-    sendClientHelloAndRecvServerHello ctx
-    recvServerFinishedSendClientFinished ctx
+----------------------------------------------------------------
+
+handshakeServer :: Context -> IO ()
+handshakeServer _ctx = undefined

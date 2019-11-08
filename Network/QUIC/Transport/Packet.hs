@@ -10,6 +10,7 @@ import Network.QUIC.Context
 import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Frame
+import Network.QUIC.Transport.Header
 import Network.QUIC.Transport.Integer
 import Network.QUIC.Transport.PacketNumber
 import Network.QUIC.Transport.Types
@@ -38,21 +39,6 @@ decodeVersion w          = UnknownVersion w
 
 ----------------------------------------------------------------
 
-encodePacketType :: RawFlags -> LongHeaderPacketType -> RawFlags
-encodePacketType flags LHInitial   = flags
-encodePacketType flags LHRTT0      = flags .|. 0b00010000
-encodePacketType flags LHHandshake = flags .|. 0b00100000
-encodePacketType flags LHRetry     = flags .|. 0b00110000
-
-decodePacketType :: RawFlags -> LongHeaderPacketType
-decodePacketType flags = case flags .&. 0b00110000 of
-    0b00000000 -> LHInitial
-    0b00010000 -> LHRTT0
-    0b00100000 -> LHHandshake
-    _          -> LHRetry
-
-----------------------------------------------------------------
-
 encrypt :: Cipher -> Secret -> PlainText -> ByteString -> PacketNumber
         -> CipherText
 encrypt cipher secret plaintext header pn =
@@ -74,9 +60,6 @@ decrypt cipher secret ciphertext header pn =
     bytePN = bytestring64 (fromIntegral pn)
 
 ----------------------------------------------------------------
-
-isLong :: Word8 -> Bool
-isLong flags = flags .&. 0x80 == 0x80
 
 flagBits :: Word8 -> Word8
 flagBits flags
@@ -262,7 +245,7 @@ decodePacket :: Context -> ByteString -> IO (Packet, ByteString)
 decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
     proFlags <- read8 rbuf
     save rbuf
-    pkt <- if testBit proFlags 7 then do
+    pkt <- if isLong proFlags then do
              decodeLongHeaderPacket ctx rbuf proFlags
            else
              decodeShortHeaderPacket ctx rbuf proFlags

@@ -21,9 +21,9 @@ spec = do
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
-                  , scMyCID = dcid
+                  , scClientIni = clientInitialPacketBinary
                   }
-            sctx <- serverContext serverConf
+            Just sctx <- serverContext serverConf
             (pkt, _) <- decodePacket sctx clientInitialPacketBinary
             clientInitialPacketBinary' <- encodePacket cctx pkt
             (pkt', _) <- decodePacket sctx clientInitialPacketBinary'
