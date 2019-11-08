@@ -37,16 +37,16 @@ processPackets ctx bs0 = loop bs0
 processPacket :: Context -> Packet -> IO ()
 processPacket ctx (InitialPacket   _ _ _ _ pn fs) = do
       addPNs ctx Initial pn
-      putStrLn $ "I: " ++ show fs
+--      putStrLn $ "I: " ++ show fs
       mapM_ (processFrame ctx Initial) fs
 processPacket ctx (HandshakePacket _ _ peercid   pn fs) = do
       addPNs ctx Handshake pn
-      putStrLn $ "H: " ++ show fs
+--      putStrLn $ "H: " ++ show fs
       when (isClient ctx) $ setPeerCID ctx peercid
       mapM_ (processFrame ctx Handshake) fs
 processPacket ctx (ShortPacket     _       pn fs) = do
       addPNs ctx Short pn
-      putStrLn $ "S: " ++ show fs
+--      putStrLn $ "S: " ++ show fs
       mapM_ (processFrame ctx Short) fs
 processPacket _ _ = undefined
 
