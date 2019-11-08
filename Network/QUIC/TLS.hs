@@ -287,18 +287,20 @@ tlsClientController serverName ciphers suggestALPN quicParams =
       }
 
 tlsServerController :: FilePath -> FilePath
+                    -> Maybe ([ByteString] -> IO ByteString)
                     -> ByteString
                     -> IO ServerController
-tlsServerController key cert quicParams = do
+tlsServerController key cert selectALPN quicParams = do
     Right cred <- credentialLoadX509 cert key
     let sshared = def {
             sharedCredentials = Credentials [cred]
           , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters quicParams]
           }
     let sparams = def {
-        serverSupported = supported
-      , serverDebug = debug
-      , serverShared = sshared
+        serverDebug     = debug
+      , serverHooks     = hook
+      , serverShared    = sshared
+      , serverSupported = supported
       }
     newQUICServer sparams
   where
@@ -310,3 +312,6 @@ tlsServerController key cert quicParams = do
 --    debug = def {
 --        debugKeyLogger = putStrLn
 --      }
+    hook = def {
+        onALPNClientSuggest = selectALPN
+      }

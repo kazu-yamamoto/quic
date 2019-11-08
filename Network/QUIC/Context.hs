@@ -57,6 +57,7 @@ data ServerConfig = ServerConfig {
   , scRecv       :: IO ByteString
   , scParams     :: Parameters
   , scClientIni  :: ByteString
+  , scALPN       :: Maybe ([ByteString] -> IO ByteString)
   }
 
 defaultServerConfig :: ServerConfig
@@ -68,6 +69,7 @@ defaultServerConfig = ServerConfig {
   , scRecv       = return ""
   , scParams     = defaultParameters
   , scClientIni  = ""
+  , scALPN       = Nothing
   }
 
 ----------------------------------------------------------------
@@ -147,7 +149,7 @@ clientContext ClientConfig{..} = do
 serverContext :: ServerConfig -> IO (Maybe Context)
 serverContext ServerConfig{..} = do
     let params = encodeParametersList $ diffParameters scParams
-    controller <- tlsServerController scKey scCert params
+    controller <- tlsServerController scKey scCert scALPN params
     mcids <- analyzeLongHeaderPacket scClientIni
     case mcids of
       Nothing -> return Nothing
