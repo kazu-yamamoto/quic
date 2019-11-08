@@ -162,47 +162,42 @@ setApplicationSecrets ctx secs = do
 
 ----------------------------------------------------------------
 
+isClient :: Context -> Bool
+isClient ctx = case role ctx of
+                 Client _ -> True
+                 Server _ -> False
+
+----------------------------------------------------------------
+
 txInitialSecret :: Context -> IO Secret
 txInitialSecret ctx = do
     let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets ctx
-    return $ Secret $ case role ctx of
-      Client _ -> c
-      Server _ -> s
+    return $ Secret $ if isClient ctx then c else s
 
 rxInitialSecret :: Context -> IO Secret
 rxInitialSecret ctx = do
     let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets ctx
-    return $ Secret $ case role ctx of
-      Client _ -> s
-      Server _ -> c
+    return $ Secret $ if isClient ctx then s else c
 
 txHandshakeSecret :: Context -> IO Secret
 txHandshakeSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets ctx)
-    return $ Secret $ case role ctx of
-      Client _ -> c
-      Server _ -> s
+    return $ Secret $ if isClient ctx then c else s
 
 rxHandshakeSecret :: Context -> IO Secret
 rxHandshakeSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets ctx)
-    return $ Secret $ case role ctx of
-      Client _ -> s
-      Server _ -> c
+    return $ Secret $ if isClient ctx then s else c
 
 txApplicationSecret :: Context -> IO Secret
 txApplicationSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets ctx)
-    return $ Secret $ case role ctx of
-      Client _ -> c
-      Server _ -> s
+    return $ Secret $ if isClient ctx then c else s
 
 rxApplicationSecret :: Context -> IO Secret
 rxApplicationSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets ctx)
-    return $ Secret $ case role ctx of
-      Client _ -> s
-      Server _ -> c
+    return $ Secret $ if isClient ctx then s else c
 
 ----------------------------------------------------------------
 
