@@ -55,9 +55,10 @@ processFrame _ _ Padding = return ()
 processFrame _ _ (ConnectionClose _errcode reason) = do
     C8.putStrLn reason
     putStrLn "FIXME: ConnectionClose"
-processFrame ctx Short (Stream sid _off dat _fin) = do
-    -- fixme _off _fin
+processFrame ctx Short (Stream sid _off dat fin) = do
+    -- fixme _off
     atomically $ writeTQueue (inputQ ctx) $ S sid dat
+    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ ctx) $ S sid ""
 processFrame ctx pt (Crypto _off cdat) = do
     --fixme _off
     case pt of
