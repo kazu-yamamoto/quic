@@ -14,7 +14,7 @@ import System.Environment (getArgs)
 main :: IO ()
 main = do
     [port,cert,key] <- getArgs
-    runUDPServerFork "127.0.0.1" port $ \s bs0 -> quicServer s bs0 cert key
+    runUDPServerFork ["127.0.0.1","::1"] port $ \s bs0 -> quicServer s bs0 cert key
 
 quicServer :: Socket -> ByteString -> FilePath -> FilePath -> IO ()
 quicServer s bs0 cert key = do
