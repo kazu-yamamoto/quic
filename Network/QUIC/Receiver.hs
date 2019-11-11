@@ -4,7 +4,6 @@
 module Network.QUIC.Receiver where
 
 import Control.Concurrent.STM
-import qualified Data.ByteString.Char8 as C8
 
 import Network.QUIC.Context
 import Network.QUIC.Imports
@@ -52,21 +51,26 @@ processPacket _ _ = undefined
 
 processFrame :: Context -> PacketType -> Frame -> IO ()
 processFrame _ _ Padding = return ()
-processFrame _ _ (ConnectionClose _errcode reason) = do
-    C8.putStrLn reason
-    putStrLn "FIXME: ConnectionClose"
-processFrame ctx Short (Stream sid _off dat fin) = do
-    -- fixme _off
-    atomically $ writeTQueue (inputQ ctx) $ S sid dat
-    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ ctx) $ S sid ""
+processFrame _ _ Ack{} = return ()
 processFrame ctx pt (Crypto _off cdat) = do
     --fixme _off
     case pt of
       Initial   -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
       Handshake -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
-      Short     -> putStrLn "FIXME: processFrame Short (new session ticket)"
+      Short     -> putStrLn "FIXME: processFrame Short:Crypto (new session ticket)"
       _         -> error "processFrame"
-processFrame _ _ (Ack _ _ _ _) = return ()
+processFrame _ _ NewToken{} =
+    putStrLn "FIXME: NewToken"
+processFrame _ _ NewConnectionID{} =
+    putStrLn "FIXME: NewConnectionID"
+processFrame _ _ (ConnectionCloseQUIC errcode _ftyp _reason) =
+    putStrLn $ "FIXME: ConnectionCloseQUIC " ++ show errcode
+processFrame _ _ (ConnectionCloseApp errcode _reason) =
+    putStrLn $ "FIXME: ConnectionCloseApp " ++ show errcode
+processFrame ctx Short (Stream sid _off dat fin) = do
+    -- fixme _off
+    atomically $ writeTQueue (inputQ ctx) $ S sid dat
+    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ ctx) $ S sid ""
 processFrame _ _ _frame        = do
     putStrLn "FIXME: processFrame"
     print _frame

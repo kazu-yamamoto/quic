@@ -15,11 +15,6 @@ encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
 encodeFrame :: WriteBuffer -> Frame -> IO ()
 encodeFrame wbuf Padding = write8 wbuf 0x00
 encodeFrame wbuf Ping = write8 wbuf 0x01
-encodeFrame wbuf (Crypto off cdata) = do
-    write8 wbuf 0x06
-    encodeInt' wbuf $ fromIntegral off
-    encodeInt' wbuf $ fromIntegral $ B.length cdata
-    copyByteString wbuf cdata
 encodeFrame wbuf (Ack largest delay range1 ranges) = do
     write8 wbuf 0x02
     encodeInt' wbuf largest
@@ -27,15 +22,34 @@ encodeFrame wbuf (Ack largest delay range1 ranges) = do
     encodeInt' wbuf $ fromIntegral $ length ranges
     encodeInt' wbuf $ fromIntegral $ range1
     -- fixme: ranges
-encodeFrame _wbuf (NewToken _) = undefined
+encodeFrame wbuf (Crypto off cdata) = do
+    write8 wbuf 0x06
+    encodeInt' wbuf $ fromIntegral off
+    encodeInt' wbuf $ fromIntegral $ B.length cdata
+    copyByteString wbuf cdata
+encodeFrame wbuf (NewToken _) = do
+    write8 wbuf 0x07
+    undefined
 encodeFrame wbuf (Stream sid _off dat _fin) = do
     -- fixme
     write8 wbuf (0x08 .|. 0x02 .|. 0x01)
     encodeInt' wbuf sid
     encodeInt' wbuf $ fromIntegral $ B.length dat
     copyByteString wbuf dat
-encodeFrame _wbuf (NewConnectionID _ _ _ _) = undefined
-encodeFrame _wbuf (ConnectionClose _ _) = undefined
+encodeFrame wbuf (NewConnectionID _ _ _ _) = do
+    write8 wbuf 0x18
+    undefined
+encodeFrame wbuf (ConnectionCloseQUIC errcode ftyp reason) = do
+    write8 wbuf 0x1c
+    encodeInt' wbuf $ fromIntegral errcode
+    encodeInt' wbuf $ fromIntegral ftyp
+    encodeInt' wbuf $ fromIntegral $ B.length reason
+    copyByteString wbuf reason
+encodeFrame wbuf (ConnectionCloseApp errcode reason) = do
+    write8 wbuf 0x1d
+    encodeInt' wbuf $ fromIntegral errcode
+    encodeInt' wbuf $ fromIntegral $ B.length reason
+    copyByteString wbuf reason
 
 ----------------------------------------------------------------
 
@@ -52,8 +66,8 @@ decodeFrames bs = withReadBuffer bs $ loop id
 
 decodeFrame :: ReadBuffer -> IO Frame
 decodeFrame rbuf = do
-    b0 <- read8 rbuf
-    case b0 of
+    ftyp <- fromIntegral <$> decodeInt' rbuf
+    case ftyp :: FrameType of
       0x00 -> return Padding
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
@@ -65,8 +79,8 @@ decodeFrame rbuf = do
                   fin = testBit x 1
               decodeStreamFrame rbuf off len fin
       0x18 -> decodeNewConnectionID rbuf
-      0x1c -> decodeConnectionCloseFrame rbuf -- QUIC layer error
-      0x1d -> decodeConnectionCloseFrame rbuf -- Application layer error
+      0x1c -> decodeConnectionCloseFrameQUIC rbuf
+      0x1d -> decodeConnectionCloseFrameApp rbuf
       _x   -> error $ show _x
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
@@ -106,12 +120,20 @@ decodeStreamFrame rbuf hasOff hasLen fin = do
              extractByteString rbuf len
     return $ Stream sID off dat fin
 
-decodeConnectionCloseFrame  :: ReadBuffer -> IO Frame
-decodeConnectionCloseFrame rbuf = do
+decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
+decodeConnectionCloseFrameQUIC rbuf = do
+    errcode <- fromIntegral <$> decodeInt' rbuf
+    ftyp    <- fromIntegral <$> decodeInt' rbuf
+    len     <- fromIntegral <$> decodeInt' rbuf
+    reason <- extractByteString rbuf len
+    return $ ConnectionCloseQUIC errcode ftyp reason
+
+decodeConnectionCloseFrameApp  :: ReadBuffer -> IO Frame
+decodeConnectionCloseFrameApp rbuf = do
     errcode <- fromIntegral <$> decodeInt' rbuf
     len <- fromIntegral <$> decodeInt' rbuf
     reason <- extractByteString rbuf len
-    return $ ConnectionClose errcode reason
+    return $ ConnectionCloseApp errcode reason
 
 decodeNewConnectionID :: ReadBuffer -> IO Frame
 decodeNewConnectionID rbuf = do

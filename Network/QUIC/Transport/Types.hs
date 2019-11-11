@@ -52,6 +52,7 @@ type CryptoData = ByteString
 type StreamData = ByteString
 type Fin = Bool
 type ErrorCode = Int
+type FrameType = Int
 
 data Frame = Padding
            | Ping
@@ -60,7 +61,8 @@ data Frame = Padding
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
            | NewConnectionID Int Int CID ByteString
-           | ConnectionClose ErrorCode ByteString
+           | ConnectionCloseQUIC ErrorCode FrameType ByteString
+           | ConnectionCloseApp  ErrorCode ByteString
            deriving (Eq,Show)
 
 data EncryptionLevel = InitialLevel
