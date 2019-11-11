@@ -86,6 +86,7 @@ defaultPhaseState = PhaseState [] 0
 
 data Segment = S StreamID ByteString
              | H PacketType ByteString
+             deriving Show
 
 type InputQ  = TQueue Segment
 type OutputQ = TQueue Segment
