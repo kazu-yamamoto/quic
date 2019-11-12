@@ -270,6 +270,11 @@ setPeerParameters Context{..} plist = do
 setNegotiatedProto :: Context -> Maybe ByteString -> IO ()
 setNegotiatedProto Context{..} malpn = writeIORef negotiatedProto malpn
 
+clearController :: Context -> IO ()
+clearController ctx = case role ctx of
+  Client ref -> writeIORef ref ControllerDone
+  Server ref -> writeIORef ref ControllerDone
+
 tlsClientController :: Context -> IO ClientController
 tlsClientController ctx = case role ctx of
   Client ref -> do
@@ -280,8 +285,10 @@ tlsClientController ctx = case role ctx of
             writeIORef ref $ ControllerRunning controller
             return controller
         ControllerRunning controller -> return controller
-        ControllerDone -> return $ \_ -> return ClientHandshakeDone
-  _ -> error "tlsClientController"
+        ControllerDone -> return nullController
+  _ -> return nullController
+  where
+    nullController _ = return ClientHandshakeDone
 
 tlsServerController :: Context -> IO ServerController
 tlsServerController ctx = case role ctx of
@@ -293,8 +300,10 @@ tlsServerController ctx = case role ctx of
             writeIORef ref $ ControllerRunning controller
             return controller
         ControllerRunning controller -> return controller
-        ControllerDone -> return $ \_ -> return ServerHandshakeDone
-  _ -> error "tlsServerController"
+        ControllerDone -> return nullController
+  _ -> return nullController
+  where
+    nullController _ = return ServerHandshakeDone
 
 setPeerCID :: Context -> CID -> IO ()
 setPeerCID Context{..} pcid = writeIORef peerCID pcid

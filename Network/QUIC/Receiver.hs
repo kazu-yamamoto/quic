@@ -4,6 +4,7 @@
 module Network.QUIC.Receiver where
 
 import Control.Concurrent.STM
+import Network.TLS.QUIC
 
 import Network.QUIC.Context
 import Network.QUIC.Imports
@@ -57,7 +58,12 @@ processFrame ctx pt (Crypto _off cdat) = do
     case pt of
       Initial   -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
       Handshake -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
-      Short     -> putStrLn "FIXME: processFrame Short:Crypto (new session ticket)"
+      Short     -> when (isClient ctx) $ do
+          -- fixme: checkint key phase
+          control <- tlsClientController ctx
+          RecvSessionTicket <- control $ PutSessionTicket cdat
+          ClientHandshakeDone <- control ExitClient
+          clearController ctx
       _         -> error "processFrame"
 processFrame _ _ NewToken{} =
     putStrLn "FIXME: NewToken"
