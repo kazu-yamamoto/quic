@@ -110,7 +110,7 @@ defaultPhaseState = PhaseState [] 0
 data Segment = S StreamID ByteString
              | H PacketType ByteString
              | C PacketType [Frame]
-             | E QUICError
+             | E TransportError
              deriving Show
 
 type InputQ  = TQueue Segment

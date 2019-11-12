@@ -61,8 +61,8 @@ data Frame = Padding
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
            | NewConnectionID Int Int CID ByteString
-           | ConnectionCloseQUIC QUICError FrameType ByteString
-           | ConnectionCloseApp  QUICError ByteString
+           | ConnectionCloseQUIC TransportError FrameType ByteString
+           | ConnectionCloseApp  TransportError ByteString
            deriving (Eq,Show)
 
 data EncryptionLevel = InitialLevel

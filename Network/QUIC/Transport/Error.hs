@@ -5,50 +5,50 @@ import Network.TLS.QUIC
 
 type ErrorCode = Int
 
-data QUICError = NoError
-               | InternalError
-               | ServerBusy
-               | FlowControlError
-               | StreamLimitError
-               | StreamStateError
-               | FinalSizeError
-               | FrameEncodingError
-               | TransportParameterError
-               | ProtocolViolation
-               | CryptoBufferExceeded
-               | CryptoError TLS.AlertDescription
-               | UnknownError Int
-               deriving (Eq,Show)
+data TransportError = NoError
+                    | InternalError
+                    | ServerBusy
+                    | FlowControlError
+                    | StreamLimitError
+                    | StreamStateError
+                    | FinalSizeError
+                    | FrameEncodingError
+                    | TransportParameterError
+                    | ProtocolViolation
+                    | CryptoBufferExceeded
+                    | CryptoError TLS.AlertDescription
+                    | UnknownError Int
+                    deriving (Eq,Show)
 
-fromQUICError :: QUICError -> ErrorCode
-fromQUICError NoError                 = 0x0
-fromQUICError InternalError           = 0x1
-fromQUICError ServerBusy              = 0x2
-fromQUICError FlowControlError        = 0x3
-fromQUICError StreamLimitError        = 0x4
-fromQUICError StreamStateError        = 0x5
-fromQUICError FinalSizeError          = 0x6
-fromQUICError FrameEncodingError      = 0x7
-fromQUICError TransportParameterError = 0x8
-fromQUICError ProtocolViolation       = 0x9
-fromQUICError CryptoBufferExceeded    = 0xa
-fromQUICError (CryptoError desc)      =
+fromTransportError :: TransportError -> ErrorCode
+fromTransportError NoError                 = 0x0
+fromTransportError InternalError           = 0x1
+fromTransportError ServerBusy              = 0x2
+fromTransportError FlowControlError        = 0x3
+fromTransportError StreamLimitError        = 0x4
+fromTransportError StreamStateError        = 0x5
+fromTransportError FinalSizeError          = 0x6
+fromTransportError FrameEncodingError      = 0x7
+fromTransportError TransportParameterError = 0x8
+fromTransportError ProtocolViolation       = 0x9
+fromTransportError CryptoBufferExceeded    = 0xa
+fromTransportError (CryptoError desc)      =
     0x100 + fromIntegral (fromAlertDescription desc)
-fromQUICError (UnknownError n)        = n
+fromTransportError (UnknownError n)        = n
 
-toQUICError :: ErrorCode -> QUICError
-toQUICError 0x0 = NoError
-toQUICError 0x1 = InternalError
-toQUICError 0x2 = ServerBusy
-toQUICError 0x3 = FlowControlError
-toQUICError 0x4 = StreamLimitError
-toQUICError 0x5 = StreamStateError
-toQUICError 0x6 = FinalSizeError
-toQUICError 0x7 = FrameEncodingError
-toQUICError 0x8 = TransportParameterError
-toQUICError 0x9 = ProtocolViolation
-toQUICError 0xa = CryptoBufferExceeded
-toQUICError n
+toTransportError :: ErrorCode -> TransportError
+toTransportError 0x0 = NoError
+toTransportError 0x1 = InternalError
+toTransportError 0x2 = ServerBusy
+toTransportError 0x3 = FlowControlError
+toTransportError 0x4 = StreamLimitError
+toTransportError 0x5 = StreamStateError
+toTransportError 0x6 = FinalSizeError
+toTransportError 0x7 = FrameEncodingError
+toTransportError 0x8 = TransportParameterError
+toTransportError 0x9 = ProtocolViolation
+toTransportError 0xa = CryptoBufferExceeded
+toTransportError n
   | 0x100 <= n && n <= 0x1ff = case mdesc of
       Nothing   -> UnknownError n
       Just desc -> CryptoError desc

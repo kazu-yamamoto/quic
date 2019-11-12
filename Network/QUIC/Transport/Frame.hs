@@ -42,13 +42,13 @@ encodeFrame wbuf (NewConnectionID _ _ _ _) = do
     undefined
 encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
     write8 wbuf 0x1c
-    encodeInt' wbuf $ fromIntegral $ fromQUICError err
+    encodeInt' wbuf $ fromIntegral $ fromTransportError err
     encodeInt' wbuf $ fromIntegral ftyp
     encodeInt' wbuf $ fromIntegral $ B.length reason
     copyByteString wbuf reason
 encodeFrame wbuf (ConnectionCloseApp err reason) = do
     write8 wbuf 0x1d
-    encodeInt' wbuf $ fromIntegral $ fromQUICError err
+    encodeInt' wbuf $ fromIntegral $ fromTransportError err
     encodeInt' wbuf $ fromIntegral $ B.length reason
     copyByteString wbuf reason
 
@@ -123,7 +123,7 @@ decodeStreamFrame rbuf hasOff hasLen fin = do
 
 decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameQUIC rbuf = do
-    err    <- toQUICError . fromIntegral <$> decodeInt' rbuf
+    err    <- toTransportError . fromIntegral <$> decodeInt' rbuf
     ftyp   <- fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractByteString rbuf len
@@ -131,7 +131,7 @@ decodeConnectionCloseFrameQUIC rbuf = do
 
 decodeConnectionCloseFrameApp  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameApp rbuf = do
-    err    <- toQUICError . fromIntegral <$> decodeInt' rbuf
+    err    <- toTransportError . fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractByteString rbuf len
     return $ ConnectionCloseApp err reason
