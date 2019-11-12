@@ -6,8 +6,10 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Data.ByteString hiding (putStrLn)
 import Network.TLS.QUIC
+import System.Timeout
 
 import Network.QUIC.Context
+import Network.QUIC.Imports
 import Network.QUIC.Receiver
 import Network.QUIC.Sender
 import Network.QUIC.Transport
@@ -22,19 +24,23 @@ recvCryptoData ctx = do
 
 handshake :: Context -> IO ()
 handshake ctx = do
-    _ <- forkIO $ sender ctx
-    _ <- forkIO $ receiver ctx
+    tid0 <- forkIO $ sender ctx
+    tid1 <- forkIO $ receiver ctx
+    setThreadIds ctx [tid0,tid1]
     if isClient ctx then
         handshakeClient ctx
       else
         handshakeServer ctx
+    setConnectionStatus ctx Open
 
 bye :: Context -> IO ()
 bye ctx = do
-    let frames = [ConnectionCloseApp NoError ""]
+    setConnectionStatus ctx Closing
+    let frames = [ConnectionCloseQUIC NoError 0 ""]
     atomically $ writeTQueue (outputQ ctx) $ C Short frames
     setCloseSent ctx
-    waitClosed ctx -- fixme: timeout
+    void $ timeout 100000 $ waitClosed ctx -- fixme: timeout
+    clearThreads ctx
 
 ----------------------------------------------------------------
 

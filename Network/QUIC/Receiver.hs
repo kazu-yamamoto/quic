@@ -72,6 +72,7 @@ processFrame _ _ NewConnectionID{} =
     putStrLn "FIXME: NewConnectionID"
 processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
     putStrLn $ "QUIC: " ++ show err
+    setConnectionStatus ctx Closing
     setCloseReceived ctx
     sent <- isCloseSent ctx
     let frames
@@ -82,6 +83,7 @@ processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
     threadDelay 100000 -- fixme
 processFrame ctx pt (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
+    setConnectionStatus ctx Closing
     setCloseReceived ctx
     sent <- isCloseSent ctx
     let frames

@@ -10,7 +10,12 @@ sendData :: Context -> ByteString -> IO ()
 sendData ctx bs = sendData' ctx 0 bs
 
 sendData' :: Context -> StreamID -> ByteString -> IO ()
-sendData' ctx sid bs = atomically $ writeTQueue (outputQ ctx) $ S sid bs
+sendData' ctx sid bs = do
+    open <- isConnectionOpen ctx
+    if open then
+        atomically $ writeTQueue (outputQ ctx) $ S sid bs
+      else
+        error "Not open"
 
 recvData :: Context -> IO ByteString
 recvData ctx = do

@@ -3,12 +3,14 @@
 
 module Network.QUIC.Context where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import Crypto.Random (getRandomBytes)
 import Data.IORef
 import Network.TLS (HostName)
 import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
+import System.Mem.Weak
 
 import Network.QUIC.Imports
 import Network.QUIC.TLS
@@ -19,6 +21,8 @@ import Network.QUIC.Transport.Types
 data ControllerState a = ControllerMaker (IO a)
                        | ControllerRunning a
                        | ControllerDone
+
+data ConnectionState = NotOpen | Open | Closing deriving (Eq, Show)
 
 data CloseState = CloseState {
     closeSent     :: Bool
@@ -125,6 +129,8 @@ data Context = Context {
   , encryptionLevel  :: TVar EncryptionLevel
   , clientInitial    :: IORef (Maybe ByteString)
   , closeState       :: TVar CloseState -- fixme: stream table
+  , connectionState  :: TVar ConnectionState -- fixme: stream table
+  , threadIds        :: IORef [Weak ThreadId]
   }
 
 newContext :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Context
@@ -145,6 +151,8 @@ newContext rl mid peercid send recv myparam isecs =
         <*> newTVarIO InitialLevel
         <*> newIORef Nothing
         <*> newTVarIO (CloseState False False)
+        <*> newTVarIO NotOpen
+        <*> newIORef []
 
 clientContext :: ClientConfig -> IO Context
 clientContext ClientConfig{..} = do
@@ -344,3 +352,28 @@ waitClosed :: Context -> IO ()
 waitClosed ctx = atomically $ do
     cs <- readTVar (closeState ctx)
     check (cs == CloseState True True)
+
+setConnectionStatus :: Context -> ConnectionState -> IO ()
+setConnectionStatus ctx st = atomically (writeTVar (connectionState ctx) st)
+
+isConnectionOpen :: Context -> IO Bool
+isConnectionOpen ctx = atomically $ do
+    st <- readTVar (connectionState ctx)
+    return $ st == Open
+
+setThreadIds :: Context -> [ThreadId] -> IO ()
+setThreadIds ctx tids = do
+    wtids <- mapM mkWeakThreadId tids
+    writeIORef (threadIds ctx) wtids
+
+clearThreads :: Context -> IO ()
+clearThreads ctx = do
+    wtids <- readIORef (threadIds ctx)
+    mapM_ kill wtids
+    writeIORef (threadIds ctx) []
+  where
+    kill wtid = do
+        mtid <- deRefWeak wtid
+        case mtid of
+          Nothing  -> return ()
+          Just tid -> killThread tid
