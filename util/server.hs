@@ -2,6 +2,7 @@
 
 module Main where
 
+import qualified Control.Exception as E
 import Control.Monad (void)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
@@ -17,8 +18,18 @@ main = do
     runUDPServerFork ["127.0.0.1","::1"] port $ \s bs0 -> quicServer s bs0 cert key
 
 quicServer :: Socket -> ByteString -> FilePath -> FilePath -> IO ()
-quicServer s bs0 cert key = do
-    let conf = defaultServerConfig {
+quicServer s bs0 cert key =
+    E.bracket (handshake conf) bye server
+  where
+    server ctx = do
+        bs <- recvData ctx
+        if bs == "" then
+            putStrLn "Stream finished"
+          else do
+            C8.putStr bs
+            sendData ctx "<html><body>Hello world!</body></html>"
+            server ctx
+    conf = defaultServerConfig {
             scVersion    = Draft23
           , scKey        = key
           , scCert       = cert
@@ -28,19 +39,3 @@ quicServer s bs0 cert key = do
           , scClientIni  = bs0
           , scALPN       = Just (\_ -> return "hq-23")
           }
-    mctx <- serverContext conf
-    case mctx of
-      Nothing -> putStrLn "Client Initial is broken"
-      Just ctx -> do
-          handshake ctx
-          loop ctx
-  where
-    loop ctx = do
-        bs <- recvData ctx
-        if bs == "" then do
-            putStrLn "Stream finished"
-            bye ctx
-          else do
-            C8.putStr bs
-            sendData ctx "<html><body>Hello world!</body></html>"
-            loop ctx
