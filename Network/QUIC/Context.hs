@@ -176,8 +176,8 @@ setApplicationSecrets ctx secs = do
 
 isClient :: Context -> Bool
 isClient ctx = case role ctx of
-                 Client _ -> True
-                 Server _ -> False
+                 Client{} -> True
+                 Server{} -> False
 
 ----------------------------------------------------------------
 
