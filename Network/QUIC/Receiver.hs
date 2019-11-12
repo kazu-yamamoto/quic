@@ -71,7 +71,10 @@ processFrame _ _ NewToken{} =
 processFrame _ _ NewConnectionID{} =
     putStrLn "FIXME: NewConnectionID"
 processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
-    putStrLn $ "QUIC: " ++ show err
+    case pt of
+      Initial   -> atomically $ writeTQueue (inputQ ctx) $ E err
+      Handshake -> atomically $ writeTQueue (inputQ ctx) $ E err
+      _         -> return ()
     setConnectionStatus ctx Closing
     setCloseReceived ctx
     sent <- isCloseSent ctx

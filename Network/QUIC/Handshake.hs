@@ -19,8 +19,11 @@ sendCryptoData ctx pt bs = atomically $ writeTQueue (outputQ ctx) $ H pt bs
 
 recvCryptoData :: Context -> IO (PacketType, ByteString)
 recvCryptoData ctx = do
-    H pt bs <- atomically $ readTQueue (inputQ ctx)
-    return (pt, bs)
+    dat <- atomically $ readTQueue (inputQ ctx)
+    case dat of
+      H pt bs -> return (pt, bs)
+      E err   -> error $ show err
+      _       -> error "recvCryptoData"
 
 handshake :: Config a => a -> IO Context
 handshake conf = do

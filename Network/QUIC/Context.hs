@@ -14,6 +14,7 @@ import System.Mem.Weak
 
 import Network.QUIC.Imports
 import Network.QUIC.TLS
+import Network.QUIC.Transport.Error
 import Network.QUIC.Transport.Header
 import Network.QUIC.Transport.Parameters
 import Network.QUIC.Transport.Types
@@ -109,6 +110,7 @@ defaultPhaseState = PhaseState [] 0
 data Segment = S StreamID ByteString
              | H PacketType ByteString
              | C PacketType [Frame]
+             | E QUICError
              deriving Show
 
 type InputQ  = TQueue Segment

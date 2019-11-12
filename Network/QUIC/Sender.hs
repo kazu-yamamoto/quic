@@ -108,3 +108,4 @@ sender ctx = loop
           S sid dat -> do
               bs <- construct ctx Short [Stream sid 0 dat True] -- fixme: off
               ctxSend ctx bs
+          _ -> return ()
