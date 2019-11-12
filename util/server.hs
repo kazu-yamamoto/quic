@@ -37,8 +37,9 @@ quicServer s bs0 cert key = do
   where
     loop ctx = do
         bs <- recvData ctx
-        if bs == "" then
+        if bs == "" then do
             putStrLn "Stream finished"
+            bye ctx
           else do
             C8.putStr bs
             sendData ctx "<html><body>Hello world!</body></html>"

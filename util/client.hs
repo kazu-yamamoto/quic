@@ -38,3 +38,4 @@ quicClient serverName s peerAddr = do
     handshake ctx
     sendData ctx "GET /index.html\r\n"
     recvData ctx >>= C8.putStrLn
+    bye ctx
