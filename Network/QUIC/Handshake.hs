@@ -103,6 +103,8 @@ handshakeServer ctx = do
     (Handshake, cf) <- recvCryptoData ctx
     SendSessionTicket nst <- control $ PutClientFinished cf
     sendCryptoData ctx Short nst
+    ServerHandshakeDone <- control ExitServer
+    clearController ctx
 
 setParameters :: Context -> [ExtensionRaw] -> IO ()
 setParameters ctx [ExtensionRaw 0xffa5 params] = do
