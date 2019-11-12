@@ -65,7 +65,7 @@ construct ctx pt frames = do
           else do
             mypn <- getPacketNumber ctx
             let ackFrame = constructAckFrame pns
-                pkt = InitialPacket Draft23 peercid mycid "" mypn [ackFrame]
+                pkt = InitialPacket currentDraft peercid mycid "" mypn [ackFrame]
             Just <$> encodePacket ctx pkt
     constructAckPacket Short peercid = do
         pns <- clearPNs ctx Handshake
@@ -74,7 +74,7 @@ construct ctx pt frames = do
           else do
             mypn <- getPacketNumber ctx
             let ackFrame = constructAckFrame pns
-                pkt = HandshakePacket Draft23 peercid mycid mypn [ackFrame]
+                pkt = HandshakePacket currentDraft peercid mycid mypn [ackFrame]
             Just <$> encodePacket ctx pkt
     constructAckPacket _ _ = return Nothing
     constructTargetPacket peercid = do
@@ -84,9 +84,9 @@ construct ctx pt frames = do
               | pns == [] = frames
               | otherwise = constructAckFrame pns : frames
         let pkt = case pt of
-              Initial   -> InitialPacket   Draft23 peercid mycid "" mypn frames'
-              Handshake -> HandshakePacket Draft23 peercid mycid    mypn frames'
-              Short     -> ShortPacket             peercid          mypn frames'
+              Initial   -> InitialPacket   currentDraft peercid mycid "" mypn frames'
+              Handshake -> HandshakePacket currentDraft peercid mycid    mypn frames'
+              Short     -> ShortPacket                  peercid          mypn frames'
               _         -> error "construct"
         encodePacket ctx pkt
 

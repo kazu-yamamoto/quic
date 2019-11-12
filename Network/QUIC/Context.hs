@@ -36,7 +36,7 @@ data ClientConfig = ClientConfig {
 
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
-    ccVersion    = Draft23
+    ccVersion    = currentDraft
   , ccServerName = "127.0.0.1"
   , ccPeerCID    = Nothing
   , ccMyCID      = Nothing
@@ -62,7 +62,7 @@ data ServerConfig = ServerConfig {
 
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scVersion    = Draft23
+    scVersion    = currentDraft
   , scKey        = "serverkey.pem"
   , scCert       = "servercert.pem"
   , scSend       = \_ -> return ()
