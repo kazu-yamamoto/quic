@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Network.QUIC.Handshake where
 
 import Control.Concurrent
@@ -26,6 +28,13 @@ handshake ctx = do
         handshakeClient ctx
       else
         handshakeServer ctx
+
+bye :: Context -> IO ()
+bye ctx = do
+    let frames = [ConnectionCloseApp NoError ""]
+    atomically $ writeTQueue (outputQ ctx) $ C Short frames
+    setCloseSent ctx
+    waitClosed ctx -- fixme: timeout
 
 ----------------------------------------------------------------
 

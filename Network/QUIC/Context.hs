@@ -20,6 +20,11 @@ data ControllerState a = ControllerMaker (IO a)
                        | ControllerRunning a
                        | ControllerDone
 
+data CloseState = CloseState {
+    closeSent     :: Bool
+  , closeReceived :: Bool
+  } deriving (Eq, Show)
+
 data Role = Client (IORef (ControllerState ClientController))
           | Server (IORef (ControllerState ServerController))
 
@@ -119,6 +124,7 @@ data Context = Context {
   , applicationState :: IORef PhaseState
   , encryptionLevel  :: TVar EncryptionLevel
   , clientInitial    :: IORef (Maybe ByteString)
+  , closeState       :: TVar CloseState -- fixme: stream table
   }
 
 newContext :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Context
@@ -138,6 +144,7 @@ newContext rl mid peercid send recv myparam isecs =
         <*> newIORef defaultPhaseState
         <*> newTVarIO InitialLevel
         <*> newIORef Nothing
+        <*> newTVarIO (CloseState False False)
 
 clientContext :: ClientConfig -> IO Context
 clientContext ClientConfig{..} = do
@@ -323,3 +330,17 @@ readClearClientInitial Context{..} = do
     mbs <- readIORef clientInitial
     writeIORef clientInitial Nothing
     return mbs
+
+setCloseSent :: Context -> IO ()
+setCloseSent ctx = atomically $ modifyTVar (closeState ctx) (\s -> s { closeSent = True })
+
+setCloseReceived :: Context -> IO ()
+setCloseReceived ctx = atomically $ modifyTVar (closeState ctx) (\s -> s { closeReceived = True })
+
+isCloseSent :: Context -> IO Bool
+isCloseSent ctx = atomically (closeSent <$> readTVar (closeState ctx))
+
+waitClosed :: Context -> IO ()
+waitClosed ctx = atomically $ do
+    cs <- readTVar (closeState ctx)
+    check (cs == CloseState True True)

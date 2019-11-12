@@ -3,6 +3,7 @@
 
 module Network.QUIC.Receiver where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import Network.TLS.QUIC
 
@@ -71,12 +72,24 @@ processFrame _ _ NewConnectionID{} =
     putStrLn "FIXME: NewConnectionID"
 processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
     putStrLn $ "QUIC: " ++ show err
-    let frames = [ConnectionCloseQUIC NoError 0 ""] -- fixme: 0
+    setCloseReceived ctx
+    sent <- isCloseSent ctx
+    let frames
+          | sent      = [] -- for acking
+          | otherwise = [ConnectionCloseApp NoError ""]
+    setCloseSent ctx
     atomically $ writeTQueue (outputQ ctx) $ C pt frames
+    threadDelay 100000 -- fixme
 processFrame ctx pt (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
-    let frames = [ConnectionCloseApp NoError ""]
+    setCloseReceived ctx
+    sent <- isCloseSent ctx
+    let frames
+          | sent      = [] -- for acking
+          | otherwise = [ConnectionCloseApp NoError ""]
+    setCloseSent ctx
     atomically $ writeTQueue (outputQ ctx) $ C pt frames
+    threadDelay 100000 -- fixme
 processFrame ctx Short (Stream sid _off dat fin) = do
     -- fixme _off
     atomically $ writeTQueue (inputQ ctx) $ S sid dat
