@@ -27,11 +27,12 @@ data Version = Negotiation
              | Draft21
              | Draft22
              | Draft23
+             | Draft24
              | UnknownVersion Word32
              deriving (Eq, Show)
 
 currentDraft :: Version
-currentDraft = Draft23
+currentDraft = Draft24
 
 data PacketType = Initial | RTT0 | Handshake | Retry | Short
                 deriving (Eq, Show)
