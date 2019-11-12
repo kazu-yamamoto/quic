@@ -31,10 +31,6 @@ instance Config ServerConfig where
 
 ----------------------------------------------------------------
 
-data ControllerState a = ControllerMaker (IO a)
-                       | ControllerRunning a
-                       | ControllerDone
-
 data ConnectionState = NotOpen | Open | Closing deriving (Eq, Show)
 
 data CloseState = CloseState {
@@ -42,8 +38,8 @@ data CloseState = CloseState {
   , closeReceived :: Bool
   } deriving (Eq, Show)
 
-data Role = Client (IORef (ControllerState ClientController))
-          | Server (IORef (ControllerState ServerController))
+data Role = Client (IORef (Maybe ClientController))
+          | Server (IORef (Maybe ServerController))
 
 type GetHandshake = IO ByteString
 type PutHandshake = ByteString -> IO ()
@@ -170,8 +166,8 @@ newContext rl mid peercid send recv myparam isecs =
 clientContext :: ClientConfig -> IO Context
 clientContext ClientConfig{..} = do
     let params = encodeParametersList $ diffParameters ccParams
-    maker <- clientControllerMaker ccServerName ccCiphers ccALPN params
-    ref <- newIORef (ControllerMaker maker)
+    controller <- clientController ccServerName ccCiphers ccALPN params
+    ref <- newIORef $ Just controller
     mycid <- case ccMyCID of
       Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
       Just cid -> return cid
@@ -184,8 +180,8 @@ clientContext ClientConfig{..} = do
 serverContext :: ServerConfig -> IO Context
 serverContext ServerConfig{..} = do
     let params = encodeParametersList $ diffParameters scParams
-    maker <- serverControllerMaker scKey scCert scALPN params
-    ref <- newIORef (ControllerMaker maker)
+    controller <- serverController scKey scCert scALPN params
+    ref <- newIORef $ Just controller
     mcids <- analyzeLongHeaderPacket scClientIni
     case mcids of
       Nothing -> error "serverContext" -- fixme
@@ -300,20 +296,16 @@ setNegotiatedProto Context{..} malpn = writeIORef negotiatedProto malpn
 
 clearController :: Context -> IO ()
 clearController ctx = case role ctx of
-  Client ref -> writeIORef ref ControllerDone
-  Server ref -> writeIORef ref ControllerDone
+  Client ref -> writeIORef ref Nothing
+  Server ref -> writeIORef ref Nothing
 
 tlsClientController :: Context -> IO ClientController
 tlsClientController ctx = case role ctx of
   Client ref -> do
       mc <- readIORef ref
       case mc of
-        ControllerMaker maker -> do
-            controller <- maker
-            writeIORef ref $ ControllerRunning controller
-            return controller
-        ControllerRunning controller -> return controller
-        ControllerDone -> return nullController
+        Nothing         -> return nullController
+        Just controller -> return controller
   _ -> return nullController
   where
     nullController _ = return ClientHandshakeDone
@@ -323,12 +315,8 @@ tlsServerController ctx = case role ctx of
   Server ref -> do
       mc <- readIORef ref
       case mc of
-        ControllerMaker maker -> do
-            controller <- maker
-            writeIORef ref $ ControllerRunning controller
-            return controller
-        ControllerRunning controller -> return controller
-        ControllerDone -> return nullController
+        Nothing         -> return nullController
+        Just controller -> return controller
   _ -> return nullController
   where
     nullController _ = return ServerHandshakeDone
