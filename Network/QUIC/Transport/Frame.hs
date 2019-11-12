@@ -3,8 +3,9 @@ module Network.QUIC.Transport.Frame where
 import qualified Data.ByteString as B
 
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Types
+import Network.QUIC.Transport.Error
 import Network.QUIC.Transport.Integer
+import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
 
@@ -39,15 +40,15 @@ encodeFrame wbuf (Stream sid _off dat _fin) = do
 encodeFrame wbuf (NewConnectionID _ _ _ _) = do
     write8 wbuf 0x18
     undefined
-encodeFrame wbuf (ConnectionCloseQUIC errcode ftyp reason) = do
+encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
     write8 wbuf 0x1c
-    encodeInt' wbuf $ fromIntegral errcode
+    encodeInt' wbuf $ fromIntegral $ fromQUICError err
     encodeInt' wbuf $ fromIntegral ftyp
     encodeInt' wbuf $ fromIntegral $ B.length reason
     copyByteString wbuf reason
-encodeFrame wbuf (ConnectionCloseApp errcode reason) = do
+encodeFrame wbuf (ConnectionCloseApp err reason) = do
     write8 wbuf 0x1d
-    encodeInt' wbuf $ fromIntegral errcode
+    encodeInt' wbuf $ fromIntegral $ fromQUICError err
     encodeInt' wbuf $ fromIntegral $ B.length reason
     copyByteString wbuf reason
 
@@ -122,18 +123,18 @@ decodeStreamFrame rbuf hasOff hasLen fin = do
 
 decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameQUIC rbuf = do
-    errcode <- fromIntegral <$> decodeInt' rbuf
-    ftyp    <- fromIntegral <$> decodeInt' rbuf
-    len     <- fromIntegral <$> decodeInt' rbuf
+    err    <- toQUICError . fromIntegral <$> decodeInt' rbuf
+    ftyp   <- fromIntegral <$> decodeInt' rbuf
+    len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractByteString rbuf len
-    return $ ConnectionCloseQUIC errcode ftyp reason
+    return $ ConnectionCloseQUIC err ftyp reason
 
 decodeConnectionCloseFrameApp  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameApp rbuf = do
-    errcode <- fromIntegral <$> decodeInt' rbuf
-    len <- fromIntegral <$> decodeInt' rbuf
+    err    <- toQUICError . fromIntegral <$> decodeInt' rbuf
+    len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractByteString rbuf len
-    return $ ConnectionCloseApp errcode reason
+    return $ ConnectionCloseApp err reason
 
 decodeNewConnectionID :: ReadBuffer -> IO Frame
 decodeNewConnectionID rbuf = do

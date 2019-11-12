@@ -3,6 +3,7 @@ module Network.QUIC.Transport.Types where
 import qualified Data.ByteString.Char8 as C8
 
 import Network.QUIC.Imports
+import Network.QUIC.Transport.Error
 
 type Length = Int
 type PacketNumber = Int64
@@ -51,7 +52,6 @@ type Gap   = Int
 type CryptoData = ByteString
 type StreamData = ByteString
 type Fin = Bool
-type ErrorCode = Int
 type FrameType = Int
 
 data Frame = Padding
@@ -61,8 +61,8 @@ data Frame = Padding
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
            | NewConnectionID Int Int CID ByteString
-           | ConnectionCloseQUIC ErrorCode FrameType ByteString
-           | ConnectionCloseApp  ErrorCode ByteString
+           | ConnectionCloseQUIC QUICError FrameType ByteString
+           | ConnectionCloseApp  QUICError ByteString
            deriving (Eq,Show)
 
 data EncryptionLevel = InitialLevel

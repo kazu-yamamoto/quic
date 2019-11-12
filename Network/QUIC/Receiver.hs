@@ -69,13 +69,13 @@ processFrame _ _ NewToken{} =
     putStrLn "FIXME: NewToken"
 processFrame _ _ NewConnectionID{} =
     putStrLn "FIXME: NewConnectionID"
-processFrame ctx pt (ConnectionCloseQUIC _errcode _ftyp _reason) = do
-    putStrLn $ "QUIC: " ++ show (toQUICError _errcode)
-    let frames = [ConnectionCloseQUIC 0 0 ""] -- fixme: 0
+processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
+    putStrLn $ "QUIC: " ++ show err
+    let frames = [ConnectionCloseQUIC NoError 0 ""] -- fixme: 0
     atomically $ writeTQueue (outputQ ctx) $ C pt frames
-processFrame ctx pt (ConnectionCloseApp _errcode _reason) = do
-    putStrLn $ "App: " ++ show (toQUICError _errcode)
-    let frames = [ConnectionCloseApp 0 ""] -- fixme: 0
+processFrame ctx pt (ConnectionCloseApp err _reason) = do
+    putStrLn $ "App: " ++ show err
+    let frames = [ConnectionCloseApp NoError ""]
     atomically $ writeTQueue (outputQ ctx) $ C pt frames
 processFrame ctx Short (Stream sid _off dat fin) = do
     -- fixme _off

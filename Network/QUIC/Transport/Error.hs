@@ -3,7 +3,7 @@ module Network.QUIC.Transport.Error where
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
-import Network.QUIC.Transport.Types
+type ErrorCode = Int
 
 data QUICError = NoError
                | InternalError
