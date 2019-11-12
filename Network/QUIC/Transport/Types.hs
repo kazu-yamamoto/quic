@@ -1,7 +1,10 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Network.QUIC.Transport.Types where
 
 import qualified Data.ByteString.Char8 as C8
 
+import qualified Control.Exception as E
 import Network.QUIC.Imports
 import Network.QUIC.Transport.Error
 
@@ -69,3 +72,12 @@ data EncryptionLevel = InitialLevel
                      | HandshakeLevel
                      | ApplicationLevel
                      deriving (Eq, Ord, Show)
+
+data QUICError = PacketIsBroken
+               | VersionIsUnknown Version
+               | HandshakeRejectedByPeer TransportError
+               | ConnectionIsNotOpen
+               | HandshakeFailed String
+               deriving (Eq, Show)
+
+instance E.Exception QUICError

@@ -5,6 +5,7 @@ module Network.QUIC.Context where
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import Control.Exception as E
 import Crypto.Random (getRandomBytes)
 import Data.IORef
 import Network.TLS (HostName)
@@ -186,7 +187,7 @@ serverContext ServerConfig{..} = do
     ref <- newIORef $ Just controller
     mcids <- analyzeLongHeaderPacket scClientIni
     case mcids of
-      Nothing -> error "serverContext" -- fixme
+      Nothing -> E.throwIO PacketIsBroken
       Just (mycid, peercid) -> do
           let isecs = initialSecrets scVersion mycid
           ctx <- newContext (Server ref) mycid peercid scSend scRecv scParams isecs

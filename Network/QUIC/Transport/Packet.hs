@@ -3,6 +3,7 @@
 
 module Network.QUIC.Transport.Packet where
 
+import qualified Control.Exception as E
 import qualified Data.ByteString as B
 import Foreign.Ptr
 
@@ -263,9 +264,9 @@ decodeLongHeaderPacket ctx rbuf proFlags = do
     scIDlen <- fromIntegral <$> read8 rbuf
     scID <- CID <$> extractByteString rbuf scIDlen
     case version of
-      Negotiation      -> decodeVersionNegotiationPacket rbuf dcID scID
-      UnknownVersion v -> error $ "unknown version " ++ show v
-      _DraftXX         -> decodeDraft ctx rbuf proFlags version dcID scID
+      Negotiation          -> decodeVersionNegotiationPacket rbuf dcID scID
+      v@(UnknownVersion _) -> E.throwIO $ VersionIsUnknown v
+      _DraftXX             -> decodeDraft ctx rbuf proFlags version dcID scID
 
 decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do

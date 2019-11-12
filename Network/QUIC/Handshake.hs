@@ -4,6 +4,7 @@ module Network.QUIC.Handshake where
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import Data.ByteString hiding (putStrLn)
 import Network.TLS.QUIC
 import System.Timeout
@@ -22,7 +23,7 @@ recvCryptoData ctx = do
     dat <- atomically $ readTQueue (inputQ ctx)
     case dat of
       H pt bs -> return (pt, bs)
-      E err   -> error $ show err
+      E err   -> E.throwIO $ HandshakeRejectedByPeer err
       _       -> error "recvCryptoData"
 
 handshake :: Config a => a -> IO Context
@@ -32,7 +33,7 @@ handshake conf = do
     tid1 <- forkIO $ receiver ctx
     setThreadIds ctx [tid0,tid1]
     if isClient ctx then
-        handshakeClient ctx
+        handshakeClient ctx -- fixme: TLSError
       else
         handshakeServer ctx
     setConnectionStatus ctx Open
@@ -73,8 +74,8 @@ sendClientHelloAndRecvServerHello ctx = do
             RecvServerHello cipher hndSecs -> do
                 setHandshakeSecrets ctx hndSecs
                 setCipher ctx cipher
-            _ -> error "sendClientHelloAndRecvServerHello"
-      _ -> error "sendClientHelloAndRecvServerHello"
+            _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
+      _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
 
 recvServerFinishedSendClientFinished :: Context -> IO ()
 recvServerFinishedSendClientFinished ctx = loop
@@ -91,7 +92,7 @@ recvServerFinishedSendClientFinished ctx = loop
               setParameters ctx exts
               setApplicationSecrets ctx appSecs
               sendCryptoData ctx Handshake cf
-          _ -> error "putServerFinished"
+          _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
 ----------------------------------------------------------------
 
@@ -114,7 +115,7 @@ handshakeServer ctx = do
           setCipher ctx cipher
           setParameters ctx exts
           return sh0
-      _ -> error "handshakeServer"
+      _ -> E.throwIO $ HandshakeFailed "handshakeServer"
     sendCryptoData ctx Initial sh
     SendServerFinished sf alpn appSecs <- control GetServerFinished
     setNegotiatedProto ctx alpn

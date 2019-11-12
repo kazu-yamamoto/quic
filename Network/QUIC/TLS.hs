@@ -39,6 +39,7 @@ module Network.QUIC.TLS (
   , ServerTrafficSecret(..)
   ) where
 
+import qualified Control.Exception as E
 import Crypto.Cipher.AES
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError)
@@ -103,7 +104,7 @@ initialSalt Draft22 = "\x7f\xbc\xdb\x0e\x7c\x66\xbb\xe9\x19\x3a\x96\xcd\x21\x51\
 -- "c3eef712c72ebb5a11a7d2432bb46365bef9f502"
 initialSalt Draft23 = "\xc3\xee\xf7\x12\xc7\x2e\xbb\x5a\x11\xa7\xd2\x43\x2b\xb4\x63\x65\xbe\xf9\xf5\x02"
 initialSalt Draft24 = "\xc3\xee\xf7\x12\xc7\x2e\xbb\x5a\x11\xa7\xd2\x43\x2b\xb4\x63\x65\xbe\xf9\xf5\x02"
-initialSalt _       = error "initialSalt"
+initialSalt v       = E.throw $ VersionIsUnknown v
 
 data InitialSecret
 

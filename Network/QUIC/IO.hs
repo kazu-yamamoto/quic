@@ -1,5 +1,6 @@
 module Network.QUIC.IO where
 
+import qualified Control.Exception as E
 import Control.Concurrent.STM
 
 import Network.QUIC.Context
@@ -15,7 +16,7 @@ sendData' ctx sid bs = do
     if open then
         atomically $ writeTQueue (outputQ ctx) $ S sid bs
       else
-        error "Not open"
+        E.throwIO ConnectionIsNotOpen
 
 recvData :: Context -> IO ByteString
 recvData ctx = do
