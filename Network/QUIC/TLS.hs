@@ -3,8 +3,8 @@
 
 module Network.QUIC.TLS (
   -- * TLS
-    tlsClientController
-  , tlsServerController
+    clientControllerMaker
+  , serverControllerMaker
   -- * Payload encryption
   , defaultCipher
   , initialSecrets
@@ -259,11 +259,11 @@ bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
 
 ----------------------------------------------------------------
 
-tlsClientController :: String -> [Cipher]
-                    -> IO (Maybe [ByteString]) -> ByteString
-                    -> IO ClientController
-tlsClientController serverName ciphers suggestALPN quicParams =
-    newQUICClient cparams
+clientControllerMaker :: String -> [Cipher]
+                      -> IO (Maybe [ByteString]) -> ByteString
+                      -> IO (IO ClientController)
+clientControllerMaker serverName ciphers suggestALPN quicParams =
+    newQUICClientMaker cparams
   where
     cparams = (defaultParamsClient serverName "") {
         clientDebug     = debug
@@ -287,11 +287,11 @@ tlsClientController serverName ciphers suggestALPN quicParams =
       , supportedCiphers  = ciphers
       }
 
-tlsServerController :: FilePath -> FilePath
-                    -> Maybe ([ByteString] -> IO ByteString)
-                    -> ByteString
-                    -> IO ServerController
-tlsServerController key cert selectALPN quicParams = do
+serverControllerMaker :: FilePath -> FilePath
+                      -> Maybe ([ByteString] -> IO ByteString)
+                      -> ByteString
+                      -> IO (IO ServerController)
+serverControllerMaker key cert selectALPN quicParams = do
     Right cred <- credentialLoadX509 cert key
     let sshared = def {
             sharedCredentials = Credentials [cred]
@@ -303,7 +303,7 @@ tlsServerController key cert selectALPN quicParams = do
       , serverShared    = sshared
       , serverSupported = supported
       }
-    newQUICServer sparams
+    newQUICServerMaker sparams
   where
     supported = def {
         supportedVersions = [TLS13]

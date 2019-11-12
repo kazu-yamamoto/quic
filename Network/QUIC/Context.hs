@@ -16,8 +16,12 @@ import Network.QUIC.Transport.Header
 import Network.QUIC.Transport.Parameters
 import Network.QUIC.Transport.Types
 
-data Role = Client ClientController
-          | Server ServerController
+data ControllerState a = ControllerMaker (IO a)
+                       | ControllerRunning a
+                       | ControllerDone
+
+data Role = Client (IORef (ControllerState ClientController))
+          | Server (IORef (ControllerState ServerController))
 
 type GetHandshake = IO ByteString
 type PutHandshake = ByteString -> IO ()
@@ -138,7 +142,8 @@ newContext rl mid peercid send recv myparam isecs =
 clientContext :: ClientConfig -> IO Context
 clientContext ClientConfig{..} = do
     let params = encodeParametersList $ diffParameters ccParams
-    controller <- tlsClientController ccServerName ccCiphers ccALPN params
+    maker <- clientControllerMaker ccServerName ccCiphers ccALPN params
+    ref <- newIORef (ControllerMaker maker)
     mycid <- case ccMyCID of
       Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
       Just cid -> return cid
@@ -146,18 +151,19 @@ clientContext ClientConfig{..} = do
       Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
       Just cid -> return cid
     let isecs = initialSecrets ccVersion peercid
-    newContext (Client controller) mycid peercid ccSend ccRecv ccParams isecs
+    newContext (Client ref) mycid peercid ccSend ccRecv ccParams isecs
 
 serverContext :: ServerConfig -> IO (Maybe Context)
 serverContext ServerConfig{..} = do
     let params = encodeParametersList $ diffParameters scParams
-    controller <- tlsServerController scKey scCert scALPN params
+    maker <- serverControllerMaker scKey scCert scALPN params
+    ref <- newIORef (ControllerMaker maker)
     mcids <- analyzeLongHeaderPacket scClientIni
     case mcids of
       Nothing -> return Nothing
       Just (mycid, peercid) -> do
           let isecs = initialSecrets scVersion mycid
-          ctx <- newContext (Server controller) mycid peercid scSend scRecv scParams isecs
+          ctx <- newContext (Server ref) mycid peercid scSend scRecv scParams isecs
           writeIORef (clientInitial ctx) (Just scClientIni)
           return $ Just ctx
 
@@ -264,14 +270,30 @@ setPeerParameters Context{..} plist = do
 setNegotiatedProto :: Context -> Maybe ByteString -> IO ()
 setNegotiatedProto Context{..} malpn = writeIORef negotiatedProto malpn
 
-tlsClientControl :: Context -> ClientController
-tlsClientControl ctx = case role ctx of
-  Client controller -> controller
+tlsClientController :: Context -> IO ClientController
+tlsClientController ctx = case role ctx of
+  Client ref -> do
+      mc <- readIORef ref
+      case mc of
+        ControllerMaker maker -> do
+            controller <- maker
+            writeIORef ref $ ControllerRunning controller
+            return controller
+        ControllerRunning controller -> return controller
+        ControllerDone -> return $ \_ -> return ClientHandshakeDone
   _ -> error "tlsClientController"
 
-tlsServerControl :: Context -> ServerController
-tlsServerControl ctx = case role ctx of
-  Server controller -> controller
+tlsServerController :: Context -> IO ServerController
+tlsServerController ctx = case role ctx of
+  Server ref -> do
+      mc <- readIORef ref
+      case mc of
+        ControllerMaker maker -> do
+            controller <- maker
+            writeIORef ref $ ControllerRunning controller
+            return controller
+        ControllerRunning controller -> return controller
+        ControllerDone -> return $ \_ -> return ServerHandshakeDone
   _ -> error "tlsServerController"
 
 setPeerCID :: Context -> CID -> IO ()

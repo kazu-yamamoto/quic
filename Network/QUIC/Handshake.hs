@@ -36,10 +36,11 @@ handshakeClient ctx = do
 
 sendClientHelloAndRecvServerHello :: Context -> IO ()
 sendClientHelloAndRecvServerHello ctx = do
-    SendClientHello ch0 _ <- tlsClientControl ctx $ GetClientHello
+    control <- tlsClientController ctx
+    SendClientHello ch0 _ <- control GetClientHello
     sendCryptoData ctx Initial ch0
     (Initial, sh0) <- recvCryptoData ctx
-    state0 <- tlsClientControl ctx $ PutServerHello sh0
+    state0 <- control $ PutServerHello sh0
     case state0 of
       RecvServerHello cipher hndSecs -> do
           setHandshakeSecrets ctx hndSecs
@@ -47,7 +48,7 @@ sendClientHelloAndRecvServerHello ctx = do
       SendClientHello ch1 _ -> do
           sendCryptoData ctx Initial ch1
           (Initial, sh1) <- recvCryptoData ctx
-          state1 <- tlsClientControl ctx $ PutServerHello sh1
+          state1 <- control $ PutServerHello sh1
           case state1 of
             RecvServerHello cipher hndSecs -> do
                 setHandshakeSecrets ctx hndSecs
@@ -59,8 +60,9 @@ recvServerFinishedSendClientFinished :: Context -> IO ()
 recvServerFinishedSendClientFinished ctx = loop
   where
     loop = do
+        control <- tlsClientController ctx
         (Handshake, eesf) <- recvCryptoData ctx
-        state <- tlsClientControl ctx $ PutServerFinished eesf
+        state <- control $ PutServerFinished eesf
         case state of
           ClientNeedsMore -> do
               loop
@@ -76,12 +78,13 @@ recvServerFinishedSendClientFinished ctx = loop
 handshakeServer :: Context -> IO ()
 handshakeServer ctx = do
     (Initial, ch) <- recvCryptoData ctx
-    state <- tlsServerControl ctx $ PutClientHello ch
+    control <- tlsServerController ctx
+    state <- control $ PutClientHello ch
     sh <- case state of
       SendRequestRetry hrr -> do
           sendCryptoData ctx Initial hrr
           (Initial, ch1) <- recvCryptoData ctx
-          SendServerHello sh0 exts cipher _ hndSecs <- tlsServerControl ctx $ PutClientHello ch1
+          SendServerHello sh0 exts cipher _ hndSecs <- control $ PutClientHello ch1
           setHandshakeSecrets ctx hndSecs
           setCipher ctx cipher
           setParameters ctx exts
@@ -93,12 +96,12 @@ handshakeServer ctx = do
           return sh0
       _ -> error "handshakeServer"
     sendCryptoData ctx Initial sh
-    SendServerFinished sf alpn appSecs <- tlsServerControl ctx GetServerFinished
+    SendServerFinished sf alpn appSecs <- control GetServerFinished
     setNegotiatedProto ctx alpn
     setApplicationSecrets ctx appSecs
     sendCryptoData ctx Handshake sf
     (Handshake, cf) <- recvCryptoData ctx
-    SendSessionTicket nst <- tlsServerControl ctx $ PutClientFinished cf
+    SendSessionTicket nst <- control $ PutClientFinished cf
     sendCryptoData ctx Short nst
 
 setParameters :: Context -> [ExtensionRaw] -> IO ()
