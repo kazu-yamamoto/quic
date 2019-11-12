@@ -18,6 +18,19 @@ import Network.QUIC.Transport.Header
 import Network.QUIC.Transport.Parameters
 import Network.QUIC.Transport.Types
 
+----------------------------------------------------------------
+
+class Config a where
+    makeContext :: a -> IO Context
+
+instance Config ClientConfig where
+    makeContext = clientContext
+
+instance Config ServerConfig where
+    makeContext = serverContext
+
+----------------------------------------------------------------
+
 data ControllerState a = ControllerMaker (IO a)
                        | ControllerRunning a
                        | ControllerDone
@@ -168,19 +181,19 @@ clientContext ClientConfig{..} = do
     let isecs = initialSecrets ccVersion peercid
     newContext (Client ref) mycid peercid ccSend ccRecv ccParams isecs
 
-serverContext :: ServerConfig -> IO (Maybe Context)
+serverContext :: ServerConfig -> IO Context
 serverContext ServerConfig{..} = do
     let params = encodeParametersList $ diffParameters scParams
     maker <- serverControllerMaker scKey scCert scALPN params
     ref <- newIORef (ControllerMaker maker)
     mcids <- analyzeLongHeaderPacket scClientIni
     case mcids of
-      Nothing -> return Nothing
+      Nothing -> error "serverContext" -- fixme
       Just (mycid, peercid) -> do
           let isecs = initialSecrets scVersion mycid
           ctx <- newContext (Server ref) mycid peercid scSend scRecv scParams isecs
           writeIORef (clientInitial ctx) (Just scClientIni)
-          return $ Just ctx
+          return ctx
 
 ----------------------------------------------------------------
 

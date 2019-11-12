@@ -22,8 +22,9 @@ recvCryptoData ctx = do
     H pt bs <- atomically $ readTQueue (inputQ ctx)
     return (pt, bs)
 
-handshake :: Context -> IO ()
-handshake ctx = do
+handshake :: Config a => a -> IO Context
+handshake conf = do
+    ctx <- makeContext conf
     tid0 <- forkIO $ sender ctx
     tid1 <- forkIO $ receiver ctx
     setThreadIds ctx [tid0,tid1]
@@ -32,6 +33,7 @@ handshake ctx = do
       else
         handshakeServer ctx
     setConnectionStatus ctx Open
+    return ctx
 
 bye :: Context -> IO ()
 bye ctx = do
