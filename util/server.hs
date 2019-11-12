@@ -6,11 +6,12 @@ import qualified Control.Exception as E
 import Control.Monad (void)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
-import Network.QUIC
 import Network.Run.UDP
 import Network.Socket hiding (Stream)
 import qualified Network.Socket.ByteString as NSB
 import System.Environment (getArgs)
+
+import Network.QUIC
 
 main :: IO ()
 main = do
