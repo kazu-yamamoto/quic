@@ -27,17 +27,19 @@ recvCryptoData ctx = do
       _       -> error "recvCryptoData"
 
 handshake :: Config a => a -> IO Context
-handshake conf = do
+handshake conf = E.handle tlserr $ do
     ctx <- makeContext conf
     tid0 <- forkIO $ sender ctx
     tid1 <- forkIO $ receiver ctx
     setThreadIds ctx [tid0,tid1]
     if isClient ctx then
-        handshakeClient ctx -- fixme: TLSError
+        handshakeClient ctx
       else
         handshakeServer ctx
     setConnectionStatus ctx Open
     return ctx
+  where
+    tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 
 bye :: Context -> IO ()
 bye ctx = do
