@@ -7,6 +7,9 @@ import qualified Data.ByteString as B
 import Test.Hspec
 
 import Network.QUIC
+import Network.QUIC.Context
+import Network.QUIC.Transport
+import Network.QUIC.Utils
 
 spec :: Spec
 spec = do
@@ -23,7 +26,7 @@ spec = do
                   , scCert  = "test/servercert.pem"
                   , scClientIni = clientInitialPacketBinary
                   }
-            Just sctx <- serverContext serverConf
+            sctx <- serverContext serverConf
             (pkt, _) <- decodePacket sctx clientInitialPacketBinary
             clientInitialPacketBinary' <- encodePacket cctx pkt
             (pkt', _) <- decodePacket sctx clientInitialPacketBinary'
