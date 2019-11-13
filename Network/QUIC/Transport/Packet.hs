@@ -330,7 +330,12 @@ unprotectHeaderPayload rbuf proFlags cipher secret = do
     return (flags, pn, frames)
 
 decodeRetryPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeRetryPacket = undefined
+decodeRetryPacket _ctx rbuf _proFlags version dcID scID = do
+    origIDlen <- fromIntegral <$> read8 rbuf
+    origID <- CID <$> extractByteString rbuf origIDlen
+    siz <- remainingSize rbuf
+    token <- extractByteString rbuf siz
+    return $ RetryPacket version dcID scID origID token
 
 decodeShortHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
 decodeShortHeaderPacket ctx rbuf proFlags = do
