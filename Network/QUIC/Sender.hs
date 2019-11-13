@@ -102,6 +102,10 @@ sender ctx = loop
               frames <- cryptoFrame ctx pt cdat
               bs <- construct ctx pt frames
               ctxSend ctx bs
+          C pt frames -> do
+              bs <- construct ctx pt frames
+              ctxSend ctx bs
           S sid dat -> do
               bs <- construct ctx Short [Stream sid 0 dat True] -- fixme: off
               ctxSend ctx bs
+          _ -> return ()

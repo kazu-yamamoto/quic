@@ -1,8 +1,12 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Network.QUIC.Transport.Types where
 
 import qualified Data.ByteString.Char8 as C8
 
+import qualified Control.Exception as E
 import Network.QUIC.Imports
+import Network.QUIC.Transport.Error
 
 type Length = Int
 type PacketNumber = Int64
@@ -51,7 +55,7 @@ type Gap   = Int
 type CryptoData = ByteString
 type StreamData = ByteString
 type Fin = Bool
-type ErrorCode = Int
+type FrameType = Int
 
 data Frame = Padding
            | Ping
@@ -60,10 +64,20 @@ data Frame = Padding
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
            | NewConnectionID Int Int CID ByteString
-           | ConnectionClose ErrorCode ByteString
+           | ConnectionCloseQUIC TransportError FrameType ByteString
+           | ConnectionCloseApp  TransportError ByteString
            deriving (Eq,Show)
 
 data EncryptionLevel = InitialLevel
                      | HandshakeLevel
                      | ApplicationLevel
                      deriving (Eq, Ord, Show)
+
+data QUICError = PacketIsBroken
+               | VersionIsUnknown Version
+               | HandshakeRejectedByPeer TransportError
+               | ConnectionIsNotOpen
+               | HandshakeFailed String
+               deriving (Eq, Show)
+
+instance E.Exception QUICError

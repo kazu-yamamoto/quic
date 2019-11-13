@@ -21,6 +21,7 @@ library
                        Network.QUIC.Sender
                        Network.QUIC.TLS
                        Network.QUIC.Transport
+                       Network.QUIC.Transport.Error
                        Network.QUIC.Transport.Frame
                        Network.QUIC.Transport.Header
                        Network.QUIC.Transport.Integer

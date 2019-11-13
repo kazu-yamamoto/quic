@@ -8,6 +8,9 @@ import qualified Data.ByteString as B
 import Test.Hspec
 
 import Network.QUIC
+import Network.QUIC.TLS
+import Network.QUIC.Transport
+import Network.QUIC.Utils
 
 ----------------------------------------------------------------
 

@@ -3,8 +3,9 @@
 
 module Network.QUIC.Receiver where
 
+import Control.Concurrent
 import Control.Concurrent.STM
-import qualified Data.ByteString.Char8 as C8
+import Network.TLS.QUIC
 
 import Network.QUIC.Context
 import Network.QUIC.Imports
@@ -52,21 +53,52 @@ processPacket _ _ = undefined
 
 processFrame :: Context -> PacketType -> Frame -> IO ()
 processFrame _ _ Padding = return ()
-processFrame _ _ (ConnectionClose _errcode reason) = do
-    C8.putStrLn reason
-    putStrLn "FIXME: ConnectionClose"
-processFrame ctx Short (Stream sid _off dat fin) = do
-    -- fixme _off
-    atomically $ writeTQueue (inputQ ctx) $ S sid dat
-    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ ctx) $ S sid ""
+processFrame _ _ Ack{} = return ()
 processFrame ctx pt (Crypto _off cdat) = do
     --fixme _off
     case pt of
       Initial   -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
       Handshake -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
-      Short     -> putStrLn "FIXME: processFrame Short (new session ticket)"
+      Short     -> when (isClient ctx) $ do
+          -- fixme: checkint key phase
+          control <- tlsClientController ctx
+          RecvSessionTicket <- control $ PutSessionTicket cdat
+          ClientHandshakeDone <- control ExitClient
+          clearController ctx
       _         -> error "processFrame"
-processFrame _ _ (Ack _ _ _ _) = return ()
+processFrame _ _ NewToken{} =
+    putStrLn "FIXME: NewToken"
+processFrame _ _ NewConnectionID{} =
+    putStrLn "FIXME: NewConnectionID"
+processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
+    case pt of
+      Initial   -> atomically $ writeTQueue (inputQ ctx) $ E err
+      Handshake -> atomically $ writeTQueue (inputQ ctx) $ E err
+      _         -> return ()
+    setConnectionStatus ctx Closing
+    setCloseReceived ctx
+    sent <- isCloseSent ctx
+    let frames
+          | sent      = [] -- for acking
+          | otherwise = [ConnectionCloseApp NoError ""]
+    setCloseSent ctx
+    atomically $ writeTQueue (outputQ ctx) $ C pt frames
+    threadDelay 100000 -- fixme
+processFrame ctx pt (ConnectionCloseApp err _reason) = do
+    putStrLn $ "App: " ++ show err
+    setConnectionStatus ctx Closing
+    setCloseReceived ctx
+    sent <- isCloseSent ctx
+    let frames
+          | sent      = [] -- for acking
+          | otherwise = [ConnectionCloseApp NoError ""]
+    setCloseSent ctx
+    atomically $ writeTQueue (outputQ ctx) $ C pt frames
+    threadDelay 100000 -- fixme
+processFrame ctx Short (Stream sid _off dat fin) = do
+    -- fixme _off
+    atomically $ writeTQueue (inputQ ctx) $ S sid dat
+    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ ctx) $ S sid ""
 processFrame _ _ _frame        = do
     putStrLn "FIXME: processFrame"
     print _frame
