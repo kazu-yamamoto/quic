@@ -11,94 +11,94 @@ import Network.QUIC.Imports
 import Network.QUIC.Transport
 
 receiver :: Connection -> IO ()
-receiver ctx = do
-    mbs <- readClearClientInitial ctx
+receiver conn = do
+    mbs <- readClearClientInitial conn
     case mbs of
         Nothing -> loop
         Just bs -> do
-            processPackets ctx bs
+            processPackets conn bs
             loop
   where
     loop = forever $ do
-        bs <- ctxRecv ctx
-        processPackets ctx bs
+        bs <- connRecv conn
+        processPackets conn bs
 
 processPackets :: Connection -> ByteString -> IO ()
-processPackets ctx bs0 = loop bs0
+processPackets conn bs0 = loop bs0
   where
     loop "" = return ()
     loop bs = do
         let level = packetEncryptionLevel bs
-        checkEncryptionLevel ctx level
-        (pkt, rest) <- decodePacket ctx bs
-        processPacket ctx pkt
+        checkEncryptionLevel conn level
+        (pkt, rest) <- decodePacket conn bs
+        processPacket conn pkt
         loop rest
 
 processPacket :: Connection -> Packet -> IO ()
-processPacket ctx (InitialPacket   _ _ _ _ pn fs) = do
-      addPNs ctx Initial pn
+processPacket conn (InitialPacket   _ _ _ _ pn fs) = do
+      addPNs conn Initial pn
 --      putStrLn $ "I: " ++ show fs
-      mapM_ (processFrame ctx Initial) fs
-processPacket ctx (HandshakePacket _ _ peercid   pn fs) = do
-      addPNs ctx Handshake pn
+      mapM_ (processFrame conn Initial) fs
+processPacket conn (HandshakePacket _ _ peercid   pn fs) = do
+      addPNs conn Handshake pn
 --      putStrLn $ "H: " ++ show fs
-      when (isClient ctx) $ setPeerCID ctx peercid
-      mapM_ (processFrame ctx Handshake) fs
-processPacket ctx (ShortPacket     _       pn fs) = do
-      addPNs ctx Short pn
+      when (isClient conn) $ setPeerCID conn peercid
+      mapM_ (processFrame conn Handshake) fs
+processPacket conn (ShortPacket     _       pn fs) = do
+      addPNs conn Short pn
 --      putStrLn $ "S: " ++ show fs
-      mapM_ (processFrame ctx Short) fs
-processPacket _ctx RetryPacket{}  = undefined -- fixme
+      mapM_ (processFrame conn Short) fs
+processPacket _conn RetryPacket{}  = undefined -- fixme
 processPacket _ _ = undefined
 
 processFrame :: Connection -> PacketType -> Frame -> IO ()
 processFrame _ _ Padding = return ()
 processFrame _ _ Ack{} = return ()
-processFrame ctx pt (Crypto _off cdat) = do
+processFrame conn pt (Crypto _off cdat) = do
     --fixme _off
     case pt of
-      Initial   -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
-      Handshake -> atomically $ writeTQueue (inputQ ctx) $ H pt cdat
-      Short     -> when (isClient ctx) $ do
+      Initial   -> atomically $ writeTQueue (inputQ conn) $ H pt cdat
+      Handshake -> atomically $ writeTQueue (inputQ conn) $ H pt cdat
+      Short     -> when (isClient conn) $ do
           -- fixme: checkint key phase
-          control <- tlsClientController ctx
+          control <- tlsClientController conn
           RecvSessionTicket <- control $ PutSessionTicket cdat
           ClientHandshakeDone <- control ExitClient
-          clearController ctx
+          clearController conn
       _         -> error "processFrame"
 processFrame _ _ NewToken{} =
     putStrLn "FIXME: NewToken"
 processFrame _ _ (NewConnectionID sn _ _ _)  =
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
-processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
+processFrame conn pt (ConnectionCloseQUIC err _ftyp _reason) = do
     case pt of
-      Initial   -> atomically $ writeTQueue (inputQ ctx) $ E err
-      Handshake -> atomically $ writeTQueue (inputQ ctx) $ E err
+      Initial   -> atomically $ writeTQueue (inputQ conn) $ E err
+      Handshake -> atomically $ writeTQueue (inputQ conn) $ E err
       _         -> return ()
-    setConnectionStatus ctx Closing
-    setCloseReceived ctx
-    sent <- isCloseSent ctx
+    setConnectionStatus conn Closing
+    setCloseReceived conn
+    sent <- isCloseSent conn
     let frames
           | sent      = [] -- for acking
           | otherwise = [ConnectionCloseApp NoError ""]
-    setCloseSent ctx
-    atomically $ writeTQueue (outputQ ctx) $ C pt frames
+    setCloseSent conn
+    atomically $ writeTQueue (outputQ conn) $ C pt frames
     threadDelay 100000 -- fixme
-processFrame ctx pt (ConnectionCloseApp err _reason) = do
+processFrame conn pt (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
-    setConnectionStatus ctx Closing
-    setCloseReceived ctx
-    sent <- isCloseSent ctx
+    setConnectionStatus conn Closing
+    setCloseReceived conn
+    sent <- isCloseSent conn
     let frames
           | sent      = [] -- for acking
           | otherwise = [ConnectionCloseApp NoError ""]
-    setCloseSent ctx
-    atomically $ writeTQueue (outputQ ctx) $ C pt frames
+    setCloseSent conn
+    atomically $ writeTQueue (outputQ conn) $ C pt frames
     threadDelay 100000 -- fixme
-processFrame ctx Short (Stream sid _off dat fin) = do
+processFrame conn Short (Stream sid _off dat fin) = do
     -- fixme _off
-    atomically $ writeTQueue (inputQ ctx) $ S sid dat
-    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ ctx) $ S sid ""
+    atomically $ writeTQueue (inputQ conn) $ S sid dat
+    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ S sid ""
 processFrame _ _ _frame        = do
     putStrLn "FIXME: processFrame"
     print _frame

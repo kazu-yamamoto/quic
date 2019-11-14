@@ -170,15 +170,15 @@ aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 aes128gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
     ciphertext `B.append` convert tag
   where
-    ctx = throwCryptoError (cipherInit key) :: AES128
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+    conn = throwCryptoError (cipherInit key) :: AES128
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
     (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext 16
 
 aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
   where
-    ctx = throwCryptoError $ cipherInit key :: AES128
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+    conn = throwCryptoError $ cipherInit key :: AES128
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
     (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
     authtag = AuthTag $ convert tag
     plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
@@ -187,15 +187,15 @@ aes256gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 aes256gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
     ciphertext `B.append` convert tag
   where
-    ctx = throwCryptoError (cipherInit key) :: AES256
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+    conn = throwCryptoError (cipherInit key) :: AES256
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
     (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext 16
 
 aes256gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
   where
-    ctx = throwCryptoError $ cipherInit key :: AES256
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM ctx nonce
+    conn = throwCryptoError $ cipherInit key :: AES256
+    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
     (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
     authtag = AuthTag $ convert tag
     plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag

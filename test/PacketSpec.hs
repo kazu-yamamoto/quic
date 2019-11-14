@@ -20,16 +20,16 @@ spec = do
             let clientConf = defaultClientConfig {
                     ccPeerCID = Just dcid
                   }
-            cctx <- clientConnection clientConf
+            cconn <- clientConnection clientConf
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
                   , scClientIni = clientInitialPacketBinary
                   }
-            sctx <- serverConnection serverConf
-            (pkt, _) <- decodePacket sctx clientInitialPacketBinary
-            clientInitialPacketBinary' <- encodePacket cctx pkt
-            (pkt', _) <- decodePacket sctx clientInitialPacketBinary'
+            sconn <- serverConnection serverConf
+            (pkt, _) <- decodePacket sconn clientInitialPacketBinary
+            clientInitialPacketBinary' <- encodePacket cconn pkt
+            (pkt', _) <- decodePacket sconn clientInitialPacketBinary'
             pkt `shouldBe` pkt'
 
 clientInitialPacketBinary :: ByteString

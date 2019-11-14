@@ -35,9 +35,9 @@ constructAckFrame (l:ls)  = ack l ls 0
 ----------------------------------------------------------------
 
 cryptoFrame :: Connection -> PacketType -> CryptoData -> IO [Frame]
-cryptoFrame ctx pt crypto = do
+cryptoFrame conn pt crypto = do
     let len = B.length crypto
-    off <- modifyCryptoOffset ctx pt len
+    off <- modifyCryptoOffset conn pt len
     case pt of
       Initial   -> return (Crypto off crypto : replicate 963 Padding)
       Handshake -> return [Crypto off crypto]
@@ -47,8 +47,8 @@ cryptoFrame ctx pt crypto = do
 ----------------------------------------------------------------
 
 construct :: Connection -> PacketType -> [Frame] -> IO ByteString
-construct ctx pt frames = do
-    peercid <- getPeerCID ctx
+construct conn pt frames = do
+    peercid <- getPeerCID conn
     mbin0 <- constructAckPacket pt peercid
     case mbin0 of
       Nothing   -> constructTargetPacket peercid
@@ -56,29 +56,29 @@ construct ctx pt frames = do
           bin1 <- constructTargetPacket peercid
           return $ bin0 `B.append` bin1
   where
-    mycid = myCID ctx
+    mycid = myCID conn
     constructAckPacket Handshake peercid = do
-        pns <- clearPNs ctx Initial
+        pns <- clearPNs conn Initial
         if null pns then
             return Nothing
           else do
-            mypn <- getPacketNumber ctx
+            mypn <- getPacketNumber conn
             let ackFrame = constructAckFrame pns
                 pkt = InitialPacket currentDraft peercid mycid "" mypn [ackFrame]
-            Just <$> encodePacket ctx pkt
+            Just <$> encodePacket conn pkt
     constructAckPacket Short peercid = do
-        pns <- clearPNs ctx Handshake
+        pns <- clearPNs conn Handshake
         if null pns then
             return Nothing
           else do
-            mypn <- getPacketNumber ctx
+            mypn <- getPacketNumber conn
             let ackFrame = constructAckFrame pns
                 pkt = HandshakePacket currentDraft peercid mycid mypn [ackFrame]
-            Just <$> encodePacket ctx pkt
+            Just <$> encodePacket conn pkt
     constructAckPacket _ _ = return Nothing
     constructTargetPacket peercid = do
-        mypn <- getPacketNumber ctx
-        pns <- clearPNs ctx pt
+        mypn <- getPacketNumber conn
+        pns <- clearPNs conn pt
         let frames'
               | null pns  = frames
               | otherwise = constructAckFrame pns : frames
@@ -87,24 +87,24 @@ construct ctx pt frames = do
               Handshake -> HandshakePacket currentDraft peercid mycid    mypn frames'
               Short     -> ShortPacket                  peercid          mypn frames'
               _         -> error "construct"
-        encodePacket ctx pkt
+        encodePacket conn pkt
 
 ----------------------------------------------------------------
 
 sender :: Connection -> IO ()
-sender ctx = loop
+sender conn = loop
   where
     loop = forever $ do
-        seg <- atomically $ readTQueue $ outputQ ctx
+        seg <- atomically $ readTQueue $ outputQ conn
         case seg of
           H pt cdat -> do
-              frames <- cryptoFrame ctx pt cdat
-              bs <- construct ctx pt frames
-              ctxSend ctx bs
+              frames <- cryptoFrame conn pt cdat
+              bs <- construct conn pt frames
+              connSend conn bs
           C pt frames -> do
-              bs <- construct ctx pt frames
-              ctxSend ctx bs
+              bs <- construct conn pt frames
+              connSend conn bs
           S sid dat -> do
-              bs <- construct ctx Short [Stream sid 0 dat True] -- fixme: off
-              ctxSend ctx bs
+              bs <- construct conn Short [Stream sid 0 dat True] -- fixme: off
+              connSend conn bs
           _ -> return ()

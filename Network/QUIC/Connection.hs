@@ -120,8 +120,8 @@ type OutputQ = TQueue Segment
 data Connection = Connection {
     role             :: Role
   , myCID            :: CID
-  , ctxSend          :: ByteString -> IO ()
-  , ctxRecv          :: IO ByteString
+  , connSend         :: ByteString -> IO ()
+  , connRecv         :: IO ByteString
   , myParams         :: Parameters
   , iniSecrets       :: TrafficSecrets InitialSecret
   , hndSecrets       :: IORef (Maybe (TrafficSecrets HandshakeSecret))
@@ -190,104 +190,104 @@ serverConnection ServerConfig{..} = do
       Nothing -> E.throwIO PacketIsBroken
       Just (mycid, peercid) -> do
           let isecs = initialSecrets scVersion mycid
-          ctx <- newConnection (Server ref) mycid peercid scSend scRecv scParams isecs
-          writeIORef (clientInitial ctx) (Just scClientIni)
-          return ctx
+          conn <- newConnection (Server ref) mycid peercid scSend scRecv scParams isecs
+          writeIORef (clientInitial conn) (Just scClientIni)
+          return conn
 
 ----------------------------------------------------------------
 
 setHandshakeSecrets :: Connection -> TrafficSecrets HandshakeSecret -> IO ()
-setHandshakeSecrets ctx secs = do
-    writeIORef (hndSecrets ctx) (Just secs)
-    atomically $ writeTVar (encryptionLevel ctx) HandshakeLevel
+setHandshakeSecrets conn secs = do
+    writeIORef (hndSecrets conn) (Just secs)
+    atomically $ writeTVar (encryptionLevel conn) HandshakeLevel
 
 setApplicationSecrets :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
-setApplicationSecrets ctx secs = do
-    writeIORef (appSecrets ctx) (Just secs)
-    atomically $ writeTVar (encryptionLevel ctx) ApplicationLevel
+setApplicationSecrets conn secs = do
+    writeIORef (appSecrets conn) (Just secs)
+    atomically $ writeTVar (encryptionLevel conn) ApplicationLevel
 
 ----------------------------------------------------------------
 
 isClient :: Connection -> Bool
-isClient ctx = case role ctx of
+isClient conn = case role conn of
                  Client{} -> True
                  Server{} -> False
 
 ----------------------------------------------------------------
 
 txInitialSecret :: Connection -> IO Secret
-txInitialSecret ctx = do
-    let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets ctx
-    return $ Secret $ if isClient ctx then c else s
+txInitialSecret conn = do
+    let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets conn
+    return $ Secret $ if isClient conn then c else s
 
 rxInitialSecret :: Connection -> IO Secret
-rxInitialSecret ctx = do
-    let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets ctx
-    return $ Secret $ if isClient ctx then s else c
+rxInitialSecret conn = do
+    let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets conn
+    return $ Secret $ if isClient conn then s else c
 
 txHandshakeSecret :: Connection -> IO Secret
-txHandshakeSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets ctx)
-    return $ Secret $ if isClient ctx then c else s
+txHandshakeSecret conn = do
+    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets conn)
+    return $ Secret $ if isClient conn then c else s
 
 rxHandshakeSecret :: Connection -> IO Secret
-rxHandshakeSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets ctx)
-    return $ Secret $ if isClient ctx then s else c
+rxHandshakeSecret conn = do
+    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets conn)
+    return $ Secret $ if isClient conn then s else c
 
 txApplicationSecret :: Connection -> IO Secret
-txApplicationSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets ctx)
-    return $ Secret $ if isClient ctx then c else s
+txApplicationSecret conn = do
+    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets conn)
+    return $ Secret $ if isClient conn then c else s
 
 rxApplicationSecret :: Connection -> IO Secret
-rxApplicationSecret ctx = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets ctx)
-    return $ Secret $ if isClient ctx then s else c
+rxApplicationSecret conn = do
+    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets conn)
+    return $ Secret $ if isClient conn then s else c
 
 ----------------------------------------------------------------
 
 getPacketNumber :: Connection -> IO PacketNumber
-getPacketNumber ctx = atomicModifyIORef' (packetNumber ctx) (\pn -> (pn + 1, pn))
+getPacketNumber conn = atomicModifyIORef' (packetNumber conn) (\pn -> (pn + 1, pn))
 
 ----------------------------------------------------------------
 
 addPNs :: Connection -> PacketType -> PacketNumber -> IO ()
-addPNs ctx pt p = atomicModifyIORef' ref add
+addPNs conn pt p = atomicModifyIORef' ref add
   where
-    ref = getStateReference ctx pt
+    ref = getStateReference conn pt
     add state = (state { receivedPacketNumbers = p : receivedPacketNumbers state}, ())
 
 
 clearPNs :: Connection -> PacketType -> IO [PacketNumber]
-clearPNs ctx pt = atomicModifyIORef' ref clear
+clearPNs conn pt = atomicModifyIORef' ref clear
   where
-    ref = getStateReference ctx pt
+    ref = getStateReference conn pt
     clear state = (state { receivedPacketNumbers = [] }, receivedPacketNumbers state)
 
 ----------------------------------------------------------------
 
 modifyCryptoOffset :: Connection -> PacketType -> Offset -> IO Offset
-modifyCryptoOffset ctx pt len = atomicModifyIORef' ref modify
+modifyCryptoOffset conn pt len = atomicModifyIORef' ref modify
   where
-    ref = getStateReference ctx pt
+    ref = getStateReference conn pt
     modify s = (s { cryptoOffSet = cryptoOffSet s + len}, cryptoOffSet s)
 
 ----------------------------------------------------------------
 
 getStateReference :: Connection -> PacketType -> IORef PhaseState
-getStateReference ctx Initial   = initialState ctx
-getStateReference ctx Handshake = handshakeState ctx
-getStateReference ctx Short     = applicationState ctx
+getStateReference conn Initial   = initialState conn
+getStateReference conn Handshake = handshakeState conn
+getStateReference conn Short     = applicationState conn
 getStateReference _   _         = error "getStateReference"
 
 ----------------------------------------------------------------
 
 getCipher :: Connection -> IO Cipher
-getCipher ctx = readIORef (usedCipher ctx)
+getCipher conn = readIORef (usedCipher conn)
 
 setCipher :: Connection -> Cipher -> IO ()
-setCipher ctx cipher = writeIORef (usedCipher ctx) cipher
+setCipher conn cipher = writeIORef (usedCipher conn) cipher
 
 setPeerParameters :: Connection -> ParametersList -> IO ()
 setPeerParameters Connection{..} plist = do
@@ -298,12 +298,12 @@ setNegotiatedProto :: Connection -> Maybe ByteString -> IO ()
 setNegotiatedProto Connection{..} malpn = writeIORef negotiatedProto malpn
 
 clearController :: Connection -> IO ()
-clearController ctx = case role ctx of
+clearController conn = case role conn of
   Client ref -> writeIORef ref Nothing
   Server ref -> writeIORef ref Nothing
 
 tlsClientController :: Connection -> IO ClientController
-tlsClientController ctx = case role ctx of
+tlsClientController conn = case role conn of
   Client ref -> do
       mc <- readIORef ref
       case mc of
@@ -314,7 +314,7 @@ tlsClientController ctx = case role ctx of
     nullController _ = return ClientHandshakeDone
 
 tlsServerController :: Connection -> IO ServerController
-tlsServerController ctx = case role ctx of
+tlsServerController conn = case role conn of
   Server ref -> do
       mc <- readIORef ref
       case mc of
@@ -333,8 +333,8 @@ getPeerCID Connection{..} = readIORef peerCID
 ----------------------------------------------------------------
 
 checkEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
-checkEncryptionLevel ctx level = atomically $ do
-    l <- readTVar $ encryptionLevel ctx
+checkEncryptionLevel conn level = atomically $ do
+    l <- readTVar $ encryptionLevel conn
     check (l >= level)
 
 readClearClientInitial :: Connection -> IO (Maybe ByteString)
@@ -344,37 +344,37 @@ readClearClientInitial Connection{..} = do
     return mbs
 
 setCloseSent :: Connection -> IO ()
-setCloseSent ctx = atomically $ modifyTVar (closeState ctx) (\s -> s { closeSent = True })
+setCloseSent conn = atomically $ modifyTVar (closeState conn) (\s -> s { closeSent = True })
 
 setCloseReceived :: Connection -> IO ()
-setCloseReceived ctx = atomically $ modifyTVar (closeState ctx) (\s -> s { closeReceived = True })
+setCloseReceived conn = atomically $ modifyTVar (closeState conn) (\s -> s { closeReceived = True })
 
 isCloseSent :: Connection -> IO Bool
-isCloseSent ctx = atomically (closeSent <$> readTVar (closeState ctx))
+isCloseSent conn = atomically (closeSent <$> readTVar (closeState conn))
 
 waitClosed :: Connection -> IO ()
-waitClosed ctx = atomically $ do
-    cs <- readTVar (closeState ctx)
+waitClosed conn = atomically $ do
+    cs <- readTVar (closeState conn)
     check (cs == CloseState True True)
 
 setConnectionStatus :: Connection -> ConnectionState -> IO ()
-setConnectionStatus ctx st = atomically (writeTVar (connectionState ctx) st)
+setConnectionStatus conn st = atomically (writeTVar (connectionState conn) st)
 
 isConnectionOpen :: Connection -> IO Bool
-isConnectionOpen ctx = atomically $ do
-    st <- readTVar (connectionState ctx)
+isConnectionOpen conn = atomically $ do
+    st <- readTVar (connectionState conn)
     return $ st == Open
 
 setThreadIds :: Connection -> [ThreadId] -> IO ()
-setThreadIds ctx tids = do
+setThreadIds conn tids = do
     wtids <- mapM mkWeakThreadId tids
-    writeIORef (threadIds ctx) wtids
+    writeIORef (threadIds conn) wtids
 
 clearThreads :: Connection -> IO ()
-clearThreads ctx = do
-    wtids <- readIORef (threadIds ctx)
+clearThreads conn = do
+    wtids <- readIORef (threadIds conn)
     mapM_ kill wtids
-    writeIORef (threadIds ctx) []
+    writeIORef (threadIds conn) []
   where
     kill wtid = do
         mtid <- deRefWeak wtid

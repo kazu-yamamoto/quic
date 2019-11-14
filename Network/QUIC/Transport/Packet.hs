@@ -127,11 +127,11 @@ maxEPNLen = 4
 ----------------------------------------------------------------
 
 encodePacket :: Connection -> Packet -> IO ByteString
-encodePacket ctx pkt = withWriteBuffer 2048 $ \wbuf ->
-  encodePacket' ctx wbuf pkt
+encodePacket conn pkt = withWriteBuffer 2048 $ \wbuf ->
+  encodePacket' conn wbuf pkt
 
 encodePacket' :: Connection -> WriteBuffer -> Packet -> IO ()
-encodePacket' _ctx wbuf (VersionNegotiationPacket dcID scID vers) = do
+encodePacket' _conn wbuf (VersionNegotiationPacket dcID scID vers) = do
     -- flag
     -- fixme: randomizing unused bits
     write8 wbuf 0b10000000
@@ -141,37 +141,37 @@ encodePacket' _ctx wbuf (VersionNegotiationPacket dcID scID vers) = do
     mapM_ (write32 wbuf . encodeVersion) vers
     -- no header protection
 
-encodePacket' ctx wbuf (InitialPacket ver dcID scID token pn frames) = do
+encodePacket' conn wbuf (InitialPacket ver dcID scID token pn frames) = do
     -- flag ... scID
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf LHInitial ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP conn wbuf LHInitial ver dcID scID pn
     -- token
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
     -- length .. payload
-    secret <- txInitialSecret ctx
+    secret <- txInitialSecret conn
     let cipher = defaultCipher
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
-encodePacket' ctx wbuf (RTT0Packet ver dcID scID pn frames) = do
+encodePacket' conn wbuf (RTT0Packet ver dcID scID pn frames) = do
     -- flag ... scID
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf LHRTT0 ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP conn wbuf LHRTT0 ver dcID scID pn
     -- length .. payload
-    secret <- undefined ctx
-    cipher <- getCipher ctx
+    secret <- undefined conn
+    cipher <- getCipher conn
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
-encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
+encodePacket' conn wbuf (HandshakePacket ver dcID scID pn frames) = do
     -- flag ... scid
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP ctx wbuf LHHandshake ver dcID scID pn
+    (epn, epnLen) <- encodeLongHeaderPP conn wbuf LHHandshake ver dcID scID pn
     -- length .. payload
-    secret <- txHandshakeSecret ctx
-    cipher <- getCipher ctx
+    secret <- txHandshakeSecret conn
+    cipher <- getCipher conn
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
-encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
+encodePacket' _conn wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
     -- fixme: randomizing unused bits
     let flags = encodePacketType 0b11000000 LHRetry
     write8 wbuf flags
@@ -182,7 +182,7 @@ encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
     copyByteString wbuf token
     -- no header protection
 
-encodePacket' ctx wbuf (ShortPacket (CID dcid) pn frames) = do
+encodePacket' conn wbuf (ShortPacket (CID dcid) pn frames) = do
     -- flag
     let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = fromIntegral (epnLen - 1)
@@ -191,8 +191,8 @@ encodePacket' ctx wbuf (ShortPacket (CID dcid) pn frames) = do
     write8 wbuf flags
     -- dcID
     copyByteString wbuf dcid
-    secret <- txApplicationSecret ctx
-    cipher <- getCipher ctx
+    secret <- txApplicationSecret conn
+    cipher <- getCipher conn
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg False
 
 encodeLongHeader :: WriteBuffer
@@ -211,7 +211,7 @@ encodeLongHeaderPP :: Connection -> WriteBuffer
                    -> LongHeaderPacketType -> Version -> CID -> CID
                    -> PacketNumber
                    -> IO (EncodedPacketNumber, Int)
-encodeLongHeaderPP _ctx wbuf pkttyp ver dcID scID pn = do
+encodeLongHeaderPP _conn wbuf pkttyp ver dcID scID pn = do
     let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = fromIntegral (pnLen - 1)
         flags' = encodePacketType (0b11000000 .|. pp) pkttyp
@@ -247,19 +247,19 @@ protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg long = do
 ----------------------------------------------------------------
 
 decodePacket :: Connection -> ByteString -> IO (Packet, ByteString)
-decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
+decodePacket conn bin = withReadBuffer bin $ \rbuf -> do
     proFlags <- read8 rbuf
     save rbuf
     pkt <- if isLong proFlags then do
-             decodeLongHeaderPacket ctx rbuf proFlags
+             decodeLongHeaderPacket conn rbuf proFlags
            else
-             decodeShortHeaderPacket ctx rbuf proFlags
+             decodeShortHeaderPacket conn rbuf proFlags
     siz <- savingSize rbuf
     let remaining = B.drop (siz + 1) bin
     return (pkt, remaining)
 
 decodeLongHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
-decodeLongHeaderPacket ctx rbuf proFlags = do
+decodeLongHeaderPacket conn rbuf proFlags = do
     version <- decodeVersion <$> read32 rbuf
     dcIDlen <- fromIntegral <$> read8 rbuf
     dcID <- CID <$> extractByteString rbuf dcIDlen
@@ -268,7 +268,7 @@ decodeLongHeaderPacket ctx rbuf proFlags = do
     case version of
       Negotiation          -> decodeVersionNegotiationPacket rbuf dcID scID
       v@(UnknownVersion _) -> E.throwIO $ VersionIsUnknown v
-      _DraftXX             -> decodeDraft ctx rbuf proFlags version dcID scID
+      _DraftXX             -> decodeDraft conn rbuf proFlags version dcID scID
 
 decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
 decodeVersionNegotiationPacket rbuf dcID scID = do
@@ -284,32 +284,32 @@ decodeVersionNegotiationPacket rbuf dcID scID = do
             decodeVersions (siz - 4) ((ver :) . vers)
 
 decodeDraft :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeDraft ctx rbuf proFlags version dcID scID = case decodePacketType proFlags of
-    LHInitial   -> decodeInitialPacket   ctx rbuf proFlags version dcID scID
-    LHRTT0      -> decodeRTT0Packet      ctx rbuf proFlags version dcID scID
-    LHHandshake -> decodeHandshakePacket ctx rbuf proFlags version dcID scID
-    LHRetry     -> decodeRetryPacket     ctx rbuf proFlags version dcID scID
+decodeDraft conn rbuf proFlags version dcID scID = case decodePacketType proFlags of
+    LHInitial   -> decodeInitialPacket   conn rbuf proFlags version dcID scID
+    LHRTT0      -> decodeRTT0Packet      conn rbuf proFlags version dcID scID
+    LHHandshake -> decodeHandshakePacket conn rbuf proFlags version dcID scID
+    LHRetry     -> decodeRetryPacket     conn rbuf proFlags version dcID scID
 
 decodeInitialPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeInitialPacket ctx rbuf proFlags version dcID scID = do
+decodeInitialPacket conn rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
-    secret <- rxInitialSecret ctx
+    secret <- rxInitialSecret conn
     let cipher = defaultCipher
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ InitialPacket version dcID scID token pn frames
 
 decodeRTT0Packet :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeRTT0Packet ctx rbuf proFlags version dcID scID = do
-    cipher <- getCipher ctx
-    secret <- undefined ctx
+decodeRTT0Packet conn rbuf proFlags version dcID scID = do
+    cipher <- getCipher conn
+    secret <- undefined conn
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ RTT0Packet version dcID scID pn frames
 
 decodeHandshakePacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeHandshakePacket ctx rbuf proFlags version dcID scID = do
-    cipher <- getCipher ctx
-    secret <- rxHandshakeSecret ctx
+decodeHandshakePacket conn rbuf proFlags version dcID scID = do
+    cipher <- getCipher conn
+    secret <- rxHandshakeSecret conn
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ HandshakePacket version dcID scID pn frames
 
@@ -332,7 +332,7 @@ unprotectHeaderPayload rbuf proFlags cipher secret = do
     return (flags, pn, frames)
 
 decodeRetryPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeRetryPacket _ctx rbuf _proFlags version dcID scID = do
+decodeRetryPacket _conn rbuf _proFlags version dcID scID = do
     origIDlen <- fromIntegral <$> read8 rbuf
     origID <- CID <$> extractByteString rbuf origIDlen
     siz <- remainingSize rbuf
@@ -340,12 +340,12 @@ decodeRetryPacket _ctx rbuf _proFlags version dcID scID = do
     return $ RetryPacket version dcID scID origID token
 
 decodeShortHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
-decodeShortHeaderPacket ctx rbuf proFlags = do
-    let mycid@(CID my) = myCID ctx
+decodeShortHeaderPacket conn rbuf proFlags = do
+    let mycid@(CID my) = myCID conn
         idlen = B.length my
     dcID <- CID <$> extractByteString rbuf idlen
     when (mycid /= dcID) $ error "decodeShortHeaderPacket"
-    cipher <- getCipher ctx
-    secret <- rxApplicationSecret ctx
+    cipher <- getCipher conn
+    secret <- rxApplicationSecret conn
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ ShortPacket dcID pn frames
