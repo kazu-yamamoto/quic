@@ -10,7 +10,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Transport
 
-receiver :: Context -> IO ()
+receiver :: Connection -> IO ()
 receiver ctx = do
     mbs <- readClearClientInitial ctx
     case mbs of
@@ -23,7 +23,7 @@ receiver ctx = do
         bs <- ctxRecv ctx
         processPackets ctx bs
 
-processPackets :: Context -> ByteString -> IO ()
+processPackets :: Connection -> ByteString -> IO ()
 processPackets ctx bs0 = loop bs0
   where
     loop "" = return ()
@@ -34,7 +34,7 @@ processPackets ctx bs0 = loop bs0
         processPacket ctx pkt
         loop rest
 
-processPacket :: Context -> Packet -> IO ()
+processPacket :: Connection -> Packet -> IO ()
 processPacket ctx (InitialPacket   _ _ _ _ pn fs) = do
       addPNs ctx Initial pn
 --      putStrLn $ "I: " ++ show fs
@@ -51,7 +51,7 @@ processPacket ctx (ShortPacket     _       pn fs) = do
 processPacket _ctx RetryPacket{}  = undefined -- fixme
 processPacket _ _ = undefined
 
-processFrame :: Context -> PacketType -> Frame -> IO ()
+processFrame :: Connection -> PacketType -> Frame -> IO ()
 processFrame _ _ Padding = return ()
 processFrame _ _ Ack{} = return ()
 processFrame ctx pt (Crypto _off cdat) = do

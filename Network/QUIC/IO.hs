@@ -7,10 +7,10 @@ import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Transport.Types
 
-sendData :: Context -> ByteString -> IO ()
+sendData :: Connection -> ByteString -> IO ()
 sendData ctx bs = sendData' ctx 0 bs
 
-sendData' :: Context -> StreamID -> ByteString -> IO ()
+sendData' :: Connection -> StreamID -> ByteString -> IO ()
 sendData' ctx sid bs = do
     open <- isConnectionOpen ctx
     if open then
@@ -18,12 +18,12 @@ sendData' ctx sid bs = do
       else
         E.throwIO ConnectionIsNotOpen
 
-recvData :: Context -> IO ByteString
+recvData :: Connection -> IO ByteString
 recvData ctx = do
     (sid, bs) <- recvData' ctx
     if sid == 0 then return bs else recvData ctx
 
-recvData' :: Context -> IO (StreamID, ByteString)
+recvData' :: Connection -> IO (StreamID, ByteString)
 recvData' ctx = do
     S sid bs <- atomically $ readTQueue (inputQ ctx)
     return (sid, bs)

@@ -15,10 +15,10 @@ import Network.QUIC.Receiver
 import Network.QUIC.Sender
 import Network.QUIC.Transport
 
-sendCryptoData :: Context -> PacketType -> ByteString -> IO ()
+sendCryptoData :: Connection -> PacketType -> ByteString -> IO ()
 sendCryptoData ctx pt bs = atomically $ writeTQueue (outputQ ctx) $ H pt bs
 
-recvCryptoData :: Context -> IO (PacketType, ByteString)
+recvCryptoData :: Connection -> IO (PacketType, ByteString)
 recvCryptoData ctx = do
     dat <- atomically $ readTQueue (inputQ ctx)
     case dat of
@@ -26,9 +26,9 @@ recvCryptoData ctx = do
       E err   -> E.throwIO $ HandshakeRejectedByPeer err
       _       -> error "recvCryptoData"
 
-handshake :: Config a => a -> IO Context
+handshake :: Config a => a -> IO Connection
 handshake conf = E.handle tlserr $ do
-    ctx <- makeContext conf
+    ctx <- makeConnection conf
     tid0 <- forkIO $ sender ctx
     tid1 <- forkIO $ receiver ctx
     setThreadIds ctx [tid0,tid1]
@@ -41,7 +41,7 @@ handshake conf = E.handle tlserr $ do
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 
-bye :: Context -> IO ()
+bye :: Connection -> IO ()
 bye ctx = do
     setConnectionStatus ctx Closing
     let frames = [ConnectionCloseQUIC NoError 0 ""]
@@ -52,12 +52,12 @@ bye ctx = do
 
 ----------------------------------------------------------------
 
-handshakeClient :: Context -> IO ()
+handshakeClient :: Connection -> IO ()
 handshakeClient ctx = do
     sendClientHelloAndRecvServerHello ctx
     recvServerFinishedSendClientFinished ctx
 
-sendClientHelloAndRecvServerHello :: Context -> IO ()
+sendClientHelloAndRecvServerHello :: Connection -> IO ()
 sendClientHelloAndRecvServerHello ctx = do
     control <- tlsClientController ctx
     SendClientHello ch0 _ <- control GetClientHello
@@ -79,7 +79,7 @@ sendClientHelloAndRecvServerHello ctx = do
             _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
       _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
 
-recvServerFinishedSendClientFinished :: Context -> IO ()
+recvServerFinishedSendClientFinished :: Connection -> IO ()
 recvServerFinishedSendClientFinished ctx = loop
   where
     loop = do
@@ -98,7 +98,7 @@ recvServerFinishedSendClientFinished ctx = loop
 
 ----------------------------------------------------------------
 
-handshakeServer :: Context -> IO ()
+handshakeServer :: Connection -> IO ()
 handshakeServer ctx = do
     (Initial, ch) <- recvCryptoData ctx
     control <- tlsServerController ctx
@@ -129,7 +129,7 @@ handshakeServer ctx = do
     ServerHandshakeDone <- control ExitServer
     clearController ctx
 
-setParameters :: Context -> [ExtensionRaw] -> IO ()
+setParameters :: Connection -> [ExtensionRaw] -> IO ()
 setParameters ctx [ExtensionRaw 0xffa5 params] = do
     let Just plist = decodeParametersList params
     setPeerParameters ctx plist

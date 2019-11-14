@@ -23,13 +23,13 @@ import Network.QUIC.Transport.Types
 ----------------------------------------------------------------
 
 class Config a where
-    makeContext :: a -> IO Context
+    makeConnection :: a -> IO Connection
 
 instance Config ClientConfig where
-    makeContext = clientContext
+    makeConnection = clientConnection
 
 instance Config ServerConfig where
-    makeContext = serverContext
+    makeConnection = serverConnection
 
 ----------------------------------------------------------------
 
@@ -117,7 +117,7 @@ data Segment = S StreamID ByteString
 type InputQ  = TQueue Segment
 type OutputQ = TQueue Segment
 
-data Context = Context {
+data Connection = Connection {
     role             :: Role
   , myCID            :: CID
   , ctxSend          :: ByteString -> IO ()
@@ -145,9 +145,9 @@ data Context = Context {
   , threadIds        :: IORef [Weak ThreadId]
   }
 
-newContext :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Context
-newContext rl mid peercid send recv myparam isecs =
-    Context rl mid send recv myparam isecs
+newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Connection
+newConnection rl mid peercid send recv myparam isecs =
+    Connection rl mid send recv myparam isecs
         <$> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef defaultParameters
@@ -166,8 +166,8 @@ newContext rl mid peercid send recv myparam isecs =
         <*> newTVarIO NotOpen
         <*> newIORef []
 
-clientContext :: ClientConfig -> IO Context
-clientContext ClientConfig{..} = do
+clientConnection :: ClientConfig -> IO Connection
+clientConnection ClientConfig{..} = do
     let params = encodeParametersList $ diffParameters ccParams
     controller <- clientController ccServerName ccCiphers ccALPN params
     ref <- newIORef $ Just controller
@@ -178,10 +178,10 @@ clientContext ClientConfig{..} = do
       Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
       Just cid -> return cid
     let isecs = initialSecrets ccVersion peercid
-    newContext (Client ref) mycid peercid ccSend ccRecv ccParams isecs
+    newConnection (Client ref) mycid peercid ccSend ccRecv ccParams isecs
 
-serverContext :: ServerConfig -> IO Context
-serverContext ServerConfig{..} = do
+serverConnection :: ServerConfig -> IO Connection
+serverConnection ServerConfig{..} = do
     let params = encodeParametersList $ diffParameters scParams
     controller <- serverController scKey scCert scALPN params
     ref <- newIORef $ Just controller
@@ -190,76 +190,76 @@ serverContext ServerConfig{..} = do
       Nothing -> E.throwIO PacketIsBroken
       Just (mycid, peercid) -> do
           let isecs = initialSecrets scVersion mycid
-          ctx <- newContext (Server ref) mycid peercid scSend scRecv scParams isecs
+          ctx <- newConnection (Server ref) mycid peercid scSend scRecv scParams isecs
           writeIORef (clientInitial ctx) (Just scClientIni)
           return ctx
 
 ----------------------------------------------------------------
 
-setHandshakeSecrets :: Context -> TrafficSecrets HandshakeSecret -> IO ()
+setHandshakeSecrets :: Connection -> TrafficSecrets HandshakeSecret -> IO ()
 setHandshakeSecrets ctx secs = do
     writeIORef (hndSecrets ctx) (Just secs)
     atomically $ writeTVar (encryptionLevel ctx) HandshakeLevel
 
-setApplicationSecrets :: Context -> TrafficSecrets ApplicationSecret -> IO ()
+setApplicationSecrets :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 setApplicationSecrets ctx secs = do
     writeIORef (appSecrets ctx) (Just secs)
     atomically $ writeTVar (encryptionLevel ctx) ApplicationLevel
 
 ----------------------------------------------------------------
 
-isClient :: Context -> Bool
+isClient :: Connection -> Bool
 isClient ctx = case role ctx of
                  Client{} -> True
                  Server{} -> False
 
 ----------------------------------------------------------------
 
-txInitialSecret :: Context -> IO Secret
+txInitialSecret :: Connection -> IO Secret
 txInitialSecret ctx = do
     let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets ctx
     return $ Secret $ if isClient ctx then c else s
 
-rxInitialSecret :: Context -> IO Secret
+rxInitialSecret :: Connection -> IO Secret
 rxInitialSecret ctx = do
     let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets ctx
     return $ Secret $ if isClient ctx then s else c
 
-txHandshakeSecret :: Context -> IO Secret
+txHandshakeSecret :: Connection -> IO Secret
 txHandshakeSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets ctx)
     return $ Secret $ if isClient ctx then c else s
 
-rxHandshakeSecret :: Context -> IO Secret
+rxHandshakeSecret :: Connection -> IO Secret
 rxHandshakeSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets ctx)
     return $ Secret $ if isClient ctx then s else c
 
-txApplicationSecret :: Context -> IO Secret
+txApplicationSecret :: Connection -> IO Secret
 txApplicationSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets ctx)
     return $ Secret $ if isClient ctx then c else s
 
-rxApplicationSecret :: Context -> IO Secret
+rxApplicationSecret :: Connection -> IO Secret
 rxApplicationSecret ctx = do
     Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets ctx)
     return $ Secret $ if isClient ctx then s else c
 
 ----------------------------------------------------------------
 
-getPacketNumber :: Context -> IO PacketNumber
+getPacketNumber :: Connection -> IO PacketNumber
 getPacketNumber ctx = atomicModifyIORef' (packetNumber ctx) (\pn -> (pn + 1, pn))
 
 ----------------------------------------------------------------
 
-addPNs :: Context -> PacketType -> PacketNumber -> IO ()
+addPNs :: Connection -> PacketType -> PacketNumber -> IO ()
 addPNs ctx pt p = atomicModifyIORef' ref add
   where
     ref = getStateReference ctx pt
     add state = (state { receivedPacketNumbers = p : receivedPacketNumbers state}, ())
 
 
-clearPNs :: Context -> PacketType -> IO [PacketNumber]
+clearPNs :: Connection -> PacketType -> IO [PacketNumber]
 clearPNs ctx pt = atomicModifyIORef' ref clear
   where
     ref = getStateReference ctx pt
@@ -267,7 +267,7 @@ clearPNs ctx pt = atomicModifyIORef' ref clear
 
 ----------------------------------------------------------------
 
-modifyCryptoOffset :: Context -> PacketType -> Offset -> IO Offset
+modifyCryptoOffset :: Connection -> PacketType -> Offset -> IO Offset
 modifyCryptoOffset ctx pt len = atomicModifyIORef' ref modify
   where
     ref = getStateReference ctx pt
@@ -275,7 +275,7 @@ modifyCryptoOffset ctx pt len = atomicModifyIORef' ref modify
 
 ----------------------------------------------------------------
 
-getStateReference :: Context -> PacketType -> IORef PhaseState
+getStateReference :: Connection -> PacketType -> IORef PhaseState
 getStateReference ctx Initial   = initialState ctx
 getStateReference ctx Handshake = handshakeState ctx
 getStateReference ctx Short     = applicationState ctx
@@ -283,26 +283,26 @@ getStateReference _   _         = error "getStateReference"
 
 ----------------------------------------------------------------
 
-getCipher :: Context -> IO Cipher
+getCipher :: Connection -> IO Cipher
 getCipher ctx = readIORef (usedCipher ctx)
 
-setCipher :: Context -> Cipher -> IO ()
+setCipher :: Connection -> Cipher -> IO ()
 setCipher ctx cipher = writeIORef (usedCipher ctx) cipher
 
-setPeerParameters :: Context -> ParametersList -> IO ()
-setPeerParameters Context{..} plist = do
+setPeerParameters :: Connection -> ParametersList -> IO ()
+setPeerParameters Connection{..} plist = do
     def <- readIORef peerParams
     writeIORef peerParams $ updateParameters def plist
 
-setNegotiatedProto :: Context -> Maybe ByteString -> IO ()
-setNegotiatedProto Context{..} malpn = writeIORef negotiatedProto malpn
+setNegotiatedProto :: Connection -> Maybe ByteString -> IO ()
+setNegotiatedProto Connection{..} malpn = writeIORef negotiatedProto malpn
 
-clearController :: Context -> IO ()
+clearController :: Connection -> IO ()
 clearController ctx = case role ctx of
   Client ref -> writeIORef ref Nothing
   Server ref -> writeIORef ref Nothing
 
-tlsClientController :: Context -> IO ClientController
+tlsClientController :: Connection -> IO ClientController
 tlsClientController ctx = case role ctx of
   Client ref -> do
       mc <- readIORef ref
@@ -313,7 +313,7 @@ tlsClientController ctx = case role ctx of
   where
     nullController _ = return ClientHandshakeDone
 
-tlsServerController :: Context -> IO ServerController
+tlsServerController :: Connection -> IO ServerController
 tlsServerController ctx = case role ctx of
   Server ref -> do
       mc <- readIORef ref
@@ -324,53 +324,53 @@ tlsServerController ctx = case role ctx of
   where
     nullController _ = return ServerHandshakeDone
 
-setPeerCID :: Context -> CID -> IO ()
-setPeerCID Context{..} pcid = writeIORef peerCID pcid
+setPeerCID :: Connection -> CID -> IO ()
+setPeerCID Connection{..} pcid = writeIORef peerCID pcid
 
-getPeerCID :: Context -> IO CID
-getPeerCID Context{..} = readIORef peerCID
+getPeerCID :: Connection -> IO CID
+getPeerCID Connection{..} = readIORef peerCID
 
 ----------------------------------------------------------------
 
-checkEncryptionLevel :: Context -> EncryptionLevel -> IO ()
+checkEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 checkEncryptionLevel ctx level = atomically $ do
     l <- readTVar $ encryptionLevel ctx
     check (l >= level)
 
-readClearClientInitial :: Context -> IO (Maybe ByteString)
-readClearClientInitial Context{..} = do
+readClearClientInitial :: Connection -> IO (Maybe ByteString)
+readClearClientInitial Connection{..} = do
     mbs <- readIORef clientInitial
     writeIORef clientInitial Nothing
     return mbs
 
-setCloseSent :: Context -> IO ()
+setCloseSent :: Connection -> IO ()
 setCloseSent ctx = atomically $ modifyTVar (closeState ctx) (\s -> s { closeSent = True })
 
-setCloseReceived :: Context -> IO ()
+setCloseReceived :: Connection -> IO ()
 setCloseReceived ctx = atomically $ modifyTVar (closeState ctx) (\s -> s { closeReceived = True })
 
-isCloseSent :: Context -> IO Bool
+isCloseSent :: Connection -> IO Bool
 isCloseSent ctx = atomically (closeSent <$> readTVar (closeState ctx))
 
-waitClosed :: Context -> IO ()
+waitClosed :: Connection -> IO ()
 waitClosed ctx = atomically $ do
     cs <- readTVar (closeState ctx)
     check (cs == CloseState True True)
 
-setConnectionStatus :: Context -> ConnectionState -> IO ()
+setConnectionStatus :: Connection -> ConnectionState -> IO ()
 setConnectionStatus ctx st = atomically (writeTVar (connectionState ctx) st)
 
-isConnectionOpen :: Context -> IO Bool
+isConnectionOpen :: Connection -> IO Bool
 isConnectionOpen ctx = atomically $ do
     st <- readTVar (connectionState ctx)
     return $ st == Open
 
-setThreadIds :: Context -> [ThreadId] -> IO ()
+setThreadIds :: Connection -> [ThreadId] -> IO ()
 setThreadIds ctx tids = do
     wtids <- mapM mkWeakThreadId tids
     writeIORef (threadIds ctx) wtids
 
-clearThreads :: Context -> IO ()
+clearThreads :: Connection -> IO ()
 clearThreads ctx = do
     wtids <- readIORef (threadIds ctx)
     mapM_ kill wtids

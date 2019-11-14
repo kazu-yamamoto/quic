@@ -34,7 +34,7 @@ constructAckFrame (l:ls)  = ack l ls 0
 
 ----------------------------------------------------------------
 
-cryptoFrame :: Context -> PacketType -> CryptoData -> IO [Frame]
+cryptoFrame :: Connection -> PacketType -> CryptoData -> IO [Frame]
 cryptoFrame ctx pt crypto = do
     let len = B.length crypto
     off <- modifyCryptoOffset ctx pt len
@@ -46,7 +46,7 @@ cryptoFrame ctx pt crypto = do
 
 ----------------------------------------------------------------
 
-construct :: Context -> PacketType -> [Frame] -> IO ByteString
+construct :: Connection -> PacketType -> [Frame] -> IO ByteString
 construct ctx pt frames = do
     peercid <- getPeerCID ctx
     mbin0 <- constructAckPacket pt peercid
@@ -91,7 +91,7 @@ construct ctx pt frames = do
 
 ----------------------------------------------------------------
 
-sender :: Context -> IO ()
+sender :: Connection -> IO ()
 sender ctx = loop
   where
     loop = forever $ do

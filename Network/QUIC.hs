@@ -9,7 +9,7 @@ module Network.QUIC (
   , recvData'
   , sendData'
   -- * Types
-  , Context
+  , Connection
   , ClientConfig(..)
   , defaultClientConfig
   , ServerConfig(..)

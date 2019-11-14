@@ -126,11 +126,11 @@ maxEPNLen = 4
 
 ----------------------------------------------------------------
 
-encodePacket :: Context -> Packet -> IO ByteString
+encodePacket :: Connection -> Packet -> IO ByteString
 encodePacket ctx pkt = withWriteBuffer 2048 $ \wbuf ->
   encodePacket' ctx wbuf pkt
 
-encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
+encodePacket' :: Connection -> WriteBuffer -> Packet -> IO ()
 encodePacket' _ctx wbuf (VersionNegotiationPacket dcID scID vers) = do
     -- flag
     -- fixme: randomizing unused bits
@@ -207,7 +207,7 @@ encodeLongHeader wbuf ver (CID dcid) (CID scid) = do
     write8 wbuf scidlen
     copyByteString wbuf scid
 
-encodeLongHeaderPP :: Context -> WriteBuffer
+encodeLongHeaderPP :: Connection -> WriteBuffer
                    -> LongHeaderPacketType -> Version -> CID -> CID
                    -> PacketNumber
                    -> IO (EncodedPacketNumber, Int)
@@ -246,7 +246,7 @@ protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg long = do
 
 ----------------------------------------------------------------
 
-decodePacket :: Context -> ByteString -> IO (Packet, ByteString)
+decodePacket :: Connection -> ByteString -> IO (Packet, ByteString)
 decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
     proFlags <- read8 rbuf
     save rbuf
@@ -258,7 +258,7 @@ decodePacket ctx bin = withReadBuffer bin $ \rbuf -> do
     let remaining = B.drop (siz + 1) bin
     return (pkt, remaining)
 
-decodeLongHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
+decodeLongHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
 decodeLongHeaderPacket ctx rbuf proFlags = do
     version <- decodeVersion <$> read32 rbuf
     dcIDlen <- fromIntegral <$> read8 rbuf
@@ -283,14 +283,14 @@ decodeVersionNegotiationPacket rbuf dcID scID = do
             ver <- decodeVersion <$> read32 rbuf
             decodeVersions (siz - 4) ((ver :) . vers)
 
-decodeDraft :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeDraft :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeDraft ctx rbuf proFlags version dcID scID = case decodePacketType proFlags of
     LHInitial   -> decodeInitialPacket   ctx rbuf proFlags version dcID scID
     LHRTT0      -> decodeRTT0Packet      ctx rbuf proFlags version dcID scID
     LHHandshake -> decodeHandshakePacket ctx rbuf proFlags version dcID scID
     LHRetry     -> decodeRetryPacket     ctx rbuf proFlags version dcID scID
 
-decodeInitialPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeInitialPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
     token <- extractByteString rbuf tokenLen
@@ -299,14 +299,14 @@ decodeInitialPacket ctx rbuf proFlags version dcID scID = do
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ InitialPacket version dcID scID token pn frames
 
-decodeRTT0Packet :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeRTT0Packet :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeRTT0Packet ctx rbuf proFlags version dcID scID = do
     cipher <- getCipher ctx
     secret <- undefined ctx
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
     return $ RTT0Packet version dcID scID pn frames
 
-decodeHandshakePacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeHandshakePacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeHandshakePacket ctx rbuf proFlags version dcID scID = do
     cipher <- getCipher ctx
     secret <- rxHandshakeSecret ctx
@@ -331,7 +331,7 @@ unprotectHeaderPayload rbuf proFlags cipher secret = do
     frames <- decodeFrames payload
     return (flags, pn, frames)
 
-decodeRetryPacket :: Context -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
+decodeRetryPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeRetryPacket _ctx rbuf _proFlags version dcID scID = do
     origIDlen <- fromIntegral <$> read8 rbuf
     origID <- CID <$> extractByteString rbuf origIDlen
@@ -339,7 +339,7 @@ decodeRetryPacket _ctx rbuf _proFlags version dcID scID = do
     token <- extractByteString rbuf siz
     return $ RetryPacket version dcID scID origID token
 
-decodeShortHeaderPacket :: Context -> ReadBuffer -> Word8 -> IO Packet
+decodeShortHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
 decodeShortHeaderPacket ctx rbuf proFlags = do
     let mycid@(CID my) = myCID ctx
         idlen = B.length my
