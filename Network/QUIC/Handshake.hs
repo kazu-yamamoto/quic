@@ -9,7 +9,7 @@ import Data.ByteString hiding (putStrLn)
 import Network.TLS.QUIC
 import System.Timeout
 
-import Network.QUIC.Context
+import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Receiver
 import Network.QUIC.Sender

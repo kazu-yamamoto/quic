@@ -21,7 +21,7 @@ module Network.QUIC (
   , exampleParameters
   ) where
 
-import Network.QUIC.Context
+import Network.QUIC.Connection
 import Network.QUIC.Handshake
 import Network.QUIC.IO
 import Network.QUIC.TLS

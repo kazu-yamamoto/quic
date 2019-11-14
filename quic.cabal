@@ -14,7 +14,7 @@ cabal-version:       >= 1.10
 
 library
   exposed-modules:     Network.QUIC
-                       Network.QUIC.Context
+                       Network.QUIC.Connection
                        Network.QUIC.Handshake
                        Network.QUIC.IO
                        Network.QUIC.Receiver

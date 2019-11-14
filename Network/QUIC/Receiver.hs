@@ -6,7 +6,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Network.TLS.QUIC
 
-import Network.QUIC.Context
+import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Transport
 

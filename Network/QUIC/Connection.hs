@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.QUIC.Context where
+module Network.QUIC.Connection where
 
 import Control.Concurrent
 import Control.Concurrent.STM

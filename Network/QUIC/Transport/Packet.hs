@@ -7,7 +7,7 @@ import qualified Control.Exception as E
 import qualified Data.ByteString as B
 import Foreign.Ptr
 
-import Network.QUIC.Context
+import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Frame
