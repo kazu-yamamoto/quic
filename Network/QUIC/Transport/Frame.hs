@@ -51,6 +51,7 @@ encodeFrame wbuf (ConnectionCloseApp err reason) = do
     encodeInt' wbuf $ fromIntegral $ fromTransportError err
     encodeInt' wbuf $ fromIntegral $ B.length reason
     copyByteString wbuf reason
+encodeFrame _ _ = undefined
 
 ----------------------------------------------------------------
 

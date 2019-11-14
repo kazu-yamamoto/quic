@@ -60,10 +60,21 @@ type FrameType = Int
 data Frame = Padding
            | Ping
            | Ack PacketNumber Delay Range [(Gap,Range)]
+           | RestStream -- fixme
+           | StopSending -- fixme
            | Crypto Offset CryptoData
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
+           | MaxData -- fixme
+           | MaxStreamData -- fixme
+           | MaxStreams -- fixme
+           | DataBlocked -- fixme
+           | StreamDataBlocked -- fixme
+           | StreamsBlocked -- fixme
            | NewConnectionID Int Int CID ByteString
+           | RetireConnectionID -- fixme
+           | PathChallenge ByteString
+           | PathResponse ByteString
            | ConnectionCloseQUIC TransportError FrameType ByteString
            | ConnectionCloseApp  TransportError ByteString
            deriving (Eq,Show)
