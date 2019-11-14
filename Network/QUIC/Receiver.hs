@@ -69,8 +69,8 @@ processFrame ctx pt (Crypto _off cdat) = do
       _         -> error "processFrame"
 processFrame _ _ NewToken{} =
     putStrLn "FIXME: NewToken"
-processFrame _ _ NewConnectionID{} =
-    putStrLn "FIXME: NewConnectionID"
+processFrame _ _ (NewConnectionID sn _ _ _)  =
+    putStrLn $ "FIXME: NewConnectionID " ++ show sn
 processFrame ctx pt (ConnectionCloseQUIC err _ftyp _reason) = do
     case pt of
       Initial   -> atomically $ writeTQueue (inputQ ctx) $ E err
