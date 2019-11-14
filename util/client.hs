@@ -38,7 +38,7 @@ quicClient serverName s peerAddr = do
         return defaultClientConfig {
                 ccVersion    = Draft23
               , ccServerName = serverName
-              , ccALPN       = return $ Just ["h3-23","hq-23"]
+              , ccALPN       = return $ Just ["h3-24","hq-24"]
               , ccSend       = send
               , ccRecv       = recv
               , ccParams     = exampleParameters
