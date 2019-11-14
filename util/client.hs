@@ -23,9 +23,9 @@ quicClient serverName s peerAddr = do
     conf <- makeConf
     E.bracket (handshake conf) bye client
   where
-    client ctx = do
-        sendData ctx "GET /index.html\r\n"
-        recvData ctx >>= C8.putStr
+    client conn = do
+        sendData conn "GET /index.html\r\n"
+        recvData conn >>= C8.putStr
     makeConf = do
         ref <- newIORef peerAddr
         let recv = do

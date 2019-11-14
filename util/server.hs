@@ -22,14 +22,14 @@ quicServer :: Socket -> ByteString -> FilePath -> FilePath -> IO ()
 quicServer s bs0 cert key =
     E.bracket (handshake conf) bye server
   where
-    server ctx = do
-        bs <- recvData ctx
+    server conn = do
+        bs <- recvData conn
         if bs == "" then
             putStrLn "Stream finished"
           else do
             C8.putStr bs
-            sendData ctx "<html><body>Hello world!</body></html>"
-            server ctx
+            sendData conn "<html><body>Hello world!</body></html>"
+            server conn
     conf = defaultServerConfig {
             scVersion    = Draft23
           , scKey        = key
