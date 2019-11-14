@@ -133,6 +133,7 @@ encodePacket ctx pkt = withWriteBuffer 2048 $ \wbuf ->
 encodePacket' :: Context -> WriteBuffer -> Packet -> IO ()
 encodePacket' _ctx wbuf (VersionNegotiationPacket dcID scID vers) = do
     -- flag
+    -- fixme: randomizing unused bits
     write8 wbuf 0b10000000
     -- ver .. scID
     encodeLongHeader wbuf Negotiation dcID scID
@@ -171,6 +172,7 @@ encodePacket' ctx wbuf (HandshakePacket ver dcID scID pn frames) = do
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg True
 
 encodePacket' _ctx wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
+    -- fixme: randomizing unused bits
     let flags = encodePacketType 0b11000000 LHRetry
     write8 wbuf flags
     encodeLongHeader wbuf ver dcID scID

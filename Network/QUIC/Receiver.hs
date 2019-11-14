@@ -49,6 +49,7 @@ processPacket ctx (ShortPacket     _       pn fs) = do
       addPNs ctx Short pn
 --      putStrLn $ "S: " ++ show fs
       mapM_ (processFrame ctx Short) fs
+processPacket _ctx RetryPacket{}  = undefined -- fixme
 processPacket _ _ = undefined
 
 processFrame :: Context -> PacketType -> Frame -> IO ()
