@@ -143,6 +143,6 @@ decodeNewConnectionID rbuf = do
     seqNum <- fromIntegral <$> decodeInt' rbuf
     rpt <- fromIntegral <$> decodeInt' rbuf
     cidLen <- fromIntegral <$> read8 rbuf
-    cID <- CID <$> extractShortByteString rbuf cidLen
+    cID <- makeCID <$> extractShortByteString rbuf cidLen
     token <- extractShortByteString rbuf 16
     return $ NewConnectionID seqNum rpt cID token

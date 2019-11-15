@@ -15,7 +15,7 @@ module Network.QUIC (
   , ServerConfig(..)
   , defaultServerConfig
   , Version(..)
-  , CID(..)
+  , CID
   , Parameters(..)
   , defaultParameters
   , exampleParameters

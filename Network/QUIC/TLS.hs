@@ -26,7 +26,7 @@ module Network.QUIC.TLS (
   , CipherText
   , Key(..)
   , IV(..)
-  , CID(..)
+  , CID
   , Secret(..)
   , AddDat(..)
   , Sample(..)

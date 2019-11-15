@@ -1,4 +1,36 @@
-module Network.QUIC.Transport.Types where
+module Network.QUIC.Transport.Types (
+    Bytes
+  , Length
+  , PacketNumber
+  , StreamID
+  , EncodedPacketNumber
+  , CID
+  , myCIDLength
+  , newCID
+  , fromCID
+  , makeCID
+  , unpackCID
+  , Token
+  , RawFlags
+  , LongHeaderPacketType(..)
+  , Version(..)
+  , currentDraft
+  , PacketType(..)
+  , Packet(..)
+  , Delay
+  , Range
+  , Gap
+  , CryptoData
+  , StreamData
+  , Fin
+  , FrameType
+  , ReasonPhrase
+  , PathData
+  , StatelessResetToken
+  , Frame(..)
+  , EncryptionLevel(..)
+  , QUICError(..)
+  ) where
 
 import Crypto.Random (getRandomBytes)
 import qualified Data.ByteString.Short as Short
@@ -18,11 +50,22 @@ type EncodedPacketNumber = Word32
 
 newtype CID = CID Bytes deriving (Eq, Ord)
 
+myCIDLength :: Int
+myCIDLength = 8
+
 newCID :: IO CID
-newCID = CID . Short.toShort <$> getRandomBytes 8 -- fixme: hard-coding
+newCID = CID . Short.toShort <$> getRandomBytes myCIDLength
 
 fromCID :: CID -> ByteString
 fromCID (CID sbs) = Short.fromShort sbs
+
+makeCID :: ShortByteString -> CID
+makeCID = CID
+
+unpackCID :: CID -> (ShortByteString, Word8)
+unpackCID (CID sbs) = (sbs, len)
+  where
+    len = fromIntegral $ Short.length sbs
 
 instance Show CID where
     show (CID cid) = "CID=" ++ shortToString (enc16s cid)

@@ -17,9 +17,9 @@ analyzeLongHeaderPacket bin = withReadBuffer bin $ \rbuf -> do
     if isLong proFlags then do
         _ <- read32 rbuf
         dcIDlen <- fromIntegral <$> read8 rbuf
-        dcID <- CID <$> extractShortByteString rbuf dcIDlen
+        dcID <- makeCID <$> extractShortByteString rbuf dcIDlen
         scIDlen <- fromIntegral <$> read8 rbuf
-        scID <- CID <$> extractShortByteString rbuf scIDlen
+        scID <- makeCID <$> extractShortByteString rbuf scIDlen
         return $ Just (dcID, scID)
       else
         return Nothing
