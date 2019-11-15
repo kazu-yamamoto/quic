@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-
 module Network.QUIC.Transport.Types where
 
 import qualified Data.ByteString.Char8 as C8

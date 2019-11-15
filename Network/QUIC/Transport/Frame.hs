@@ -21,7 +21,7 @@ encodeFrame wbuf (Ack largest delay range1 ranges) = do
     encodeInt' wbuf largest
     encodeInt' wbuf $ fromIntegral delay
     encodeInt' wbuf $ fromIntegral $ length ranges
-    encodeInt' wbuf $ fromIntegral $ range1
+    encodeInt' wbuf $ fromIntegral range1
     -- fixme: ranges
 encodeFrame wbuf (Crypto off cdata) = do
     write8 wbuf 0x06
@@ -37,7 +37,7 @@ encodeFrame wbuf (Stream sid _off dat _fin) = do
     encodeInt' wbuf sid
     encodeInt' wbuf $ fromIntegral $ B.length dat
     copyByteString wbuf dat
-encodeFrame wbuf (NewConnectionID _ _ _ _) = do
+encodeFrame wbuf NewConnectionID{} = do
     write8 wbuf 0x18
     undefined
 encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do

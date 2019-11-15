@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Sender where
 
@@ -81,7 +80,7 @@ construct ctx pt frames = do
         mypn <- getPacketNumber ctx
         pns <- clearPNs ctx pt
         let frames'
-              | pns == [] = frames
+              | null pns  = frames
               | otherwise = constructAckFrame pns : frames
         let pkt = case pt of
               Initial   -> InitialPacket   currentDraft peercid mycid "" mypn frames'

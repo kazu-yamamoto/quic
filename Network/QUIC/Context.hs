@@ -248,7 +248,7 @@ rxApplicationSecret ctx = do
 ----------------------------------------------------------------
 
 getPacketNumber :: Context -> IO PacketNumber
-getPacketNumber ctx = atomicModifyIORef' (packetNumber ctx) (\pn -> ((pn + 1), pn))
+getPacketNumber ctx = atomicModifyIORef' (packetNumber ctx) (\pn -> (pn + 1, pn))
 
 ----------------------------------------------------------------
 

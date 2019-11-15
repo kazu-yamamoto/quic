@@ -249,10 +249,10 @@ sampleLength cipher
   | otherwise                                      = error "sampleLength"
 
 bsXOR :: ByteString -> ByteString -> ByteString
-bsXOR bs1 bs2 = B.pack $ map (uncurry xor) $ B.zip bs1 bs2
+bsXOR bs1 bs2 = B.pack $ B.zipWith xor bs1 bs2
 
 bsXORpad :: ByteString -> ByteString -> ByteString
-bsXORpad iv pn = B.pack $ map (uncurry xor) $ zip ivl pnl
+bsXORpad iv pn = B.pack $ zipWith xor ivl pnl
   where
     ivl = B.unpack iv
     diff = B.length iv - B.length pn
