@@ -118,11 +118,11 @@ serverInitialSecret :: Version -> CID -> ServerTrafficSecret InitialSecret
 serverInitialSecret v c = ServerTrafficSecret $ initialSecret (Label "server in") v c
 
 initialSecret :: Label -> Version -> CID -> ByteString
-initialSecret (Label label) ver (CID cid) = secret
+initialSecret (Label label) ver cid = secret
   where
     cipher    = defaultCipher
     hash      = cipherHash cipher
-    iniSecret = hkdfExtract hash (initialSalt ver) cid
+    iniSecret = hkdfExtract hash (initialSalt ver) $ fromCID cid
     hashSize  = hashDigestSize hash
     secret    = hkdfExpandLabel hash iniSecret label "" hashSize
 

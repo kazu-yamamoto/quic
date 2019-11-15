@@ -1,6 +1,7 @@
 module Network.QUIC.Transport.Frame where
 
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Imports
 import Network.QUIC.Transport.Error
@@ -44,13 +45,13 @@ encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
     write8 wbuf 0x1c
     encodeInt' wbuf $ fromIntegral $ fromTransportError err
     encodeInt' wbuf $ fromIntegral ftyp
-    encodeInt' wbuf $ fromIntegral $ B.length reason
-    copyByteString wbuf reason
+    encodeInt' wbuf $ fromIntegral $ Short.length reason
+    copyShortByteString wbuf reason
 encodeFrame wbuf (ConnectionCloseApp err reason) = do
     write8 wbuf 0x1d
     encodeInt' wbuf $ fromIntegral $ fromTransportError err
-    encodeInt' wbuf $ fromIntegral $ B.length reason
-    copyByteString wbuf reason
+    encodeInt' wbuf $ fromIntegral $ Short.length reason
+    copyShortByteString wbuf reason
 encodeFrame _ _ = undefined
 
 ----------------------------------------------------------------
@@ -104,7 +105,7 @@ decodeAckFrame rbuf = do
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do
     len <- fromIntegral <$> decodeInt' rbuf
-    token <- extractByteString rbuf len
+    token <- extractShortByteString rbuf len
     return $ NewToken token
 
 decodeStreamFrame :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
@@ -127,14 +128,14 @@ decodeConnectionCloseFrameQUIC rbuf = do
     err    <- toTransportError . fromIntegral <$> decodeInt' rbuf
     ftyp   <- fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
-    reason <- extractByteString rbuf len
+    reason <- extractShortByteString rbuf len
     return $ ConnectionCloseQUIC err ftyp reason
 
 decodeConnectionCloseFrameApp  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameApp rbuf = do
     err    <- toTransportError . fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
-    reason <- extractByteString rbuf len
+    reason <- extractShortByteString rbuf len
     return $ ConnectionCloseApp err reason
 
 decodeNewConnectionID :: ReadBuffer -> IO Frame
@@ -142,6 +143,6 @@ decodeNewConnectionID rbuf = do
     seqNum <- fromIntegral <$> decodeInt' rbuf
     rpt <- fromIntegral <$> decodeInt' rbuf
     cidLen <- fromIntegral <$> read8 rbuf
-    cID <- CID <$> extractByteString rbuf cidLen
-    token <- extractByteString rbuf 16
+    cID <- CID <$> extractShortByteString rbuf cidLen
+    token <- extractShortByteString rbuf 16
     return $ NewConnectionID seqNum rpt cID token

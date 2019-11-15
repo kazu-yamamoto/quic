@@ -5,6 +5,7 @@ module Network.QUIC.Transport.Packet where
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Short as Short
 import Foreign.Ptr
 
 import Network.QUIC.Connection
@@ -146,8 +147,8 @@ encodePacket' conn wbuf (InitialPacket ver dcID scID token pn frames) = do
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf LHInitial ver dcID scID pn
     -- token
-    encodeInt' wbuf $ fromIntegral $ B.length token
-    copyByteString wbuf token
+    encodeInt' wbuf $ fromIntegral $ Short.length token
+    copyShortByteString wbuf token
     -- length .. payload
     secret <- txInitialSecret conn
     let cipher = defaultCipher
@@ -176,10 +177,10 @@ encodePacket' _conn wbuf (RetryPacket ver dcID scID (CID odcid) token) = do
     let flags = encodePacketType 0b11000000 LHRetry
     write8 wbuf flags
     encodeLongHeader wbuf ver dcID scID
-    let odcidlen = fromIntegral $ B.length odcid
+    let odcidlen = fromIntegral $ Short.length odcid
     write8 wbuf odcidlen
-    copyByteString wbuf odcid
-    copyByteString wbuf token
+    copyShortByteString wbuf odcid
+    copyShortByteString wbuf token
     -- no header protection
 
 encodePacket' conn wbuf (ShortPacket (CID dcid) pn frames) = do
@@ -190,7 +191,7 @@ encodePacket' conn wbuf (ShortPacket (CID dcid) pn frames) = do
     headerBeg <- currentOffset wbuf
     write8 wbuf flags
     -- dcID
-    copyByteString wbuf dcid
+    copyShortByteString wbuf dcid
     secret <- txApplicationSecret conn
     cipher <- getCipher conn
     protectPayloadHeader wbuf frames cipher secret pn epn epnLen headerBeg False
@@ -200,12 +201,12 @@ encodeLongHeader :: WriteBuffer
                  -> IO ()
 encodeLongHeader wbuf ver (CID dcid) (CID scid) = do
     write32 wbuf $ encodeVersion ver
-    let dcidlen = fromIntegral $ B.length dcid
+    let dcidlen = fromIntegral $ Short.length dcid
     write8 wbuf dcidlen
-    copyByteString wbuf dcid
-    let scidlen = fromIntegral $ B.length scid
+    copyShortByteString wbuf dcid
+    let scidlen = fromIntegral $ Short.length scid
     write8 wbuf scidlen
-    copyByteString wbuf scid
+    copyShortByteString wbuf scid
 
 encodeLongHeaderPP :: Connection -> WriteBuffer
                    -> LongHeaderPacketType -> Version -> CID -> CID
@@ -262,9 +263,9 @@ decodeLongHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
 decodeLongHeaderPacket conn rbuf proFlags = do
     version <- decodeVersion <$> read32 rbuf
     dcIDlen <- fromIntegral <$> read8 rbuf
-    dcID <- CID <$> extractByteString rbuf dcIDlen
+    dcID <- CID <$> extractShortByteString rbuf dcIDlen
     scIDlen <- fromIntegral <$> read8 rbuf
-    scID <- CID <$> extractByteString rbuf scIDlen
+    scID <- CID <$> extractShortByteString rbuf scIDlen
     case version of
       Negotiation          -> decodeVersionNegotiationPacket rbuf dcID scID
       v@(UnknownVersion _) -> E.throwIO $ VersionIsUnknown v
@@ -293,7 +294,7 @@ decodeDraft conn rbuf proFlags version dcID scID = case decodePacketType proFlag
 decodeInitialPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeInitialPacket conn rbuf proFlags version dcID scID = do
     tokenLen <- fromIntegral <$> decodeInt' rbuf
-    token <- extractByteString rbuf tokenLen
+    token <- extractShortByteString rbuf tokenLen
     secret <- rxInitialSecret conn
     let cipher = defaultCipher
     (_flags, pn, frames) <- unprotectHeaderPayload rbuf proFlags cipher secret
@@ -334,16 +335,16 @@ unprotectHeaderPayload rbuf proFlags cipher secret = do
 decodeRetryPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeRetryPacket _conn rbuf _proFlags version dcID scID = do
     origIDlen <- fromIntegral <$> read8 rbuf
-    origID <- CID <$> extractByteString rbuf origIDlen
+    origID <- CID <$> extractShortByteString rbuf origIDlen
     siz <- remainingSize rbuf
-    token <- extractByteString rbuf siz
+    token <- extractShortByteString rbuf siz
     return $ RetryPacket version dcID scID origID token
 
 decodeShortHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
 decodeShortHeaderPacket conn rbuf proFlags = do
     let mycid@(CID my) = myCID conn
-        idlen = B.length my
-    dcID <- CID <$> extractByteString rbuf idlen
+        idlen = Short.length my
+    dcID <- CID <$> extractShortByteString rbuf idlen
     when (mycid /= dcID) $ error "decodeShortHeaderPacket"
     cipher <- getCipher conn
     secret <- rxApplicationSecret conn

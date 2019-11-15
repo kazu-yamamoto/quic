@@ -6,7 +6,6 @@ module Network.QUIC.Connection where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Exception as E
-import Crypto.Random (getRandomBytes)
 import Data.IORef
 import Network.TLS (HostName)
 import Network.TLS.Extra.Cipher
@@ -172,10 +171,10 @@ clientConnection ClientConfig{..} = do
     controller <- clientController ccServerName ccCiphers ccALPN params
     ref <- newIORef $ Just controller
     mycid <- case ccMyCID of
-      Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
+      Nothing  -> newCID
       Just cid -> return cid
     peercid <- case ccPeerCID of
-      Nothing  -> CID <$> getRandomBytes 8 -- fixme: hard-coding
+      Nothing  -> newCID
       Just cid -> return cid
     let isecs = initialSecrets ccVersion peercid
     newConnection (Client ref) mycid peercid ccSend ccRecv ccParams isecs

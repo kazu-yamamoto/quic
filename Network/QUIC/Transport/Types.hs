@@ -1,22 +1,33 @@
 module Network.QUIC.Transport.Types where
 
-import qualified Data.ByteString.Char8 as C8
+import Crypto.Random (getRandomBytes)
+import qualified Data.ByteString.Short as Short
 
 import qualified Control.Exception as E
 import Network.QUIC.Imports
 import Network.QUIC.Transport.Error
+
+-- | All internal byte sequences.
+--   `ByteString` should be used for FFI related stuff.
+type Bytes = ShortByteString
 
 type Length = Int
 type PacketNumber = Int64
 type StreamID = Int64
 type EncodedPacketNumber = Word32
 
-newtype CID = CID ByteString deriving (Eq)
+newtype CID = CID Bytes deriving (Eq, Ord)
+
+newCID :: IO CID
+newCID = CID . Short.toShort <$> getRandomBytes 8 -- fixme: hard-coding
+
+fromCID :: CID -> ByteString
+fromCID (CID sbs) = Short.fromShort sbs
 
 instance Show CID where
-    show (CID cid) = "CID=" ++ C8.unpack (enc16 cid)
+    show (CID cid) = "CID=" ++ shortToString (enc16s cid)
 
-type Token = ByteString
+type Token = Bytes
 type RawFlags = Word8
 
 data LongHeaderPacketType = LHInitial | LHRTT0 | LHHandshake | LHRetry
@@ -54,6 +65,9 @@ type CryptoData = ByteString
 type StreamData = ByteString
 type Fin = Bool
 type FrameType = Int
+type ReasonPhrase = Bytes
+type PathData = Bytes -- 8 bytes
+type StatelessResetToken = Bytes -- 16 bytes
 
 data Frame = Padding
            | Ping
@@ -69,12 +83,12 @@ data Frame = Padding
            | DataBlocked -- fixme
            | StreamDataBlocked -- fixme
            | StreamsBlocked -- fixme
-           | NewConnectionID Int Int CID ByteString
+           | NewConnectionID Int Int CID StatelessResetToken
            | RetireConnectionID -- fixme
-           | PathChallenge ByteString
-           | PathResponse ByteString
-           | ConnectionCloseQUIC TransportError FrameType ByteString
-           | ConnectionCloseApp  TransportError ByteString
+           | PathChallenge PathData
+           | PathResponse PathData
+           | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
+           | ConnectionCloseApp  TransportError ReasonPhrase
            deriving (Eq,Show)
 
 data EncryptionLevel = InitialLevel

@@ -16,7 +16,7 @@ spec = do
     -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
     describe "test vector" $ do
         it "describes example of Client Initial draft 23" $ do
-            let dcid = CID $ dec16 "8394c8f03e515708"
+            let dcid = CID $ dec16s "8394c8f03e515708"
             let clientConf = defaultClientConfig {
                     ccPeerCID = Just dcid
                   }

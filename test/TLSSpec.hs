@@ -21,7 +21,7 @@ spec = do
         it "describes the examples of Keys" $ do
             ----------------------------------------------------------------
             -- shared keys
-            let dcID = CID (dec16 "8394c8f03e515708")
+            let dcID = CID (dec16s "8394c8f03e515708")
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret currentDraft dcID
             client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "fda3953aecc040e48b34e27ef87de3a6098ecf0e38b7e032c5c57bcbd5975b84")
             let ckey = aeadKey defaultCipher (Secret cis)
@@ -40,7 +40,7 @@ spec = do
             shp `shouldBe` Key (dec16 "a8ed82e6664f865aedf6106943f95fb8")
 
         it "describes the examples of Client Initial draft 23" $ do
-            let dcID = CID (dec16 "8394c8f03e515708")
+            let dcID = CID (dec16s "8394c8f03e515708")
                 ClientTrafficSecret cis = clientInitialSecret currentDraft dcID
                 ckey = aeadKey defaultCipher (Secret cis)
                 civ = initialVector defaultCipher (Secret cis)
