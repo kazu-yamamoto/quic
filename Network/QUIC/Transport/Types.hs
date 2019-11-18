@@ -73,9 +73,6 @@ instance Show CID where
 type Token = Bytes
 type RawFlags = Word8
 
-data LongHeaderPacketType = LHInitial | LHRTT0 | LHHandshake | LHRetry
-                deriving (Eq, Show)
-
 data Version = Negotiation
              | Draft18
              | Draft19
@@ -90,7 +87,18 @@ data Version = Negotiation
 currentDraft :: Version
 currentDraft = Draft24
 
-data PacketType = Initial | RTT0 | Handshake | Retry | Short
+data LongHeaderPacketType = LHInitial
+                          | LHRTT0
+                          | LHHandshake
+                          | LHRetry
+                          deriving (Eq, Show)
+
+data PacketType = VersionNegotiation
+                | Initial
+                | RTT0
+                | Handshake
+                | Retry
+                | Short
                 deriving (Eq, Show)
 
 data Packet = VersionNegotiationPacket CID CID [Version]
