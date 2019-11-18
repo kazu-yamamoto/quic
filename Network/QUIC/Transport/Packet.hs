@@ -174,7 +174,7 @@ encodePacket' conn wbuf (HandshakePacket ver dcID scID pn frames) = do
 
 encodePacket' _conn wbuf (RetryPacket ver dcID scID odcID token) = do
     -- fixme: randomizing unused bits
-    let flags = encodePacketType 0b11000000 LHRetry
+    let flags = encodeLongHeaderPacketType 0b00000000 LHRetry
     write8 wbuf flags
     encodeLongHeader wbuf ver dcID scID
     let (odcid, odcidlen) = unpackCID odcID
@@ -216,7 +216,7 @@ encodeLongHeaderPP :: Connection -> WriteBuffer
 encodeLongHeaderPP _conn wbuf pkttyp ver dcID scID pn = do
     let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = fromIntegral (pnLen - 1)
-        flags' = encodePacketType (0b11000000 .|. pp) pkttyp
+        flags' = encodeLongHeaderPacketType pp pkttyp
     write8 wbuf flags'
     encodeLongHeader wbuf ver dcID scID
     return el
@@ -286,7 +286,7 @@ decodeVersionNegotiationPacket rbuf dcID scID = do
             decodeVersions (siz - 4) ((ver :) . vers)
 
 decodeDraft :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
-decodeDraft conn rbuf proFlags version dcID scID = case decodePacketType proFlags of
+decodeDraft conn rbuf proFlags version dcID scID = case decodeLongHeaderPacketType proFlags of
     LHInitial   -> decodeInitialPacket   conn rbuf proFlags version dcID scID
     LHRTT0      -> decodeRTT0Packet      conn rbuf proFlags version dcID scID
     LHHandshake -> decodeHandshakePacket conn rbuf proFlags version dcID scID
