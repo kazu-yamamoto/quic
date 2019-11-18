@@ -38,5 +38,5 @@ quicServer s bs0 cert key =
           , scRecv       = NSB.recv s 2048
           , scParams     = exampleParameters
           , scClientIni  = bs0
-          , scALPN       = Just (\_ -> return "hq-23")
+          , scALPN       = Just (\_ -> return "hq-24")
           }
