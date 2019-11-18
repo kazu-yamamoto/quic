@@ -203,7 +203,7 @@ setHandshakeSecrets conn secs = do
 setApplicationSecrets :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 setApplicationSecrets conn secs = do
     writeIORef (appSecrets conn) (Just secs)
-    atomically $ writeTVar (encryptionLevel conn) ApplicationLevel
+    atomically $ writeTVar (encryptionLevel conn) RTT1Level
 
 ----------------------------------------------------------------
 

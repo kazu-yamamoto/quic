@@ -135,8 +135,9 @@ data Frame = Padding
            deriving (Eq,Show)
 
 data EncryptionLevel = InitialLevel
+                     | RTT0Level
                      | HandshakeLevel
-                     | ApplicationLevel
+                     | RTT1Level
                      deriving (Eq, Ord, Show)
 
 data QUICError = PacketIsBroken

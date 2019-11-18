@@ -48,6 +48,6 @@ packetEncryptionLevel bs
                   LHRetry     -> InitialLevel
                   LHHandshake -> HandshakeLevel
                   _           -> undefined
-  | otherwise     = ApplicationLevel
+  | otherwise     = RTT1Level
   where
     w = B.head bs
