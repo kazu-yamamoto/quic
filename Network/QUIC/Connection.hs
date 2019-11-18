@@ -189,7 +189,8 @@ serverConnection ServerConfig{..} = do
       Nothing -> E.throwIO PacketIsBroken
       Just (mycid, peercid) -> do
           let isecs = initialSecrets scVersion mycid
-          conn <- newConnection (Server ref) mycid peercid scSend scRecv scParams isecs
+          mycid' <- newCID
+          conn <- newConnection (Server ref) mycid' peercid scSend scRecv scParams isecs
           writeIORef (clientInitial conn) (Just scClientIni)
           return conn
 
