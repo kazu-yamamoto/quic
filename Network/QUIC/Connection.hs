@@ -5,30 +5,16 @@ module Network.QUIC.Connection where
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception as E
 import Data.IORef
-import Network.TLS (HostName)
-import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
 import System.Mem.Weak
 
+import Network.QUIC.Config
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Error
-import Network.QUIC.Transport.Header
-import Network.QUIC.Transport.Parameters
 import Network.QUIC.Transport.Types
-
-----------------------------------------------------------------
-
-class Config a where
-    makeConnection :: a -> IO Connection
-
-instance Config ClientConfig where
-    makeConnection = clientConnection
-
-instance Config ServerConfig where
-    makeConnection = serverConnection
 
 ----------------------------------------------------------------
 
@@ -44,56 +30,6 @@ data Role = Client (IORef (Maybe ClientController))
 
 type GetHandshake = IO ByteString
 type PutHandshake = ByteString -> IO ()
-
-data ClientConfig = ClientConfig {
-    ccVersion    :: Version
-  , ccServerName :: HostName
-  , ccPeerCID    :: Maybe CID -- for the test purpose
-  , ccMyCID      :: Maybe CID -- for the test purpose
-  , ccALPN       :: IO (Maybe [ByteString])
-  , ccCiphers    :: [Cipher]
-  , ccSend       :: ByteString -> IO ()
-  , ccRecv       :: IO ByteString
-  , ccParams     :: Parameters
-  }
-
-defaultClientConfig :: ClientConfig
-defaultClientConfig = ClientConfig {
-    ccVersion    = currentDraft
-  , ccServerName = "127.0.0.1"
-  , ccPeerCID    = Nothing
-  , ccMyCID      = Nothing
-  , ccALPN       = return Nothing
-  , ccCiphers    = ciphersuite_strong
-  , ccSend       = \_ -> return ()
-  , ccRecv       = return ""
-  , ccParams     = defaultParameters
-  }
-
-----------------------------------------------------------------
-
-data ServerConfig = ServerConfig {
-    scVersion    :: Version
-  , scKey        :: FilePath
-  , scCert       :: FilePath
-  , scSend       :: ByteString -> IO ()
-  , scRecv       :: IO ByteString
-  , scParams     :: Parameters
-  , scClientIni  :: ByteString
-  , scALPN       :: Maybe ([ByteString] -> IO ByteString)
-  }
-
-defaultServerConfig :: ServerConfig
-defaultServerConfig = ServerConfig {
-    scVersion    = currentDraft
-  , scKey        = "serverkey.pem"
-  , scCert       = "servercert.pem"
-  , scSend       = \_ -> return ()
-  , scRecv       = return ""
-  , scParams     = defaultParameters
-  , scClientIni  = ""
-  , scALPN       = Nothing
-  }
 
 ----------------------------------------------------------------
 
@@ -121,7 +57,6 @@ data Connection = Connection {
   , myCID            :: CID
   , connSend         :: ByteString -> IO ()
   , connRecv         :: IO ByteString
-  , myParams         :: Parameters
   , iniSecrets       :: TrafficSecrets InitialSecret
   , hndSecrets       :: IORef (Maybe (TrafficSecrets HandshakeSecret))
   , appSecrets       :: IORef (Maybe (TrafficSecrets ApplicationSecret))
@@ -138,15 +73,14 @@ data Connection = Connection {
   , handshakeState   :: IORef PhaseState
   , applicationState :: IORef PhaseState
   , encryptionLevel  :: TVar EncryptionLevel
-  , clientInitial    :: IORef (Maybe ByteString)
   , closeState       :: TVar CloseState -- fixme: stream table
   , connectionState  :: TVar ConnectionState -- fixme: stream table
   , threadIds        :: IORef [Weak ThreadId]
   }
 
-newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Connection
-newConnection rl mid peercid send recv myparam isecs =
-    Connection rl mid send recv myparam isecs
+newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> TrafficSecrets InitialSecret -> IO Connection
+newConnection rl mid peercid send recv isecs =
+    Connection rl mid send recv isecs
         <$> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef defaultParameters
@@ -160,7 +94,6 @@ newConnection rl mid peercid send recv myparam isecs =
         <*> newIORef defaultPhaseState
         <*> newIORef defaultPhaseState
         <*> newTVarIO InitialLevel
-        <*> newIORef Nothing
         <*> newTVarIO (CloseState False False)
         <*> newTVarIO NotOpen
         <*> newIORef []
@@ -177,22 +110,16 @@ clientConnection ClientConfig{..} = do
       Nothing  -> newCID
       Just cid -> return cid
     let isecs = initialSecrets ccVersion peercid
-    newConnection (Client ref) mycid peercid ccSend ccRecv ccParams isecs
+    newConnection (Client ref) mycid peercid ccSend ccRecv isecs
 
-serverConnection :: ServerConfig -> IO Connection
-serverConnection ServerConfig{..} = do
-    let params = encodeParametersList $ diffParameters scParams
+serverConnection :: ServerConfig -> CID -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
+serverConnection ServerConfig{..} mycid peercid ocid send recv = do
+    let params = encodeParametersList $ diffParameters scParameters
     controller <- serverController scKey scCert scALPN params
     ref <- newIORef $ Just controller
-    mcids <- analyzeLongHeaderPacket scClientIni
-    case mcids of
-      Nothing -> E.throwIO PacketIsBroken
-      Just (mycid, peercid) -> do
-          let isecs = initialSecrets scVersion mycid
-          mycid' <- newCID
-          conn <- newConnection (Server ref) mycid' peercid scSend scRecv scParams isecs
-          writeIORef (clientInitial conn) (Just scClientIni)
-          return conn
+    let isecs = initialSecrets scVersion ocid
+    conn <- newConnection (Server ref) mycid peercid send recv isecs
+    return conn
 
 ----------------------------------------------------------------
 
@@ -336,12 +263,6 @@ checkEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 checkEncryptionLevel conn level = atomically $ do
     l <- readTVar $ encryptionLevel conn
     check (l >= level)
-
-readClearClientInitial :: Connection -> IO (Maybe ByteString)
-readClearClientInitial Connection{..} = do
-    mbs <- readIORef clientInitial
-    writeIORef clientInitial Nothing
-    return mbs
 
 setCloseSent :: Connection -> IO ()
 setCloseSent conn = atomically $ modifyTVar (closeState conn) (\s -> s { closeSent = True })

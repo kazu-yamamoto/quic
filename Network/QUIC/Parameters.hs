@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Transport.Parameters where
+module Network.QUIC.Parameters where
 
 import System.IO.Unsafe (unsafeDupablePerformIO)
 import qualified Data.ByteString as BS

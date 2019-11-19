@@ -7,7 +7,7 @@ import Control.Monad
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Network.Run.UDP
-import Network.Socket hiding (Stream)
+import Network.Socket (Socket, SockAddr)
 import qualified Network.Socket.ByteString as NSB
 import System.Environment
 
@@ -21,7 +21,7 @@ main = do
 quicClient :: String -> Socket -> SockAddr -> IO ()
 quicClient serverName s peerAddr = do
     conf <- makeConf
-    E.bracket (handshake conf) bye client
+    E.bracket (connect conf) close client
   where
     client conn = do
         sendData conn "GET /index.html\r\n"
@@ -36,8 +36,7 @@ quicClient serverName s peerAddr = do
                 peer <- readIORef ref
                 void $ NSB.sendTo s bs peer
         return defaultClientConfig {
-                ccVersion    = Draft23
-              , ccServerName = serverName
+                ccServerName = serverName
               , ccALPN       = return $ Just ["h3-24","hq-24"]
               , ccSend       = send
               , ccRecv       = recv

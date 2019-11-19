@@ -65,6 +65,18 @@ decomp n ws x = decomp (n-1) (w:ws) x'
     x' = x `shiftR` 8
     w  = fromIntegral x
 
+encodeInt8 :: Int64  -> ByteString
+encodeInt8 i = unsafeDupablePerformIO $ withWriteBuffer 8 $ \wbuf -> do
+    let [w0,w1,w2,w3,w4,w5,w6,w7] = decomp 8 [] i
+    write8 wbuf (w0 .|. 0b11000000)
+    write8 wbuf w1
+    write8 wbuf w2
+    write8 wbuf w3
+    write8 wbuf w4
+    write8 wbuf w5
+    write8 wbuf w6
+    write8 wbuf w7
+
 ----------------------------------------------------------------
 
 -- |

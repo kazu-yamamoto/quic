@@ -2,13 +2,9 @@
 
 module Main where
 
-import qualified Control.Exception as E
-import Control.Monad (void)
-import Data.ByteString (ByteString)
+import Control.Concurrent
+import Control.Monad (void, forever)
 import qualified Data.ByteString.Char8 as C8
-import Network.Run.UDP
-import Network.Socket hiding (Stream)
-import qualified Network.Socket.ByteString as NSB
 import System.Environment (getArgs)
 
 import Network.QUIC
@@ -16,13 +12,22 @@ import Network.QUIC
 main :: IO ()
 main = do
     [port,cert,key] <- getArgs
-    runUDPServerFork ["127.0.0.1","::1"] port $ \s bs0 -> quicServer s bs0 cert key
+    let conf = defaultServerConfig {
+            scAddresses    = [("127.0.0.1", read port)]
+          , scKey          = key
+          , scCert         = cert
+          , scParameters   = exampleParameters
+          , scALPN         = Just (\_ -> return "hq-24")
+          , scRequireRetry = False
+          }
+    withQUICServer conf $ \qs -> forever $ do
+        conn <- accept qs
+        void $ forkFinally (server conn) (\_ -> close conn)
 
-quicServer :: Socket -> ByteString -> FilePath -> FilePath -> IO ()
-quicServer s bs0 cert key =
-    E.bracket (handshake conf) bye server
+server :: Connection -> IO ()
+server conn = loop
   where
-    server conn = do
+    loop = do
         bs <- recvData conn
         if bs == "" then
             putStrLn "Stream finished"
@@ -30,13 +35,3 @@ quicServer s bs0 cert key =
             C8.putStr bs
             sendData conn "<html><body>Hello world!</body></html>"
             server conn
-    conf = defaultServerConfig {
-            scVersion    = Draft23
-          , scKey        = key
-          , scCert       = cert
-          , scSend       = \bs -> void $ NSB.send s bs
-          , scRecv       = NSB.recv s 2048
-          , scParams     = exampleParameters
-          , scClientIni  = bs0
-          , scALPN       = Just (\_ -> return "hq-24")
-          }
