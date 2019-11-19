@@ -262,10 +262,10 @@ decodePacket conn bin = withReadBuffer bin $ \rbuf -> do
 decodeLongHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
 decodeLongHeaderPacket conn rbuf proFlags = do
     version <- decodeVersion <$> read32 rbuf
-    dCIDlen <- fromIntegral <$> read8 rbuf
-    dCID <- makeCID <$> extractShortByteString rbuf dCIDlen
-    sCIDlen <- fromIntegral <$> read8 rbuf
-    sCID <- makeCID <$> extractShortByteString rbuf sCIDlen
+    dcidlen <- fromIntegral <$> read8 rbuf
+    dCID <- makeCID <$> extractShortByteString rbuf dcidlen
+    scidlen <- fromIntegral <$> read8 rbuf
+    sCID <- makeCID <$> extractShortByteString rbuf scidlen
     case version of
       Negotiation          -> decodeVersionNegotiationPacket rbuf dCID sCID
       v@(UnknownVersion _) -> E.throwIO $ VersionIsUnknown v
@@ -334,11 +334,11 @@ unprotectHeaderPayload rbuf proFlags cipher secret = do
 
 decodeRetryPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeRetryPacket _conn rbuf _proFlags version dCID sCID = do
-    origIDlen <- fromIntegral <$> read8 rbuf
-    origID <- makeCID <$> extractShortByteString rbuf origIDlen
+    odcidlen <- fromIntegral <$> read8 rbuf
+    odCID <- makeCID <$> extractShortByteString rbuf odcidlen
     siz <- remainingSize rbuf
     token <- extractByteString rbuf siz
-    return $ RetryPacket version dCID sCID origID token
+    return $ RetryPacket version dCID sCID odCID token
 
 decodeShortHeaderPacket :: Connection -> ReadBuffer -> Word8 -> IO Packet
 decodeShortHeaderPacket conn rbuf proFlags = do
