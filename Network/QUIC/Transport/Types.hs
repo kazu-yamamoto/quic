@@ -70,7 +70,7 @@ unpackCID (CID sbs) = (sbs, len)
 instance Show CID where
     show (CID cid) = "CID=" ++ shortToString (enc16s cid)
 
-type Token = Bytes
+type Token = ByteString -- to be decrypted
 type RawFlags = Word8
 
 data Version = Negotiation
