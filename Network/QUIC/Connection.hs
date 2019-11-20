@@ -114,8 +114,7 @@ serverConnection ServerConfig{..} mycid peercid ocid send recv = do
     controller <- serverController scKey scCert scALPN params
     ref <- newIORef $ Just controller
     let isecs = initialSecrets scVersion ocid
-    conn <- newConnection (Server ref) mycid peercid send recv isecs
-    return conn
+    newConnection (Server ref) mycid peercid send recv isecs
 
 ----------------------------------------------------------------
 
