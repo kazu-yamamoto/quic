@@ -42,11 +42,14 @@ generateTokenSecret = TokenSecret <$> genServerIV
 
 ----------------------------------------------------------------
 
+serverIVLength :: Int
+serverIVLength = 8
+
 serverKeyLength :: Int
 serverKeyLength = 32
 
-serverIVLength :: Int
-serverIVLength = 8
+serverCounterLength :: Int
+serverCounterLength = 8
 
 serverEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 serverEncrypt = aes256gcmEncrypt
@@ -60,8 +63,8 @@ genServerKey = Key <$> getRandomBytes serverKeyLength
 genServerIV :: IO IV
 genServerIV = IV <$> getRandomBytes serverIVLength
 
-makeNonce1 :: IV -> Int64 -> Nonce
-makeNonce1 iv n = makeNonce2 iv seqnum
+makeNonce1 :: IV -> Int64 -> (Nonce, ByteString)
+makeNonce1 iv n = (makeNonce2 iv seqnum, seqnum)
   where
     seqnum = encodeInt8 n
 
@@ -77,8 +80,9 @@ encryptRetryToken :: TokenSecret -> RetryToken -> IO Token
 encryptRetryToken TokenSecret{..} retryToken = do
     plain <- encodeRetryToken retryToken
     n <- atomicModifyIORef' tokenCounter (\i -> (i+1, i))
-    let nonce = makeNonce1 tokenIV n
-    return $ serverEncrypt tokenKey nonce plain serverAddDat
+    let (nonce, seqnum) = makeNonce1 tokenIV n
+        cipher = serverEncrypt tokenKey nonce plain serverAddDat
+    return (seqnum `BS.append` cipher)
 
 -- seqnum = 8 bytes
 -- tag = 16 bytes
@@ -87,7 +91,7 @@ decryptRetryToken :: TokenSecret -> Token -> IO (Maybe RetryToken)
 decryptRetryToken TokenSecret{..} bs
   | BS.length bs < 35 = return Nothing
   | otherwise = do
-        let (seqnum,cipher) = BS.splitAt 8 bs
+        let (seqnum,cipher) = BS.splitAt serverCounterLength bs
             nonce = makeNonce2 tokenIV seqnum
             mplain = serverDecrypt tokenKey nonce cipher serverAddDat
         case mplain of

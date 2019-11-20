@@ -7,6 +7,7 @@ import qualified Data.ByteString as BS
 
 import Network.QUIC.Imports
 import Network.QUIC.Transport.Integer
+import Network.QUIC.Transport.Types
 
 type ParametersList = [(ParametersKeyId,ParametersValue)]
 
@@ -66,7 +67,7 @@ toParametersKeyId 14 = Just ParametersActiveConnectionIdLimit
 toParametersKeyId _ = Nothing
 
 data Parameters = Parameters {
-    originalConnectionId    :: Maybe ByteString
+    originalConnectionId    :: Maybe CID
   , idleTimeout             :: Int -- Milliseconds
   , stateLessResetToken     :: Maybe ByteString -- 16 bytes
   , maxPacketSize           :: Int
@@ -112,7 +113,7 @@ updateParameters :: Parameters -> ParametersList -> Parameters
 updateParameters params kvs = foldl' update params kvs
   where
     update x (ParametersOriginalConnectionId,v)
-        = x { originalConnectionId = Just v }
+        = x { originalConnectionId = Just (toCID v) }
     update x (ParametersIdleTimeout,v)
         = x { idleTimeout = decInt v }
     update x (ParametersStateLessResetToken,v)
@@ -152,7 +153,7 @@ diff params label key enc
 
 diffParameters :: Parameters -> ParametersList
 diffParameters p = catMaybes [
-    diff p originalConnectionId    ParametersOriginalConnectionId    fromJust
+    diff p originalConnectionId    ParametersOriginalConnectionId    (fromCID . fromJust)
   , diff p idleTimeout             ParametersIdleTimeout             encInt
   , diff p stateLessResetToken     ParametersStateLessResetToken     fromJust
   , diff p maxPacketSize           ParametersMaxPacketSize           encInt

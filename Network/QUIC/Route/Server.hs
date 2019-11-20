@@ -89,14 +89,12 @@ dispatch ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa p
               when (tokenVersion /= ver) $ error "dispatch: fixme"
               when (dCID /= localCID) $ error "dispatch: fixme"
               when (sCID /= remoteCID) $ error "dispatch: fixme"
-              -- fixme: telling oCID for parameters in Crypto.
-              -- fixme: creating new TQueue
               q <- newTQueueIO
               atomicModifyIORef' routeTable $ \rt' -> (M.insert dCID q rt', ())
               -- fixme: check listen length
               atomically $ writeTQueue q bs
-              -- fixme: specifying dCID is correct?
-              atomically $ writeTQueue acceptQueue $ Accept dCID sCID dCID mysa peersa q
+              -- fixme: origLocalCID
+              atomically $ writeTQueue acceptQueue $ Accept dCID sCID origLocalCID mysa peersa q
 dispatch _ ServerRoute{..} (PHShort dCID) _ _ _ _ = do
     rt <- readIORef routeTable
     let mroute = M.lookup dCID rt

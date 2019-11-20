@@ -8,6 +8,7 @@ module Network.QUIC.Transport.Types (
   , myCIDLength
   , newCID
   , fromCID
+  , toCID
   , makeCID
   , unpackCID
   , Token
@@ -54,7 +55,10 @@ myCIDLength :: Int
 myCIDLength = 8
 
 newCID :: IO CID
-newCID = CID . Short.toShort <$> getRandomBytes myCIDLength
+newCID = toCID <$> getRandomBytes myCIDLength
+
+toCID :: ByteString -> CID
+toCID = CID . Short.toShort
 
 fromCID :: CID -> ByteString
 fromCID (CID sbs) = Short.fromShort sbs
