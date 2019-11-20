@@ -29,9 +29,7 @@ module Network.QUIC (
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
-import Network.QUIC.Handshake
+import Network.QUIC.Core
 import Network.QUIC.IO
 import Network.QUIC.Parameters
-import Network.QUIC.Route
 import Network.QUIC.Transport
-
