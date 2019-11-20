@@ -1,24 +1,28 @@
 -- https://quicwg.org/base-drafts/
 
 module Network.QUIC (
-  -- * APIs
-    connect
+  -- * Server
+    ServerConfig(..)
+  , defaultServerConfig
+  , withQUICServer
+  , QUICServer
   , accept
-  , close
+  -- * Client
+  , ClientConfig(..)
+  , defaultClientConfig
+  , connect
+  -- * IO
   , recvData
   , sendData
   , recvData'
   , sendData'
-  , withQUICServer
-  , QUICServer
+  -- * Closing
+  , close
   -- * Types
   , Connection
-  , ClientConfig(..)
-  , defaultClientConfig
-  , ServerConfig(..)
-  , defaultServerConfig
   , Version(..)
   , CID
+  -- ** Parameters
   , Parameters(..)
   , defaultParameters
   , exampleParameters
