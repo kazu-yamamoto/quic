@@ -9,16 +9,14 @@ module Network.QUIC.Route.Server (
   , RouteTable
   , Accept(..)
   , newServerRoute
-  , runRouter
+  , router
   ) where
 
 import Control.Concurrent.STM
 import Data.IORef
-import Data.IP
 import Data.Map (Map)
 import qualified Data.Map as M
 import Network.ByteOrder
-import Network.QUIC.Socket
 import Network.Socket
 import qualified Network.Socket.ByteString as NBS
 
@@ -29,7 +27,6 @@ import Network.QUIC.Route.Token
 import Network.QUIC.TLS
 import Network.QUIC.Transport
 
--- fixme: oCID to TLS
 data Accept = Accept CID CID CID SockAddr SockAddr (TQueue ByteString)
 
 data ServerRoute = ServerRoute {
@@ -43,15 +40,14 @@ newServerRoute = ServerRoute <$> generateTokenSecret <*> newIORef M.empty <*> ne
 
 type RouteTable = Map CID (TQueue ByteString)
 
-runRouter :: ServerConfig -> ServerRoute -> (IP, PortNumber) -> IO ()
-runRouter conf route ip = do
-    (s,mysa) <- udpServerListenSocket ip
-    let recv = NBS.recvFrom s 2048
-    forever $ do
-        (bs,peersa) <- recv
-        ph <- decodePlainHeader bs
-        let send bin = void $ NBS.sendTo s bin peersa
-        router conf route ph mysa peersa bs send
+router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
+router conf route (s,mysa) = forever $ do
+    (bs,peersa) <- recv
+    ph <- decodePlainHeader bs
+    let send bin = void $ NBS.sendTo s bin peersa
+    dispatch conf route ph mysa peersa bs send
+  where
+    recv = NBS.recvFrom s 2048
 
 pathValidation :: IO ()
 pathValidation = undefined
@@ -62,8 +58,8 @@ supportedVersions = [Draft24, Draft23]
 ----------------------------------------------------------------
 
 -- fixme: deleting unnecessary Entry
-router :: ServerConfig -> ServerRoute -> PlainHeader -> SockAddr -> SockAddr -> ByteString -> (ByteString -> IO ()) -> IO ()
-router ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa peersa bs send
+dispatch :: ServerConfig -> ServerRoute -> PlainHeader -> SockAddr -> SockAddr -> ByteString -> (ByteString -> IO ()) -> IO ()
+dispatch ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa peersa bs send
   | ver /= currentDraft && ver `elem` supportedVersions = do
         bin <- encodeVersionNegotiation sCID dCID (delete ver supportedVersions)
         send bin
@@ -90,9 +86,9 @@ router ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa pee
         case mretryToken of
           Nothing -> return ()
           Just RetryToken{..} -> do
-              when (tokenVersion /= ver) $ error "router: fixme"
-              when (dCID /= localCID) $ error "router: fixme"
-              when (sCID /= remoteCID) $ error "router: fixme"
+              when (tokenVersion /= ver) $ error "dispatch: fixme"
+              when (dCID /= localCID) $ error "dispatch: fixme"
+              when (sCID /= remoteCID) $ error "dispatch: fixme"
               -- fixme: telling oCID for parameters in Crypto.
               -- fixme: creating new TQueue
               q <- newTQueueIO
@@ -101,13 +97,13 @@ router ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa pee
               atomically $ writeTQueue q bs
               -- fixme: specifying dCID is correct?
               atomically $ writeTQueue acceptQueue $ Accept dCID sCID dCID mysa peersa q
-router _ ServerRoute{..} (PHShort dCID) _ _ _ _ = do
+dispatch _ ServerRoute{..} (PHShort dCID) _ _ _ _ = do
     rt <- readIORef routeTable
     let mroute = M.lookup dCID rt
     case mroute of
       Nothing -> pathValidation
       Just _  -> return () -- connected socket is done? No. fixme.
-router _ _ _ _ _ _ _ = return ()
+dispatch _ _ _ _ _ _ _ = return ()
 
 ----------------------------------------------------------------
 

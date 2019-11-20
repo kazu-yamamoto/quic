@@ -8,6 +8,7 @@ import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Network.TLS.QUIC
 import System.Timeout
+import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Handshake
@@ -28,9 +29,12 @@ data QUICServer = QUICServer {
 withQUICServer :: ServerConfig -> (QUICServer -> IO ()) -> IO ()
 withQUICServer conf body = do
     route <- newServerRoute
-    mapM_ (void . forkIO . runRouter conf route) $ scAddresses conf
+    ssas <- mapM  udpServerListenSocket $ scAddresses conf
+    tids <- mapM (runRouter route) ssas
     let qs = QUICServer conf route
-    body qs
+    body qs `E.finally` mapM_ killThread tids
+  where
+    runRouter route ssa@(s,_) = forkFinally (router conf route ssa) (\_ -> NS.close s)
 
 accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
