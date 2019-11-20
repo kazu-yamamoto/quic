@@ -7,6 +7,7 @@ module Network.QUIC.Route.Server (
   , defaultServerConfig
   , QUICServer(..)
   , withQUICServer
+  , RouteTable
   , Accept(..)
   ) where
 

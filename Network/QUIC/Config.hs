@@ -39,8 +39,6 @@ defaultServerConfig = ServerConfig {
 data ClientConfig = ClientConfig {
     ccVersion    :: Version
   , ccServerName :: HostName
-  , ccPeerCID    :: Maybe CID -- for the test purpose
-  , ccMyCID      :: Maybe CID -- for the test purpose
   , ccALPN       :: IO (Maybe [ByteString])
   , ccCiphers    :: [Cipher]
   , ccSend       :: ByteString -> IO ()
@@ -52,8 +50,6 @@ defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
     ccVersion    = currentDraft
   , ccServerName = "127.0.0.1"
-  , ccPeerCID    = Nothing
-  , ccMyCID      = Nothing
   , ccALPN       = return Nothing
   , ccCiphers    = ciphersuite_strong
   , ccSend       = \_ -> return ()

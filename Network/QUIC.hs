@@ -21,7 +21,6 @@ module Network.QUIC (
   -- * Types
   , Connection
   , Version(..)
-  , CID
   -- ** Parameters
   , Parameters(..)
   , defaultParameters
@@ -34,6 +33,5 @@ import Network.QUIC.Handshake
 import Network.QUIC.IO
 import Network.QUIC.Parameters
 import Network.QUIC.Route
-import Network.QUIC.TLS
 import Network.QUIC.Transport
 

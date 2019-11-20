@@ -103,12 +103,8 @@ clientConnection ClientConfig{..} = do
     let params = encodeParametersList $ diffParameters ccParams
     controller <- clientController ccServerName ccCiphers ccALPN params
     ref <- newIORef $ Just controller
-    mycid <- case ccMyCID of
-      Nothing  -> newCID
-      Just cid -> return cid
-    peercid <- case ccPeerCID of
-      Nothing  -> newCID
-      Just cid -> return cid
+    mycid <- newCID
+    peercid <- newCID
     let isecs = initialSecrets ccVersion peercid
     newConnection (Client ref) mycid peercid ccSend ccRecv isecs
 
