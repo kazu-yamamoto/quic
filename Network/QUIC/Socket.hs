@@ -1,6 +1,6 @@
 module Network.QUIC.Socket where
 
-import Data.IP
+import Data.IP hiding (addr)
 import Network.Socket
 
 sockAddrFamily :: SockAddr -> Family
@@ -31,4 +31,14 @@ udpServerConnectedSocket mysa peersa = do
     setSocketOption s ReuseAddr 1
     bind s anysa      -- (UDP, *:13443, *:*)
     connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
+    return s
+
+udpClientConnectedSocket :: HostName -> ServiceName -> IO Socket
+udpClientConnectedSocket host port = do
+    let hints = defaultHints {
+              addrSocketType = Datagram
+            }
+    addr <- head <$> getAddrInfo (Just hints) (Just host) (Just port)
+    s <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
+    connect s $ addrAddress addr
     return s

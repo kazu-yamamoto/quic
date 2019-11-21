@@ -41,7 +41,10 @@ withQUICClient conf body = do
 
 connect :: QUICClient -> IO Connection
 connect QUICClient{..} = E.handle tlserr $ do
-    conn <- clientConnection clientConfig
+    s <- udpClientConnectedSocket (ccServerName clientConfig) (ccPortName clientConfig)
+    let send bs = void $ NSB.send s bs
+        recv = NSB.recv s 2048
+    conn <- clientConnection clientConfig send recv
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     setThreadIds conn [tid0,tid1]

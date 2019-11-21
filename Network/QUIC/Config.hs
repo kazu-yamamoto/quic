@@ -14,10 +14,9 @@ import Network.QUIC.Transport.Types
 data ClientConfig = ClientConfig {
     ccVersion    :: Version
   , ccServerName :: HostName
-  , ccALPN       :: IO (Maybe [ByteString])
+  , ccPortName   :: ServiceName
   , ccCiphers    :: [Cipher]
-  , ccSend       :: ByteString -> IO ()
-  , ccRecv       :: IO ByteString
+  , ccALPN       :: IO (Maybe [ByteString])
   , ccParameters :: Parameters
   }
 
@@ -25,10 +24,9 @@ defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
     ccVersion    = currentDraft
   , ccServerName = "127.0.0.1"
-  , ccALPN       = return Nothing
+  , ccPortName   = "13443"
   , ccCiphers    = ciphersuite_strong
-  , ccSend       = \_ -> return ()
-  , ccRecv       = return ""
+  , ccALPN       = return Nothing
   , ccParameters = defaultParameters
   }
 

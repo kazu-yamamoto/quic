@@ -98,14 +98,14 @@ newConnection rl mid peercid send recv isecs =
         <*> newTVarIO NotOpen
         <*> newIORef []
 
-clientConnection :: ClientConfig -> IO Connection
-clientConnection conf@ClientConfig{..} = do
+clientConnection :: ClientConfig -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
+clientConnection conf@ClientConfig{..} send recv = do
     controller <- clientController conf
     ref <- newIORef $ Just controller
     mycid <- newCID
     peercid <- newCID
     let isecs = initialSecrets ccVersion peercid
-    newConnection (Client ref) mycid peercid ccSend ccRecv isecs
+    newConnection (Client ref) mycid peercid send recv isecs
 
 serverConnection :: ServerConfig -> CID -> CID -> OrigCID -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
 serverConnection conf@ServerConfig{..} myCID peerCID origCID send recv = do
