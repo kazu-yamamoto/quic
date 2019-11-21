@@ -99,12 +99,11 @@ newConnection rl mid peercid send recv isecs =
         <*> newIORef []
         <*> newIORef nullClientController
 
-clientConnection :: ClientConfig -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
-clientConnection ClientConfig{..} send recv = do
-    mycid <- newCID
-    peercid <- newCID
-    let isecs = initialSecrets ccVersion peercid
-    newConnection Client mycid peercid send recv isecs
+clientConnection :: ClientConfig -> CID -> CID
+                 -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
+clientConnection ClientConfig{..} myCID peerCID send recv = do
+    let isecs = initialSecrets ccVersion peerCID
+    newConnection Client myCID peerCID send recv isecs
 
 serverConnection :: ServerConfig -> CID -> CID -> OrigCID -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
 serverConnection ServerConfig{..} myCID peerCID origCID send recv = do
