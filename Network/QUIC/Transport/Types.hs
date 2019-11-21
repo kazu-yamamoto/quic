@@ -11,6 +11,7 @@ module Network.QUIC.Transport.Types (
   , toCID
   , makeCID
   , unpackCID
+  , OrigCID(..)
   , Token
   , RawFlags
   , LongHeaderPacketType(..)
@@ -73,6 +74,8 @@ unpackCID (CID sbs) = (sbs, len)
 
 instance Show CID where
     show (CID cid) = "CID=" ++ shortToString (enc16s cid)
+
+data OrigCID = OCFirst CID | OCRetry CID deriving (Eq, Show)
 
 type Token = ByteString -- to be decrypted
 type RawFlags = Word8

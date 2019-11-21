@@ -27,7 +27,7 @@ import Network.QUIC.Route.Token
 import Network.QUIC.TLS
 import Network.QUIC.Transport
 
-data Accept = Accept CID CID CID SockAddr SockAddr (TQueue ByteString)
+data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue ByteString)
 
 data ServerRoute = ServerRoute {
     tokenSecret  :: TokenSecret
@@ -79,7 +79,8 @@ dispatch ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa p
                   atomicModifyIORef' routeTable $ \rt' -> (M.insert newdCID q rt', ())
                   -- fixme: check listen length
                   atomically $ writeTQueue q bs
-                  atomically $ writeTQueue acceptQueue $ Accept newdCID sCID dCID mysa peersa q
+                  let ent = Accept newdCID sCID (OCFirst dCID) mysa peersa q
+                  atomically $ writeTQueue acceptQueue ent
           Just q -> atomically $ writeTQueue q bs -- resend packets
   | otherwise = do
         mretryToken <- decryptRetryToken tokenSecret token
@@ -93,8 +94,8 @@ dispatch ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa p
               atomicModifyIORef' routeTable $ \rt' -> (M.insert dCID q rt', ())
               -- fixme: check listen length
               atomically $ writeTQueue q bs
-              -- fixme: origLocalCID
-              atomically $ writeTQueue acceptQueue $ Accept dCID sCID origLocalCID mysa peersa q
+              let ent = Accept dCID sCID (OCRetry origLocalCID) mysa peersa q
+              atomically $ writeTQueue acceptQueue ent
 dispatch _ ServerRoute{..} (PHShort dCID) _ _ _ _ = do
     rt <- readIORef routeTable
     let mroute = M.lookup dCID rt
