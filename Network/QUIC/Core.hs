@@ -21,10 +21,37 @@ import Network.QUIC.Sender
 import Network.QUIC.Socket
 import Network.QUIC.Transport
 
+----------------------------------------------------------------
+
+data QUICClient = QUICClient {
+    clientConfig :: ClientConfig
+  }
+
 data QUICServer = QUICServer {
     serverConfig :: ServerConfig
   , serverRoute  :: ServerRoute
   }
+
+----------------------------------------------------------------
+
+withQUICClient :: ClientConfig -> (QUICClient -> IO ()) -> IO ()
+withQUICClient conf body = do
+    let qc = QUICClient conf
+    body qc
+
+connect :: QUICClient -> IO Connection
+connect QUICClient{..} = E.handle tlserr $ do
+    conn <- clientConnection clientConfig
+    tid0 <- forkIO $ sender conn
+    tid1 <- forkIO $ receiver conn
+    setThreadIds conn [tid0,tid1]
+    handshakeClient conn
+    setConnectionStatus conn Open
+    return conn
+  where
+    tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
+
+----------------------------------------------------------------
 
 withQUICServer :: ServerConfig -> (QUICServer -> IO ()) -> IO ()
 withQUICServer conf body = do
@@ -56,17 +83,7 @@ accept QUICServer{..} = E.handle tlserr $ do
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 
-connect :: ClientConfig -> IO Connection
-connect conf = E.handle tlserr $ do
-    conn <- clientConnection conf
-    tid0 <- forkIO $ sender conn
-    tid1 <- forkIO $ receiver conn
-    setThreadIds conn [tid0,tid1]
-    handshakeClient conn
-    setConnectionStatus conn Open
-    return conn
-  where
-    tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
+----------------------------------------------------------------
 
 close :: Connection -> IO ()
 close conn = do

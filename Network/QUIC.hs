@@ -1,16 +1,18 @@
 -- https://quicwg.org/base-drafts/
 
 module Network.QUIC (
+  -- * Client
+    ClientConfig(..)
+  , defaultClientConfig
+  , withQUICClient
+  , QUICClient
+  , connect
   -- * Server
-    ServerConfig(..)
+  , ServerConfig(..)
   , defaultServerConfig
   , withQUICServer
   , QUICServer
   , accept
-  -- * Client
-  , ClientConfig(..)
-  , defaultClientConfig
-  , connect
   -- * IO
   , recvData
   , sendData
