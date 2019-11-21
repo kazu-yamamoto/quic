@@ -109,13 +109,11 @@ clientConnection ClientConfig{..} = do
     newConnection (Client ref) mycid peercid ccSend ccRecv isecs
 
 serverConnection :: ServerConfig -> CID -> CID -> OrigCID -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
-serverConnection ServerConfig{..} myCID peerCID origCID send recv = do
-    let (params, isecs) = case origCID of
-          OCFirst oCID -> (encodeParametersList $ diffParameters scParameters
-                          ,initialSecrets scVersion oCID)
-          OCRetry oCID -> (encodeParametersList $ diffParameters scParameters { originalConnectionId = Just oCID}
-                          ,initialSecrets scVersion myCID)
-    controller <- serverController scKey scCert scALPN params
+serverConnection conf@ServerConfig{..} myCID peerCID origCID send recv = do
+    let isecs = case origCID of
+          OCFirst oCID -> initialSecrets scVersion oCID
+          OCRetry _    -> initialSecrets scVersion myCID
+    controller <- serverController conf origCID
     ref <- newIORef $ Just controller
     newConnection (Server ref) myCID peerCID send recv isecs
 

@@ -1,5 +1,6 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.TLS (
   -- * TLS
@@ -54,7 +55,9 @@ import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
 
+import Network.QUIC.Config
 import Network.QUIC.Imports
+import Network.QUIC.Parameters hiding (diff)
 import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
@@ -270,53 +273,56 @@ clientController serverName ciphers suggestALPN quicParams =
     newQUICClient cparams
   where
     cparams = (defaultParamsClient serverName "") {
-        clientDebug     = debug
+        clientShared    = cshared
       , clientHooks     = hook
-      , clientShared    = cshared
       , clientSupported = supported
-      }
-    debug = def
---    debug = def {
---        debugKeyLogger = putStrLn
---      }
-    hook = def {
-        onSuggestALPN = suggestALPN
+      , clientDebug     = debug
       }
     cshared = def {
         sharedValidationCache = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
       , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters quicParams]
       }
+    hook = def {
+        onSuggestALPN = suggestALPN
+      }
     supported = def {
         supportedVersions = [TLS13]
       , supportedCiphers  = ciphers
-      }
-
-serverController :: FilePath -> FilePath
-                 -> Maybe ([ByteString] -> IO ByteString)
-                 -> ByteString
-                 -> IO ServerController
-serverController key cert selectALPN quicParams = do
-    Right cred <- credentialLoadX509 cert key
-    let sshared = def {
-            sharedCredentials = Credentials [cred]
-          , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters quicParams]
-          }
-    let sparams = def {
-        serverDebug     = debug
-      , serverHooks     = hook
-      , serverShared    = sshared
-      , serverSupported = supported
-      }
-    newQUICServer sparams
-  where
-    supported = def {
-        supportedVersions = [TLS13]
-      , supportedCiphers = ciphersuite_strong
       }
     debug = def
 --    debug = def {
 --        debugKeyLogger = putStrLn
 --      }
-    hook = def {
-        onALPNClientSuggest = selectALPN
+
+serverController :: ServerConfig
+                 -> OrigCID
+                 -> IO ServerController
+serverController ServerConfig{..} origCID = do
+    Right cred <- credentialLoadX509 scCert scKey
+    let qparams = case origCID of
+          OCFirst _    -> scParameters
+          OCRetry oCID -> scParameters { originalConnectionId = Just oCID }
+        eQparams = encodeParametersList $ diffParameters qparams
+    let sshared = def {
+            sharedCredentials = Credentials [cred]
+          , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+          }
+    let sparams = def {
+        serverShared    = sshared
+      , serverHooks     = hook
+      , serverSupported = supported
+      , serverDebug     = debug
       }
+    newQUICServer sparams
+  where
+    hook = def {
+        onALPNClientSuggest = scALPN
+      }
+    supported = def {
+        supportedVersions = [TLS13]
+      , supportedCiphers  = scCiphers
+      }
+    debug = def
+--    debug = def {
+--        debugKeyLogger = putStrLn
+--      }
