@@ -28,6 +28,8 @@ library
                        Network.QUIC.Sender
                        Network.QUIC.Socket
                        Network.QUIC.TLS
+                       Network.QUIC.TLS.Controller
+                       Network.QUIC.TLS.Crypto
                        Network.QUIC.Transport
                        Network.QUIC.Transport.Error
                        Network.QUIC.Transport.Frame
