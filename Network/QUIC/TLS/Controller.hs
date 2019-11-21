@@ -11,32 +11,29 @@ import Network.TLS hiding (Version)
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
-import Network.QUIC.Imports
 import Network.QUIC.Parameters hiding (diff)
 import Network.QUIC.Transport.Types
 
-clientController:: String -> [Cipher]
-                -> IO (Maybe [ByteString]) -> ByteString
-                -> IO ClientController
-clientController serverName ciphers suggestALPN quicParams =
-    newQUICClient cparams
+clientController:: ClientConfig -> IO ClientController
+clientController ClientConfig{..} = newQUICClient cparams
   where
-    cparams = (defaultParamsClient serverName "") {
+    cparams = (defaultParamsClient ccServerName "") {
         clientShared    = cshared
       , clientHooks     = hook
       , clientSupported = supported
       , clientDebug     = debug
       }
+    eQparams = encodeParametersList $ diffParameters ccParameters
     cshared = def {
         sharedValidationCache = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
-      , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters quicParams]
+      , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
       }
     hook = def {
-        onSuggestALPN = suggestALPN
+        onSuggestALPN = ccALPN
       }
     supported = def {
         supportedVersions = [TLS13]
-      , supportedCiphers  = ciphers
+      , supportedCiphers  = ccCiphers
       }
     debug = def
 --    debug = def {

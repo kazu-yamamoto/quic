@@ -99,9 +99,8 @@ newConnection rl mid peercid send recv isecs =
         <*> newIORef []
 
 clientConnection :: ClientConfig -> IO Connection
-clientConnection ClientConfig{..} = do
-    let params = encodeParametersList $ diffParameters ccParams
-    controller <- clientController ccServerName ccCiphers ccALPN params
+clientConnection conf@ClientConfig{..} = do
+    controller <- clientController conf
     ref <- newIORef $ Just controller
     mycid <- newCID
     peercid <- newCID

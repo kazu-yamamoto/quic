@@ -43,7 +43,7 @@ data ClientConfig = ClientConfig {
   , ccCiphers    :: [Cipher]
   , ccSend       :: ByteString -> IO ()
   , ccRecv       :: IO ByteString
-  , ccParams     :: Parameters
+  , ccParameters :: Parameters
   }
 
 defaultClientConfig :: ClientConfig
@@ -54,5 +54,5 @@ defaultClientConfig = ClientConfig {
   , ccCiphers    = ciphersuite_strong
   , ccSend       = \_ -> return ()
   , ccRecv       = return ""
-  , ccParams     = defaultParameters
+  , ccParameters = defaultParameters
   }
