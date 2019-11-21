@@ -25,8 +25,7 @@ data CloseState = CloseState {
   , closeReceived :: Bool
   } deriving (Eq, Show)
 
-data Role = Client (IORef (Maybe ClientController))
-          | Server (IORef (Maybe ServerController))
+data Role = Client | Server deriving (Eq, Show)
 
 type GetHandshake = IO ByteString
 type PutHandshake = ByteString -> IO ()
@@ -76,6 +75,7 @@ data Connection = Connection {
   , closeState       :: TVar CloseState -- fixme: stream table
   , connectionState  :: TVar ConnectionState -- fixme: stream table
   , threadIds        :: IORef [Weak ThreadId]
+  , connClientCntrl  :: IORef ClientController
   }
 
 newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> TrafficSecrets InitialSecret -> IO Connection
@@ -97,24 +97,21 @@ newConnection rl mid peercid send recv isecs =
         <*> newTVarIO (CloseState False False)
         <*> newTVarIO NotOpen
         <*> newIORef []
+        <*> newIORef nullClientController
 
 clientConnection :: ClientConfig -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
-clientConnection conf@ClientConfig{..} send recv = do
-    controller <- clientController conf
-    ref <- newIORef $ Just controller
+clientConnection ClientConfig{..} send recv = do
     mycid <- newCID
     peercid <- newCID
     let isecs = initialSecrets ccVersion peercid
-    newConnection (Client ref) mycid peercid send recv isecs
+    newConnection Client mycid peercid send recv isecs
 
 serverConnection :: ServerConfig -> CID -> CID -> OrigCID -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
-serverConnection conf@ServerConfig{..} myCID peerCID origCID send recv = do
+serverConnection ServerConfig{..} myCID peerCID origCID send recv = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets scVersion oCID
           OCRetry _    -> initialSecrets scVersion myCID
-    controller <- serverController conf origCID
-    ref <- newIORef $ Just controller
-    newConnection (Server ref) myCID peerCID send recv isecs
+    newConnection Server myCID peerCID send recv isecs
 
 ----------------------------------------------------------------
 
@@ -131,9 +128,7 @@ setApplicationSecrets conn secs = do
 ----------------------------------------------------------------
 
 isClient :: Connection -> Bool
-isClient conn = case role conn of
-                 Client{} -> True
-                 Server{} -> False
+isClient conn = role conn == Client
 
 ----------------------------------------------------------------
 
@@ -219,32 +214,14 @@ setPeerParameters Connection{..} plist = do
 setNegotiatedProto :: Connection -> Maybe ByteString -> IO ()
 setNegotiatedProto Connection{..} malpn = writeIORef negotiatedProto malpn
 
-clearController :: Connection -> IO ()
-clearController conn = case role conn of
-  Client ref -> writeIORef ref Nothing
-  Server ref -> writeIORef ref Nothing
+setClientController :: Connection -> ClientController -> IO ()
+setClientController Connection{..} ctl = writeIORef connClientCntrl ctl
 
-tlsClientController :: Connection -> IO ClientController
-tlsClientController conn = case role conn of
-  Client ref -> do
-      mc <- readIORef ref
-      case mc of
-        Nothing         -> return nullController
-        Just controller -> return controller
-  _ -> return nullController
-  where
-    nullController _ = return ClientHandshakeDone
+getClientController :: Connection -> IO ClientController
+getClientController Connection{..} = readIORef connClientCntrl
 
-tlsServerController :: Connection -> IO ServerController
-tlsServerController conn = case role conn of
-  Server ref -> do
-      mc <- readIORef ref
-      case mc of
-        Nothing         -> return nullController
-        Just controller -> return controller
-  _ -> return nullController
-  where
-    nullController _ = return ServerHandshakeDone
+clearClientController :: Connection -> IO ()
+clearClientController conn = setClientController conn nullClientController
 
 setPeerCID :: Connection -> CID -> IO ()
 setPeerCID Connection{..} pcid = writeIORef peerCID pcid

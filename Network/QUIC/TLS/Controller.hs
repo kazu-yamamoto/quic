@@ -2,7 +2,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.TLS.Controller (
-    clientController
+    nullClientController
+  , clientController
   , serverController
   ) where
 
@@ -13,6 +14,9 @@ import Network.TLS.QUIC
 import Network.QUIC.Config
 import Network.QUIC.Parameters hiding (diff)
 import Network.QUIC.Transport.Types
+
+nullClientController :: ClientController
+nullClientController _ = return ClientHandshakeDone
 
 clientController:: ClientConfig -> IO ClientController
 clientController ClientConfig{..} = newQUICClient cparams

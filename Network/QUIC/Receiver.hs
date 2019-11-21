@@ -53,10 +53,10 @@ processFrame conn pt (Crypto _off cdat) = do
       Handshake -> atomically $ writeTQueue (inputQ conn) $ H pt cdat
       Short     -> when (isClient conn) $ do
           -- fixme: checkint key phase
-          control <- tlsClientController conn
-          RecvSessionTicket <- control $ PutSessionTicket cdat
+          control <- getClientController conn
+          RecvSessionTicket   <- control $ PutSessionTicket cdat
           ClientHandshakeDone <- control ExitClient
-          clearController conn
+          clearClientController conn
       _         -> error "processFrame"
 processFrame _ _ NewToken{} =
     putStrLn "FIXME: NewToken"

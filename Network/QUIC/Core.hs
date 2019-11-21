@@ -48,7 +48,7 @@ connect QUICClient{..} = E.handle tlserr $ do
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     setThreadIds conn [tid0,tid1]
-    handshakeClient conn
+    handshakeClient clientConfig conn
     setConnectionStatus conn Open
     return conn
   where
@@ -68,7 +68,7 @@ withQUICServer conf body = do
 
 accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
-    Accept mycid peercid ocid mysa peersa q <- atomically $ readTQueue $ acceptQueue serverRoute
+    Accept myCID peerCID oCID mysa peersa q <- atomically $ readTQueue $ acceptQueue serverRoute
     s <- udpServerConnectedSocket mysa peersa
     let send bs = void $ NSB.send s bs
         recv = do
@@ -76,11 +76,11 @@ accept QUICServer{..} = E.handle tlserr $ do
             case mx of
               Nothing -> NSB.recv s 2048
               Just x  -> return x
-    conn <- serverConnection serverConfig mycid peercid ocid send recv
+    conn <- serverConnection serverConfig myCID peerCID oCID send recv
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     setThreadIds conn [tid0,tid1]
-    handshakeServer conn
+    handshakeServer serverConfig oCID conn
     setConnectionStatus conn Open
     return conn
   where
