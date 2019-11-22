@@ -28,40 +28,53 @@ processPackets conn bs0 = loop bs0
 
 processPacket :: Connection -> Packet -> IO ()
 processPacket conn (InitialPacket   _ _ _ _ pn fs) = do
-      addPNs conn Initial pn
---      putStrLn $ "I: " ++ show fs
-      mapM_ (processFrame conn Initial) fs
+--    putStrLn $ "I: " ++ show fs
+    rets <- mapM (processFrame conn Initial) fs
+    when (and rets) $ addPNs conn Initial pn
 processPacket conn (HandshakePacket _ _ peercid   pn fs) = do
-      addPNs conn Handshake pn
---      putStrLn $ "H: " ++ show fs
-      when (isClient conn) $ setPeerCID conn peercid
-      mapM_ (processFrame conn Handshake) fs
+--    putStrLn $ "H: " ++ show fs
+    when (isClient conn) $ setPeerCID conn peercid
+    rets <- mapM (processFrame conn Handshake) fs
+    when (and rets) $ addPNs conn Handshake pn
 processPacket conn (ShortPacket     _       pn fs) = do
-      addPNs conn Short pn
---      putStrLn $ "S: " ++ show fs
-      mapM_ (processFrame conn Short) fs
+--    putStrLn $ "S: " ++ show fs
+    rets <- mapM (processFrame conn Short) fs
+    when (and rets) $ addPNs conn Short pn
 processPacket _conn RetryPacket{}  = undefined -- fixme
 processPacket _ _ = undefined
 
-processFrame :: Connection -> PacketType -> Frame -> IO ()
-processFrame _ _ Padding = return ()
-processFrame _ _ Ack{} = return ()
+processFrame :: Connection -> PacketType -> Frame -> IO Bool
+processFrame _ _ Padding = return True
+processFrame _ _ Ack{} = return True
 processFrame conn pt (Crypto _off cdat) = do
     --fixme _off
     case pt of
-      Initial   -> atomically $ writeTQueue (inputQ conn) $ H pt cdat
-      Handshake -> atomically $ writeTQueue (inputQ conn) $ H pt cdat
-      Short     -> when (isClient conn) $ do
-          -- fixme: checkint key phase
-          control <- getClientController conn
-          RecvSessionTicket   <- control $ PutSessionTicket cdat
-          ClientHandshakeDone <- control ExitClient
-          clearClientController conn
-      _         -> error "processFrame"
-processFrame _ _ NewToken{} =
+      Initial   -> do
+          atomically $ writeTQueue (inputQ conn) $ H pt cdat
+          return True
+      Handshake -> do
+          atomically $ writeTQueue (inputQ conn) $ H pt cdat
+          return True
+      Short
+        | isClient conn -> do
+              -- fixme: checkint key phase
+              control <- getClientController conn
+              RecvSessionTicket   <- control $ PutSessionTicket cdat
+              ClientHandshakeDone <- control ExitClient
+              clearClientController conn
+              return True
+        | otherwise -> do
+              putStrLn "processFrame: Short:Crypto for server"
+              return False
+      _         -> do
+          putStrLn $  "processFrame: invalid packet type " ++ show pt
+          return False
+processFrame _ _ NewToken{} = do
     putStrLn "FIXME: NewToken"
-processFrame _ _ (NewConnectionID sn _ _ _)  =
+    return True
+processFrame _ _ (NewConnectionID sn _ _ _)  = do
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
+    return True
 processFrame conn pt (ConnectionCloseQUIC err _ftyp _reason) = do
     case pt of
       Initial   -> atomically $ writeTQueue (inputQ conn) $ E err
@@ -76,6 +89,7 @@ processFrame conn pt (ConnectionCloseQUIC err _ftyp _reason) = do
     setCloseSent conn
     atomically $ writeTQueue (outputQ conn) $ C pt frames
     threadDelay 100000 -- fixme
+    return True
 processFrame conn pt (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
     setConnectionStatus conn Closing
@@ -87,10 +101,13 @@ processFrame conn pt (ConnectionCloseApp err _reason) = do
     setCloseSent conn
     atomically $ writeTQueue (outputQ conn) $ C pt frames
     threadDelay 100000 -- fixme
+    return True
 processFrame conn Short (Stream sid _off dat fin) = do
     -- fixme _off
     atomically $ writeTQueue (inputQ conn) $ S sid dat
     when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ S sid ""
+    return True
 processFrame _ _ _frame        = do
     putStrLn "FIXME: processFrame"
     print _frame
+    return True
