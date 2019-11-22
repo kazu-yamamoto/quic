@@ -5,10 +5,14 @@ module Network.QUIC.Connection where
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import Data.Hourglass
 import Data.IORef
+import Data.IntPSQ (IntPSQ)
+import qualified Data.IntPSQ as PSQ
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Network.TLS.QUIC
+import System.Hourglass
 import System.Mem.Weak
 
 import Network.QUIC.Config
@@ -38,10 +42,13 @@ data Segment = S StreamID ByteString
              | H PacketType ByteString
              | C PacketType [Frame]
              | E TransportError
+             | A
              deriving Show
 
 type InputQ  = TQueue Segment
 type OutputQ = TQueue Segment
+type RetransQ = IntPSQ ElapsedP Retrans
+data Retrans  = Retrans Segment PacketType (Set PacketNumber)
 
 data Connection = Connection {
     role             :: Role
@@ -57,6 +64,7 @@ data Connection = Connection {
   , negotiatedProto  :: IORef (Maybe ByteString)
   , inputQ           :: InputQ
   , outputQ          :: OutputQ
+  , retransQ         :: IORef RetransQ
   -- my packet numbers intentionally using the single space
   , packetNumber     :: IORef PacketNumber
   -- peer's packet numbers
@@ -84,6 +92,7 @@ newConnection rl mid peercid send recv isecs =
         <*> newIORef Nothing
         <*> newTQueueIO
         <*> newTQueueIO
+        <*> newIORef PSQ.empty
         <*> newIORef 0
         <*> newIORef Set.empty
         <*> newIORef Set.empty
@@ -173,11 +182,22 @@ addPNs conn pt p = atomicModifyIORef' ref add
     add pns = (Set.insert p pns, ())
 
 
-clearPNs :: Connection -> PacketType -> IO [PacketNumber]
-clearPNs conn pt = Set.toDescList <$> atomicModifyIORef' ref clear
+getPNs :: Connection -> PacketType -> IO (Set PacketNumber)
+getPNs conn pt = readIORef ref
   where
     ref = getPacketNumbers conn pt
-    clear pns = (Set.empty, pns)
+
+updatePNs :: Connection -> PacketType -> Set PacketNumber -> IO ()
+updatePNs conn pt pns = atomicModifyIORef' ref update
+  where
+    ref = getPacketNumbers conn pt
+    update pns0 = (pns0 Set.\\ pns, ())
+
+nullPNs :: Set PacketNumber -> Bool
+nullPNs = Set.null
+
+fromPNs :: Set PacketNumber -> [PacketNumber]
+fromPNs = Set.toDescList
 
 ----------------------------------------------------------------
 
@@ -194,6 +214,29 @@ modifyCryptoOffset conn pt len = atomicModifyIORef' ref modify
   where
     ref = getCryptoOffset conn pt
     modify off = (off + len, off)
+
+----------------------------------------------------------------
+
+keepSegment :: Connection -> PacketNumber -> Segment -> PacketType -> Set PacketNumber -> IO ()
+keepSegment conn pn seg pt pns = do
+    tm <- timeCurrentP
+    atomicModifyIORef' ref (add tm)
+  where
+    ref = retransQ conn
+    pn' = fromIntegral pn
+    ent = Retrans seg pt pns
+    add tm psq = (PSQ.insert pn' tm ent psq, ())
+
+releaseSegment :: Connection -> PacketNumber -> IO (Maybe Retrans)
+releaseSegment conn pn = do
+    atomicModifyIORef' ref del
+  where
+    ref = retransQ conn
+    pn' = fromIntegral pn
+    del psq = (PSQ.delete pn' psq, snd <$> PSQ.lookup pn' psq)
+
+clearAcks :: Connection -> Retrans -> IO ()
+clearAcks conn (Retrans _ pt pns) = updatePNs conn pt pns
 
 ----------------------------------------------------------------
 

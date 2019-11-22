@@ -48,6 +48,7 @@ library
                      , containers
                      , cryptonite
                      , data-default-class
+                     , hourglass
                      , iproute
                      , memory
                      , network
