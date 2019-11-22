@@ -6,6 +6,8 @@ module Network.QUIC.Connection where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.IORef
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Network.TLS.QUIC
 import System.Mem.Weak
 
@@ -29,16 +31,6 @@ data Role = Client | Server deriving (Eq, Show)
 
 type GetHandshake = IO ByteString
 type PutHandshake = ByteString -> IO ()
-
-----------------------------------------------------------------
-
-data PhaseState = PhaseState {
-    receivedPacketNumbers :: [PacketNumber]
-  , cryptoOffSet :: Offset
-  }
-
-defaultPhaseState :: PhaseState
-defaultPhaseState = PhaseState [] 0
 
 ----------------------------------------------------------------
 
@@ -68,9 +60,12 @@ data Connection = Connection {
   -- my packet numbers intentionally using the single space
   , packetNumber     :: IORef PacketNumber
   -- peer's packet numbers
-  , initialState     :: IORef PhaseState
-  , handshakeState   :: IORef PhaseState
-  , applicationState :: IORef PhaseState
+  , iniPacketNumbers :: IORef (Set PacketNumber)
+  , hndPacketNumbers :: IORef (Set PacketNumber)
+  , appPacketNumbers :: IORef (Set PacketNumber)
+  , iniCryptoOffset  :: IORef Offset
+  , hndCryptoOffset  :: IORef Offset
+  , appCryptoOffset  :: IORef Offset
   , encryptionLevel  :: TVar EncryptionLevel
   , closeState       :: TVar CloseState -- fixme: stream table
   , connectionState  :: TVar ConnectionState -- fixme: stream table
@@ -90,9 +85,12 @@ newConnection rl mid peercid send recv isecs =
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newIORef 0
-        <*> newIORef defaultPhaseState
-        <*> newIORef defaultPhaseState
-        <*> newIORef defaultPhaseState
+        <*> newIORef Set.empty
+        <*> newIORef Set.empty
+        <*> newIORef Set.empty
+        <*> newIORef 0
+        <*> newIORef 0
+        <*> newIORef 0
         <*> newTVarIO InitialLevel
         <*> newTVarIO (CloseState False False)
         <*> newTVarIO NotOpen
@@ -171,31 +169,39 @@ getPacketNumber conn = atomicModifyIORef' (packetNumber conn) (\pn -> (pn + 1, p
 addPNs :: Connection -> PacketType -> PacketNumber -> IO ()
 addPNs conn pt p = atomicModifyIORef' ref add
   where
-    ref = getStateReference conn pt
-    add state = (state { receivedPacketNumbers = p : receivedPacketNumbers state}, ())
+    ref = getPacketNumbers conn pt
+    add pns = (Set.insert p pns, ())
 
 
 clearPNs :: Connection -> PacketType -> IO [PacketNumber]
-clearPNs conn pt = atomicModifyIORef' ref clear
+clearPNs conn pt = Set.toDescList <$> atomicModifyIORef' ref clear
   where
-    ref = getStateReference conn pt
-    clear state = (state { receivedPacketNumbers = [] }, receivedPacketNumbers state)
+    ref = getPacketNumbers conn pt
+    clear pns = (Set.empty, pns)
+
+----------------------------------------------------------------
+
+getPacketNumbers :: Connection -> PacketType -> IORef (Set PacketNumber)
+getPacketNumbers conn Initial   = iniPacketNumbers conn
+getPacketNumbers conn Handshake = hndPacketNumbers conn
+getPacketNumbers conn Short     = appPacketNumbers conn
+getPacketNumbers _   _          = error "getPacketNumbers"
 
 ----------------------------------------------------------------
 
 modifyCryptoOffset :: Connection -> PacketType -> Offset -> IO Offset
 modifyCryptoOffset conn pt len = atomicModifyIORef' ref modify
   where
-    ref = getStateReference conn pt
-    modify s = (s { cryptoOffSet = cryptoOffSet s + len}, cryptoOffSet s)
+    ref = getCryptoOffset conn pt
+    modify off = (off + len, off)
 
 ----------------------------------------------------------------
 
-getStateReference :: Connection -> PacketType -> IORef PhaseState
-getStateReference conn Initial   = initialState conn
-getStateReference conn Handshake = handshakeState conn
-getStateReference conn Short     = applicationState conn
-getStateReference _   _         = error "getStateReference"
+getCryptoOffset :: Connection -> PacketType -> IORef Offset
+getCryptoOffset conn Initial   = iniCryptoOffset conn
+getCryptoOffset conn Handshake = hndCryptoOffset conn
+getCryptoOffset conn Short     = appCryptoOffset conn
+getCryptoOffset _   _          = error "getCryptoOffset"
 
 ----------------------------------------------------------------
 
