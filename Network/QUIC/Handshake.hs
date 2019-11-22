@@ -2,18 +2,18 @@
 
 module Network.QUIC.Handshake where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Data.ByteString hiding (putStrLn)
 import Network.TLS.QUIC
-import System.Timeout
 
+import Network.QUIC.Config
 import Network.QUIC.Connection
-import Network.QUIC.Imports
-import Network.QUIC.Receiver
-import Network.QUIC.Sender
+import Network.QUIC.Parameters
+import Network.QUIC.TLS
 import Network.QUIC.Transport
+
+----------------------------------------------------------------
 
 sendCryptoData :: Connection -> PacketType -> ByteString -> IO ()
 sendCryptoData conn pt bs = atomically $ writeTQueue (outputQ conn) $ H pt bs
@@ -26,40 +26,17 @@ recvCryptoData conn = do
       E err   -> E.throwIO $ HandshakeRejectedByPeer err
       _       -> error "recvCryptoData"
 
-handshake :: Config a => a -> IO Connection
-handshake conf = E.handle tlserr $ do
-    conn <- makeConnection conf
-    tid0 <- forkIO $ sender conn
-    tid1 <- forkIO $ receiver conn
-    setThreadIds conn [tid0,tid1]
-    if isClient conn then
-        handshakeClient conn
-      else
-        handshakeServer conn
-    setConnectionStatus conn Open
-    return conn
-  where
-    tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
-
-bye :: Connection -> IO ()
-bye conn = do
-    setConnectionStatus conn Closing
-    let frames = [ConnectionCloseQUIC NoError 0 ""]
-    atomically $ writeTQueue (outputQ conn) $ C Short frames
-    setCloseSent conn
-    void $ timeout 100000 $ waitClosed conn -- fixme: timeout
-    clearThreads conn
-
 ----------------------------------------------------------------
 
-handshakeClient :: Connection -> IO ()
-handshakeClient conn = do
-    sendClientHelloAndRecvServerHello conn
-    recvServerFinishedSendClientFinished conn
+handshakeClient :: ClientConfig -> Connection -> IO ()
+handshakeClient conf conn = do
+    control <- clientController conf
+    setClientController conn control
+    sendClientHelloAndRecvServerHello control conn
+    recvServerFinishedSendClientFinished control conn
 
-sendClientHelloAndRecvServerHello :: Connection -> IO ()
-sendClientHelloAndRecvServerHello conn = do
-    control <- tlsClientController conn
+sendClientHelloAndRecvServerHello :: ClientController-> Connection -> IO ()
+sendClientHelloAndRecvServerHello control conn = do
     SendClientHello ch0 _ <- control GetClientHello
     sendCryptoData conn Initial ch0
     (Initial, sh0) <- recvCryptoData conn
@@ -79,11 +56,10 @@ sendClientHelloAndRecvServerHello conn = do
             _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
       _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
 
-recvServerFinishedSendClientFinished :: Connection -> IO ()
-recvServerFinishedSendClientFinished conn = loop
+recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
+recvServerFinishedSendClientFinished control conn = loop
   where
     loop = do
-        control <- tlsClientController conn
         (Handshake, eesf) <- recvCryptoData conn
         state <- control $ PutServerFinished eesf
         case state of
@@ -98,10 +74,10 @@ recvServerFinishedSendClientFinished conn = loop
 
 ----------------------------------------------------------------
 
-handshakeServer :: Connection -> IO ()
-handshakeServer conn = do
+handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
+handshakeServer conf origCID conn = do
+    control <- serverController conf origCID
     (Initial, ch) <- recvCryptoData conn
-    control <- tlsServerController conn
     state <- control $ PutClientHello ch
     sh <- case state of
       SendRequestRetry hrr -> do
@@ -127,7 +103,7 @@ handshakeServer conn = do
     SendSessionTicket nst <- control $ PutClientFinished cf
     sendCryptoData conn Short nst
     ServerHandshakeDone <- control ExitServer
-    clearController conn
+    return ()
 
 setParameters :: Connection -> [ExtensionRaw] -> IO ()
 setParameters conn [ExtensionRaw 0xffa5 params] = do

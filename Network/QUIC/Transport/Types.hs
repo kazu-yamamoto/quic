@@ -8,8 +8,10 @@ module Network.QUIC.Transport.Types (
   , myCIDLength
   , newCID
   , fromCID
+  , toCID
   , makeCID
   , unpackCID
+  , OrigCID(..)
   , Token
   , RawFlags
   , LongHeaderPacketType(..)
@@ -54,7 +56,10 @@ myCIDLength :: Int
 myCIDLength = 8
 
 newCID :: IO CID
-newCID = CID . Short.toShort <$> getRandomBytes myCIDLength
+newCID = toCID <$> getRandomBytes myCIDLength
+
+toCID :: ByteString -> CID
+toCID = CID . Short.toShort
 
 fromCID :: CID -> ByteString
 fromCID (CID sbs) = Short.fromShort sbs
@@ -70,7 +75,9 @@ unpackCID (CID sbs) = (sbs, len)
 instance Show CID where
     show (CID cid) = "CID=" ++ shortToString (enc16s cid)
 
-type Token = Bytes
+data OrigCID = OCFirst CID | OCRetry CID deriving (Eq, Show)
+
+type Token = ByteString -- to be decrypted
 type RawFlags = Word8
 
 data Version = Negotiation

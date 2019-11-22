@@ -5,30 +5,16 @@ module Network.QUIC.Connection where
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception as E
 import Data.IORef
-import Network.TLS (HostName)
-import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
 import System.Mem.Weak
 
+import Network.QUIC.Config
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Error
-import Network.QUIC.Transport.Header
-import Network.QUIC.Transport.Parameters
 import Network.QUIC.Transport.Types
-
-----------------------------------------------------------------
-
-class Config a where
-    makeConnection :: a -> IO Connection
-
-instance Config ClientConfig where
-    makeConnection = clientConnection
-
-instance Config ServerConfig where
-    makeConnection = serverConnection
 
 ----------------------------------------------------------------
 
@@ -39,61 +25,10 @@ data CloseState = CloseState {
   , closeReceived :: Bool
   } deriving (Eq, Show)
 
-data Role = Client (IORef (Maybe ClientController))
-          | Server (IORef (Maybe ServerController))
+data Role = Client | Server deriving (Eq, Show)
 
 type GetHandshake = IO ByteString
 type PutHandshake = ByteString -> IO ()
-
-data ClientConfig = ClientConfig {
-    ccVersion    :: Version
-  , ccServerName :: HostName
-  , ccPeerCID    :: Maybe CID -- for the test purpose
-  , ccMyCID      :: Maybe CID -- for the test purpose
-  , ccALPN       :: IO (Maybe [ByteString])
-  , ccCiphers    :: [Cipher]
-  , ccSend       :: ByteString -> IO ()
-  , ccRecv       :: IO ByteString
-  , ccParams     :: Parameters
-  }
-
-defaultClientConfig :: ClientConfig
-defaultClientConfig = ClientConfig {
-    ccVersion    = currentDraft
-  , ccServerName = "127.0.0.1"
-  , ccPeerCID    = Nothing
-  , ccMyCID      = Nothing
-  , ccALPN       = return Nothing
-  , ccCiphers    = ciphersuite_strong
-  , ccSend       = \_ -> return ()
-  , ccRecv       = return ""
-  , ccParams     = defaultParameters
-  }
-
-----------------------------------------------------------------
-
-data ServerConfig = ServerConfig {
-    scVersion    :: Version
-  , scKey        :: FilePath
-  , scCert       :: FilePath
-  , scSend       :: ByteString -> IO ()
-  , scRecv       :: IO ByteString
-  , scParams     :: Parameters
-  , scClientIni  :: ByteString
-  , scALPN       :: Maybe ([ByteString] -> IO ByteString)
-  }
-
-defaultServerConfig :: ServerConfig
-defaultServerConfig = ServerConfig {
-    scVersion    = currentDraft
-  , scKey        = "serverkey.pem"
-  , scCert       = "servercert.pem"
-  , scSend       = \_ -> return ()
-  , scRecv       = return ""
-  , scParams     = defaultParameters
-  , scClientIni  = ""
-  , scALPN       = Nothing
-  }
 
 ----------------------------------------------------------------
 
@@ -121,7 +56,6 @@ data Connection = Connection {
   , myCID            :: CID
   , connSend         :: ByteString -> IO ()
   , connRecv         :: IO ByteString
-  , myParams         :: Parameters
   , iniSecrets       :: TrafficSecrets InitialSecret
   , hndSecrets       :: IORef (Maybe (TrafficSecrets HandshakeSecret))
   , appSecrets       :: IORef (Maybe (TrafficSecrets ApplicationSecret))
@@ -138,15 +72,15 @@ data Connection = Connection {
   , handshakeState   :: IORef PhaseState
   , applicationState :: IORef PhaseState
   , encryptionLevel  :: TVar EncryptionLevel
-  , clientInitial    :: IORef (Maybe ByteString)
   , closeState       :: TVar CloseState -- fixme: stream table
   , connectionState  :: TVar ConnectionState -- fixme: stream table
   , threadIds        :: IORef [Weak ThreadId]
+  , connClientCntrl  :: IORef ClientController
   }
 
-newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> Parameters -> TrafficSecrets InitialSecret -> IO Connection
-newConnection rl mid peercid send recv myparam isecs =
-    Connection rl mid send recv myparam isecs
+newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> TrafficSecrets InitialSecret -> IO Connection
+newConnection rl mid peercid send recv isecs =
+    Connection rl mid send recv isecs
         <$> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef defaultParameters
@@ -160,39 +94,23 @@ newConnection rl mid peercid send recv myparam isecs =
         <*> newIORef defaultPhaseState
         <*> newIORef defaultPhaseState
         <*> newTVarIO InitialLevel
-        <*> newIORef Nothing
         <*> newTVarIO (CloseState False False)
         <*> newTVarIO NotOpen
         <*> newIORef []
+        <*> newIORef nullClientController
 
-clientConnection :: ClientConfig -> IO Connection
-clientConnection ClientConfig{..} = do
-    let params = encodeParametersList $ diffParameters ccParams
-    controller <- clientController ccServerName ccCiphers ccALPN params
-    ref <- newIORef $ Just controller
-    mycid <- case ccMyCID of
-      Nothing  -> newCID
-      Just cid -> return cid
-    peercid <- case ccPeerCID of
-      Nothing  -> newCID
-      Just cid -> return cid
-    let isecs = initialSecrets ccVersion peercid
-    newConnection (Client ref) mycid peercid ccSend ccRecv ccParams isecs
+clientConnection :: ClientConfig -> CID -> CID
+                 -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
+clientConnection ClientConfig{..} myCID peerCID send recv = do
+    let isecs = initialSecrets ccVersion peerCID
+    newConnection Client myCID peerCID send recv isecs
 
-serverConnection :: ServerConfig -> IO Connection
-serverConnection ServerConfig{..} = do
-    let params = encodeParametersList $ diffParameters scParams
-    controller <- serverController scKey scCert scALPN params
-    ref <- newIORef $ Just controller
-    mcids <- analyzeLongHeaderPacket scClientIni
-    case mcids of
-      Nothing -> E.throwIO PacketIsBroken
-      Just (mycid, peercid) -> do
-          let isecs = initialSecrets scVersion mycid
-          mycid' <- newCID
-          conn <- newConnection (Server ref) mycid' peercid scSend scRecv scParams isecs
-          writeIORef (clientInitial conn) (Just scClientIni)
-          return conn
+serverConnection :: ServerConfig -> CID -> CID -> OrigCID -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
+serverConnection ServerConfig{..} myCID peerCID origCID send recv = do
+    let isecs = case origCID of
+          OCFirst oCID -> initialSecrets scVersion oCID
+          OCRetry _    -> initialSecrets scVersion myCID
+    newConnection Server myCID peerCID send recv isecs
 
 ----------------------------------------------------------------
 
@@ -209,9 +127,7 @@ setApplicationSecrets conn secs = do
 ----------------------------------------------------------------
 
 isClient :: Connection -> Bool
-isClient conn = case role conn of
-                 Client{} -> True
-                 Server{} -> False
+isClient conn = role conn == Client
 
 ----------------------------------------------------------------
 
@@ -297,32 +213,14 @@ setPeerParameters Connection{..} plist = do
 setNegotiatedProto :: Connection -> Maybe ByteString -> IO ()
 setNegotiatedProto Connection{..} malpn = writeIORef negotiatedProto malpn
 
-clearController :: Connection -> IO ()
-clearController conn = case role conn of
-  Client ref -> writeIORef ref Nothing
-  Server ref -> writeIORef ref Nothing
+setClientController :: Connection -> ClientController -> IO ()
+setClientController Connection{..} ctl = writeIORef connClientCntrl ctl
 
-tlsClientController :: Connection -> IO ClientController
-tlsClientController conn = case role conn of
-  Client ref -> do
-      mc <- readIORef ref
-      case mc of
-        Nothing         -> return nullController
-        Just controller -> return controller
-  _ -> return nullController
-  where
-    nullController _ = return ClientHandshakeDone
+getClientController :: Connection -> IO ClientController
+getClientController Connection{..} = readIORef connClientCntrl
 
-tlsServerController :: Connection -> IO ServerController
-tlsServerController conn = case role conn of
-  Server ref -> do
-      mc <- readIORef ref
-      case mc of
-        Nothing         -> return nullController
-        Just controller -> return controller
-  _ -> return nullController
-  where
-    nullController _ = return ServerHandshakeDone
+clearClientController :: Connection -> IO ()
+clearClientController conn = setClientController conn nullClientController
 
 setPeerCID :: Connection -> CID -> IO ()
 setPeerCID Connection{..} pcid = writeIORef peerCID pcid
@@ -336,12 +234,6 @@ checkEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 checkEncryptionLevel conn level = atomically $ do
     l <- readTVar $ encryptionLevel conn
     check (l >= level)
-
-readClearClientInitial :: Connection -> IO (Maybe ByteString)
-readClearClientInitial Connection{..} = do
-    mbs <- readIORef clientInitial
-    writeIORef clientInitial Nothing
-    return mbs
 
 setCloseSent :: Connection -> IO ()
 setCloseSent conn = atomically $ modifyTVar (closeState conn) (\s -> s { closeSent = True })

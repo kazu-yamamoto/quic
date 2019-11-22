@@ -11,17 +11,9 @@ import Network.QUIC.Imports
 import Network.QUIC.Transport
 
 receiver :: Connection -> IO ()
-receiver conn = do
-    mbs <- readClearClientInitial conn
-    case mbs of
-        Nothing -> loop
-        Just bs -> do
-            processPackets conn bs
-            loop
-  where
-    loop = forever $ do
-        bs <- connRecv conn
-        processPackets conn bs
+receiver conn = forever $ do
+    bs <- connRecv conn
+    processPackets conn bs
 
 processPackets :: Connection -> ByteString -> IO ()
 processPackets conn bs0 = loop bs0
@@ -61,10 +53,10 @@ processFrame conn pt (Crypto _off cdat) = do
       Handshake -> atomically $ writeTQueue (inputQ conn) $ H pt cdat
       Short     -> when (isClient conn) $ do
           -- fixme: checkint key phase
-          control <- tlsClientController conn
-          RecvSessionTicket <- control $ PutSessionTicket cdat
+          control <- getClientController conn
+          RecvSessionTicket   <- control $ PutSessionTicket cdat
           ClientHandshakeDone <- control ExitClient
-          clearController conn
+          clearClientController conn
       _         -> error "processFrame"
 processFrame _ _ NewToken{} =
     putStrLn "FIXME: NewToken"

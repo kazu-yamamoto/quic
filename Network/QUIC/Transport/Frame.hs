@@ -105,8 +105,7 @@ decodeAckFrame rbuf = do
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do
     len <- fromIntegral <$> decodeInt' rbuf
-    token <- extractShortByteString rbuf len
-    return $ NewToken token
+    NewToken <$> extractByteString rbuf len
 
 decodeStreamFrame :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
 decodeStreamFrame rbuf hasOff hasLen fin = do

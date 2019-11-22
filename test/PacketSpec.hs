@@ -15,22 +15,23 @@ spec :: Spec
 spec = do
     -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
     describe "test vector" $ do
-        it "describes example of Client Initial draft 23" $ do
-            let dcid = makeCID $ dec16s "8394c8f03e515708"
-            let clientConf = defaultClientConfig {
-                    ccPeerCID = Just dcid
-                  }
-            cconn <- clientConnection clientConf
+        it "describes example of Client Initial draft 24" $ do
+            let serverCID = makeCID $ dec16s "8394c8f03e515708"
+                clientCID = makeCID ""
+                send = \_ -> return ()
+                recv = return ""
+            let clientConf = defaultClientConfig
+            clientConn <- clientConnection clientConf clientCID serverCID send recv
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
-                  , scClientIni = clientInitialPacketBinary
                   }
-            sconn <- serverConnection serverConf
-            (pkt, _) <- decodePacket sconn clientInitialPacketBinary
-            clientInitialPacketBinary' <- encodePacket cconn pkt
-            (pkt', _) <- decodePacket sconn clientInitialPacketBinary'
+            serverConn <- serverConnection serverConf serverCID clientCID (OCFirst serverCID) send recv
+            (pkt, _) <- decodePacket serverConn clientInitialPacketBinary
+            clientInitialPacketBinary' <- encodePacket clientConn pkt
+            (pkt', _) <- decodePacket serverConn clientInitialPacketBinary'
             pkt `shouldBe` pkt'
+            True `shouldBe` True
 
 clientInitialPacketBinary :: ByteString
 clientInitialPacketBinary = dec16 $ B.concat [

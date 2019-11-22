@@ -1,28 +1,37 @@
 -- https://quicwg.org/base-drafts/
 
 module Network.QUIC (
-  -- * APIs
-    handshake
-  , bye
+  -- * Client
+    ClientConfig(..)
+  , defaultClientConfig
+  , withQUICClient
+  , QUICClient
+  , connect
+  -- * Server
+  , ServerConfig(..)
+  , defaultServerConfig
+  , withQUICServer
+  , QUICServer
+  , accept
+  -- * IO
   , recvData
   , sendData
   , recvData'
   , sendData'
+  -- * Closing
+  , close
   -- * Types
   , Connection
-  , ClientConfig(..)
-  , defaultClientConfig
-  , ServerConfig(..)
-  , defaultServerConfig
   , Version(..)
-  , CID
+  -- ** Parameters
   , Parameters(..)
   , defaultParameters
   , exampleParameters
   ) where
 
+import Network.QUIC.Config
 import Network.QUIC.Connection
-import Network.QUIC.Handshake
+import Network.QUIC.Core
 import Network.QUIC.IO
-import Network.QUIC.TLS
+import Network.QUIC.Parameters
 import Network.QUIC.Transport

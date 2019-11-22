@@ -1,28 +1,80 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
-import qualified Control.Exception as E
-import Control.Monad (void)
-import Data.ByteString (ByteString)
+import Control.Concurrent
+import Control.Monad
 import qualified Data.ByteString.Char8 as C8
-import Network.Run.UDP
-import Network.Socket hiding (Stream)
-import qualified Network.Socket.ByteString as NSB
+import System.Console.GetOpt
 import System.Environment (getArgs)
+import System.Exit
 
 import Network.QUIC
 
+data Options = Options {
+    optRetry    :: Bool
+  , optKeyFile  :: FilePath
+  , optCertFile :: FilePath
+  } deriving Show
+
+defaultOptions :: Options
+defaultOptions = Options {
+    optRetry    = False
+  , optKeyFile  = "serverkey.pem"
+  , optCertFile = "servercert.pem"
+  }
+
+options :: [OptDescr (Options -> Options)]
+options = [
+    Option ['r'] ["retry"]
+    (NoArg (\o -> o { optRetry = True }))
+    "requre retry"
+  , Option ['k'] ["key"]
+    (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
+    "key file"
+  , Option ['c'] ["cert"]
+    (ReqArg (\fl o -> o { optCertFile = fl }) "FILE")
+    "certificate file"
+  ]
+
+usage :: String
+usage = "Usage: server [OPTION] addr port"
+
+showUsageAndExit :: String -> IO a
+showUsageAndExit msg = do
+    putStrLn msg
+    putStrLn $ usageInfo usage options
+    exitFailure
+
+compilerOpts :: [String] -> IO (Options, [String])
+compilerOpts argv =
+    case getOpt Permute options argv of
+      (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
+      (_,_,errs) -> showUsageAndExit $ concat errs
+
 main :: IO ()
 main = do
-    [port,cert,key] <- getArgs
-    runUDPServerFork ["127.0.0.1","::1"] port $ \s bs0 -> quicServer s bs0 cert key
+    args <- getArgs
+    (Options{..}, ips) <- compilerOpts args
+    when (length ips /= 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
+    let [addr,port] = ips
+    let conf = defaultServerConfig {
+            scAddresses    = [(read addr, read port)]
+          , scKey          = optKeyFile
+          , scCert         = optCertFile
+          , scParameters   = exampleParameters
+          , scALPN         = Just (\_ -> return "hq-24")
+          , scRequireRetry = optRetry
+          }
+    withQUICServer conf $ \qs -> forever $ do
+        conn <- accept qs
+        void $ forkFinally (server conn) (\_ -> close conn)
 
-quicServer :: Socket -> ByteString -> FilePath -> FilePath -> IO ()
-quicServer s bs0 cert key =
-    E.bracket (handshake conf) bye server
+server :: Connection -> IO ()
+server conn = loop
   where
-    server conn = do
+    loop = do
         bs <- recvData conn
         if bs == "" then
             putStrLn "Stream finished"
@@ -30,13 +82,3 @@ quicServer s bs0 cert key =
             C8.putStr bs
             sendData conn "<html><body>Hello world!</body></html>"
             server conn
-    conf = defaultServerConfig {
-            scVersion    = Draft23
-          , scKey        = key
-          , scCert       = cert
-          , scSend       = \bs -> void $ NSB.send s bs
-          , scRecv       = NSB.recv s 2048
-          , scParams     = exampleParameters
-          , scClientIni  = bs0
-          , scALPN       = Just (\_ -> return "hq-24")
-          }

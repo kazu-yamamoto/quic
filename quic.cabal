@@ -14,12 +14,22 @@ cabal-version:       >= 1.10
 
 library
   exposed-modules:     Network.QUIC
+                       Network.QUIC.Config
                        Network.QUIC.Connection
+                       Network.QUIC.Core
                        Network.QUIC.Handshake
                        Network.QUIC.IO
+                       Network.QUIC.Parameters
                        Network.QUIC.Receiver
+                       Network.QUIC.Route
+                       Network.QUIC.Route.Header
+                       Network.QUIC.Route.Server
+                       Network.QUIC.Route.Token
                        Network.QUIC.Sender
+                       Network.QUIC.Socket
                        Network.QUIC.TLS
+                       Network.QUIC.TLS.Controller
+                       Network.QUIC.TLS.Crypto
                        Network.QUIC.Transport
                        Network.QUIC.Transport.Error
                        Network.QUIC.Transport.Frame
@@ -27,7 +37,6 @@ library
                        Network.QUIC.Transport.Integer
                        Network.QUIC.Transport.Packet
                        Network.QUIC.Transport.PacketNumber
-                       Network.QUIC.Transport.Parameters
                        Network.QUIC.Transport.Types
                        Network.QUIC.Utils
   other-modules:
@@ -36,7 +45,9 @@ library
   build-depends:       base >= 4.7 && < 5
                      , base16-bytestring
                      , bytestring
+                     , containers
                      , cryptonite
+                     , iproute
                      , memory
                      , network
                      , network-byte-order
