@@ -47,13 +47,13 @@ library
                      , bytestring
                      , containers
                      , cryptonite
+                     , data-default-class
                      , iproute
                      , memory
                      , network
                      , network-byte-order
                      , stm
                      , tls
-                     , data-default-class
   -- hs-source-dirs:
   default-language:    Haskell2010
   ghc-options:         -Wall -Wcompat
