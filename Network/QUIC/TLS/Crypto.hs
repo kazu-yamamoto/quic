@@ -1,6 +1,5 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.TLS.Crypto (
   -- * Payload encryption
