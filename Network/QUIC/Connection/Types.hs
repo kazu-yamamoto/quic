@@ -36,7 +36,7 @@ data CloseState = CloseState {
 ----------------------------------------------------------------
 
 data Segment = S StreamID ByteString
-             | H PacketType ByteString
+             | H PacketType ByteString Token
              | C PacketType [Frame]
              | E TransportError
              | A
@@ -54,7 +54,7 @@ data Connection = Connection {
   , myCID            :: CID
   , connSend         :: ByteString -> IO ()
   , connRecv         :: IO ByteString
-  , iniSecrets       :: TrafficSecrets InitialSecret
+  , iniSecrets       :: IORef (TrafficSecrets InitialSecret)
   , hndSecrets       :: IORef (Maybe (TrafficSecrets HandshakeSecret))
   , appSecrets       :: IORef (Maybe (TrafficSecrets ApplicationSecret))
   , peerParams       :: IORef Parameters
@@ -82,8 +82,9 @@ data Connection = Connection {
 
 newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> TrafficSecrets InitialSecret -> IO Connection
 newConnection rl mid peercid send recv isecs =
-    Connection rl mid send recv isecs
-        <$> newIORef Nothing
+    Connection rl mid send recv
+        <$> newIORef isecs
+        <*> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef defaultParameters
         <*> newIORef peercid

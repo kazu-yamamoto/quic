@@ -8,6 +8,7 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
+import Network.QUIC.TLS
 import Network.QUIC.Transport
 
 -- |
@@ -60,7 +61,15 @@ processPacket conn (ShortPacket     _       pn fs) = do
 --    putStrLn $ "S: " ++ show fs
     rets <- mapM (processFrame conn Short) fs
     when (and rets) $ addPNs conn Short pn
-processPacket _conn RetryPacket{}  = undefined -- fixme
+processPacket conn (RetryPacket ver _ sCID _ token)  = do
+    mr <- releaseSegment conn 0
+    case mr of
+      Just (Retrans (H pt cdat _) _ _) -> do
+          -- fixme: many checking
+          setPeerCID conn sCID
+          setInitialSecrets conn $ initialSecrets ver sCID
+          atomically $ writeTQueue (outputQ conn) $ H pt cdat token
+      _ -> return ()
 processPacket _ _ = undefined
 
 processFrame :: Connection -> PacketType -> Frame -> IO Bool
@@ -74,10 +83,10 @@ processFrame conn pt (Crypto _off cdat) = do
     --fixme _off
     case pt of
       Initial   -> do
-          atomically $ writeTQueue (inputQ conn) $ H pt cdat
+          atomically $ writeTQueue (inputQ conn) $ H pt cdat emptyToken
           return True
       Handshake -> do
-          atomically $ writeTQueue (inputQ conn) $ H pt cdat
+          atomically $ writeTQueue (inputQ conn) $ H pt cdat emptyToken
           return True
       Short
         | isClient conn -> do

@@ -16,15 +16,16 @@ import Network.QUIC.Transport
 ----------------------------------------------------------------
 
 sendCryptoData :: Connection -> PacketType -> ByteString -> IO ()
-sendCryptoData conn pt bs = atomically $ writeTQueue (outputQ conn) $ H pt bs
+sendCryptoData conn pt bs =
+    atomically $ writeTQueue (outputQ conn) $ H pt bs emptyToken
 
 recvCryptoData :: Connection -> IO (PacketType, ByteString)
 recvCryptoData conn = do
     dat <- atomically $ readTQueue (inputQ conn)
     case dat of
-      H pt bs -> return (pt, bs)
-      E err   -> E.throwIO $ HandshakeRejectedByPeer err
-      _       -> error "recvCryptoData"
+      H pt bs _ -> return (pt, bs)
+      E err     -> E.throwIO $ HandshakeRejectedByPeer err
+      _         -> error "recvCryptoData"
 
 ----------------------------------------------------------------
 

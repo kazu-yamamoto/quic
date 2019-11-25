@@ -47,8 +47,8 @@ cryptoFrame conn pt crypto = do
 
 ----------------------------------------------------------------
 
-construct :: Connection -> Segment -> PacketType -> [Frame] -> IO ByteString
-construct conn seg pt frames = do
+construct :: Connection -> Segment -> PacketType -> [Frame] -> Token -> IO ByteString
+construct conn seg pt frames token = do
     peercid <- getPeerCID conn
     mbin0 <- constructAckPacket pt peercid
     case mbin0 of
@@ -86,9 +86,9 @@ construct conn seg pt frames = do
               | null pns  = frames
               | otherwise = constructAckFrame (fromPNs pns) : frames
         let pkt = case pt of
-              Initial   -> InitialPacket   currentDraft peercid mycid "" mypn frames'
-              Handshake -> HandshakePacket currentDraft peercid mycid    mypn frames'
-              Short     -> ShortPacket                  peercid          mypn frames'
+              Initial   -> InitialPacket   currentDraft peercid mycid token mypn frames'
+              Handshake -> HandshakePacket currentDraft peercid mycid       mypn frames'
+              Short     -> ShortPacket                  peercid             mypn frames'
               _         -> error "construct"
         keepSegment conn mypn seg pt pns
         encodePacket conn pkt
@@ -101,15 +101,15 @@ sender conn = loop
     loop = forever $ do
         seg <- atomically $ readTQueue $ outputQ conn
         case seg of
-          H pt cdat -> do
+          H pt cdat token -> do
               frames <- cryptoFrame conn pt cdat
-              bs <- construct conn seg pt frames
+              bs <- construct conn seg pt frames token
               connSend conn bs
           C pt frames -> do
-              bs <- construct conn seg pt frames
+              bs <- construct conn seg pt frames emptyToken
               connSend conn bs
           S sid dat -> do
-              bs <- construct conn seg Short [Stream sid 0 dat True] -- fixme: off
+              bs <- construct conn seg Short [Stream sid 0 dat True] emptyToken -- fixme: off
               connSend conn bs
           _ -> return ()
 

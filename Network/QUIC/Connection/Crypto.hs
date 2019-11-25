@@ -48,6 +48,9 @@ setNegotiatedProto Connection{..} malpn = writeIORef negotiatedProto malpn
 
 ----------------------------------------------------------------
 
+setInitialSecrets :: Connection -> TrafficSecrets InitialSecret -> IO ()
+setInitialSecrets Connection{..} secs = writeIORef iniSecrets secs
+
 setHandshakeSecrets :: Connection -> TrafficSecrets HandshakeSecret -> IO ()
 setHandshakeSecrets Connection{..} secs = do
     writeIORef hndSecrets $ Just secs
@@ -62,12 +65,12 @@ setApplicationSecrets Connection{..} secs = do
 
 txInitialSecret :: Connection -> IO Secret
 txInitialSecret conn = do
-    let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets conn
+    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ iniSecrets conn
     return $ Secret $ if isClient conn then c else s
 
 rxInitialSecret :: Connection -> IO Secret
 rxInitialSecret conn = do
-    let (ClientTrafficSecret c, ServerTrafficSecret s) = iniSecrets conn
+    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ iniSecrets conn
     return $ Secret $ if isClient conn then s else c
 
 txHandshakeSecret :: Connection -> IO Secret
