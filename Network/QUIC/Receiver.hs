@@ -12,26 +12,6 @@ import Network.QUIC.TLS
 import Network.QUIC.Transport
 import Network.QUIC.Types
 
--- |
--- >>> deconstructAckFrame $ Ack 9 0 0 []
--- [9]
--- >>> deconstructAckFrame $ Ack 9 0 2 []
--- [7,8,9]
--- >>> deconstructAckFrame $ Ack 8 0 1 [(2,1)]
--- [2,3,7,8]
--- >>> deconstructAckFrame $ Ack 9 0 2 [(0,1)]
--- [4,5,7,8,9]
-deconstructAckFrame :: Frame -> [PacketNumber]
-deconstructAckFrame (Ack lpn _ fr grs) = loop grs [stt .. lpn]
-  where
-    stt = lpn - fromIntegral fr
-    loop _          []        = error "loop"
-    loop []         acc       = acc
-    loop ((g,r):xs) acc@(s:_) = loop xs ([z - fromIntegral r .. z] ++ acc)
-      where
-        z = s - fromIntegral g - 2
-deconstructAckFrame _ = error "deconstructAckFrame"
-
 receiver :: Connection -> IO ()
 receiver conn = forever $ do
     bs <- connRecv conn
@@ -77,8 +57,8 @@ processPacket _ _ = undefined
 
 processFrame :: Connection -> PacketType -> Frame -> IO Bool
 processFrame _ _ Padding = return True
-processFrame conn _ ack@Ack{} = do
-    let pns = deconstructAckFrame ack
+processFrame conn _ (Ack ackInfo _)= do
+    let pns = fromAckInfo ackInfo
     segs <- catMaybes <$> mapM (releaseSegment conn) pns
     mapM_ (clearAcks conn) segs
     return True

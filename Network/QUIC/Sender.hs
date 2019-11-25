@@ -11,29 +11,6 @@ import Network.QUIC.Imports
 import Network.QUIC.Transport
 import Network.QUIC.Types
 
--- |
--- >>> constructAckFrame [9]
--- Ack 9 0 0 []
--- >>> constructAckFrame [9,8,7]
--- Ack 9 0 2 []
--- >>> constructAckFrame [8,7,3,2]
--- Ack 8 0 1 [(2,1)]
--- >>> constructAckFrame [9,8,7,5,4]
--- Ack 9 0 2 [(0,1)]
-constructAckFrame :: [PacketNumber] -> Frame
-constructAckFrame []  = error "constructAckFrame"
-constructAckFrame [l] = Ack l 0 0 []
-constructAckFrame (l:ls)  = ack l ls 0
-  where
-    ack _ []     fr = Ack l 0 fr []
-    ack p (x:xs) fr
-      | p - 1 == x  = ack x xs (fr+1)
-      | otherwise   = Ack l 0 fr $ ranges x xs (fromIntegral (p - x) - 2) 0
-    ranges _ [] g r = [(g, r)]
-    ranges p (x:xs) g r
-      | p - 1 == x  = ranges x xs g (r+1)
-      | otherwise   = (g, r) : ranges x xs (fromIntegral(p - x) - 2) 0
-
 ----------------------------------------------------------------
 
 cryptoFrame :: Connection -> PacketType -> CryptoData -> IO [Frame]
@@ -65,7 +42,7 @@ construct conn seg pt frames token = do
             return Nothing
           else do
             mypn <- getPacketNumber conn
-            let ackFrame = constructAckFrame $ fromPNs pns
+            let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
                 pkt = InitialPacket currentDraft peercid mycid "" mypn [ackFrame]
             keepSegment conn mypn A Initial pns
             Just <$> encodePacket conn pkt
@@ -75,7 +52,7 @@ construct conn seg pt frames token = do
             return Nothing
           else do
             mypn <- getPacketNumber conn
-            let ackFrame = constructAckFrame $ fromPNs pns
+            let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
                 pkt = HandshakePacket currentDraft peercid mycid mypn [ackFrame]
             keepSegment conn mypn A Handshake pns
             Just <$> encodePacket conn pkt
@@ -85,7 +62,7 @@ construct conn seg pt frames token = do
         pns <- getPNs conn pt
         let frames'
               | null pns  = frames
-              | otherwise = constructAckFrame (fromPNs pns) : frames
+              | otherwise = Ack (toAckInfo $ fromPNs pns) 0 : frames
         let pkt = case pt of
               Initial   -> InitialPacket   currentDraft peercid mycid token mypn frames'
               Handshake -> HandshakePacket currentDraft peercid mycid       mypn frames'

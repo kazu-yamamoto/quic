@@ -3,7 +3,6 @@
 module Network.QUIC.Types (
     Bytes
   , Length
-  , PacketNumber
   , StreamID
   , EncodedPacketNumber
   , Token
@@ -15,8 +14,6 @@ module Network.QUIC.Types (
   , PacketType(..)
   , Packet(..)
   , Delay
-  , Range
-  , Gap
   , CryptoData
   , StreamData
   , Fin
@@ -26,18 +23,19 @@ module Network.QUIC.Types (
   , StatelessResetToken
   , Frame(..)
   , EncryptionLevel(..)
+  , module Network.QUIC.Types.Ack
   , module Network.QUIC.Types.CID
   , module Network.QUIC.Types.Error
   , module Network.QUIC.Types.Integer
   ) where
 
 import Network.QUIC.Imports
+import Network.QUIC.Types.Ack
 import Network.QUIC.Types.CID
 import Network.QUIC.Types.Error
 import Network.QUIC.Types.Integer
 
 type Length = Int
-type PacketNumber = Int64
 type StreamID = Int64
 type EncodedPacketNumber = Word32
 
@@ -84,8 +82,6 @@ data Packet = VersionNegotiationPacket CID CID [Version]
              deriving (Eq, Show)
 
 type Delay = Int
-type Range = Int
-type Gap   = Int
 type CryptoData = ByteString
 type StreamData = ByteString
 type Fin = Bool
@@ -96,7 +92,7 @@ type StatelessResetToken = Bytes -- 16 bytes
 
 data Frame = Padding
            | Ping
-           | Ack PacketNumber Delay Range [(Gap,Range)]
+           | Ack AckInfo Delay
            | RestStream -- fixme
            | StopSending -- fixme
            | Crypto Offset CryptoData

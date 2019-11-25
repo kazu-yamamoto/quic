@@ -15,7 +15,7 @@ encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
 encodeFrame :: WriteBuffer -> Frame -> IO ()
 encodeFrame wbuf Padding = write8 wbuf 0x00
 encodeFrame wbuf Ping = write8 wbuf 0x01
-encodeFrame wbuf (Ack largest delay range1 ranges) = do
+encodeFrame wbuf (Ack (AckInfo largest range1 ranges) delay) = do
     write8 wbuf 0x02
     encodeInt' wbuf largest
     encodeInt' wbuf $ fromIntegral delay
@@ -98,7 +98,7 @@ decodeAckFrame rbuf = do
     _count  <- (fromIntegral <$> decodeInt' rbuf) :: IO Int
     range1  <- fromIntegral <$> decodeInt' rbuf
     -- fixme: ranges
-    return $ Ack largest delay range1 []
+    return $ Ack (AckInfo largest range1 []) delay
 
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do
