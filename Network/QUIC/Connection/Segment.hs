@@ -10,8 +10,11 @@ module Network.QUIC.Connection.Segment (
   , clearAcks
   , keepSegment
   , releaseSegment
+  , updateSegment
+  , MilliSeconds(..)
   ) where
 
+import Data.Hourglass
 import Data.IORef
 import qualified Data.IntPSQ as PSQ
 import Data.Set (Set)
@@ -19,6 +22,7 @@ import qualified Data.Set as Set
 import System.Hourglass
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.Transport.Types
 
 ----------------------------------------------------------------
@@ -86,3 +90,29 @@ releaseSegment Connection{..} pn = do
   where
     pn' = fromIntegral pn
     del psq = (PSQ.delete pn' psq, snd <$> PSQ.lookup pn' psq)
+
+----------------------------------------------------------------
+
+newtype MilliSeconds = MilliSeconds Int64 deriving (Eq, Show)
+
+timeDel :: ElapsedP -> MilliSeconds -> ElapsedP
+timeDel (ElapsedP sec nano) milli
+  | nano' >= sec1 = ElapsedP sec (nano' - sec1)
+  | otherwise     = ElapsedP (sec - 1) nano'
+  where
+    milliToNano (MilliSeconds n) = NanoSeconds (n * 1000000)
+    sec1 = 1000000000
+    nano' = nano + sec1 - milliToNano milli
+
+updateSegment :: Connection -> MilliSeconds -> IO [Segment]
+updateSegment Connection{..} milli = do
+    tm <- timeCurrentP
+    let tm' = tm `timeDel` milli
+    atomicModifyIORef' retransQ (split tm')
+  where
+    split x psq = (psq', map getSegment rets)
+      where
+        (rets, psq') = PSQ.atMostView x psq
+    getSegment (_,_,Retrans x _ _) = x
+
+----------------------------------------------------------------

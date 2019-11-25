@@ -49,7 +49,8 @@ connect QUICClient{..} = E.handle tlserr $ do
     conn <- clientConnection clientConfig myCID peerCID send recv
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
-    setThreadIds conn [tid0,tid1]
+    tid2 <- forkIO $ resender conn
+    setThreadIds conn [tid0,tid1,tid2]
     handshakeClient clientConfig conn
     setConnectionStatus conn Open
     return conn
@@ -81,7 +82,8 @@ accept QUICServer{..} = E.handle tlserr $ do
     conn <- serverConnection serverConfig myCID peerCID oCID send recv
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
-    setThreadIds conn [tid0,tid1]
+    tid2 <- forkIO $ resender conn
+    setThreadIds conn [tid0,tid1,tid2]
     handshakeServer serverConfig oCID conn
     setConnectionStatus conn Open
     return conn

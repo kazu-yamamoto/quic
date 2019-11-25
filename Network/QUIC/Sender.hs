@@ -2,6 +2,7 @@
 
 module Network.QUIC.Sender where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.ByteString as B
 
@@ -111,3 +112,12 @@ sender conn = loop
               bs <- construct conn seg Short [Stream sid 0 dat True] -- fixme: off
               connSend conn bs
           _ -> return ()
+
+----------------------------------------------------------------
+
+resender :: Connection -> IO ()
+resender conn = forever $ do
+    threadDelay 25000
+    -- retransQ
+    segs <- updateSegment conn (MilliSeconds 25)
+    mapM_ (atomically . writeTQueue (outputQ conn)) segs
