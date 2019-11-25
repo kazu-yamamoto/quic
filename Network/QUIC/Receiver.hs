@@ -62,6 +62,8 @@ processPacket conn (ShortPacket     _       pn fs) = do
     rets <- mapM (processFrame conn Short) fs
     when (and rets) $ addPNs conn Short pn
 processPacket conn (RetryPacket ver _ sCID _ token)  = do
+    -- The packet number of first crypto frame is 0.
+    -- This ensures that retry can be accepted only once.
     mr <- releaseSegment conn 0
     case mr of
       Just (Retrans (H pt cdat _) _ _) -> do
