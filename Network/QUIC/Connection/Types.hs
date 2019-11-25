@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Types where
@@ -47,6 +48,9 @@ type OutputQ = TQueue Segment
 type RetransQ = IntPSQ ElapsedP Retrans
 data Retrans  = Retrans Segment PacketType (Set PacketNumber)
 
+dummySecrets :: TrafficSecrets a
+dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
+
 ----------------------------------------------------------------
 
 data Connection = Connection {
@@ -55,8 +59,8 @@ data Connection = Connection {
   , connSend         :: ByteString -> IO ()
   , connRecv         :: IO ByteString
   , iniSecrets       :: IORef (TrafficSecrets InitialSecret)
-  , hndSecrets       :: IORef (Maybe (TrafficSecrets HandshakeSecret))
-  , appSecrets       :: IORef (Maybe (TrafficSecrets ApplicationSecret))
+  , hndSecrets       :: IORef (TrafficSecrets HandshakeSecret)
+  , appSecrets       :: IORef (TrafficSecrets ApplicationSecret)
   , peerParams       :: IORef Parameters
   , peerCID          :: IORef CID
   , usedCipher       :: IORef Cipher
@@ -84,8 +88,8 @@ newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString ->
 newConnection rl mid peercid send recv isecs =
     Connection rl mid send recv
         <$> newIORef isecs
-        <*> newIORef Nothing
-        <*> newIORef Nothing
+        <*> newIORef dummySecrets
+        <*> newIORef dummySecrets
         <*> newIORef defaultParameters
         <*> newIORef peercid
         <*> newIORef defaultCipher

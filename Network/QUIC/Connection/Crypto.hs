@@ -53,12 +53,12 @@ setInitialSecrets Connection{..} secs = writeIORef iniSecrets secs
 
 setHandshakeSecrets :: Connection -> TrafficSecrets HandshakeSecret -> IO ()
 setHandshakeSecrets Connection{..} secs = do
-    writeIORef hndSecrets $ Just secs
+    writeIORef hndSecrets secs
     atomically $ writeTVar encryptionLevel HandshakeLevel
 
 setApplicationSecrets :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 setApplicationSecrets Connection{..} secs = do
-    writeIORef appSecrets $ Just secs
+    writeIORef appSecrets secs
     atomically $ writeTVar encryptionLevel RTT1Level
 
 ----------------------------------------------------------------
@@ -75,22 +75,22 @@ rxInitialSecret conn = do
 
 txHandshakeSecret :: Connection -> IO Secret
 txHandshakeSecret conn = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets conn)
+    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ hndSecrets conn
     return $ Secret $ if isClient conn then c else s
 
 rxHandshakeSecret :: Connection -> IO Secret
 rxHandshakeSecret conn = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (hndSecrets conn)
+    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ hndSecrets conn
     return $ Secret $ if isClient conn then s else c
 
 txApplicationSecret :: Connection -> IO Secret
 txApplicationSecret conn = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets conn)
+    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ appSecrets conn
     return $ Secret $ if isClient conn then c else s
 
 rxApplicationSecret :: Connection -> IO Secret
 rxApplicationSecret conn = do
-    Just (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef (appSecrets conn)
+    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ appSecrets conn
     return $ Secret $ if isClient conn then s else c
 
 ----------------------------------------------------------------
