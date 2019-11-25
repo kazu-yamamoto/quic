@@ -4,9 +4,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Error
-import Network.QUIC.Transport.Integer
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 

@@ -1,8 +1,7 @@
 module Network.QUIC.Transport.PacketNumber where
 
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Types
-
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 

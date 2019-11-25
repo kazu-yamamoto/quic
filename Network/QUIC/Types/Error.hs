@@ -1,7 +1,10 @@
-module Network.QUIC.Transport.Error where
+module Network.QUIC.Types.Error where
 
+import qualified Control.Exception as E
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
+
+import Network.QUIC.Imports
 
 type ErrorCode = Int
 
@@ -55,3 +58,13 @@ toTransportError n
   | otherwise    = UnknownError n
   where
     mdesc = toAlertDescription $ fromIntegral (n - 0x100)
+
+
+data QUICError = PacketIsBroken
+               | VersionIsUnknown Word32
+               | HandshakeRejectedByPeer TransportError
+               | ConnectionIsNotOpen
+               | HandshakeFailed String
+               deriving (Eq, Show)
+
+instance E.Exception QUICError

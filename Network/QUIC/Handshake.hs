@@ -11,7 +11,7 @@ import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
-import Network.QUIC.Transport
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 

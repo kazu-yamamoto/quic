@@ -1,6 +1,6 @@
 {-# LANGUAGE BinaryLiterals #-}
 
-module Network.QUIC.Transport.Integer where
+module Network.QUIC.Types.Integer where
 
 import System.IO.Unsafe (unsafeDupablePerformIO)
 

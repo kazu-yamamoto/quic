@@ -12,9 +12,8 @@ import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Transport.Frame
 import Network.QUIC.Transport.Header
-import Network.QUIC.Transport.Integer
 import Network.QUIC.Transport.PacketNumber
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
@@ -267,9 +266,9 @@ decodeLongHeaderPacket conn rbuf proFlags = do
     scidlen <- fromIntegral <$> read8 rbuf
     sCID <- makeCID <$> extractShortByteString rbuf scidlen
     case version of
-      Negotiation          -> decodeVersionNegotiationPacket rbuf dCID sCID
-      v@(UnknownVersion _) -> E.throwIO $ VersionIsUnknown v
-      _DraftXX             -> decodeDraft conn rbuf proFlags version dCID sCID
+      Negotiation      -> decodeVersionNegotiationPacket rbuf dCID sCID
+      UnknownVersion v -> E.throwIO $ VersionIsUnknown v
+      _DraftXX         -> decodeDraft conn rbuf proFlags version dCID sCID
 
 decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO Packet
 decodeVersionNegotiationPacket rbuf dCID sCID = do

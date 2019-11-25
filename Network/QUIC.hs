@@ -34,4 +34,4 @@ import Network.QUIC.Connection
 import Network.QUIC.Core
 import Network.QUIC.IO
 import Network.QUIC.Parameters
-import Network.QUIC.Transport
+import Network.QUIC.Types

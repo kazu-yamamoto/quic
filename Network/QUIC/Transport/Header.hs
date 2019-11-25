@@ -6,7 +6,7 @@ import qualified Data.ByteString as B
 
 import Network.QUIC.Imports
 import Network.QUIC.TLS
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 isLong :: Word8 -> Bool
 isLong flags = testBit flags 7

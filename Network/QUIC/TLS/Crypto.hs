@@ -51,7 +51,7 @@ import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
 
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
@@ -103,7 +103,8 @@ initialSalt Draft22 = "\x7f\xbc\xdb\x0e\x7c\x66\xbb\xe9\x19\x3a\x96\xcd\x21\x51\
 -- "c3eef712c72ebb5a11a7d2432bb46365bef9f502"
 initialSalt Draft23 = "\xc3\xee\xf7\x12\xc7\x2e\xbb\x5a\x11\xa7\xd2\x43\x2b\xb4\x63\x65\xbe\xf9\xf5\x02"
 initialSalt Draft24 = "\xc3\xee\xf7\x12\xc7\x2e\xbb\x5a\x11\xa7\xd2\x43\x2b\xb4\x63\x65\xbe\xf9\xf5\x02"
-initialSalt v       = E.throw $ VersionIsUnknown v
+initialSalt (UnknownVersion v) = E.throw $ VersionIsUnknown v
+initialSalt Negotiation        = E.throw $ VersionIsUnknown 0
 
 data InitialSecret
 

@@ -36,13 +36,14 @@ library
                        Network.QUIC.TLS.Controller
                        Network.QUIC.TLS.Crypto
                        Network.QUIC.Transport
-                       Network.QUIC.Transport.Error
                        Network.QUIC.Transport.Frame
                        Network.QUIC.Transport.Header
-                       Network.QUIC.Transport.Integer
                        Network.QUIC.Transport.Packet
                        Network.QUIC.Transport.PacketNumber
-                       Network.QUIC.Transport.Types
+                       Network.QUIC.Types
+                       Network.QUIC.Types.CID
+                       Network.QUIC.Types.Error
+                       Network.QUIC.Types.Integer
                        Network.QUIC.Utils
   other-modules:
                        Network.QUIC.Imports

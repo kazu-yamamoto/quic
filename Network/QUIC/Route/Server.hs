@@ -26,6 +26,7 @@ import Network.QUIC.Route.Header
 import Network.QUIC.Route.Token
 import Network.QUIC.TLS
 import Network.QUIC.Transport
+import Network.QUIC.Types
 
 data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue ByteString)
 

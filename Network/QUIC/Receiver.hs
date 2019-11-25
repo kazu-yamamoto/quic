@@ -10,6 +10,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Transport
+import Network.QUIC.Types
 
 -- |
 -- >>> deconstructAckFrame $ Ack 9 0 0 []

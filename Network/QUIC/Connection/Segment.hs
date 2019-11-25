@@ -23,7 +23,7 @@ import System.Hourglass
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 -- My packet numbers

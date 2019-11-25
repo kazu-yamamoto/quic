@@ -9,6 +9,7 @@ import qualified Data.ByteString as B
 import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Transport
+import Network.QUIC.Types
 
 -- |
 -- >>> constructAckFrame [9]

@@ -1,5 +1,6 @@
 module Network.QUIC.Imports (
-    ByteString(..)
+    Bytes
+  , ByteString(..)
   , ShortByteString(..)
   , module Control.Applicative
   , module Control.Monad
@@ -31,3 +32,7 @@ import Data.Word
 import Numeric
 import Network.ByteOrder
 import Network.QUIC.Utils
+
+-- | All internal byte sequences.
+--   `ByteString` should be used for FFI related stuff.
+type Bytes = ShortByteString

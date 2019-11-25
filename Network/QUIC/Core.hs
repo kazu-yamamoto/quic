@@ -19,7 +19,7 @@ import Network.QUIC.Receiver
 import Network.QUIC.Route
 import Network.QUIC.Sender
 import Network.QUIC.Socket
-import Network.QUIC.Transport
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 

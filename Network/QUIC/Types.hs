@@ -1,19 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Transport.Types (
+module Network.QUIC.Types (
     Bytes
   , Length
   , PacketNumber
   , StreamID
   , EncodedPacketNumber
-  , CID
-  , myCIDLength
-  , newCID
-  , fromCID
-  , toCID
-  , makeCID
-  , unpackCID
-  , OrigCID(..)
   , Token
   , emptyToken
   , RawFlags
@@ -34,51 +26,20 @@ module Network.QUIC.Transport.Types (
   , StatelessResetToken
   , Frame(..)
   , EncryptionLevel(..)
-  , QUICError(..)
+  , module Network.QUIC.Types.CID
+  , module Network.QUIC.Types.Error
+  , module Network.QUIC.Types.Integer
   ) where
 
-import Crypto.Random (getRandomBytes)
-import qualified Data.ByteString.Short as Short
-
-import qualified Control.Exception as E
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Error
-
--- | All internal byte sequences.
---   `ByteString` should be used for FFI related stuff.
-type Bytes = ShortByteString
+import Network.QUIC.Types.CID
+import Network.QUIC.Types.Error
+import Network.QUIC.Types.Integer
 
 type Length = Int
 type PacketNumber = Int64
 type StreamID = Int64
 type EncodedPacketNumber = Word32
-
-newtype CID = CID Bytes deriving (Eq, Ord)
-
-myCIDLength :: Int
-myCIDLength = 8
-
-newCID :: IO CID
-newCID = toCID <$> getRandomBytes myCIDLength
-
-toCID :: ByteString -> CID
-toCID = CID . Short.toShort
-
-fromCID :: CID -> ByteString
-fromCID (CID sbs) = Short.fromShort sbs
-
-makeCID :: ShortByteString -> CID
-makeCID = CID
-
-unpackCID :: CID -> (ShortByteString, Word8)
-unpackCID (CID sbs) = (sbs, len)
-  where
-    len = fromIntegral $ Short.length sbs
-
-instance Show CID where
-    show (CID cid) = "CID=" ++ shortToString (enc16s cid)
-
-data OrigCID = OCFirst CID | OCRetry CID deriving (Eq, Show)
 
 type Token = ByteString -- to be decrypted
 emptyToken :: Token
@@ -160,12 +121,3 @@ data EncryptionLevel = InitialLevel
                      | HandshakeLevel
                      | RTT1Level
                      deriving (Eq, Ord, Show)
-
-data QUICError = PacketIsBroken
-               | VersionIsUnknown Version
-               | HandshakeRejectedByPeer TransportError
-               | ConnectionIsNotOpen
-               | HandshakeFailed String
-               deriving (Eq, Show)
-
-instance E.Exception QUICError

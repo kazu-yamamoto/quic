@@ -6,8 +6,7 @@ import System.IO.Unsafe (unsafeDupablePerformIO)
 import qualified Data.ByteString as BS
 
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Integer
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 type ParametersList = [(ParametersKeyId,ParametersValue)]
 

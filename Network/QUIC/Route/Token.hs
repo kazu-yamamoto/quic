@@ -17,6 +17,7 @@ import Network.ByteOrder
 import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Transport
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 

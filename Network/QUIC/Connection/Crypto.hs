@@ -10,7 +10,7 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 

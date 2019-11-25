@@ -5,7 +5,7 @@ import Control.Concurrent.STM
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 sendData :: Connection -> ByteString -> IO ()
 sendData conn bs = sendData' conn 0 bs

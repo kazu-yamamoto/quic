@@ -9,7 +9,7 @@ import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 data ClientConfig = ClientConfig {
     ccVersion    :: Version

@@ -13,7 +13,7 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Parameters hiding (diff)
-import Network.QUIC.Transport.Types
+import Network.QUIC.Types
 
 nullClientController :: ClientController
 nullClientController _ = return ClientHandshakeDone

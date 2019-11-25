@@ -2,6 +2,7 @@ module Network.QUIC.Route.Header where
 
 import Network.QUIC.Imports
 import Network.QUIC.Transport
+import Network.QUIC.Types
 
 data PlainHeader = PHVersionNegotiation CID CID
                  | PHInitial   Version  CID CID Token

@@ -9,6 +9,7 @@ import Test.Hspec
 import Network.QUIC
 import Network.QUIC.Connection
 import Network.QUIC.Transport
+import Network.QUIC.Types
 import Network.QUIC.Utils
 
 spec :: Spec
