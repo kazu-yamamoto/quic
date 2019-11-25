@@ -16,6 +16,11 @@ library
   exposed-modules:     Network.QUIC
                        Network.QUIC.Config
                        Network.QUIC.Connection
+                       Network.QUIC.Connection.Crypto
+                       Network.QUIC.Connection.Misc
+                       Network.QUIC.Connection.Segment
+                       Network.QUIC.Connection.State
+                       Network.QUIC.Connection.Types
                        Network.QUIC.Core
                        Network.QUIC.Handshake
                        Network.QUIC.IO
