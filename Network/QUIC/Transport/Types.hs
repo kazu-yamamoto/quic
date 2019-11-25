@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Network.QUIC.Transport.Types (
     Bytes
   , Length
@@ -13,6 +15,7 @@ module Network.QUIC.Transport.Types (
   , unpackCID
   , OrigCID(..)
   , Token
+  , emptyToken
   , RawFlags
   , LongHeaderPacketType(..)
   , Version(..)
@@ -78,6 +81,9 @@ instance Show CID where
 data OrigCID = OCFirst CID | OCRetry CID deriving (Eq, Show)
 
 type Token = ByteString -- to be decrypted
+emptyToken :: Token
+emptyToken = ""
+
 type RawFlags = Word8
 
 data Version = Negotiation
