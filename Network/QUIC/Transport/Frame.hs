@@ -21,7 +21,11 @@ encodeFrame wbuf (Ack (AckInfo largest range1 ranges) delay) = do
     encodeInt' wbuf $ fromIntegral delay
     encodeInt' wbuf $ fromIntegral $ length ranges
     encodeInt' wbuf $ fromIntegral range1
-    -- fixme: ranges
+    mapM_ putRanges ranges
+  where
+    putRanges (gap,range) = do
+        encodeInt' wbuf $ fromIntegral gap
+        encodeInt' wbuf $ fromIntegral range
 encodeFrame wbuf (Crypto off cdata) = do
     write8 wbuf 0x06
     encodeInt' wbuf $ fromIntegral off
@@ -95,10 +99,17 @@ decodeAckFrame :: ReadBuffer -> IO Frame
 decodeAckFrame rbuf = do
     largest <- decodeInt' rbuf
     delay   <- fromIntegral <$> decodeInt' rbuf
-    _count  <- (fromIntegral <$> decodeInt' rbuf) :: IO Int
+    count   <- fromIntegral <$> decodeInt' rbuf
     range1  <- fromIntegral <$> decodeInt' rbuf
-    -- fixme: ranges
-    return $ Ack (AckInfo largest range1 []) delay
+    ranges  <- getRanges count id
+    return $ Ack (AckInfo largest range1 ranges) delay
+  where
+    getRanges 0 build = return $ build []
+    getRanges n build = do
+        gap   <- fromIntegral <$> decodeInt' rbuf
+        range <- fromIntegral <$> decodeInt' rbuf
+        let n' = n - 1 :: Int
+        getRanges n' (build . ((gap, range) :))
 
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do
