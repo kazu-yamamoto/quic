@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Network.QUIC.IO where
 
 import qualified Control.Exception as E
@@ -25,5 +27,8 @@ recvData conn = do
 
 recvData' :: Connection -> IO (StreamID, ByteString)
 recvData' conn = do
-    S sid bs <- atomically $ readTQueue (inputQ conn)
-    return (sid, bs)
+    mi <- atomically $ readTQueue (inputQ conn)
+    case mi of
+      S sid bs -> return (sid, bs)
+      E _      -> return (0, "") -- fixme sid
+      _x       -> error $ show _x

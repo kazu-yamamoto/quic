@@ -2,7 +2,6 @@
 
 module Network.QUIC.Receiver where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 import Network.TLS.QUIC
 
@@ -91,33 +90,21 @@ processFrame _ _ NewToken{} = do
 processFrame _ _ (NewConnectionID sn _ _ _)  = do
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
-processFrame conn pt (ConnectionCloseQUIC err _ftyp _reason) = do
-    case pt of
-      Initial   -> atomically $ writeTQueue (inputQ conn) $ E err
-      Handshake -> atomically $ writeTQueue (inputQ conn) $ E err
-      _         -> return ()
+processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
+    atomically $ writeTQueue (inputQ conn) $ E err
     setConnectionStatus conn Closing
     setCloseReceived conn
-    sent <- isCloseSent conn
-    let frames
-          | sent      = [] -- for acking
-          | otherwise = [ConnectionCloseApp NoError ""]
     setCloseSent conn
-    atomically $ writeTQueue (outputQ conn) $ C pt frames
-    threadDelay 100000 -- fixme
-    return True
-processFrame conn pt (ConnectionCloseApp err _reason) = do
+    clearThreads conn
+    return False
+processFrame conn _ (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
+    atomically $ writeTQueue (inputQ conn) $ E err
     setConnectionStatus conn Closing
     setCloseReceived conn
-    sent <- isCloseSent conn
-    let frames
-          | sent      = [] -- for acking
-          | otherwise = [ConnectionCloseApp NoError ""]
     setCloseSent conn
-    atomically $ writeTQueue (outputQ conn) $ C pt frames
-    threadDelay 100000 -- fixme
-    return True
+    clearThreads conn
+    return False
 processFrame conn Short (Stream sid _off dat fin) = do
     -- fixme _off
     atomically $ writeTQueue (inputQ conn) $ S sid dat
