@@ -41,20 +41,22 @@ construct conn seg pt frames token = do
         if nullPNs pns then
             return Nothing
           else do
+            -- This packet will not be acknowledged.
+            clearPNs conn Initial
             mypn <- getPacketNumber conn
             let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
                 pkt = InitialPacket currentDraft peercid mycid "" mypn [ackFrame]
-            keepSegment conn mypn A Initial pns
             Just <$> encodePacket conn pkt
     constructAckPacket Short peercid = do
         pns <- getPNs conn Handshake
         if nullPNs pns then
             return Nothing
           else do
+            -- This packet will not be acknowledged.
+            clearPNs conn Handshake
             mypn <- getPacketNumber conn
             let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
                 pkt = HandshakePacket currentDraft peercid mycid mypn [ackFrame]
-            keepSegment conn mypn A Handshake pns
             Just <$> encodePacket conn pkt
     constructAckPacket _ _ = return Nothing
     constructTargetPacket peercid = do

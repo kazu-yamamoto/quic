@@ -39,7 +39,6 @@ data Segment = S StreamID ByteString
              | H PacketType ByteString Token
              | C PacketType [Frame]
              | E TransportError
-             | A
              deriving Show
 
 type InputQ  = TQueue Segment

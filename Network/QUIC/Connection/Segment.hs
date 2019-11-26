@@ -5,9 +5,10 @@ module Network.QUIC.Connection.Segment (
     getPacketNumber
   , getPNs
   , addPNs
+  , clearPNs
   , nullPNs
   , fromPNs
-  , clearAcks
+  , removeAcks
   , keepSegment
   , releaseSegment
   , updateSegment
@@ -47,6 +48,11 @@ addPNs conn pt p = atomicModifyIORef' ref add
     ref = getPacketNumbers conn pt
     add pns = (Set.insert p pns, ())
 
+clearPNs :: Connection -> PacketType -> IO ()
+clearPNs conn pt = atomicModifyIORef' ref clear
+  where
+    ref = getPacketNumbers conn pt
+    clear _ = (Set.empty, ())
 
 updatePNs :: Connection -> PacketType -> Set PacketNumber -> IO ()
 updatePNs conn pt pns = atomicModifyIORef' ref update
@@ -64,8 +70,8 @@ getPacketNumbers _   _          = error "getPacketNumbers"
 
 ----------------------------------------------------------------
 
-clearAcks :: Connection -> Retrans -> IO ()
-clearAcks conn (Retrans _ pt pns) = updatePNs conn pt pns
+removeAcks :: Connection -> Retrans -> IO ()
+removeAcks conn (Retrans _ pt pns) = updatePNs conn pt pns
 
 nullPNs :: Set PacketNumber -> Bool
 nullPNs = Set.null

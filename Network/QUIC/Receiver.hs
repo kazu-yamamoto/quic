@@ -60,7 +60,7 @@ processFrame _ _ Padding = return True
 processFrame conn _ (Ack ackInfo _)= do
     let pns = fromAckInfo ackInfo
     segs <- catMaybes <$> mapM (releaseSegment conn) pns
-    mapM_ (clearAcks conn) segs
+    mapM_ (removeAcks conn) segs
     return True
 processFrame conn pt (Crypto _off cdat) = do
     --fixme _off
@@ -124,6 +124,7 @@ processFrame conn Short (Stream sid _off dat fin) = do
     when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ S sid ""
     return True
 processFrame _ _ _frame        = do
+    -- This includes Ping which should be just acknowledged.
     putStrLn "FIXME: processFrame"
     print _frame
     return True
