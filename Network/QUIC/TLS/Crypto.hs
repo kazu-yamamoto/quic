@@ -4,6 +4,7 @@
 module Network.QUIC.TLS.Crypto (
   -- * Payload encryption
     defaultCipher
+  , defaultCipherOverhead
   , initialSecrets
   , clientInitialSecret
   , serverInitialSecret
@@ -166,20 +167,23 @@ cipherDecrypt cipher
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
   | otherwise                                      = error "cipherDecrypt"
 
+defaultCipherOverhead :: Int
+defaultCipherOverhead = 16
+
 aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 aes128gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
     ciphertext `B.append` convert tag
   where
     conn = throwCryptoError (cipherInit key) :: AES128
     aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
-    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext 16
+    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext defaultCipherOverhead
 
 aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
   where
     conn = throwCryptoError $ cipherInit key :: AES128
     aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
-    (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+    (ciphertext, tag) = B.splitAt (B.length ciphertag - defaultCipherOverhead) ciphertag
     authtag = AuthTag $ convert tag
     plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
 

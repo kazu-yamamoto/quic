@@ -8,20 +8,45 @@ import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
+import Network.QUIC.TLS
 import Network.QUIC.Transport
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-cryptoFrame :: Connection -> PacketType -> CryptoData -> IO [Frame]
-cryptoFrame conn pt crypto = do
+cryptoFrame :: Connection -> PacketType -> CryptoData -> Token -> IO [Frame]
+cryptoFrame conn pt crypto token = do
     let len = B.length crypto
     off <- modifyCryptoOffset conn pt len
     case pt of
-      Initial   -> return (Crypto off crypto : replicate 963 Padding)
+      Initial   -> do
+          paddingFrames <- makePaddingFrames conn len token off
+          return (Crypto off crypto : paddingFrames)
       Handshake -> return [Crypto off crypto]
       Short     -> return [Crypto off crypto]
       _         -> error "cryptoFrame"
+
+makePaddingFrames :: Connection -> Int -> Token -> Int -> IO [Frame]
+makePaddingFrames conn len token off
+  | isClient conn = do
+        let (_, dcidlen) = unpackCID $ myCID conn
+        (_, scidlen) <- unpackCID <$> getPeerCID conn
+        let tokenLen = B.length token
+        let extra = 1 + 4
+                  + 1 + fromIntegral dcidlen
+                  + 1 + fromIntegral scidlen
+                  + (if tokenLen <= 63 then 1 else 2)
+                  + tokenLen
+                  + 2 -- length
+                  + 2 -- packet number
+                  -- frame
+                  + 1
+                  + (if off <= 63 then 1 else 2)
+                  + 2
+                  + defaultCipherOverhead
+            padlen = 1200 - len - extra
+        return $ replicate padlen Padding
+makePaddingFrames _ _ _ _ = return []
 
 ----------------------------------------------------------------
 
@@ -82,7 +107,7 @@ sender conn = loop
         seg <- atomically $ readTQueue $ outputQ conn
         case seg of
           H pt cdat token -> do
-              frames <- cryptoFrame conn pt cdat
+              frames <- cryptoFrame conn pt cdat token
               bs <- construct conn seg pt frames token
               connSend conn bs
           C pt frames -> do
