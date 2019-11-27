@@ -44,13 +44,13 @@ processPacket conn (ShortPacket     _       pn fs) = do
 processPacket conn (RetryPacket ver _ sCID _ token)  = do
     -- The packet number of first crypto frame is 0.
     -- This ensures that retry can be accepted only once.
-    mr <- releaseSegment conn 0
+    mr <- releaseOutput conn 0
     case mr of
-      Just (Retrans (H lvl cdat _) _ _) -> do
+      Just (Retrans (OutHandshake lvl cdat _) _ _) -> do
           -- fixme: many checking
           setPeerCID conn sCID
           setInitialSecrets conn $ initialSecrets ver sCID
-          atomically $ writeTQueue (outputQ conn) $ H lvl cdat token
+          atomically $ writeTQueue (outputQ conn) $ OutHandshake lvl cdat token
       _ -> return ()
 processPacket _ _ = undefined
 
@@ -58,20 +58,20 @@ processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding = return True
 processFrame conn _ (Ack ackInfo _)= do
     let pns = fromAckInfo ackInfo
-    segs <- catMaybes <$> mapM (releaseSegment conn) pns
-    mapM_ (removeAcks conn) segs
+    outs <- catMaybes <$> mapM (releaseOutput conn) pns
+    mapM_ (removeAcks conn) outs
     return True
 processFrame conn lvl (Crypto _off cdat) = do
     --fixme _off
     case lvl of
       InitialLevel   -> do
-          atomically $ writeTQueue (inputQ conn) $ H lvl cdat emptyToken
+          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat emptyToken
           return True
       RTT0Level -> do
           putStrLn $  "processFrame: invalid packet type " ++ show lvl
           return False
       HandshakeLevel -> do
-          atomically $ writeTQueue (inputQ conn) $ H lvl cdat emptyToken
+          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat emptyToken
           return True
       RTT1Level
         | isClient conn -> do
@@ -91,7 +91,7 @@ processFrame _ _ (NewConnectionID sn _ _ _)  = do
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
 processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
-    atomically $ writeTQueue (inputQ conn) $ E err
+    atomically $ writeTQueue (inputQ conn) $ InpEerror err
     setConnectionStatus conn Closing
     setCloseReceived conn
     setCloseSent conn
@@ -99,7 +99,7 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
     return False
 processFrame conn _ (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
-    atomically $ writeTQueue (inputQ conn) $ E err
+    atomically $ writeTQueue (inputQ conn) $ InpEerror err
     setConnectionStatus conn Closing
     setCloseReceived conn
     setCloseSent conn
@@ -107,8 +107,8 @@ processFrame conn _ (ConnectionCloseApp err _reason) = do
     return False
 processFrame conn RTT1Level (Stream sid _off dat fin) = do
     -- fixme _off
-    atomically $ writeTQueue (inputQ conn) $ S sid dat
-    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ S sid ""
+    atomically $ writeTQueue (inputQ conn) $ InpStream sid dat
+    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ InpStream sid ""
     return True
 processFrame _ _ _frame        = do
     -- This includes Ping which should be just acknowledged.

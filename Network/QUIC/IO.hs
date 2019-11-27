@@ -16,7 +16,7 @@ sendData' :: Connection -> StreamID -> ByteString -> IO ()
 sendData' conn sid bs = do
     open <- isConnectionOpen conn
     if open then
-        atomically $ writeTQueue (outputQ conn) $ S sid bs
+        atomically $ writeTQueue (outputQ conn) $ OutStream sid bs
       else
         E.throwIO ConnectionIsNotOpen
 
@@ -29,6 +29,6 @@ recvData' :: Connection -> IO (StreamID, ByteString)
 recvData' conn = do
     mi <- atomically $ readTQueue (inputQ conn)
     case mi of
-      S sid bs -> return (sid, bs)
-      E _      -> return (0, "") -- fixme sid
-      _x       -> error $ show _x
+      InpStream sid bs -> return (sid, bs)
+      InpEerror{}      -> return (0, "") -- fixme sid
+      InpHandshake{}   -> error "recvData'"

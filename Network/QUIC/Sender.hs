@@ -53,8 +53,8 @@ makePaddingFrames _ _ _ _ = return []
 
 ----------------------------------------------------------------
 
-construct :: Connection -> Segment -> EncryptionLevel -> [Frame] -> Token -> IO ByteString
-construct conn seg lvl frames token = do
+construct :: Connection -> Output -> EncryptionLevel -> [Frame] -> Token -> IO ByteString
+construct conn out lvl frames token = do
     peercid <- getPeerCID conn
     mbin0 <- constructAckPacket lvl peercid
     case mbin0 of
@@ -98,7 +98,7 @@ construct conn seg lvl frames token = do
               HandshakeLevel -> HandshakePacket currentDraft peercid mycid       mypn frames'
               RTT1Level      -> ShortPacket                  peercid             mypn frames'
               _         -> error "construct"
-        keepSegment conn mypn seg lvl pns
+        keepOutput conn mypn out lvl pns
         encodePacket conn pkt
 
 ----------------------------------------------------------------
@@ -107,19 +107,18 @@ sender :: Connection -> IO ()
 sender conn = loop
   where
     loop = forever $ do
-        seg <- atomically $ readTQueue $ outputQ conn
-        case seg of
-          H lvl cdat token -> do
+        out <- atomically $ readTQueue $ outputQ conn
+        case out of
+          OutHandshake lvl cdat token -> do
               frames <- cryptoFrame conn lvl cdat token
-              bs <- construct conn seg lvl frames token
+              bs <- construct conn out lvl frames token
               connSend conn bs
-          C lvl frames -> do
-              bs <- construct conn seg lvl frames emptyToken
+          OutControl lvl frames -> do
+              bs <- construct conn out lvl frames emptyToken
               connSend conn bs
-          S sid dat -> do
-              bs <- construct conn seg RTT1Level [Stream sid 0 dat True] emptyToken -- fixme: off
+          OutStream sid dat -> do
+              bs <- construct conn out RTT1Level [Stream sid 0 dat True] emptyToken -- fixme: off
               connSend conn bs
-          _ -> return ()
 
 ----------------------------------------------------------------
 
@@ -127,5 +126,5 @@ resender :: Connection -> IO ()
 resender conn = forever $ do
     threadDelay 25000
     -- retransQ
-    segs <- updateSegment conn (MilliSeconds 25)
-    mapM_ (atomically . writeTQueue (outputQ conn)) segs
+    outs <- updateOutput conn (MilliSeconds 25)
+    mapM_ (atomically . writeTQueue (outputQ conn)) outs

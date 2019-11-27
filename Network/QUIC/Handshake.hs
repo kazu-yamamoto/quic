@@ -17,15 +17,15 @@ import Network.QUIC.Types
 
 sendCryptoData :: Connection -> EncryptionLevel -> ByteString -> IO ()
 sendCryptoData conn lvl bs =
-    atomically $ writeTQueue (outputQ conn) $ H lvl bs emptyToken
+    atomically $ writeTQueue (outputQ conn) $ OutHandshake lvl bs emptyToken
 
 recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString)
 recvCryptoData conn = do
     dat <- atomically $ readTQueue (inputQ conn)
     case dat of
-      H lvl bs _ -> return (lvl, bs)
-      E err      -> E.throwIO $ HandshakeRejectedByPeer err
-      _          -> error "recvCryptoData"
+      InpHandshake lvl bs _ -> return (lvl, bs)
+      InpEerror err         -> E.throwIO $ HandshakeRejectedByPeer err
+      InpStream{}           -> error "recvCryptoData"
 
 ----------------------------------------------------------------
 

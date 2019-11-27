@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.QUIC.Connection.Segment (
+module Network.QUIC.Connection.Transmit (
     getPacketNumber
   , getPNs
   , addPNs
@@ -9,9 +9,9 @@ module Network.QUIC.Connection.Segment (
   , nullPNs
   , fromPNs
   , removeAcks
-  , keepSegment
-  , releaseSegment
-  , updateSegment
+  , keepOutput
+  , releaseOutput
+  , updateOutput
   , MilliSeconds(..)
   ) where
 
@@ -81,17 +81,17 @@ fromPNs = Set.toDescList
 
 ----------------------------------------------------------------
 
-keepSegment :: Connection -> PacketNumber -> Segment -> EncryptionLevel -> Set PacketNumber -> IO ()
-keepSegment Connection{..} pn seg lvl pns = do
+keepOutput :: Connection -> PacketNumber -> Output -> EncryptionLevel -> Set PacketNumber -> IO ()
+keepOutput Connection{..} pn out lvl pns = do
     tm <- timeCurrentP
     atomicModifyIORef' retransQ (add tm)
   where
     pn' = fromIntegral pn
-    ent = Retrans seg lvl pns
+    ent = Retrans out lvl pns
     add tm psq = (PSQ.insert pn' tm ent psq, ())
 
-releaseSegment :: Connection -> PacketNumber -> IO (Maybe Retrans)
-releaseSegment Connection{..} pn = do
+releaseOutput :: Connection -> PacketNumber -> IO (Maybe Retrans)
+releaseOutput Connection{..} pn = do
     atomicModifyIORef' retransQ del
   where
     pn' = fromIntegral pn
@@ -110,15 +110,15 @@ timeDel (ElapsedP sec nano) milli
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
 
-updateSegment :: Connection -> MilliSeconds -> IO [Segment]
-updateSegment Connection{..} milli = do
+updateOutput :: Connection -> MilliSeconds -> IO [Output]
+updateOutput Connection{..} milli = do
     tm <- timeCurrentP
     let tm' = tm `timeDel` milli
     atomicModifyIORef' retransQ (split tm')
   where
-    split x psq = (psq', map getSegment rets)
+    split x psq = (psq', map getOutput rets)
       where
         (rets, psq') = PSQ.atMostView x psq
-    getSegment (_,_,Retrans x _ _) = x
+    getOutput (_,_,Retrans x _ _) = x
 
 ----------------------------------------------------------------
