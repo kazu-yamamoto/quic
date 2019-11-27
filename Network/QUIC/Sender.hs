@@ -26,6 +26,9 @@ cryptoFrame conn lvl crypto token = do
       HandshakeLevel -> return [Crypto off crypto]
       RTT1Level      -> return [Crypto off crypto]
 
+maximumQUICPacketSize :: Int
+maximumQUICPacketSize = 1200
+
 makePaddingFrames :: Connection -> Int -> Token -> Int -> IO [Frame]
 makePaddingFrames conn len token off
   | isClient conn = do
@@ -37,14 +40,14 @@ makePaddingFrames conn len token off
                   + 1 + fromIntegral scidlen
                   + (if tokenLen <= 63 then 1 else 2)
                   + tokenLen
-                  + 2 -- length
+                  + (if len <= 63 then 1 else 2)
                   + 2 -- packet number
                   -- frame
                   + 1
                   + (if off <= 63 then 1 else 2)
                   + 2
                   + defaultCipherOverhead
-            padlen = 1200 - len - extra
+            padlen = maximumQUICPacketSize - len - extra
         return $ replicate padlen Padding
 makePaddingFrames _ _ _ _ = return []
 
