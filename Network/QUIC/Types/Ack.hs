@@ -30,8 +30,7 @@ toAckInfo (l:ls)  = ack l ls 0
     ranges _ [] g r = [(g, r)]
     ranges p (x:xs) g r
       | p - 1 == x  = ranges x xs g (r+1)
-      | otherwise   = (g, r) : ranges x xs (fromIntegral(p - x) - 2) 0
-
+      | otherwise   = (g, r) : ranges x xs (fromIntegral (p - x) - 2) 0
 
 -- |
 -- >>> fromAckInfo $ AckInfo 9 0 []
