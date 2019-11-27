@@ -42,7 +42,12 @@ data Input = InpStream StreamID ByteString
 
 data Output = OutStream StreamID ByteString
             | OutControl EncryptionLevel [Frame]
-            | OutHandshake EncryptionLevel ByteString Token
+            | OutHndClientHello0 ByteString (Maybe ByteString)
+            | OutHndClientHelloR ByteString (Maybe ByteString) Token
+            | OutHndServerHello  ByteString ByteString
+            | OutHndServerHelloR ByteString
+            | OutHndClientFinished ByteString
+            | OutHndServerNST ByteString
             deriving Show
 
 type InputQ  = TQueue Input

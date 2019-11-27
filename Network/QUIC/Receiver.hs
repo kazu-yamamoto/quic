@@ -46,17 +46,17 @@ processPacket conn (RetryPacket ver _ sCID _ token)  = do
     -- This ensures that retry can be accepted only once.
     mr <- releaseOutput conn 0
     case mr of
-      Just (Retrans (OutHandshake lvl cdat _) _ _) -> do
+      Just (Retrans (OutHndClientHello0 cdat mEarydata) _ _) -> do
           -- fixme: many checking
           setPeerCID conn sCID
           setInitialSecrets conn $ initialSecrets ver sCID
-          atomically $ writeTQueue (outputQ conn) $ OutHandshake lvl cdat token
+          atomically $ writeTQueue (outputQ conn) $ OutHndClientHelloR cdat mEarydata token
       _ -> return ()
 processPacket _ _ = undefined
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding = return True
-processFrame conn _ (Ack ackInfo _)= do
+processFrame conn _ (Ack ackInfo _) = do
     let pns = fromAckInfo ackInfo
     outs <- catMaybes <$> mapM (releaseOutput conn) pns
     mapM_ (removeAcks conn) outs
