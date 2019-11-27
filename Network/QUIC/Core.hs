@@ -96,7 +96,7 @@ close :: Connection -> IO ()
 close conn = do
     setConnectionStatus conn Closing
     let frames = [ConnectionCloseQUIC NoError 0 ""]
-    atomically $ writeTQueue (outputQ conn) $ C Short frames
+    atomically $ writeTQueue (outputQ conn) $ C RTT1Level frames
     setCloseSent conn
     void $ timeout 100000 $ waitClosed conn -- fixme: timeout
     clearThreads conn

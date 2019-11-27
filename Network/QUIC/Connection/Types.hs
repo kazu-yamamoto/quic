@@ -36,15 +36,15 @@ data CloseState = CloseState {
 ----------------------------------------------------------------
 
 data Segment = S StreamID ByteString
-             | H PacketType ByteString Token
-             | C PacketType [Frame]
+             | H EncryptionLevel ByteString Token
+             | C EncryptionLevel [Frame]
              | E TransportError
              deriving Show
 
 type InputQ  = TQueue Segment
 type OutputQ = TQueue Segment
 type RetransQ = IntPSQ ElapsedP Retrans
-data Retrans  = Retrans Segment PacketType (Set PacketNumber)
+data Retrans  = Retrans Segment EncryptionLevel (Set PacketNumber)
 
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")

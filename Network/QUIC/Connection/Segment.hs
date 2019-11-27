@@ -37,41 +37,41 @@ getPacketNumber Connection{..} = atomicModifyIORef' packetNumber inc
 ----------------------------------------------------------------
 -- Peer's packet numbers
 
-getPNs :: Connection -> PacketType -> IO (Set PacketNumber)
-getPNs conn pt = readIORef ref
+getPNs :: Connection -> EncryptionLevel -> IO (Set PacketNumber)
+getPNs conn lvl = readIORef ref
   where
-    ref = getPacketNumbers conn pt
+    ref = getPacketNumbers conn lvl
 
-addPNs :: Connection -> PacketType -> PacketNumber -> IO ()
-addPNs conn pt p = atomicModifyIORef' ref add
+addPNs :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
+addPNs conn lvl p = atomicModifyIORef' ref add
   where
-    ref = getPacketNumbers conn pt
+    ref = getPacketNumbers conn lvl
     add pns = (Set.insert p pns, ())
 
-clearPNs :: Connection -> PacketType -> IO ()
-clearPNs conn pt = atomicModifyIORef' ref clear
+clearPNs :: Connection -> EncryptionLevel -> IO ()
+clearPNs conn lvl = atomicModifyIORef' ref clear
   where
-    ref = getPacketNumbers conn pt
+    ref = getPacketNumbers conn lvl
     clear _ = (Set.empty, ())
 
-updatePNs :: Connection -> PacketType -> Set PacketNumber -> IO ()
-updatePNs conn pt pns = atomicModifyIORef' ref update
+updatePNs :: Connection -> EncryptionLevel -> Set PacketNumber -> IO ()
+updatePNs conn lvl pns = atomicModifyIORef' ref update
   where
-    ref = getPacketNumbers conn pt
+    ref = getPacketNumbers conn lvl
     update pns0 = (pns0 Set.\\ pns, ())
 
 ----------------------------------------------------------------
 
-getPacketNumbers :: Connection -> PacketType -> IORef (Set PacketNumber)
-getPacketNumbers conn Initial   = iniPacketNumbers conn
-getPacketNumbers conn Handshake = hndPacketNumbers conn
-getPacketNumbers conn Short     = appPacketNumbers conn
-getPacketNumbers _   _          = error "getPacketNumbers"
+getPacketNumbers :: Connection -> EncryptionLevel -> IORef (Set PacketNumber)
+getPacketNumbers conn InitialLevel   = iniPacketNumbers conn
+getPacketNumbers conn RTT0Level      = appPacketNumbers conn
+getPacketNumbers conn HandshakeLevel = hndPacketNumbers conn
+getPacketNumbers conn RTT1Level      = appPacketNumbers conn
 
 ----------------------------------------------------------------
 
 removeAcks :: Connection -> Retrans -> IO ()
-removeAcks conn (Retrans _ pt pns) = updatePNs conn pt pns
+removeAcks conn (Retrans _ lvl pns) = updatePNs conn lvl pns
 
 nullPNs :: Set PacketNumber -> Bool
 nullPNs = Set.null
@@ -81,13 +81,13 @@ fromPNs = Set.toDescList
 
 ----------------------------------------------------------------
 
-keepSegment :: Connection -> PacketNumber -> Segment -> PacketType -> Set PacketNumber -> IO ()
-keepSegment Connection{..} pn seg pt pns = do
+keepSegment :: Connection -> PacketNumber -> Segment -> EncryptionLevel -> Set PacketNumber -> IO ()
+keepSegment Connection{..} pn seg lvl pns = do
     tm <- timeCurrentP
     atomicModifyIORef' retransQ (add tm)
   where
     pn' = fromIntegral pn
-    ent = Retrans seg pt pns
+    ent = Retrans seg lvl pns
     add tm psq = (PSQ.insert pn' tm ent psq, ())
 
 releaseSegment :: Connection -> PacketNumber -> IO (Maybe Retrans)

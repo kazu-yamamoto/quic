@@ -143,7 +143,7 @@ encodePacket' _conn wbuf (VersionNegotiationPacket dCID sCID vers) = do
 encodePacket' conn wbuf (InitialPacket ver dCID sCID token pn frames) = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP conn wbuf LHInitial ver dCID sCID pn
+    (epn, epnLen) <- encodeLongHeaderPP conn wbuf Initial ver dCID sCID pn
     -- token
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
@@ -155,7 +155,7 @@ encodePacket' conn wbuf (InitialPacket ver dCID sCID token pn frames) = do
 encodePacket' conn wbuf (RTT0Packet ver dCID sCID pn frames) = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP conn wbuf LHRTT0 ver dCID sCID pn
+    (epn, epnLen) <- encodeLongHeaderPP conn wbuf RTT0 ver dCID sCID pn
     -- length .. payload
     secret <- undefined conn
     cipher <- getCipher conn
@@ -164,7 +164,7 @@ encodePacket' conn wbuf (RTT0Packet ver dCID sCID pn frames) = do
 encodePacket' conn wbuf (HandshakePacket ver dCID sCID pn frames) = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
-    (epn, epnLen) <- encodeLongHeaderPP conn wbuf LHHandshake ver dCID sCID pn
+    (epn, epnLen) <- encodeLongHeaderPP conn wbuf Handshake ver dCID sCID pn
     -- length .. payload
     secret <- txHandshakeSecret conn
     cipher <- getCipher conn
@@ -172,7 +172,7 @@ encodePacket' conn wbuf (HandshakePacket ver dCID sCID pn frames) = do
 
 encodePacket' _conn wbuf (RetryPacket ver dCID sCID odCID token) = do
     -- fixme: randomizing unused bits
-    let flags = encodeLongHeaderPacketType 0b00000000 LHRetry
+    let flags = encodeLongHeaderPacketType 0b00000000 Retry
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
     let (odcid, odcidlen) = unpackCID odCID
@@ -285,10 +285,10 @@ decodeVersionNegotiationPacket rbuf dCID sCID = do
 
 decodeDraft :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeDraft conn rbuf proFlags version dCID sCID = case decodeLongHeaderPacketType proFlags of
-    LHInitial   -> decodeInitialPacket   conn rbuf proFlags version dCID sCID
-    LHRTT0      -> decodeRTT0Packet      conn rbuf proFlags version dCID sCID
-    LHHandshake -> decodeHandshakePacket conn rbuf proFlags version dCID sCID
-    LHRetry     -> decodeRetryPacket     conn rbuf proFlags version dCID sCID
+    Initial   -> decodeInitialPacket   conn rbuf proFlags version dCID sCID
+    RTT0      -> decodeRTT0Packet      conn rbuf proFlags version dCID sCID
+    Handshake -> decodeHandshakePacket conn rbuf proFlags version dCID sCID
+    Retry     -> decodeRetryPacket     conn rbuf proFlags version dCID sCID
 
 decodeInitialPacket :: Connection -> ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO Packet
 decodeInitialPacket conn rbuf proFlags version dCID sCID = do

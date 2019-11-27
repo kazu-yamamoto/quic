@@ -11,7 +11,6 @@ module Network.QUIC.Types (
   , LongHeaderPacketType(..)
   , Version(..)
   , currentDraft
-  , PacketType(..)
   , Packet(..)
   , Delay
   , CryptoData
@@ -59,19 +58,17 @@ data Version = Negotiation
 currentDraft :: Version
 currentDraft = Draft24
 
-data LongHeaderPacketType = LHInitial
-                          | LHRTT0
-                          | LHHandshake
-                          | LHRetry
+data LongHeaderPacketType = Initial
+                          | RTT0
+                          | Handshake
+                          | Retry
                           deriving (Eq, Show)
 
-data PacketType = VersionNegotiation
-                | Initial
-                | RTT0
-                | Handshake
-                | Retry
-                | Short
-                deriving (Eq, Show)
+data EncryptionLevel = InitialLevel
+                     | RTT0Level
+                     | HandshakeLevel
+                     | RTT1Level
+                     deriving (Eq, Ord, Show)
 
 data Packet = VersionNegotiationPacket CID CID [Version]
             | InitialPacket    Version CID CID Token PacketNumber [Frame]
@@ -111,9 +108,3 @@ data Frame = Padding
            | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
            | ConnectionCloseApp  TransportError ReasonPhrase
            deriving (Eq,Show)
-
-data EncryptionLevel = InitialLevel
-                     | RTT0Level
-                     | HandshakeLevel
-                     | RTT1Level
-                     deriving (Eq, Ord, Show)

@@ -119,7 +119,7 @@ encodeVersionNegotiation dCID sCID vers = withWriteBuffer 2048 $ \wbuf -> do
 
 encodeRetry :: Version -> CID -> CID -> CID -> ByteString -> IO ByteString
 encodeRetry ver dCID sCID odCID token = withWriteBuffer 2048 $ \wbuf -> do
-    let flags = encodeLongHeaderPacketType 0b00000000 LHRetry
+    let flags = encodeLongHeaderPacketType 0b00000000 Retry
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
     let (odcid, odcidlen) = unpackCID odCID

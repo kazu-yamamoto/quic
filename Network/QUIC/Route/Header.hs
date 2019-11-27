@@ -24,13 +24,13 @@ decodePlainHeader bin = withReadBuffer bin $ \rbuf -> do
         case version of
           Negotiation -> return $ PHVersionNegotiation dCID sCID
           _           -> case decodeLongHeaderPacketType proFlags of
-            LHInitial   -> do
+            Initial   -> do
                 tokenLen <- fromIntegral <$> decodeInt' rbuf
                 token <- extractByteString rbuf tokenLen
                 return $ PHInitial version dCID sCID token
-            LHRTT0      -> return $ PHRTT0 version dCID sCID
-            LHHandshake -> return $ PHHandshake version dCID sCID
-            LHRetry     -> do
+            RTT0      -> return $ PHRTT0 version dCID sCID
+            Handshake -> return $ PHHandshake version dCID sCID
+            Retry     -> do
                 odCIDlen <- fromIntegral <$> read8 rbuf
                 odCID <- makeCID <$> extractShortByteString rbuf odCIDlen
                 tokenLen <- fromIntegral <$> decodeInt' rbuf

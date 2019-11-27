@@ -14,17 +14,17 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-cryptoFrame :: Connection -> PacketType -> CryptoData -> Token -> IO [Frame]
-cryptoFrame conn pt crypto token = do
+cryptoFrame :: Connection -> EncryptionLevel -> CryptoData -> Token -> IO [Frame]
+cryptoFrame conn lvl crypto token = do
     let len = B.length crypto
-    off <- modifyCryptoOffset conn pt len
-    case pt of
-      Initial   -> do
+    off <- modifyCryptoOffset conn lvl len
+    case lvl of
+      InitialLevel   -> do
           paddingFrames <- makePaddingFrames conn len token off
           return (Crypto off crypto : paddingFrames)
-      Handshake -> return [Crypto off crypto]
-      Short     -> return [Crypto off crypto]
-      _         -> error "cryptoFrame"
+      RTT0Level      -> error "cryptoFrame"
+      HandshakeLevel -> return [Crypto off crypto]
+      RTT1Level      -> return [Crypto off crypto]
 
 makePaddingFrames :: Connection -> Int -> Token -> Int -> IO [Frame]
 makePaddingFrames conn len token off
@@ -50,10 +50,10 @@ makePaddingFrames _ _ _ _ = return []
 
 ----------------------------------------------------------------
 
-construct :: Connection -> Segment -> PacketType -> [Frame] -> Token -> IO ByteString
-construct conn seg pt frames token = do
+construct :: Connection -> Segment -> EncryptionLevel -> [Frame] -> Token -> IO ByteString
+construct conn seg lvl frames token = do
     peercid <- getPeerCID conn
-    mbin0 <- constructAckPacket pt peercid
+    mbin0 <- constructAckPacket lvl peercid
     case mbin0 of
       Nothing   -> constructTargetPacket peercid
       Just bin0 -> do
@@ -61,24 +61,24 @@ construct conn seg pt frames token = do
           return $ bin0 `B.append` bin1
   where
     mycid = myCID conn
-    constructAckPacket Handshake peercid = do
-        pns <- getPNs conn Initial
+    constructAckPacket HandshakeLevel peercid = do
+        pns <- getPNs conn InitialLevel
         if nullPNs pns then
             return Nothing
           else do
             -- This packet will not be acknowledged.
-            clearPNs conn Initial
+            clearPNs conn InitialLevel
             mypn <- getPacketNumber conn
             let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
                 pkt = InitialPacket currentDraft peercid mycid "" mypn [ackFrame]
             Just <$> encodePacket conn pkt
-    constructAckPacket Short peercid = do
-        pns <- getPNs conn Handshake
+    constructAckPacket RTT1Level peercid = do
+        pns <- getPNs conn HandshakeLevel
         if nullPNs pns then
             return Nothing
           else do
             -- This packet will not be acknowledged.
-            clearPNs conn Handshake
+            clearPNs conn HandshakeLevel
             mypn <- getPacketNumber conn
             let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
                 pkt = HandshakePacket currentDraft peercid mycid mypn [ackFrame]
@@ -86,16 +86,16 @@ construct conn seg pt frames token = do
     constructAckPacket _ _ = return Nothing
     constructTargetPacket peercid = do
         mypn <- getPacketNumber conn
-        pns <- getPNs conn pt
+        pns <- getPNs conn lvl
         let frames'
               | null pns  = frames
               | otherwise = Ack (toAckInfo $ fromPNs pns) 0 : frames
-        let pkt = case pt of
-              Initial   -> InitialPacket   currentDraft peercid mycid token mypn frames'
-              Handshake -> HandshakePacket currentDraft peercid mycid       mypn frames'
-              Short     -> ShortPacket                  peercid             mypn frames'
+        let pkt = case lvl of
+              InitialLevel   -> InitialPacket   currentDraft peercid mycid token mypn frames'
+              HandshakeLevel -> HandshakePacket currentDraft peercid mycid       mypn frames'
+              RTT1Level      -> ShortPacket                  peercid             mypn frames'
               _         -> error "construct"
-        keepSegment conn mypn seg pt pns
+        keepSegment conn mypn seg lvl pns
         encodePacket conn pkt
 
 ----------------------------------------------------------------
@@ -106,15 +106,15 @@ sender conn = loop
     loop = forever $ do
         seg <- atomically $ readTQueue $ outputQ conn
         case seg of
-          H pt cdat token -> do
-              frames <- cryptoFrame conn pt cdat token
-              bs <- construct conn seg pt frames token
+          H lvl cdat token -> do
+              frames <- cryptoFrame conn lvl cdat token
+              bs <- construct conn seg lvl frames token
               connSend conn bs
-          C pt frames -> do
-              bs <- construct conn seg pt frames emptyToken
+          C lvl frames -> do
+              bs <- construct conn seg lvl frames emptyToken
               connSend conn bs
           S sid dat -> do
-              bs <- construct conn seg Short [Stream sid 0 dat True] emptyToken -- fixme: off
+              bs <- construct conn seg RTT1Level [Stream sid 0 dat True] emptyToken -- fixme: off
               connSend conn bs
           _ -> return ()
 

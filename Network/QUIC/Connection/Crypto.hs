@@ -95,14 +95,14 @@ rxApplicationSecret conn = do
 
 ----------------------------------------------------------------
 
-modifyCryptoOffset :: Connection -> PacketType -> Offset -> IO Offset
-modifyCryptoOffset conn pt len = atomicModifyIORef' ref modify
+modifyCryptoOffset :: Connection -> EncryptionLevel -> Offset -> IO Offset
+modifyCryptoOffset conn lvl len = atomicModifyIORef' ref modify
   where
-    ref = getCryptoOffset conn pt
+    ref = getCryptoOffset conn lvl
     modify off = (off + len, off)
 
-getCryptoOffset :: Connection -> PacketType -> IORef Offset
-getCryptoOffset conn Initial   = iniCryptoOffset conn
-getCryptoOffset conn Handshake = hndCryptoOffset conn
-getCryptoOffset conn Short     = appCryptoOffset conn
-getCryptoOffset _   _          = error "getCryptoOffset"
+getCryptoOffset :: Connection -> EncryptionLevel -> IORef Offset
+getCryptoOffset conn InitialLevel   = iniCryptoOffset conn
+getCryptoOffset _    RTT0Level      = error "getCryptoOffset"
+getCryptoOffset conn HandshakeLevel = hndCryptoOffset conn
+getCryptoOffset conn RTT1Level      = appCryptoOffset conn

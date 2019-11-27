@@ -27,27 +27,27 @@ analyzeLongHeaderPacket bin = withReadBuffer bin $ \rbuf -> do
 ----------------------------------------------------------------
 
 encodeLongHeaderPacketType :: RawFlags -> LongHeaderPacketType -> RawFlags
-encodeLongHeaderPacketType flags LHInitial   = flags .|. 0b11000000
-encodeLongHeaderPacketType flags LHRTT0      = flags .|. 0b11010000
-encodeLongHeaderPacketType flags LHHandshake = flags .|. 0b11100000
-encodeLongHeaderPacketType flags LHRetry     = flags .|. 0b11110000
+encodeLongHeaderPacketType flags Initial   = flags .|. 0b11000000
+encodeLongHeaderPacketType flags RTT0      = flags .|. 0b11010000
+encodeLongHeaderPacketType flags Handshake = flags .|. 0b11100000
+encodeLongHeaderPacketType flags Retry     = flags .|. 0b11110000
 
 decodeLongHeaderPacketType :: RawFlags -> LongHeaderPacketType
 decodeLongHeaderPacketType flags = case flags .&. 0b00110000 of
-    0b00000000 -> LHInitial
-    0b00010000 -> LHRTT0
-    0b00100000 -> LHHandshake
-    _          -> LHRetry
+    0b00000000 -> Initial
+    0b00010000 -> RTT0
+    0b00100000 -> Handshake
+    _          -> Retry
 
 ----------------------------------------------------------------
 
 packetEncryptionLevel :: ByteString -> EncryptionLevel
 packetEncryptionLevel bs
   | isLong w  = case decodeLongHeaderPacketType w of
-                  LHInitial   -> InitialLevel
-                  LHRetry     -> InitialLevel
-                  LHHandshake -> HandshakeLevel
-                  _           -> undefined
-  | otherwise     = RTT1Level
+                  Initial   -> InitialLevel
+                  RTT0      -> RTT0Level
+                  Handshake -> HandshakeLevel
+                  Retry     -> InitialLevel
+  | otherwise                = RTT1Level
   where
     w = B.head bs

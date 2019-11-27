@@ -30,47 +30,50 @@ processPackets conn bs0 = loop bs0
 processPacket :: Connection -> Packet -> IO ()
 processPacket conn (InitialPacket   _ _ _ _ pn fs) = do
 --    putStrLn $ "I: " ++ show fs
-    rets <- mapM (processFrame conn Initial) fs
-    when (and rets) $ addPNs conn Initial pn
+    rets <- mapM (processFrame conn InitialLevel) fs
+    when (and rets) $ addPNs conn InitialLevel pn
 processPacket conn (HandshakePacket _ _ peercid   pn fs) = do
 --    putStrLn $ "H: " ++ show fs
     when (isClient conn) $ setPeerCID conn peercid
-    rets <- mapM (processFrame conn Handshake) fs
-    when (and rets) $ addPNs conn Handshake pn
+    rets <- mapM (processFrame conn HandshakeLevel) fs
+    when (and rets) $ addPNs conn HandshakeLevel pn
 processPacket conn (ShortPacket     _       pn fs) = do
 --    putStrLn $ "S: " ++ show fs
-    rets <- mapM (processFrame conn Short) fs
-    when (and rets) $ addPNs conn Short pn
+    rets <- mapM (processFrame conn RTT1Level) fs
+    when (and rets) $ addPNs conn RTT1Level pn
 processPacket conn (RetryPacket ver _ sCID _ token)  = do
     -- The packet number of first crypto frame is 0.
     -- This ensures that retry can be accepted only once.
     mr <- releaseSegment conn 0
     case mr of
-      Just (Retrans (H pt cdat _) _ _) -> do
+      Just (Retrans (H lvl cdat _) _ _) -> do
           -- fixme: many checking
           setPeerCID conn sCID
           setInitialSecrets conn $ initialSecrets ver sCID
-          atomically $ writeTQueue (outputQ conn) $ H pt cdat token
+          atomically $ writeTQueue (outputQ conn) $ H lvl cdat token
       _ -> return ()
 processPacket _ _ = undefined
 
-processFrame :: Connection -> PacketType -> Frame -> IO Bool
+processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding = return True
 processFrame conn _ (Ack ackInfo _)= do
     let pns = fromAckInfo ackInfo
     segs <- catMaybes <$> mapM (releaseSegment conn) pns
     mapM_ (removeAcks conn) segs
     return True
-processFrame conn pt (Crypto _off cdat) = do
+processFrame conn lvl (Crypto _off cdat) = do
     --fixme _off
-    case pt of
-      Initial   -> do
-          atomically $ writeTQueue (inputQ conn) $ H pt cdat emptyToken
+    case lvl of
+      InitialLevel   -> do
+          atomically $ writeTQueue (inputQ conn) $ H lvl cdat emptyToken
           return True
-      Handshake -> do
-          atomically $ writeTQueue (inputQ conn) $ H pt cdat emptyToken
+      RTT0Level -> do
+          putStrLn $  "processFrame: invalid packet type " ++ show lvl
+          return False
+      HandshakeLevel -> do
+          atomically $ writeTQueue (inputQ conn) $ H lvl cdat emptyToken
           return True
-      Short
+      RTT1Level
         | isClient conn -> do
               -- fixme: checkint key phase
               control <- getClientController conn
@@ -81,9 +84,6 @@ processFrame conn pt (Crypto _off cdat) = do
         | otherwise -> do
               putStrLn "processFrame: Short:Crypto for server"
               return False
-      _         -> do
-          putStrLn $  "processFrame: invalid packet type " ++ show pt
-          return False
 processFrame _ _ NewToken{} = do
     putStrLn "FIXME: NewToken"
     return True
@@ -105,7 +105,7 @@ processFrame conn _ (ConnectionCloseApp err _reason) = do
     setCloseSent conn
     clearThreads conn
     return False
-processFrame conn Short (Stream sid _off dat fin) = do
+processFrame conn RTT1Level (Stream sid _off dat fin) = do
     -- fixme _off
     atomically $ writeTQueue (inputQ conn) $ S sid dat
     when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ S sid ""
