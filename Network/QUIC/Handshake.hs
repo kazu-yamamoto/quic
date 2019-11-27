@@ -15,17 +15,16 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-sendCryptoData :: Connection -> EncryptionLevel -> ByteString -> IO ()
-sendCryptoData conn lvl bs =
-    atomically $ writeTQueue (outputQ conn) $ H lvl bs emptyToken
+sendCryptoData :: Connection -> Output -> IO ()
+sendCryptoData conn out = atomically $ writeTQueue (outputQ conn) out
 
 recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString)
 recvCryptoData conn = do
     dat <- atomically $ readTQueue (inputQ conn)
     case dat of
-      H lvl bs _ -> return (lvl, bs)
-      E err      -> E.throwIO $ HandshakeRejectedByPeer err
-      _          -> error "recvCryptoData"
+      InpHandshake lvl bs _ -> return (lvl, bs)
+      InpEerror err         -> E.throwIO $ HandshakeRejectedByPeer err
+      InpStream{}           -> error "recvCryptoData"
 
 ----------------------------------------------------------------
 
@@ -39,7 +38,7 @@ handshakeClient conf conn = do
 sendClientHelloAndRecvServerHello :: ClientController-> Connection -> IO ()
 sendClientHelloAndRecvServerHello control conn = do
     SendClientHello ch0 _ <- control GetClientHello
-    sendCryptoData conn InitialLevel ch0
+    sendCryptoData conn $ OutHndClientHello0 ch0 Nothing
     (InitialLevel, sh0) <- recvCryptoData conn
     state0 <- control $ PutServerHello sh0
     case state0 of
@@ -47,7 +46,7 @@ sendClientHelloAndRecvServerHello control conn = do
           setHandshakeSecrets conn hndSecs
           setCipher conn cipher
       SendClientHello ch1 _ -> do
-          sendCryptoData conn InitialLevel ch1
+          sendCryptoData conn $ OutHndClientHello0 ch1 Nothing
           (InitialLevel, sh1) <- recvCryptoData conn
           state1 <- control $ PutServerHello sh1
           case state1 of
@@ -70,7 +69,7 @@ recvServerFinishedSendClientFinished control conn = loop
               setNegotiatedProto conn alpn
               setParameters conn exts
               setApplicationSecrets conn appSecs
-              sendCryptoData conn HandshakeLevel cf
+              sendCryptoData conn $ OutHndClientFinished cf
           _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
 ----------------------------------------------------------------
@@ -82,7 +81,7 @@ handshakeServer conf origCID conn = do
     state <- control $ PutClientHello ch
     sh <- case state of
       SendRequestRetry hrr -> do
-          sendCryptoData conn InitialLevel hrr
+          sendCryptoData conn $ OutHndServerHelloR hrr
           (InitialLevel, ch1) <- recvCryptoData conn
           SendServerHello sh0 exts cipher _ hndSecs <- control $ PutClientHello ch1
           setHandshakeSecrets conn hndSecs
@@ -95,14 +94,13 @@ handshakeServer conf origCID conn = do
           setParameters conn exts
           return sh0
       _ -> E.throwIO $ HandshakeFailed "handshakeServer"
-    sendCryptoData conn InitialLevel sh
     SendServerFinished sf alpn appSecs <- control GetServerFinished
     setNegotiatedProto conn alpn
     setApplicationSecrets conn appSecs
-    sendCryptoData conn HandshakeLevel sf
+    sendCryptoData conn $ OutHndServerHello sh sf
     (HandshakeLevel, cf) <- recvCryptoData conn
     SendSessionTicket nst <- control $ PutClientFinished cf
-    sendCryptoData conn RTT1Level nst
+    sendCryptoData conn $ OutHndServerNST nst
     ServerHandshakeDone <- control ExitServer
     return ()
 

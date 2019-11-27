@@ -18,8 +18,8 @@ library
                        Network.QUIC.Connection
                        Network.QUIC.Connection.Crypto
                        Network.QUIC.Connection.Misc
-                       Network.QUIC.Connection.Segment
                        Network.QUIC.Connection.State
+                       Network.QUIC.Connection.Transmit
                        Network.QUIC.Connection.Types
                        Network.QUIC.Core
                        Network.QUIC.Handshake

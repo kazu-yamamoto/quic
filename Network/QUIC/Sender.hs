@@ -14,27 +14,22 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-cryptoFrame :: Connection -> EncryptionLevel -> CryptoData -> Token -> IO [Frame]
-cryptoFrame conn lvl crypto token = do
+cryptoFrame :: Connection -> CryptoData -> EncryptionLevel -> IO Frame
+cryptoFrame conn crypto lvl = do
     let len = B.length crypto
     off <- modifyCryptoOffset conn lvl len
-    case lvl of
-      InitialLevel   -> do
-          paddingFrames <- makePaddingFrames conn len token off
-          return (Crypto off crypto : paddingFrames)
-      RTT0Level      -> error "cryptoFrame"
-      HandshakeLevel -> return [Crypto off crypto]
-      RTT1Level      -> return [Crypto off crypto]
+    return $ Crypto off crypto
 
 maximumQUICPacketSize :: Int
 maximumQUICPacketSize = 1200
 
-makePaddingFrames :: Connection -> Int -> Token -> Int -> IO [Frame]
-makePaddingFrames conn len token off
+makePaddingFrames :: Connection -> Frame -> Token -> IO [Frame]
+makePaddingFrames conn (Crypto off crypto) token
   | isClient conn = do
         let (_, dcidlen) = unpackCID $ myCID conn
         (_, scidlen) <- unpackCID <$> getPeerCID conn
-        let tokenLen = B.length token
+        let len = B.length crypto
+            tokenLen = B.length token
         let extra = 1 + 4
                   + 1 + fromIntegral dcidlen
                   + 1 + fromIntegral scidlen
@@ -49,19 +44,22 @@ makePaddingFrames conn len token off
                   + defaultCipherOverhead
             padlen = maximumQUICPacketSize - len - extra
         return $ replicate padlen Padding
-makePaddingFrames _ _ _ _ = return []
+makePaddingFrames _ _ _ = return []
 
 ----------------------------------------------------------------
 
-construct :: Connection -> Segment -> EncryptionLevel -> [Frame] -> Token -> IO ByteString
-construct conn seg lvl frames token = do
+construct :: Connection -> Output -> EncryptionLevel -> [Frame] -> Token -> Bool -> IO ByteString
+construct conn out lvl frames token genLowerAck = do
     peercid <- getPeerCID conn
-    mbin0 <- constructAckPacket lvl peercid
-    case mbin0 of
-      Nothing   -> constructTargetPacket peercid
-      Just bin0 -> do
-          bin1 <- constructTargetPacket peercid
-          return $ bin0 `B.append` bin1
+    if genLowerAck then do
+        mbin0 <- constructAckPacket lvl peercid
+        case mbin0 of
+          Nothing   -> constructTargetPacket peercid
+          Just bin0 -> do
+              bin1 <- constructTargetPacket peercid
+              return $ bin0 `B.append` bin1
+      else
+        constructTargetPacket peercid
   where
     mycid = myCID conn
     constructAckPacket HandshakeLevel peercid = do
@@ -98,7 +96,7 @@ construct conn seg lvl frames token = do
               HandshakeLevel -> HandshakePacket currentDraft peercid mycid       mypn frames'
               RTT1Level      -> ShortPacket                  peercid             mypn frames'
               _         -> error "construct"
-        keepSegment conn mypn seg lvl pns
+        keepOutput conn mypn out lvl pns
         encodePacket conn pkt
 
 ----------------------------------------------------------------
@@ -107,19 +105,44 @@ sender :: Connection -> IO ()
 sender conn = loop
   where
     loop = forever $ do
-        seg <- atomically $ readTQueue $ outputQ conn
-        case seg of
-          H lvl cdat token -> do
-              frames <- cryptoFrame conn lvl cdat token
-              bs <- construct conn seg lvl frames token
+        out <- atomically $ readTQueue $ outputQ conn
+        case out of
+          OutHndClientHello0 ch _mEarydata -> do
+              frame <- cryptoFrame conn ch InitialLevel
+              paddingFrames <- makePaddingFrames conn frame emptyToken
+              let frames = frame : paddingFrames
+              bs <- construct conn out InitialLevel frames emptyToken False
               connSend conn bs
-          C lvl frames -> do
-              bs <- construct conn seg lvl frames emptyToken
+          OutHndClientHelloR ch _mEarydata token -> do
+              frame <- cryptoFrame conn ch InitialLevel
+              paddingFrames <- makePaddingFrames conn frame token
+              let frames = frame : paddingFrames
+              bs <- construct conn out InitialLevel frames token False
               connSend conn bs
-          S sid dat -> do
-              bs <- construct conn seg RTT1Level [Stream sid 0 dat True] emptyToken -- fixme: off
+          OutHndServerHello  sh sf -> do
+              frame0 <- cryptoFrame conn sh InitialLevel
+              bs0 <- construct conn out InitialLevel [frame0] emptyToken False
+              frame1 <- cryptoFrame conn sf HandshakeLevel
+              bs1 <- construct conn out HandshakeLevel [frame1] emptyToken False
+              connSend conn (bs0 `B.append` bs1)
+          OutHndServerHelloR sh -> do
+              frame <- cryptoFrame conn sh InitialLevel
+              bs <- construct conn out InitialLevel [frame] emptyToken False
               connSend conn bs
-          _ -> return ()
+          OutHndClientFinished cf -> do
+              frame <- cryptoFrame conn cf HandshakeLevel
+              bs <- construct conn out HandshakeLevel [frame] emptyToken True
+              connSend conn bs
+          OutHndServerNST nst -> do
+              frame <- cryptoFrame conn nst RTT1Level
+              bs <- construct conn out RTT1Level [frame] emptyToken True
+              connSend conn bs
+          OutControl lvl frames -> do
+              bs <- construct conn out lvl frames emptyToken False
+              connSend conn bs
+          OutStream sid dat -> do
+              bs <- construct conn out RTT1Level [Stream sid 0 dat True] emptyToken False -- fixme: off
+              connSend conn bs
 
 ----------------------------------------------------------------
 
@@ -127,5 +150,5 @@ resender :: Connection -> IO ()
 resender conn = forever $ do
     threadDelay 25000
     -- retransQ
-    segs <- updateSegment conn (MilliSeconds 25)
-    mapM_ (atomically . writeTQueue (outputQ conn)) segs
+    outs <- updateOutput conn (MilliSeconds 25)
+    mapM_ (atomically . writeTQueue (outputQ conn)) outs
