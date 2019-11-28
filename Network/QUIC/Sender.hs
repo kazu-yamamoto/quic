@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Sender where
+module Network.QUIC.Sender (
+    sender
+  , resender
+  ) where
 
 import Control.Concurrent
 import Control.Concurrent.STM

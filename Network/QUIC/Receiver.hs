@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Receiver where
+module Network.QUIC.Receiver (
+    receiver
+  ) where
 
 import Control.Concurrent.STM
 import Network.TLS.QUIC
