@@ -13,7 +13,7 @@ encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
   mapM_ (encodeFrame wbuf) frames
 
 encodeFrame :: WriteBuffer -> Frame -> IO ()
-encodeFrame wbuf Padding = write8 wbuf 0x00
+encodeFrame wbuf (Padding n) = replicateM_ n $ write8 wbuf 0x00
 encodeFrame wbuf Ping = write8 wbuf 0x01
 encodeFrame wbuf (Ack (AckInfo largest range1 ranges) delay) = do
     write8 wbuf 0x02
@@ -73,7 +73,7 @@ decodeFrame :: ReadBuffer -> IO Frame
 decodeFrame rbuf = do
     ftyp <- fromIntegral <$> decodeInt' rbuf
     case ftyp :: FrameType of
-      0x00 -> return Padding
+      0x00 -> decodePaddingFrames rbuf
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
       0x06 -> decodeCryptoFrame rbuf
@@ -87,6 +87,21 @@ decodeFrame rbuf = do
       0x1c -> decodeConnectionCloseFrameQUIC rbuf
       0x1d -> decodeConnectionCloseFrameApp rbuf
       _x   -> error $ show _x
+
+decodePaddingFrames :: ReadBuffer -> IO Frame
+decodePaddingFrames rbuf = loop 1
+  where
+    loop n = do
+        room <- remainingSize rbuf
+        if room == 0 then
+            return $ Padding n
+          else do
+            ftyp <- read8 rbuf
+            if ftyp == 0x00 then
+                loop (n + 1)
+              else do
+                ff rbuf (-1)
+                return $ Padding n
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
 decodeCryptoFrame rbuf = do

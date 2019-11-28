@@ -46,7 +46,7 @@ makePaddingFrames conn (Crypto off crypto) token
                   + 2
                   + defaultCipherOverhead
             padlen = maximumQUICPacketSize - len - extra
-        return $ replicate padlen Padding
+        return $ [Padding padlen]
 makePaddingFrames _ _ _ = return []
 
 ----------------------------------------------------------------

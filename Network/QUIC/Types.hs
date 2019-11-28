@@ -87,7 +87,7 @@ type ReasonPhrase = Bytes
 type PathData = Bytes -- 8 bytes
 type StatelessResetToken = Bytes -- 16 bytes
 
-data Frame = Padding
+data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
            | RestStream -- fixme

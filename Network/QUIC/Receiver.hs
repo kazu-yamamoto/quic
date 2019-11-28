@@ -57,7 +57,7 @@ processPacket conn (RetryPacket ver _ sCID _ token)  = do
 processPacket _ _ = undefined
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
-processFrame _ _ Padding = return True
+processFrame _ _ Padding{} = return True
 processFrame conn _ (Ack ackInfo _) = do
     let pns = fromAckInfo ackInfo
     outs <- catMaybes <$> mapM (releaseOutput conn) pns
