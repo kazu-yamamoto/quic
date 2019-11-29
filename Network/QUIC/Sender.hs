@@ -117,7 +117,7 @@ sender conn = loop
               bs <- construct conn out InitialLevel frames emptyToken False
               connSend conn bs
           OutHndClientHelloR ch _mEarydata token -> do
-              frame <- cryptoFrame conn ch InitialLevel
+              let frame = Crypto 0 ch
               paddingFrames <- makePaddingFrames conn frame token
               let frames = frame : paddingFrames
               bs <- construct conn out InitialLevel frames token False
