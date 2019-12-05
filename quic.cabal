@@ -27,7 +27,6 @@ library
                        Network.QUIC.Parameters
                        Network.QUIC.Receiver
                        Network.QUIC.Route
-                       Network.QUIC.Route.Header
                        Network.QUIC.Route.Server
                        Network.QUIC.Route.Token
                        Network.QUIC.Sender
@@ -35,16 +34,20 @@ library
                        Network.QUIC.TLS
                        Network.QUIC.TLS.Controller
                        Network.QUIC.TLS.Crypto
-                       Network.QUIC.Transport
-                       Network.QUIC.Transport.Frame
-                       Network.QUIC.Transport.Header
-                       Network.QUIC.Transport.Packet
-                       Network.QUIC.Transport.PacketNumber
+                       Network.QUIC.Packet
+                       Network.QUIC.Packet.Decode
+                       Network.QUIC.Packet.Decrypt
+                       Network.QUIC.Packet.Encode
+                       Network.QUIC.Packet.Frame
+                       Network.QUIC.Packet.Header
+                       Network.QUIC.Packet.Number
+                       Network.QUIC.Packet.Version
                        Network.QUIC.Types
                        Network.QUIC.Types.Ack
                        Network.QUIC.Types.CID
                        Network.QUIC.Types.Error
                        Network.QUIC.Types.Integer
+                       Network.QUIC.Types.Packet
                        Network.QUIC.Utils
   other-modules:
                        Network.QUIC.Imports

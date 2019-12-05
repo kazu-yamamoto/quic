@@ -1,4 +1,4 @@
-module Network.QUIC.Transport.PacketNumber where
+module Network.QUIC.Packet.Number where
 
 import Network.QUIC.Imports
 import Network.QUIC.Types

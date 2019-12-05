@@ -58,13 +58,16 @@ data Retrans  = Retrans Output EncryptionLevel (Set PacketNumber)
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
+type SendMany = [ByteString] -> IO ()
+type Receive  = IO [CryptPacket]
+
 ----------------------------------------------------------------
 
 data Connection = Connection {
     role             :: Role
   , myCID            :: CID
-  , connSend         :: ByteString -> IO ()
-  , connRecv         :: IO ByteString
+  , connSend         :: SendMany
+  , connRecv         :: Receive
   , iniSecrets       :: IORef (TrafficSecrets InitialSecret)
   , hndSecrets       :: IORef (TrafficSecrets HandshakeSecret)
   , appSecrets       :: IORef (TrafficSecrets ApplicationSecret)
@@ -91,7 +94,7 @@ data Connection = Connection {
   , connClientCntrl  :: IORef ClientController
   }
 
-newConnection :: Role -> CID -> CID -> (ByteString -> IO ()) -> IO ByteString -> TrafficSecrets InitialSecret -> IO Connection
+newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
 newConnection rl mid peercid send recv isecs =
     Connection rl mid send recv
         <$> newIORef isecs
@@ -120,12 +123,13 @@ newConnection rl mid peercid send recv isecs =
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> CID -> CID
-                 -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
+                 -> SendMany -> Receive -> IO Connection
 clientConnection ClientConfig{..} myCID peerCID send recv = do
     let isecs = initialSecrets ccVersion peerCID
     newConnection Client myCID peerCID send recv isecs
 
-serverConnection :: ServerConfig -> CID -> CID -> OrigCID -> (ByteString -> IO ()) -> IO ByteString -> IO Connection
+serverConnection :: ServerConfig -> CID -> CID -> OrigCID
+                 -> SendMany -> Receive -> IO Connection
 serverConnection ServerConfig{..} myCID peerCID origCID send recv = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets scVersion oCID

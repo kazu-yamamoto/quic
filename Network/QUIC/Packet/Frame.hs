@@ -1,4 +1,4 @@
-module Network.QUIC.Transport.Frame where
+module Network.QUIC.Packet.Frame where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short

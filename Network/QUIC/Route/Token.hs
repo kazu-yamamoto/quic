@@ -15,8 +15,8 @@ import Data.IORef
 import Network.ByteOrder
 
 import Network.QUIC.Imports
+import Network.QUIC.Packet
 import Network.QUIC.TLS
-import Network.QUIC.Transport
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

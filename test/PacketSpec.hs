@@ -8,7 +8,7 @@ import Test.Hspec
 
 import Network.QUIC
 import Network.QUIC.Connection
-import Network.QUIC.Transport
+import Network.QUIC.Packet
 import Network.QUIC.Types
 import Network.QUIC.Utils
 
@@ -20,7 +20,8 @@ spec = do
             let serverCID = makeCID $ dec16s "8394c8f03e515708"
                 clientCID = makeCID ""
                 send = \_ -> return ()
-                recv = return ""
+                -- dummy
+                recv = return [CryptPacket (Short $ CID "") (Crypt 0 "")]
             let clientConf = defaultClientConfig
             clientConn <- clientConnection clientConf clientCID serverCID send recv
             let serverConf = defaultServerConfig {
@@ -28,11 +29,14 @@ spec = do
                   , scCert  = "test/servercert.pem"
                   }
             serverConn <- serverConnection serverConf serverCID clientCID (OCFirst serverCID) send recv
-            (pkt, _) <- decodePacket serverConn clientInitialPacketBinary
-            clientInitialPacketBinary' <- encodePacket clientConn pkt
-            (pkt', _) <- decodePacket serverConn clientInitialPacketBinary'
-            pkt `shouldBe` pkt'
-            True `shouldBe` True
+            (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
+            plain <- decryptCrypt serverConn crypt InitialLevel
+            let ppkt = PlainPacket header plain
+            clientInitialPacketBinary' <- B.concat <$> encodePlainPacket clientConn ppkt
+            (PacketIC (CryptPacket header' crypt'), _) <- decodePacket clientInitialPacketBinary'
+            plain' <- decryptCrypt serverConn crypt' InitialLevel
+            header' `shouldBe` header
+            plainFrames plain' `shouldBe` plainFrames plain
 
 clientInitialPacketBinary :: ByteString
 clientInitialPacketBinary = dec16 $ B.concat [

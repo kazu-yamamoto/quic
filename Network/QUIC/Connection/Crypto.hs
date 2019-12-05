@@ -1,6 +1,21 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.QUIC.Connection.Crypto where
+module Network.QUIC.Connection.Crypto (
+    checkEncryptionLevel
+  , setClientController
+  , getClientController
+  , clearClientController
+  , getCipher
+  , setCipher
+  , setPeerParameters
+  , setNegotiatedProto
+  , setInitialSecrets
+  , setHandshakeSecrets
+  , setApplicationSecrets
+  , getTxSecret
+  , getRxSecret
+  , modifyCryptoOffset
+  ) where
 
 import Control.Concurrent.STM
 import Data.IORef
@@ -32,8 +47,9 @@ clearClientController conn = setClientController conn nullClientController
 
 ----------------------------------------------------------------
 
-getCipher :: Connection -> IO Cipher
-getCipher Connection{..} = readIORef usedCipher
+getCipher :: Connection -> EncryptionLevel -> IO Cipher
+getCipher _ InitialLevel   = return defaultCipher
+getCipher Connection{..} _ = readIORef usedCipher
 
 setCipher :: Connection -> Cipher -> IO ()
 setCipher Connection{..} cipher = writeIORef usedCipher cipher
@@ -60,6 +76,20 @@ setApplicationSecrets :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 setApplicationSecrets Connection{..} secs = do
     writeIORef appSecrets secs
     atomically $ writeTVar encryptionLevel RTT1Level
+
+----------------------------------------------------------------
+
+getTxSecret :: Connection -> EncryptionLevel -> IO Secret
+getTxSecret conn RTT0Level      = undefined conn
+getTxSecret conn InitialLevel   = txInitialSecret conn
+getTxSecret conn HandshakeLevel = txHandshakeSecret conn
+getTxSecret conn RTT1Level      = txApplicationSecret conn
+
+getRxSecret :: Connection -> EncryptionLevel -> IO Secret
+getRxSecret conn RTT0Level      = undefined conn
+getRxSecret conn InitialLevel   = rxInitialSecret conn
+getRxSecret conn HandshakeLevel = rxHandshakeSecret conn
+getRxSecret conn RTT1Level      = rxApplicationSecret conn
 
 ----------------------------------------------------------------
 

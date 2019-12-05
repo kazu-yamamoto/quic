@@ -9,52 +9,20 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
-import Network.QUIC.TLS
-import Network.QUIC.Transport
+import Network.QUIC.Packet
 import Network.QUIC.Types
 
 receiver :: Connection -> IO ()
 receiver conn = forever $ do
-    bs <- connRecv conn
-    processPackets conn bs
-
-processPackets :: Connection -> ByteString -> IO ()
-processPackets conn bs0 = loop bs0
-  where
-    loop "" = return ()
-    loop bs = do
-        let level = packetEncryptionLevel bs
+    cpkts <- connRecv conn
+    forM_ cpkts $ \(CryptPacket header crypt) -> do
+        let level = packetEncryptionLevel header
         checkEncryptionLevel conn level
-        (pkt, rest) <- decodePacket conn bs
-        processPacket conn pkt
-        loop rest
-
-processPacket :: Connection -> Packet -> IO ()
-processPacket conn (InitialPacket   _ _ _ _ pn fs) = do
---    putStrLn $ "I: " ++ show fs
-    rets <- mapM (processFrame conn InitialLevel) fs
-    when (and rets) $ addPNs conn InitialLevel pn
-processPacket conn (HandshakePacket _ _ peercid   pn fs) = do
---    putStrLn $ "H: " ++ show fs
-    when (isClient conn) $ setPeerCID conn peercid
-    rets <- mapM (processFrame conn HandshakeLevel) fs
-    when (and rets) $ addPNs conn HandshakeLevel pn
-processPacket conn (ShortPacket     _       pn fs) = do
---    putStrLn $ "S: " ++ show fs
-    rets <- mapM (processFrame conn RTT1Level) fs
-    when (and rets) $ addPNs conn RTT1Level pn
-processPacket conn (RetryPacket ver _ sCID _ token)  = do
-    -- The packet number of first crypto frame is 0.
-    -- This ensures that retry can be accepted only once.
-    mr <- releaseOutput conn 0
-    case mr of
-      Just (Retrans (OutHndClientHello0 cdat mEarydata) _ _) -> do
-          -- fixme: many checking
-          setPeerCID conn sCID
-          setInitialSecrets conn $ initialSecrets ver sCID
-          atomically $ writeTQueue (outputQ conn) $ OutHndClientHelloR cdat mEarydata token
-      _ -> return ()
-processPacket _ _ = undefined
+        when (isClient conn && level == HandshakeLevel) $
+            setPeerCID conn $ headerPeerCID header
+        Plain _ pn fs <- decryptCrypt conn crypt level
+        rets <- mapM (processFrame conn level) fs
+        when (and rets) $ addPNs conn level pn
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True

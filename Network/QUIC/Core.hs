@@ -11,10 +11,11 @@ import System.Timeout
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 
-import Network.QUIC.Handshake
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Handshake
 import Network.QUIC.Imports
+import Network.QUIC.Packet
 import Network.QUIC.Receiver
 import Network.QUIC.Route
 import Network.QUIC.Sender
@@ -42,8 +43,8 @@ withQUICClient conf body = do
 connect :: QUICClient -> IO Connection
 connect QUICClient{..} = E.handle tlserr $ do
     s <- udpClientConnectedSocket (ccServerName clientConfig) (ccPortName clientConfig)
-    let send bs = void $ NSB.send s bs
-        recv = NSB.recv s 2048
+    let send bss = void $ NSB.sendMany s bss
+        recv     = NSB.recv s 2048 >>= decodeCryptPackets
     myCID   <- newCID
     peerCID <- newCID
     conn <- clientConnection clientConfig myCID peerCID send recv
@@ -73,12 +74,12 @@ accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
     Accept myCID peerCID oCID mysa peersa q <- atomically $ readTQueue $ acceptQueue serverRoute
     s <- udpServerConnectedSocket mysa peersa
-    let send bs = void $ NSB.send s bs
+    let send bss = void $ NSB.sendMany s bss
         recv = do
-            mx <- atomically $ tryReadTQueue q
-            case mx of
-              Nothing -> NSB.recv s 2048
-              Just x  -> return x
+            mpkt <- atomically $ tryReadTQueue q
+            case mpkt of
+              Nothing  -> NSB.recv s 2048 >>= decodeCryptPackets
+              Just pkt -> return [pkt]
     conn <- serverConnection serverConfig myCID peerCID oCID send recv
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn

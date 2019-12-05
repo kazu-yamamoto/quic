@@ -11,8 +11,8 @@ import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
+import Network.QUIC.Packet
 import Network.QUIC.TLS
-import Network.QUIC.Transport
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -51,16 +51,13 @@ makePaddingFrames _ _ _ = return []
 
 ----------------------------------------------------------------
 
-construct :: Connection -> Output -> EncryptionLevel -> [Frame] -> Token -> Bool -> IO ByteString
+construct :: Connection -> Output -> EncryptionLevel -> [Frame] -> Token -> Bool -> IO [ByteString]
 construct conn out lvl frames token genLowerAck = do
     peercid <- getPeerCID conn
     if genLowerAck then do
-        mbin0 <- constructAckPacket lvl peercid
-        case mbin0 of
-          Nothing   -> constructTargetPacket peercid
-          Just bin0 -> do
-              bin1 <- constructTargetPacket peercid
-              return $ bin0 `B.append` bin1
+        bss0 <- constructAckPacket lvl peercid
+        bss1 <- constructTargetPacket peercid
+        return (bss0 ++ bss1)
       else
         constructTargetPacket peercid
   where
@@ -68,39 +65,43 @@ construct conn out lvl frames token genLowerAck = do
     constructAckPacket HandshakeLevel peercid = do
         pns <- getPNs conn InitialLevel
         if nullPNs pns then
-            return Nothing
+            return []
           else do
             -- This packet will not be acknowledged.
             clearPNs conn InitialLevel
             mypn <- getPacketNumber conn
-            let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
-                pkt = InitialPacket currentDraft peercid mycid "" mypn [ackFrame]
-            Just <$> encodePacket conn pkt
+            let header   = Initial currentDraft peercid mycid ""
+                ackFrame = Ack (toAckInfo $ fromPNs pns) 0
+                plain    = Plain 0 mypn [ackFrame]
+                ppkt     = PlainPacket header plain
+            encodePlainPacket conn ppkt
     constructAckPacket RTT1Level peercid = do
         pns <- getPNs conn HandshakeLevel
         if nullPNs pns then
-            return Nothing
+            return []
           else do
             -- This packet will not be acknowledged.
             clearPNs conn HandshakeLevel
             mypn <- getPacketNumber conn
-            let ackFrame = Ack (toAckInfo $ fromPNs pns) 0
-                pkt = HandshakePacket currentDraft peercid mycid mypn [ackFrame]
-            Just <$> encodePacket conn pkt
-    constructAckPacket _ _ = return Nothing
+            let header   = Handshake currentDraft peercid mycid
+                ackFrame = Ack (toAckInfo $ fromPNs pns) 0
+                plain    = Plain 0 mypn [ackFrame]
+                ppkt     = PlainPacket header plain
+            encodePlainPacket conn ppkt
+    constructAckPacket _ _ = return []
     constructTargetPacket peercid = do
         mypn <- getPacketNumber conn
         pns <- getPNs conn lvl
         let frames'
               | null pns  = frames
               | otherwise = Ack (toAckInfo $ fromPNs pns) 0 : frames
-        let pkt = case lvl of
-              InitialLevel   -> InitialPacket   currentDraft peercid mycid token mypn frames'
-              HandshakeLevel -> HandshakePacket currentDraft peercid mycid       mypn frames'
-              RTT1Level      -> ShortPacket                  peercid             mypn frames'
+        let ppkt = case lvl of
+              InitialLevel   -> PlainPacket (Initial   currentDraft peercid mycid token) (Plain 0 mypn frames')
+              HandshakeLevel -> PlainPacket (Handshake currentDraft peercid mycid)       (Plain 0 mypn frames')
+              RTT1Level      -> PlainPacket (Short                  peercid)             (Plain 0 mypn frames')
               _         -> error "construct"
         keepOutput conn mypn out lvl pns
-        encodePacket conn pkt
+        encodePlainPacket conn ppkt
 
 ----------------------------------------------------------------
 
@@ -114,38 +115,38 @@ sender conn = loop
               frame <- cryptoFrame conn ch InitialLevel
               paddingFrames <- makePaddingFrames conn frame emptyToken
               let frames = frame : paddingFrames
-              bs <- construct conn out InitialLevel frames emptyToken False
-              connSend conn bs
+              bss <- construct conn out InitialLevel frames emptyToken False
+              connSend conn bss
           OutHndClientHelloR ch _mEarydata token -> do
               let frame = Crypto 0 ch
               paddingFrames <- makePaddingFrames conn frame token
               let frames = frame : paddingFrames
-              bs <- construct conn out InitialLevel frames token False
-              connSend conn bs
+              bss <- construct conn out InitialLevel frames token False
+              connSend conn bss
           OutHndServerHello  sh sf -> do
               frame0 <- cryptoFrame conn sh InitialLevel
-              bs0 <- construct conn out InitialLevel [frame0] emptyToken False
+              bss0 <- construct conn out InitialLevel [frame0] emptyToken False
               frame1 <- cryptoFrame conn sf HandshakeLevel
-              bs1 <- construct conn out HandshakeLevel [frame1] emptyToken False
-              connSend conn (bs0 `B.append` bs1)
+              bss1 <- construct conn out HandshakeLevel [frame1] emptyToken False
+              connSend conn (bss0 ++ bss1)
           OutHndServerHelloR sh -> do
               frame <- cryptoFrame conn sh InitialLevel
-              bs <- construct conn out InitialLevel [frame] emptyToken False
-              connSend conn bs
+              bss <- construct conn out InitialLevel [frame] emptyToken False
+              connSend conn bss
           OutHndClientFinished cf -> do
               frame <- cryptoFrame conn cf HandshakeLevel
-              bs <- construct conn out HandshakeLevel [frame] emptyToken True
-              connSend conn bs
+              bss <- construct conn out HandshakeLevel [frame] emptyToken True
+              connSend conn bss
           OutHndServerNST nst -> do
               frame <- cryptoFrame conn nst RTT1Level
-              bs <- construct conn out RTT1Level [frame] emptyToken True
-              connSend conn bs
+              bss <- construct conn out RTT1Level [frame] emptyToken True
+              connSend conn bss
           OutControl lvl frames -> do
-              bs <- construct conn out lvl frames emptyToken False
-              connSend conn bs
+              bss <- construct conn out lvl frames emptyToken False
+              connSend conn bss
           OutStream sid dat -> do
-              bs <- construct conn out RTT1Level [Stream sid 0 dat True] emptyToken False -- fixme: off
-              connSend conn bs
+              bss <- construct conn out RTT1Level [Stream sid 0 dat True] emptyToken False -- fixme: off
+              connSend conn bss
 
 ----------------------------------------------------------------
 

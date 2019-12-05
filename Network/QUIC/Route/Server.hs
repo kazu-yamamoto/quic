@@ -1,4 +1,3 @@
-{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -22,13 +21,12 @@ import qualified Network.Socket.ByteString as NBS
 
 import Network.QUIC.Config
 import Network.QUIC.Imports
-import Network.QUIC.Route.Header
+import Network.QUIC.Packet
 import Network.QUIC.Route.Token
 import Network.QUIC.TLS
-import Network.QUIC.Transport
 import Network.QUIC.Types
 
-data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue ByteString)
+data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue CryptPacket)
 
 data ServerRoute = ServerRoute {
     tokenSecret  :: TokenSecret
@@ -39,14 +37,14 @@ data ServerRoute = ServerRoute {
 newServerRoute :: IO ServerRoute
 newServerRoute = ServerRoute <$> generateTokenSecret <*> newIORef M.empty <*> newTQueueIO
 
-type RouteTable = Map CID (TQueue ByteString)
+type RouteTable = Map CID (TQueue CryptPacket)
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
 router conf route (s,mysa) = forever $ do
-    (bs,peersa) <- recv
-    ph <- decodePlainHeader bs
-    let send bin = void $ NBS.sendTo s bin peersa
-    dispatch conf route ph mysa peersa bs send
+    (bs0,peersa) <- recv
+    (pkt, _bs1) <- decodePacket bs0 -- fixme: _bs1
+    let send bs = void $ NBS.sendTo s bs peersa
+    dispatch conf route pkt mysa peersa send
   where
     recv = NBS.recvFrom s 2048
 
@@ -59,11 +57,13 @@ supportedVersions = [Draft24, Draft23]
 ----------------------------------------------------------------
 
 -- fixme: deleting unnecessary Entry
-dispatch :: ServerConfig -> ServerRoute -> PlainHeader -> SockAddr -> SockAddr -> ByteString -> (ByteString -> IO ()) -> IO ()
-dispatch ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa peersa bs send
+dispatch :: ServerConfig -> ServerRoute -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> IO ()
+dispatch ServerConfig{..} ServerRoute{..}
+         (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
+         mysa peersa send
   | ver /= currentDraft && ver `elem` supportedVersions = do
-        bin <- encodeVersionNegotiation sCID dCID (delete ver supportedVersions)
-        send bin
+        bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (delete ver supportedVersions)
+        send bss
   | token == "" = do
         rt <- readIORef routeTable
         let mroute = M.lookup dCID rt
@@ -73,16 +73,16 @@ dispatch ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa p
               if scRequireRetry then do
                   let retryToken = RetryToken currentDraft newdCID sCID dCID
                   newtoken <- encryptRetryToken tokenSecret retryToken
-                  bin <- encodeRetry currentDraft sCID newdCID dCID newtoken
-                  send bin
+                  bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
+                  send bss
                 else do
                   q <- newTQueueIO
                   atomicModifyIORef' routeTable $ \rt' -> (M.insert newdCID q rt', ())
                   -- fixme: check listen length
-                  atomically $ writeTQueue q bs
+                  atomically $ writeTQueue q cpkt
                   let ent = Accept newdCID sCID (OCFirst dCID) mysa peersa q
                   atomically $ writeTQueue acceptQueue ent
-          Just q -> atomically $ writeTQueue q bs -- resend packets
+          Just q -> atomically $ writeTQueue q cpkt -- resend packets
   | otherwise = do
         mretryToken <- decryptRetryToken tokenSecret token
         case mretryToken of
@@ -94,35 +94,13 @@ dispatch ServerConfig{..} ServerRoute{..} (PHInitial ver dCID sCID token) mysa p
               q <- newTQueueIO
               atomicModifyIORef' routeTable $ \rt' -> (M.insert dCID q rt', ())
               -- fixme: check listen length
-              atomically $ writeTQueue q bs
+              atomically $ writeTQueue q cpkt
               let ent = Accept dCID sCID (OCRetry origLocalCID) mysa peersa q
               atomically $ writeTQueue acceptQueue ent
-dispatch _ ServerRoute{..} (PHShort dCID) _ _ _ _ = do
+dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ = do
     rt <- readIORef routeTable
     let mroute = M.lookup dCID rt
     case mroute of
       Nothing -> pathValidation
       Just _  -> return () -- connected socket is done? No. fixme.
-dispatch _ _ _ _ _ _ _ = return ()
-
-----------------------------------------------------------------
-
-encodeVersionNegotiation :: CID -> CID -> [Version] -> IO ByteString
-encodeVersionNegotiation dCID sCID vers = withWriteBuffer 2048 $ \wbuf -> do
-    -- flag
-    -- fixme: randomizing unused bits
-    write8 wbuf 0b10000000
-    -- ver .. sCID
-    encodeLongHeader wbuf Negotiation dCID sCID
-    -- vers
-    mapM_ (write32 wbuf . encodeVersion) vers
-
-encodeRetry :: Version -> CID -> CID -> CID -> ByteString -> IO ByteString
-encodeRetry ver dCID sCID odCID token = withWriteBuffer 2048 $ \wbuf -> do
-    let flags = encodeLongHeaderPacketType 0b00000000 Retry
-    write8 wbuf flags
-    encodeLongHeader wbuf ver dCID sCID
-    let (odcid, odcidlen) = unpackCID odCID
-    write8 wbuf odcidlen
-    copyShortByteString wbuf odcid
-    copyByteString wbuf token
+dispatch _ _ _ _ _ _ = return ()
