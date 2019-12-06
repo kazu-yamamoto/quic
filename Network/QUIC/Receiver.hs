@@ -15,14 +15,17 @@ import Network.QUIC.Types
 receiver :: Connection -> IO ()
 receiver conn = forever $ do
     cpkts <- connRecv conn
-    forM_ cpkts $ \(CryptPacket header crypt) -> do
-        let level = packetEncryptionLevel header
-        checkEncryptionLevel conn level
-        when (isClient conn && level == HandshakeLevel) $
-            setPeerCID conn $ headerPeerCID header
-        Plain _ pn fs <- decryptCrypt conn crypt level
-        rets <- mapM (processFrame conn level) fs
-        when (and rets) $ addPNs conn level pn
+    mapM_ (processCryptPacket conn) cpkts
+
+processCryptPacket :: Connection -> CryptPacket -> IO ()
+processCryptPacket conn (CryptPacket header crypt) = do
+    let level = packetEncryptionLevel header
+    checkEncryptionLevel conn level
+    when (isClient conn && level == HandshakeLevel) $
+        setPeerCID conn $ headerPeerCID header
+    Plain _ pn fs <- decryptCrypt conn crypt level
+    rets <- mapM (processFrame conn level) fs
+    when (and rets) $ addPNs conn level pn
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True
