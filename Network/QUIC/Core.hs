@@ -6,10 +6,11 @@ module Network.QUIC.Core where
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
-import Network.TLS.QUIC
-import System.Timeout
+import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
+import Network.TLS.QUIC
+import System.Timeout
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -20,6 +21,7 @@ import Network.QUIC.Receiver
 import Network.QUIC.Route
 import Network.QUIC.Sender
 import Network.QUIC.Socket
+import Network.QUIC.TLS
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -43,8 +45,9 @@ withQUICClient conf body = do
 connect :: QUICClient -> IO Connection
 connect QUICClient{..} = E.handle tlserr $ do
     s <- udpClientConnectedSocket (ccServerName clientConfig) (ccPortName clientConfig)
+    connref <- newIORef Nothing
     let send bss = void $ NSB.sendMany s bss
-        recv     = NSB.recv s 2048 >>= decodeCryptPackets
+        recv     = recvClient s connref
     myCID   <- newCID
     peerCID <- newCID
     conn <- clientConnection clientConfig myCID peerCID send recv
@@ -52,11 +55,36 @@ connect QUICClient{..} = E.handle tlserr $ do
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
+    writeIORef connref $ Just conn
     handshakeClient clientConfig conn
     setConnectionStatus conn Open
     return conn
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
+
+recvClient :: NS.Socket -> IORef (Maybe Connection) -> IO [CryptPacket]
+recvClient s connref = do
+    pkts <- NSB.recv s 2048 >>= decodePackets
+    catMaybes <$> mapM go pkts
+  where
+    go (PacketIV _)   = return Nothing
+    go (PacketIC pkt) = return $ Just pkt
+    go (PacketIR (RetryPacket ver _dCID sCID _oCID token))  = do
+        -- The packet number of first crypto frame is 0.
+        -- This ensures that retry can be accepted only once.
+        -- fixme: may checking
+        mconn <- readIORef connref
+        case mconn of
+          Nothing   -> return ()
+          Just conn -> do
+              mr <- releaseOutput conn 0
+              case mr of
+                Just (Retrans (OutHndClientHello0 cdat mEarydata) _ _) -> do
+                    setPeerCID conn sCID
+                    setInitialSecrets conn $ initialSecrets ver sCID
+                    atomically $ writeTQueue (outputQ conn) $ OutHndClientHelloR cdat mEarydata token
+                _ -> return ()
+        return Nothing
 
 ----------------------------------------------------------------
 
