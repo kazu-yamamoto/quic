@@ -5,7 +5,7 @@ module Network.QUIC.Packet.Encode (
   , encodeVersionNegotiationPacket
   , encodeRetryPacket
   , encodePlainPacket
-  , encodeVersion
+  , maximumQUICPacketSize
   ) where
 
 import qualified Data.ByteString as B
@@ -22,19 +22,31 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-headerMaxSize :: BufferSize
-headerMaxSize = 128
+-- minimum PMTU = 1024 + 256 = 1280
+-- IPv4 payload = 1280 - 20 - 8 = 1252
+-- IPv6 payload = 1280 - 40 - 8 = 1232
+
+-- Short = (1 + 160 + 4) + (1 + 4 + 4) + 1024 = 1198  (padlen = 2)
+
+maximumQUICPacketSize :: Int
+maximumQUICPacketSize = 1200
+
+-- Not from spec.
+maximumQUICHeaderSize :: BufferSize
+maximumQUICHeaderSize = 128
+
+----------------------------------------------------------------
 
 -- This is not used internally.
 encodePacket :: Connection -> PacketO -> IO [ByteString]
 encodePacket _    (PacketOV pkt) = (:[]) <$> encodeVersionNegotiationPacket pkt
 encodePacket _    (PacketOR pkt) = (:[]) <$> encodeRetryPacket pkt
-encodePacket conn (PacketOP pkt) = encodePlainPacket conn pkt
+encodePacket conn (PacketOP pkt) = encodePlainPacket conn pkt Nothing
 
 ----------------------------------------------------------------
 
 encodeVersionNegotiationPacket :: VersionNegotiationPacket -> IO ByteString
-encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withWriteBuffer headerMaxSize $ \wbuf -> do
+encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     -- fixme: randomizing unused bits
     let flags = versionNegotiationPacketType
     write8 wbuf flags
@@ -47,7 +59,7 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
 ----------------------------------------------------------------
 
 encodeRetryPacket :: RetryPacket -> IO ByteString
-encodeRetryPacket (RetryPacket ver dCID sCID odCID token) = withWriteBuffer headerMaxSize $ \wbuf -> do
+encodeRetryPacket (RetryPacket ver dCID sCID odCID token) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     -- fixme: randomizing unused bits
     let flags = retryPacketType
     write8 wbuf flags
@@ -60,13 +72,13 @@ encodeRetryPacket (RetryPacket ver dCID sCID odCID token) = withWriteBuffer head
 
 ----------------------------------------------------------------
 
-encodePlainPacket :: Connection -> PlainPacket -> IO [ByteString]
-encodePlainPacket conn ppkt = do
-    (hdr,bdy) <- encodePlainPacket' conn ppkt
+encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO [ByteString]
+encodePlainPacket conn ppkt mlen = do
+    (hdr,bdy) <- encodePlainPacket' conn ppkt mlen
     return [hdr,bdy]
 
-encodePlainPacket' :: Connection -> PlainPacket -> IO (ByteString, ByteString)
-encodePlainPacket' conn (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames)) = withWriteBuffer' headerMaxSize $ \wbuf -> do
+encodePlainPacket' :: Connection -> PlainPacket -> Maybe Int -> IO (ByteString, ByteString)
+encodePlainPacket' conn (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf InitialPacketType ver dCID sCID flags pn
@@ -74,23 +86,23 @@ encodePlainPacket' conn (PlainPacket (Initial ver dCID sCID token) (Plain flags 
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg InitialLevel
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen InitialLevel
 
-encodePlainPacket' conn (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames)) = withWriteBuffer' headerMaxSize $ \wbuf -> do
+encodePlainPacket' conn (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf RTT0PacketType ver dCID sCID flags pn
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg RTT0Level
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT0Level
 
-encodePlainPacket' conn (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames)) = withWriteBuffer' headerMaxSize $ \wbuf -> do
+encodePlainPacket' conn (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf HandshakePacketType ver dCID sCID flags pn
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg HandshakeLevel
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen HandshakeLevel
 
-encodePlainPacket' conn (PlainPacket (Short dCID) (Plain flags pn frames)) = withWriteBuffer' headerMaxSize $ \wbuf -> do
+encodePlainPacket' conn (PlainPacket (Short dCID) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
     -- flag
     let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen
@@ -100,7 +112,7 @@ encodePlainPacket' conn (PlainPacket (Short dCID) (Plain flags pn frames)) = wit
     -- dCID
     let (dcid, _) = unpackCID dCID
     copyShortByteString wbuf dcid
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg RTT1Level
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT1Level
 
 ----------------------------------------------------------------
 
@@ -133,11 +145,22 @@ encodeLongHeaderPP _conn wbuf pkttyp ver dCID sCID flags pn = do
 
 ----------------------------------------------------------------
 
-protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> EncryptionLevel -> IO ByteString
-protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg lvl = do
+protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO ByteString
+protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     secret <- getTxSecret conn lvl
     cipher <- getCipher conn lvl
-    plaintext <- encodeFrames frames
+    plaintext0 <- encodeFrames frames
+    plaintext <- case mlen of
+      Nothing -> return plaintext0
+      Just expectedSize -> do
+          here <- currentOffset wbuf
+          let headerSize = (here `minusPtr` headerBeg)
+                         + (if lvl /= RTT1Level then 2 else 0)
+                         + epnLen
+              -- fixme: 16 = cipher overhead
+              restSize = expectedSize - headerSize - B.length plaintext0 - 16
+          padding <- encodeFrames [Padding restSize]
+          return $ plaintext0 `B.append` padding
     when (lvl /= RTT1Level) $ do
         let len = epnLen + B.length plaintext + 16 -- fixme: crypto overhead
         -- length: assuming 2byte length
