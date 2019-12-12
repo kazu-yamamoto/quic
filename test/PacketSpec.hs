@@ -30,11 +30,11 @@ spec = do
                   }
             serverConn <- serverConnection serverConf serverCID clientCID (OCFirst serverCID) send recv
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
-            plain <- decryptCrypt serverConn crypt InitialLevel
+            Right plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain
             clientInitialPacketBinary' <- B.concat <$> encodePlainPacket clientConn ppkt Nothing
             (PacketIC (CryptPacket header' crypt'), _) <- decodePacket clientInitialPacketBinary'
-            plain' <- decryptCrypt serverConn crypt' InitialLevel
+            Right plain' <- decryptCrypt serverConn crypt' InitialLevel
             header' `shouldBe` header
             plainFrames plain' `shouldBe` plainFrames plain
 

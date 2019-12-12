@@ -23,9 +23,13 @@ processCryptPacket conn (CryptPacket header crypt) = do
     checkEncryptionLevel conn level
     when (isClient conn && level == HandshakeLevel) $
         setPeerCID conn $ headerPeerCID header
-    Plain _ pn fs <- decryptCrypt conn crypt level
-    rets <- mapM (processFrame conn level) fs
-    when (and rets) $ addPNs conn level pn
+    eplain <- decryptCrypt conn crypt level
+    case eplain of
+      Right (Plain _ pn fs) -> do
+          rets <- mapM (processFrame conn level) fs
+          when (and rets) $ addPNs conn level pn
+      Left PacketCannotBeDecrypted -> return () -- ignore
+      Left _                       -> return () -- fixme
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True

@@ -20,7 +20,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO Plain
+decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Either QUICError Plain)
 decryptCrypt conn Crypt{..} lvl = do
     secret <- getRxSecret conn lvl
     cipher <- getCipher conn lvl
@@ -42,9 +42,12 @@ decryptCrypt conn Crypt{..} lvl = do
         void $ copy p proHeader
         poke8 flags p 0
         void $ copy (p `plusPtr` cryptPktNumOffset) $ B.take epnLen bytePN
-    let Just payload = decrypt cipher secret ciphertext header pn
-    frames <- decodeFrames payload
-    return $ Plain rawFlags pn frames
+    let mpayload = decrypt cipher secret ciphertext header pn
+    case mpayload of
+      Nothing      -> return $ Left PacketCannotBeDecrypted
+      Just payload -> do
+          frames <- decodeFrames payload
+          return $ Right $ Plain rawFlags pn frames
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
