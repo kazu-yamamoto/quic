@@ -32,7 +32,7 @@ spec = do
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain
-            clientInitialPacketBinary' <- B.concat <$> encodePlainPacket clientConn ppkt
+            clientInitialPacketBinary' <- B.concat <$> encodePlainPacket clientConn ppkt Nothing
             (PacketIC (CryptPacket header' crypt'), _) <- decodePacket clientInitialPacketBinary'
             plain' <- decryptCrypt serverConn crypt' InitialLevel
             header' `shouldBe` header
