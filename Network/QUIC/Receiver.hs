@@ -36,8 +36,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
           Right (Plain _ pn fs) -> do
               rets <- mapM (processFrame conn level) fs
               when (and rets) $ addPNs conn level pn
-          Left PacketCannotBeDecrypted -> return () -- ignore
-          Left _                       -> return () -- fixme
+          Left err -> print err
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True
