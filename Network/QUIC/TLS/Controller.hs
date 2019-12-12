@@ -39,10 +39,9 @@ clientController ClientConfig{..} = newQUICClient cparams
         supportedVersions = [TLS13]
       , supportedCiphers  = ccCiphers
       }
-    debug = def
---    debug = def {
---        debugKeyLogger = putStrLn
---      }
+    debug = def {
+        debugKeyLogger = putStrLn
+      }
 
 serverController :: ServerConfig
                  -> OrigCID
@@ -72,7 +71,6 @@ serverController ServerConfig{..} origCID = do
         supportedVersions = [TLS13]
       , supportedCiphers  = scCiphers
       }
-    debug = def
---    debug = def {
---        debugKeyLogger = putStrLn
---      }
+    debug = def {
+        debugKeyLogger = putStrLn
+      }
