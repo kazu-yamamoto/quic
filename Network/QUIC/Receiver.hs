@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Receiver (
     receiver
@@ -10,6 +11,7 @@ import Network.TLS.QUIC
 import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 receiver :: Connection -> IO ()
@@ -23,13 +25,19 @@ processCryptPacket conn (CryptPacket header crypt) = do
     checkEncryptionLevel conn level
     when (isClient conn && level == HandshakeLevel) $
         setPeerCID conn $ headerPeerCID header
-    eplain <- decryptCrypt conn crypt level
-    case eplain of
-      Right (Plain _ pn fs) -> do
-          rets <- mapM (processFrame conn level) fs
-          when (and rets) $ addPNs conn level pn
-      Left PacketCannotBeDecrypted -> return () -- ignore
-      Left _                       -> return () -- fixme
+    statelessReset <- isStateLessreset conn header crypt
+    if statelessReset then do
+          setConnectionStatus conn Closing
+          setCloseReceived conn
+          clearThreads conn
+      else do
+        eplain <- decryptCrypt conn crypt level
+        case eplain of
+          Right (Plain _ pn fs) -> do
+              rets <- mapM (processFrame conn level) fs
+              when (and rets) $ addPNs conn level pn
+          Left PacketCannotBeDecrypted -> return () -- ignore
+          Left _                       -> return () -- fixme
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True
@@ -93,3 +101,15 @@ processFrame _ _ _frame        = do
     putStrLn "FIXME: processFrame"
     print _frame
     return True
+
+isStateLessreset :: Connection -> Header -> Crypt -> IO Bool
+isStateLessreset conn (Short dCID) Crypt{..}
+  | myCID conn /= dCID = do
+        params <- getPeerParameters conn
+        case stateLessResetToken params of
+          Nothing -> return False
+          mtoken  -> do
+              let mtoken' = decodeStatelessResetToken cryptPacket
+              return (mtoken == mtoken')
+  | otherwise = return False
+isStateLessreset _ _ _ = return False
