@@ -80,5 +80,5 @@ server conn = loop
             putStrLn "Stream finished"
           else do
             C8.putStr bs
-            sendData conn "<html><body>Hello world!</body></html>"
+            sendData conn "<html><body>Hello world!</body></html>\n"
             server conn

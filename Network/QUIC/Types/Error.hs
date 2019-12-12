@@ -60,7 +60,7 @@ toTransportError n
     mdesc = toAlertDescription $ fromIntegral (n - 0x100)
 
 
-data QUICError = PacketIsBroken
+data QUICError = PacketCannotBeDecrypted
                | VersionIsUnknown Word32
                | HandshakeRejectedByPeer TransportError
                | ConnectionIsNotOpen

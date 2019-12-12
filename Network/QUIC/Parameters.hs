@@ -4,6 +4,7 @@ module Network.QUIC.Parameters where
 
 import System.IO.Unsafe (unsafeDupablePerformIO)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -68,7 +69,7 @@ toParametersKeyId _ = Nothing
 data Parameters = Parameters {
     originalConnectionId    :: Maybe CID
   , idleTimeout             :: Int -- Milliseconds
-  , stateLessResetToken     :: Maybe ByteString -- 16 bytes
+  , statelessResetToken     :: Maybe StatelessResetToken -- 16 bytes
   , maxPacketSize           :: Int
   , maxData                 :: Int
   , maxStreamDataBidiLocal  :: Int
@@ -87,7 +88,7 @@ defaultParameters :: Parameters
 defaultParameters = Parameters {
     originalConnectionId    = Nothing
   , idleTimeout             = 0 -- disabled
-  , stateLessResetToken     = Nothing
+  , statelessResetToken     = Nothing
   , maxPacketSize           = 65527
   , maxData                 = -1
   , maxStreamDataBidiLocal  = -1
@@ -116,7 +117,7 @@ updateParameters params kvs = foldl' update params kvs
     update x (ParametersIdleTimeout,v)
         = x { idleTimeout = decInt v }
     update x (ParametersStateLessResetToken,v)
-        = x {stateLessResetToken = Just v}
+        = x {statelessResetToken = Just (StatelessResetToken $ Short.toShort v) }
     update x (ParametersMaxPacketSize,v)
         = x {maxPacketSize = decInt v}
     update x (ParametersMaxData,v)
@@ -154,7 +155,7 @@ diffParameters :: Parameters -> ParametersList
 diffParameters p = catMaybes [
     diff p originalConnectionId    ParametersOriginalConnectionId    (fromCID . fromJust)
   , diff p idleTimeout             ParametersIdleTimeout             encInt
-  , diff p stateLessResetToken     ParametersStateLessResetToken     fromJust
+  , diff p statelessResetToken     ParametersStateLessResetToken     encSRT
   , diff p maxPacketSize           ParametersMaxPacketSize           encInt
   , diff p maxData                 ParametersMaxData                 encInt
   , diff p maxStreamDataBidiLocal  ParametersMaxStreamDataBidiLocal  encInt
@@ -168,6 +169,10 @@ diffParameters p = catMaybes [
   , diff p preferredAddress        ParametersPreferredAddress        fromJust
   , diff p activeConnectionIdLimit ParametersActiveConnectionIdLimit encInt
   ]
+
+encSRT :: Maybe StatelessResetToken -> ByteString
+encSRT (Just (StatelessResetToken srt)) = Short.fromShort srt
+encSRT _ = error "encSRT"
 
 encodeParametersList :: ParametersList -> ByteString
 encodeParametersList kvs = unsafeDupablePerformIO $

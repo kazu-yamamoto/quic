@@ -5,10 +5,12 @@ module Network.QUIC.Packet.Decode (
   , decodePackets
   , decodePacket
   , decodeVersion
+  , decodeStatelessResetToken
   ) where
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Header
@@ -113,3 +115,13 @@ decodeRetryPacket rbuf _proFlags version dCID sCID = do
     siz <- remainingSize rbuf
     token <- extractByteString rbuf siz
     return $ PacketIR $ RetryPacket version dCID sCID odCID token
+
+----------------------------------------------------------------
+
+decodeStatelessResetToken :: ByteString -> Maybe StatelessResetToken
+decodeStatelessResetToken bs
+  | len < 21  = Nothing
+  | otherwise = Just $ StatelessResetToken $ Short.toShort token
+  where
+    len = B.length bs
+    (_,token) = B.splitAt (len - 16) bs

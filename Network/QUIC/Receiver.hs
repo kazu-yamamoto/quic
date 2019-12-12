@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Receiver (
     receiver
@@ -10,6 +11,7 @@ import Network.TLS.QUIC
 import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 receiver :: Connection -> IO ()
@@ -23,9 +25,19 @@ processCryptPacket conn (CryptPacket header crypt) = do
     checkEncryptionLevel conn level
     when (isClient conn && level == HandshakeLevel) $
         setPeerCID conn $ headerPeerCID header
-    Plain _ pn fs <- decryptCrypt conn crypt level
-    rets <- mapM (processFrame conn level) fs
-    when (and rets) $ addPNs conn level pn
+    statelessReset <- isStateLessreset conn header crypt
+    if statelessReset then do
+          putStrLn "Connection is reset statelessly"
+          setConnectionStatus conn Closing
+          setCloseReceived conn
+          clearThreads conn
+      else do
+        eplain <- decryptCrypt conn crypt level
+        case eplain of
+          Right (Plain _ pn fs) -> do
+              rets <- mapM (processFrame conn level) fs
+              when (and rets) $ addPNs conn level pn
+          Left err -> print err
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True
@@ -60,7 +72,8 @@ processFrame conn lvl (Crypto _off cdat) = do
 processFrame _ _ NewToken{} = do
     putStrLn "FIXME: NewToken"
     return True
-processFrame _ _ (NewConnectionID sn _ _ _)  = do
+processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
+    -- fixme: register stateless token
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
 processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
@@ -88,3 +101,16 @@ processFrame _ _ _frame        = do
     putStrLn "FIXME: processFrame"
     print _frame
     return True
+
+-- QUIC version 1 uses only short packets for stateless reset.
+-- But we should check other packets, too.
+isStateLessreset :: Connection -> Header -> Crypt -> IO Bool
+isStateLessreset conn header Crypt{..}
+  | myCID conn /= headerMyCID header = do
+        params <- getPeerParameters conn
+        case statelessResetToken params of
+          Nothing -> return False
+          mtoken  -> do
+              let mtoken' = decodeStatelessResetToken cryptPacket
+              return (mtoken == mtoken')
+  | otherwise = return False

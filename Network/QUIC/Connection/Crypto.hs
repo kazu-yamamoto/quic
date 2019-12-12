@@ -7,6 +7,7 @@ module Network.QUIC.Connection.Crypto (
   , clearClientController
   , getCipher
   , setCipher
+  , getPeerParameters
   , setPeerParameters
   , setNegotiatedProto
   , setInitialSecrets
@@ -53,6 +54,9 @@ getCipher Connection{..} _ = readIORef usedCipher
 
 setCipher :: Connection -> Cipher -> IO ()
 setCipher Connection{..} cipher = writeIORef usedCipher cipher
+
+getPeerParameters :: Connection -> IO Parameters
+getPeerParameters Connection{..} = readIORef peerParams
 
 setPeerParameters :: Connection -> ParametersList -> IO ()
 setPeerParameters Connection{..} plist = do
