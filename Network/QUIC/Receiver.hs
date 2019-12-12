@@ -27,6 +27,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
         setPeerCID conn $ headerPeerCID header
     statelessReset <- isStateLessreset conn header crypt
     if statelessReset then do
+          putStrLn "Connection is reset statelessly"
           setConnectionStatus conn Closing
           setCloseReceived conn
           clearThreads conn
@@ -101,9 +102,11 @@ processFrame _ _ _frame        = do
     print _frame
     return True
 
+-- QUIC version 1 uses only short packets for stateless reset.
+-- But we should check other packets, too.
 isStateLessreset :: Connection -> Header -> Crypt -> IO Bool
-isStateLessreset conn (Short dCID) Crypt{..}
-  | myCID conn /= dCID = do
+isStateLessreset conn header Crypt{..}
+  | myCID conn /= headerMyCID header = do
         params <- getPeerParameters conn
         case statelessResetToken params of
           Nothing -> return False
@@ -111,4 +114,3 @@ isStateLessreset conn (Short dCID) Crypt{..}
               let mtoken' = decodeStatelessResetToken cryptPacket
               return (mtoken == mtoken')
   | otherwise = return False
-isStateLessreset _ _ _ = return False

@@ -47,6 +47,12 @@ data Header = Initial   Version  CID CID Token
             | Short              CID
             deriving (Eq, Show)
 
+headerMyCID :: Header -> CID
+headerMyCID (Initial   _ cid _ _) = cid
+headerMyCID (RTT0      _ cid _)   = cid
+headerMyCID (Handshake _ cid _)   = cid
+headerMyCID (Short       cid)     = cid
+
 headerPeerCID :: Header -> CID
 headerPeerCID (Initial   _ _ cid _) = cid
 headerPeerCID (RTT0      _ _ cid)   = cid
