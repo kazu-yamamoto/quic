@@ -47,7 +47,7 @@ construct conn out lvl frames token genLowerAck mTargetSize = do
             mypn <- getPacketNumber conn
             let header   = Initial currentDraft peercid mycid ""
                 ackFrame = Ack (toAckInfo $ fromPNs pns) 0
-                plain    = Plain 0 mypn [ackFrame]
+                plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
     constructAckPacket RTT1Level peercid = do
@@ -60,7 +60,7 @@ construct conn out lvl frames token genLowerAck mTargetSize = do
             mypn <- getPacketNumber conn
             let header   = Handshake currentDraft peercid mycid
                 ackFrame = Ack (toAckInfo $ fromPNs pns) 0
-                plain    = Plain 0 mypn [ackFrame]
+                plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
     constructAckPacket _ _ = return []
@@ -71,9 +71,9 @@ construct conn out lvl frames token genLowerAck mTargetSize = do
               | null pns  = frames
               | otherwise = Ack (toAckInfo $ fromPNs pns) 0 : frames
         let ppkt = case lvl of
-              InitialLevel   -> PlainPacket (Initial   currentDraft peercid mycid token) (Plain 0 mypn frames')
-              HandshakeLevel -> PlainPacket (Handshake currentDraft peercid mycid)       (Plain 0 mypn frames')
-              RTT1Level      -> PlainPacket (Short                  peercid)             (Plain 0 mypn frames')
+              InitialLevel   -> PlainPacket (Initial   currentDraft peercid mycid token) (Plain (Flags 0) mypn frames')
+              HandshakeLevel -> PlainPacket (Handshake currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')
+              RTT1Level      -> PlainPacket (Short                  peercid)             (Plain (Flags 0) mypn frames')
               _         -> error "construct"
         keepOutput conn mypn out lvl pns
         encodePlainPacket conn ppkt mlen

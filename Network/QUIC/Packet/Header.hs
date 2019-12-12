@@ -10,8 +10,23 @@ isLong :: Word8 -> Bool
 isLong flags = testBit flags 7
 
 {-# INLINE isShort #-}
-isShort :: Word8 -> Bool
-isShort flags = not $ testBit flags 7
+isShort :: Flags Protected -> Bool
+isShort (Flags flags) = not $ testBit flags 7
+
+----------------------------------------------------------------
+
+unprotectFlags :: Flags Protected -> Word8 -> Flags Raw
+unprotectFlags (Flags proFlags) mask1 = Flags flags
+  where
+    mask = mask1 .&. flagBits proFlags
+    flags = proFlags `xor` mask
+
+protectFlags :: Flags Raw -> Word8 -> Flags Protected
+protectFlags (Flags flags) mask1 = Flags proFlags
+  where
+    mask = mask1 .&. flagBits flags
+    proFlags = flags `xor` mask
+
 
 {-# INLINE flagBits #-}
 flagBits :: Word8 -> Word8
@@ -22,43 +37,47 @@ flagBits flags
 ----------------------------------------------------------------
 
 {-# INLINE encodeShortHeaderFlags #-}
-encodeShortHeaderFlags :: RawFlags -> RawFlags -> RawFlags
-encodeShortHeaderFlags fg pp =         0b01000000
-                           .|. (fg .&. 0b00111100)
-                           .|. (pp .&. 0b00000011)
+encodeShortHeaderFlags :: Flags Raw -> Flags Raw -> Flags Raw
+encodeShortHeaderFlags (Flags fg) (Flags pp) = Flags flags
+  where
+    flags =          0b01000000
+         .|. (fg .&. 0b00111100)
+         .|. (pp .&. 0b00000011)
 
 {-# INLINE encodeLongHeaderFlags #-}
-encodeLongHeaderFlags :: LongHeaderPacketType -> RawFlags -> RawFlags -> RawFlags
-encodeLongHeaderFlags typ fg pp = longHeaderPacketType typ
-                              .|. (fg .&. 0b00001100)
-
-                              .|. (pp .&. 0b00000011)
+encodeLongHeaderFlags :: LongHeaderPacketType -> Flags Raw -> Flags Raw -> Flags Raw
+encodeLongHeaderFlags typ (Flags fg) (Flags pp) = Flags flags
+  where
+    Flags tp = longHeaderPacketType typ
+    flags =   tp
+         .|. (fg .&. 0b00001100)
+         .|. (pp .&. 0b00000011)
 
 {-# INLINE longHeaderPacketType #-}
-longHeaderPacketType :: LongHeaderPacketType -> RawFlags
-longHeaderPacketType InitialPacketType   = 0b11000000
-longHeaderPacketType RTT0PacketType      = 0b11010000
-longHeaderPacketType HandshakePacketType = 0b11100000
-longHeaderPacketType RetryPacketType     = 0b11110000
+longHeaderPacketType :: LongHeaderPacketType -> Flags Raw
+longHeaderPacketType InitialPacketType   = Flags 0b11000000
+longHeaderPacketType RTT0PacketType      = Flags 0b11010000
+longHeaderPacketType HandshakePacketType = Flags 0b11100000
+longHeaderPacketType RetryPacketType     = Flags 0b11110000
 
-retryPacketType :: RawFlags
-retryPacketType = 0b11110000
+retryPacketType :: Flags Raw
+retryPacketType = Flags 0b11110000
 
-versionNegotiationPacketType :: RawFlags
-versionNegotiationPacketType = 0b10000000
+versionNegotiationPacketType :: Flags Raw
+versionNegotiationPacketType = Flags 0b10000000
 
 {-# INLINE decodeLongHeaderPacketType #-}
-decodeLongHeaderPacketType :: RawFlags -> LongHeaderPacketType
-decodeLongHeaderPacketType flags = case flags .&. 0b00110000 of
+decodeLongHeaderPacketType :: Flags Protected -> LongHeaderPacketType
+decodeLongHeaderPacketType (Flags flags) = case flags .&. 0b00110000 of
     0b00000000 -> InitialPacketType
     0b00010000 -> RTT0PacketType
     0b00100000 -> HandshakePacketType
     _          -> RetryPacketType
 
 {-# INLINE encodePktNumLength #-}
-encodePktNumLength :: Int -> RawFlags
-encodePktNumLength epnLen = fromIntegral (epnLen - 1)
+encodePktNumLength :: Int -> Flags Raw
+encodePktNumLength epnLen = Flags $ fromIntegral (epnLen - 1)
 
 {-# INLINE decodePktNumLength #-}
-decodePktNumLength :: RawFlags -> Int
-decodePktNumLength flags = fromIntegral (flags .&. 0b11) + 1
+decodePktNumLength :: Flags Raw -> Int
+decodePktNumLength (Flags flags) = fromIntegral (flags .&. 0b11) + 1

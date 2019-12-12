@@ -36,7 +36,7 @@ decodePackets bs0 = loop bs0 id
 decodePacket :: ByteString -> IO (PacketI, ByteString)
 decodePacket bs = withReadBuffer bs $ \rbuf -> do
     save rbuf
-    proFlags <- read8 rbuf
+    proFlags <- Flags <$> read8 rbuf
     let short = isShort proFlags
     pkt <- decode rbuf proFlags short
     siz <- savingSize rbuf
@@ -106,7 +106,7 @@ decodeVersionNegotiationPacket rbuf dCID sCID = do
             ver <- decodeVersion <$> read32 rbuf
             decodeVersions (siz - 4) ((ver :) . vers)
 
-decodeRetryPacket :: ReadBuffer -> RawFlags -> Version -> CID -> CID -> IO PacketI
+decodeRetryPacket :: ReadBuffer -> Flags Protected -> Version -> CID -> CID -> IO PacketI
 decodeRetryPacket rbuf _proFlags version dCID sCID = do
     odcidlen <- fromIntegral <$> read8 rbuf
     odCID <- makeCID <$> extractShortByteString rbuf odcidlen

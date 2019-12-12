@@ -57,7 +57,7 @@ data PlainPacket = PlainPacket Header Plain deriving (Eq, Show)
 data CryptPacket = CryptPacket Header Crypt deriving (Eq, Show)
 
 data Plain  = Plain  {
-    plainFlags        :: RawFlags
+    plainFlags        :: Flags Raw
   , plainPacketNumber :: PacketNumber
   , plainFrames       :: [Frame]
   } deriving (Eq, Show)
@@ -89,5 +89,11 @@ packetEncryptionLevel Short{}     = RTT1Level
 
 ----------------------------------------------------------------
 
+newtype Flags a = Flags Word8 deriving (Eq, Show)
+
+data Protected
+data Raw
+
+----------------------------------------------------------------
+
 type EncodedPacketNumber = Word32
-type RawFlags = Word8

@@ -48,7 +48,7 @@ encodePacket conn (PacketOP pkt) = encodePlainPacket conn pkt Nothing
 encodeVersionNegotiationPacket :: VersionNegotiationPacket -> IO ByteString
 encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     -- fixme: randomizing unused bits
-    let flags = versionNegotiationPacketType
+    let Flags flags = versionNegotiationPacketType
     write8 wbuf flags
     -- ver .. sCID
     encodeLongHeader wbuf Negotiation dCID sCID
@@ -61,7 +61,7 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
 encodeRetryPacket :: RetryPacket -> IO ByteString
 encodeRetryPacket (RetryPacket ver dCID sCID odCID token) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     -- fixme: randomizing unused bits
-    let flags = retryPacketType
+    let Flags flags = retryPacketType
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
     let (odcid, odcidlen) = unpackCID odCID
@@ -106,7 +106,7 @@ encodePlainPacket' conn (PlainPacket (Short dCID) (Plain flags pn frames)) mlen 
     -- flag
     let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen
-        flags' = encodeShortHeaderFlags flags pp
+        Flags flags' = encodeShortHeaderFlags flags pp
     headerBeg <- currentOffset wbuf
     write8 wbuf flags'
     -- dCID
@@ -132,13 +132,13 @@ encodeLongHeader wbuf ver dCID sCID = do
 
 encodeLongHeaderPP :: Connection -> WriteBuffer
                    -> LongHeaderPacketType -> Version -> CID -> CID
-                   -> RawFlags
+                   -> Flags Raw
                    -> PacketNumber
                    -> IO (EncodedPacketNumber, Int)
 encodeLongHeaderPP _conn wbuf pkttyp ver dCID sCID flags pn = do
     let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength pnLen
-        flags' = encodeLongHeaderFlags pkttyp flags pp
+        Flags flags' = encodeLongHeaderFlags pkttyp flags pp
     write8 wbuf flags'
     encodeLongHeader wbuf ver dCID sCID
     return el
@@ -187,9 +187,9 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
 
 protectHeader :: Buffer -> Buffer -> Int -> Cipher -> Secret -> CipherText -> IO ()
 protectHeader headerBeg pnBeg epnLen cipher secret ciphertext = do
-    flags <- peek8 headerBeg 0
-    let protectecFlag = flags `xor` ((mask `B.index` 0) .&. flagBits flags)
-    poke8 protectecFlag headerBeg 0
+    flags <- Flags <$> peek8 headerBeg 0
+    let Flags proFlags = protectFlags flags (mask `B.index` 0)
+    poke8 proFlags headerBeg 0
     shuffle 0
     when (epnLen >= 2) $ shuffle 1
     when (epnLen >= 3) $ shuffle 2
