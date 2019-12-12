@@ -5,7 +5,7 @@ module Network.QUIC.Types.Packet where
 import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
 import Network.QUIC.Types.CID
-import Network.QUIC.Types.Error
+import Network.QUIC.Types.Frame
 
 ----------------------------------------------------------------
 
@@ -69,30 +69,6 @@ data Crypt = Crypt {
 
 ----------------------------------------------------------------
 
-data Frame = Padding Int
-           | Ping
-           | Ack AckInfo Delay
-           | RestStream -- fixme
-           | StopSending -- fixme
-           | Crypto Offset CryptoData
-           | NewToken Token
-           | Stream StreamID Offset StreamData Fin
-           | MaxData -- fixme
-           | MaxStreamData -- fixme
-           | MaxStreams -- fixme
-           | DataBlocked -- fixme
-           | StreamDataBlocked -- fixme
-           | StreamsBlocked -- fixme
-           | NewConnectionID Int Int CID StatelessResetToken
-           | RetireConnectionID -- fixme
-           | PathChallenge PathData
-           | PathResponse PathData
-           | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
-           | ConnectionCloseApp  TransportError ReasonPhrase
-           deriving (Eq,Show)
-
-----------------------------------------------------------------
-
 data LongHeaderPacketType = InitialPacketType
                           | RTT0PacketType
                           | HandshakePacketType
@@ -113,21 +89,5 @@ packetEncryptionLevel Short{}     = RTT1Level
 
 ----------------------------------------------------------------
 
-type Length = Int
-type StreamID = Int64
 type EncodedPacketNumber = Word32
 type RawFlags = Word8
-
-type Token = ByteString -- to be decrypted
-emptyToken :: Token
-emptyToken = ""
-
-type FrameType = Int
-
-type Delay = Int
-type CryptoData = ByteString
-type StreamData = ByteString
-type Fin = Bool
-type ReasonPhrase = Bytes
-type PathData = Bytes -- 8 bytes
-type StatelessResetToken = Bytes -- 16 bytes
