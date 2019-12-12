@@ -105,7 +105,7 @@ isStateLessreset :: Connection -> Header -> Crypt -> IO Bool
 isStateLessreset conn (Short dCID) Crypt{..}
   | myCID conn /= dCID = do
         params <- getPeerParameters conn
-        case stateLessResetToken params of
+        case statelessResetToken params of
           Nothing -> return False
           mtoken  -> do
               let mtoken' = decodeStatelessResetToken cryptPacket

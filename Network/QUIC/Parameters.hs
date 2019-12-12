@@ -69,7 +69,7 @@ toParametersKeyId _ = Nothing
 data Parameters = Parameters {
     originalConnectionId    :: Maybe CID
   , idleTimeout             :: Int -- Milliseconds
-  , stateLessResetToken     :: Maybe StatelessResetToken -- 16 bytes
+  , statelessResetToken     :: Maybe StatelessResetToken -- 16 bytes
   , maxPacketSize           :: Int
   , maxData                 :: Int
   , maxStreamDataBidiLocal  :: Int
@@ -88,7 +88,7 @@ defaultParameters :: Parameters
 defaultParameters = Parameters {
     originalConnectionId    = Nothing
   , idleTimeout             = 0 -- disabled
-  , stateLessResetToken     = Nothing
+  , statelessResetToken     = Nothing
   , maxPacketSize           = 65527
   , maxData                 = -1
   , maxStreamDataBidiLocal  = -1
@@ -117,7 +117,7 @@ updateParameters params kvs = foldl' update params kvs
     update x (ParametersIdleTimeout,v)
         = x { idleTimeout = decInt v }
     update x (ParametersStateLessResetToken,v)
-        = x {stateLessResetToken = Just (Short.toShort v) }
+        = x {statelessResetToken = Just (Short.toShort v) }
     update x (ParametersMaxPacketSize,v)
         = x {maxPacketSize = decInt v}
     update x (ParametersMaxData,v)
@@ -155,7 +155,7 @@ diffParameters :: Parameters -> ParametersList
 diffParameters p = catMaybes [
     diff p originalConnectionId    ParametersOriginalConnectionId    (fromCID . fromJust)
   , diff p idleTimeout             ParametersIdleTimeout             encInt
-  , diff p stateLessResetToken     ParametersStateLessResetToken     (Short.fromShort . fromJust)
+  , diff p statelessResetToken     ParametersStateLessResetToken     (Short.fromShort . fromJust)
   , diff p maxPacketSize           ParametersMaxPacketSize           encInt
   , diff p maxData                 ParametersMaxData                 encInt
   , diff p maxStreamDataBidiLocal  ParametersMaxStreamDataBidiLocal  encInt
