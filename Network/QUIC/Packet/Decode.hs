@@ -121,7 +121,7 @@ decodeRetryPacket rbuf _proFlags version dCID sCID = do
 decodeStatelessResetToken :: ByteString -> Maybe StatelessResetToken
 decodeStatelessResetToken bs
   | len < 21  = Nothing
-  | otherwise = Just $ Short.toShort token
+  | otherwise = Just $ StatelessResetToken $ Short.toShort token
   where
     len = B.length bs
     (_,token) = B.splitAt (len - 16) bs
