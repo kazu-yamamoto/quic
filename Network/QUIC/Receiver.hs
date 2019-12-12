@@ -64,7 +64,8 @@ processFrame conn lvl (Crypto _off cdat) = do
 processFrame _ _ NewToken{} = do
     putStrLn "FIXME: NewToken"
     return True
-processFrame _ _ (NewConnectionID sn _ _ _)  = do
+processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
+    -- fixme: register stateless token
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
 processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
