@@ -77,7 +77,7 @@ processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
 processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
-    atomically $ writeTQueue (inputQ conn) $ InpEerror err
+    atomically $ writeTQueue (inputQ conn) $ InpError err
     setConnectionState conn Closing
     setCloseReceived conn
     setCloseSent conn
@@ -85,7 +85,7 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
     return False
 processFrame conn _ (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
-    atomically $ writeTQueue (inputQ conn) $ InpEerror err
+    atomically $ writeTQueue (inputQ conn) $ InpError err
     setConnectionState conn Closing
     setCloseReceived conn
     setCloseSent conn

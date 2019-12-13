@@ -30,5 +30,5 @@ recvData' conn = do
     mi <- atomically $ readTQueue (inputQ conn)
     case mi of
       InpStream sid bs -> return (sid, bs)
-      InpEerror{}      -> return (0, "") -- fixme sid
+      InpError{}       -> return (0, "") -- fixme sid
       InpHandshake{}   -> error "recvData'"

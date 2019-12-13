@@ -23,7 +23,7 @@ recvCryptoData conn = do
     dat <- atomically $ readTQueue (inputQ conn)
     case dat of
       InpHandshake lvl bs _ -> return (lvl, bs)
-      InpEerror err         -> E.throwIO $ HandshakeRejectedByPeer err
+      InpError err          -> E.throwIO $ HandshakeRejectedByPeer err
       InpStream{}           -> error "recvCryptoData"
 
 ----------------------------------------------------------------
