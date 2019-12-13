@@ -11,7 +11,7 @@ module Network.QUIC.Connection.Transmit (
   , removeAcks
   , keepOutput
   , releaseOutput
-  , updateOutput
+  , getRetransmissions
   , MilliSeconds(..)
   ) where
 
@@ -110,8 +110,8 @@ timeDel (ElapsedP sec nano) milli
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
 
-updateOutput :: Connection -> MilliSeconds -> IO [Output]
-updateOutput Connection{..} milli = do
+getRetransmissions :: Connection -> MilliSeconds -> IO [Output]
+getRetransmissions Connection{..} milli = do
     tm <- timeCurrentP
     let tm' = tm `timeDel` milli
     atomicModifyIORef' retransQ (split tm')
