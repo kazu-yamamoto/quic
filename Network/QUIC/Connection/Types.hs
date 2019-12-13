@@ -43,7 +43,7 @@ data Input = InpStream StreamID ByteString
 data Output = OutStream StreamID ByteString
             | OutControl EncryptionLevel [Frame]
             | OutHndClientHello0 ByteString (Maybe ByteString)
-            | OutHndClientHelloR ByteString (Maybe ByteString) Token
+            | OutHndClientHelloR ByteString (Maybe ByteString)
             | OutHndServerHello  ByteString ByteString
             | OutHndServerHelloR ByteString
             | OutHndClientFinished ByteString
@@ -92,6 +92,7 @@ data Connection = Connection {
   , connectionState  :: TVar ConnectionState -- fixme: stream table
   , threadIds        :: IORef [Weak ThreadId]
   , connClientCntrl  :: IORef ClientController
+  , connToken        :: IORef Token
   }
 
 newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
@@ -119,6 +120,7 @@ newConnection rl mid peercid send recv isecs =
         <*> newTVarIO NotOpen
         <*> newIORef []
         <*> newIORef nullClientController
+        <*> newIORef emptyToken
 
 ----------------------------------------------------------------
 

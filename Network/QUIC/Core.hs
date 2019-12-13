@@ -82,7 +82,8 @@ recvClient s connref = do
                 Just (Retrans (OutHndClientHello0 cdat mEarydata) _ _) -> do
                     setPeerCID conn sCID
                     setInitialSecrets conn $ initialSecrets ver sCID
-                    atomically $ writeTQueue (outputQ conn) $ OutHndClientHelloR cdat mEarydata token
+                    setToken conn token
+                    atomically $ writeTQueue (outputQ conn) $ OutHndClientHelloR cdat mEarydata
                 _ -> return ()
         return Nothing
 

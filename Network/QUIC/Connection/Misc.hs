@@ -8,6 +8,7 @@ import System.Mem.Weak
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.TLS
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
@@ -35,3 +36,11 @@ clearThreads conn = do
         case mtid of
           Nothing  -> return ()
           Just tid -> killThread tid
+
+----------------------------------------------------------------
+
+setToken :: Connection -> Token -> IO ()
+setToken conn token = writeIORef (connToken conn) token
+
+getToken :: Connection -> IO Token
+getToken conn = readIORef $ connToken conn
