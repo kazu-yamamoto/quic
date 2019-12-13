@@ -76,7 +76,7 @@ construct conn out lvl frames genLowerAck mTargetSize = do
               HandshakeLevel -> PlainPacket (Handshake currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')
               RTT1Level      -> PlainPacket (Short                  peercid)             (Plain (Flags 0) mypn frames')
               _         -> error "construct"
-        keepOutput conn mypn out lvl pns
+        when (frames /= []) $ keepOutput conn mypn out lvl pns
         encodePlainPacket conn ppkt mlen
 
 ----------------------------------------------------------------

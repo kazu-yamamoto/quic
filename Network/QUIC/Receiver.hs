@@ -96,6 +96,9 @@ processFrame conn RTT1Level (Stream sid _off dat fin) = do
     atomically $ writeTQueue (inputQ conn) $ InpStream sid dat
     when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ InpStream sid ""
     return True
+processFrame conn lvl Ping = do
+    atomically $ writeTQueue (outputQ conn) $ OutControl lvl []
+    return True
 processFrame _ _ _frame        = do
     -- This includes Ping which should be just acknowledged.
     putStrLn "FIXME: processFrame"
