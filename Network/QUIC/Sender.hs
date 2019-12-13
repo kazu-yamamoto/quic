@@ -138,4 +138,17 @@ resender conn = forever $ do
     threadDelay 25000
     -- retransQ
     outs <- updateOutput conn (MilliSeconds 25)
-    mapM_ (atomically . writeTQueue (outputQ conn)) outs
+    open <- isConnectionOpen conn
+    -- Some implementations do not return Ack for Initial and Handshake
+    -- correctly. We should consider that the success of handshake
+    -- implicitly acknowledge them.
+    let outs'
+         | open      = filter isEstablished outs
+         | otherwise = outs
+    mapM_ (atomically . writeTQueue (outputQ conn)) outs'
+
+isEstablished :: Output -> Bool
+isEstablished OutStream{}       = True
+isEstablished OutControl{}      = True
+isEstablished OutHndServerNST{} = True
+isEstablished _                 = False
