@@ -6,6 +6,8 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Imports
 
+newtype ApplicationError = ApplicationError Int deriving (Eq, Show)
+
 type ErrorCode = Int
 
 data TransportError = NoError
@@ -59,10 +61,12 @@ toTransportError n
   where
     mdesc = toAlertDescription $ fromIntegral (n - 0x100)
 
+type ReasonPhrase = Bytes
 
 data QUICError = PacketCannotBeDecrypted
                | VersionIsUnknown Word32
-               | HandshakeRejectedByPeer TransportError
+               | TransportErrorOccurs TransportError ReasonPhrase
+               | ApplicationErrorOccurs ApplicationError ReasonPhrase
                | ConnectionIsNotOpen
                | HandshakeFailed String
                deriving (Eq, Show)

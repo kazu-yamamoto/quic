@@ -49,9 +49,9 @@ encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
     encodeInt' wbuf $ fromIntegral ftyp
     encodeInt' wbuf $ fromIntegral $ Short.length reason
     copyShortByteString wbuf reason
-encodeFrame wbuf (ConnectionCloseApp err reason) = do
+encodeFrame wbuf (ConnectionCloseApp (ApplicationError err) reason) = do
     write8 wbuf 0x1d
-    encodeInt' wbuf $ fromIntegral $ fromTransportError err
+    encodeInt' wbuf $ fromIntegral $ err
     encodeInt' wbuf $ fromIntegral $ Short.length reason
     copyShortByteString wbuf reason
 encodeFrame _ _ = undefined
@@ -156,7 +156,7 @@ decodeConnectionCloseFrameQUIC rbuf = do
 
 decodeConnectionCloseFrameApp  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameApp rbuf = do
-    err    <- toTransportError . fromIntegral <$> decodeInt' rbuf
+    err    <- ApplicationError . fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractShortByteString rbuf len
     return $ ConnectionCloseApp err reason

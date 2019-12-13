@@ -37,7 +37,8 @@ data CloseState = CloseState {
 
 data Input = InpStream StreamID ByteString
            | InpHandshake EncryptionLevel ByteString Token
-           | InpError TransportError
+           | InpTransportError TransportError FrameType ReasonPhrase
+           | InpApplicationError ApplicationError ReasonPhrase
            deriving Show
 
 data Output = OutStream StreamID ByteString

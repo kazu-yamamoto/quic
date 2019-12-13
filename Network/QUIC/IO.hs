@@ -29,6 +29,7 @@ recvData' :: Connection -> IO (StreamID, ByteString)
 recvData' conn = do
     mi <- atomically $ readTQueue (inputQ conn)
     case mi of
-      InpStream sid bs -> return (sid, bs)
-      InpError{}       -> return (0, "") -- fixme sid
-      InpHandshake{}   -> error "recvData'"
+      InpStream sid bs      -> return (sid, bs)
+      InpApplicationError{} -> return (0, "") -- fixme sid
+      InpTransportError{}   -> return (0, "") -- fixme sid
+      InpHandshake{}        -> error "recvData'"

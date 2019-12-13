@@ -30,7 +30,7 @@ data Frame = Padding Int
            | PathChallenge PathData
            | PathResponse PathData
            | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
-           | ConnectionCloseApp  TransportError ReasonPhrase
+           | ConnectionCloseApp ApplicationError ReasonPhrase
            deriving (Eq,Show)
 
 type StreamID = Int64
@@ -42,7 +42,6 @@ type CryptoData = ByteString
 type StreamData = ByteString
 
 type PathData = Bytes -- 8 bytes
-type ReasonPhrase = Bytes
 -- 16 bytes
 newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq,Show)
 

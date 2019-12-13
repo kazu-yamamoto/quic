@@ -76,16 +76,16 @@ processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
     -- fixme: register stateless token
     putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
-processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
-    atomically $ writeTQueue (inputQ conn) $ InpError err
+processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
+    atomically $ writeTQueue (inputQ conn) $ InpTransportError err ftyp reason
     setConnectionState conn Closing
     setCloseReceived conn
     setCloseSent conn
     clearThreads conn
     return False
-processFrame conn _ (ConnectionCloseApp err _reason) = do
+processFrame conn _ (ConnectionCloseApp err reason) = do
     putStrLn $ "App: " ++ show err
-    atomically $ writeTQueue (inputQ conn) $ InpError err
+    atomically $ writeTQueue (inputQ conn) $ InpApplicationError err reason
     setConnectionState conn Closing
     setCloseReceived conn
     setCloseSent conn

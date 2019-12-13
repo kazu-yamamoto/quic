@@ -22,9 +22,10 @@ recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString)
 recvCryptoData conn = do
     dat <- atomically $ readTQueue (inputQ conn)
     case dat of
-      InpHandshake lvl bs _ -> return (lvl, bs)
-      InpError err          -> E.throwIO $ HandshakeRejectedByPeer err
-      InpStream{}           -> error "recvCryptoData"
+      InpHandshake lvl bs _      -> return (lvl, bs)
+      InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
+      InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
+      InpStream{}                -> error "recvCryptoData"
 
 ----------------------------------------------------------------
 
