@@ -15,6 +15,7 @@ module Network.QUIC.Connection.Crypto (
   , setApplicationSecrets
   , getTxSecret
   , getRxSecret
+  , setCryptoOffset
   , modifyCryptoOffset
   ) where
 
@@ -128,6 +129,11 @@ rxApplicationSecret conn = do
     return $ Secret $ if isClient conn then s else c
 
 ----------------------------------------------------------------
+
+setCryptoOffset :: Connection -> EncryptionLevel -> Offset -> IO ()
+setCryptoOffset conn lvl len = writeIORef ref len
+  where
+    ref = getCryptoOffset conn lvl
 
 modifyCryptoOffset :: Connection -> EncryptionLevel -> Offset -> IO Offset
 modifyCryptoOffset conn lvl len = atomicModifyIORef' ref modify

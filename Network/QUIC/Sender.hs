@@ -87,13 +87,8 @@ sender conn = loop
     loop = forever $ do
         out <- atomically $ readTQueue $ outputQ conn
         case out of
-          OutHndClientHello0 ch _mEarydata -> do
+          OutHndClientHello ch _mEarydata -> do
               frame <- cryptoFrame conn ch InitialLevel
-              let frames = [frame]
-              bss <- construct conn out InitialLevel frames False $ Just maximumQUICPacketSize
-              connSend conn bss
-          OutHndClientHelloR ch _mEarydata -> do
-              let frame = Crypto 0 ch
               let frames = [frame]
               bss <- construct conn out InitialLevel frames False $ Just maximumQUICPacketSize
               connSend conn bss

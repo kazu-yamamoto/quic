@@ -79,11 +79,12 @@ recvClient s connref = do
           Just conn -> do
               mr <- releaseOutput conn 0
               case mr of
-                Just (Retrans (OutHndClientHello0 cdat mEarydata) _ _) -> do
+                Just (Retrans (OutHndClientHello cdat mEarydata) _ _) -> do
                     setPeerCID conn sCID
                     setInitialSecrets conn $ initialSecrets ver sCID
                     setToken conn token
-                    atomically $ writeTQueue (outputQ conn) $ OutHndClientHelloR cdat mEarydata
+                    setCryptoOffset conn InitialLevel 0
+                    atomically $ writeTQueue (outputQ conn) $ OutHndClientHello cdat mEarydata
                 _ -> return ()
         return Nothing
 

@@ -42,8 +42,7 @@ data Input = InpStream StreamID ByteString
 
 data Output = OutStream StreamID ByteString
             | OutControl EncryptionLevel [Frame]
-            | OutHndClientHello0 ByteString (Maybe ByteString)
-            | OutHndClientHelloR ByteString (Maybe ByteString)
+            | OutHndClientHello  ByteString (Maybe ByteString)
             | OutHndServerHello  ByteString ByteString
             | OutHndServerHelloR ByteString
             | OutHndClientFinished ByteString

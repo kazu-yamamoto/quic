@@ -38,7 +38,7 @@ handshakeClient conf conn = do
 sendClientHelloAndRecvServerHello :: ClientController-> Connection -> IO ()
 sendClientHelloAndRecvServerHello control conn = do
     SendClientHello ch0 _ <- control GetClientHello
-    sendCryptoData conn $ OutHndClientHello0 ch0 Nothing
+    sendCryptoData conn $ OutHndClientHello ch0 Nothing
     (InitialLevel, sh0) <- recvCryptoData conn
     state0 <- control $ PutServerHello sh0
     case state0 of
@@ -46,7 +46,7 @@ sendClientHelloAndRecvServerHello control conn = do
           setHandshakeSecrets conn hndSecs
           setCipher conn cipher
       SendClientHello ch1 _ -> do
-          sendCryptoData conn $ OutHndClientHello0 ch1 Nothing
+          sendCryptoData conn $ OutHndClientHello ch1 Nothing
           (InitialLevel, sh1) <- recvCryptoData conn
           state1 <- control $ PutServerHello sh1
           case state1 of
