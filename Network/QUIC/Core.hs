@@ -57,7 +57,7 @@ connect QUICClient{..} = E.handle tlserr $ do
     setThreadIds conn [tid0,tid1,tid2]
     writeIORef connref $ Just conn
     handshakeClient clientConfig conn
-    setConnectionStatus conn Open
+    setConnectionState conn Open
     return conn
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
@@ -116,7 +116,7 @@ accept QUICServer{..} = E.handle tlserr $ do
     tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
     handshakeServer serverConfig oCID conn
-    setConnectionStatus conn Open
+    setConnectionState conn Open
     return conn
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
@@ -125,7 +125,7 @@ accept QUICServer{..} = E.handle tlserr $ do
 
 close :: Connection -> IO ()
 close conn = do
-    setConnectionStatus conn Closing
+    setConnectionState conn Closing
     let frames = [ConnectionCloseQUIC NoError 0 ""]
     atomically $ writeTQueue (outputQ conn) $ OutControl RTT1Level frames
     setCloseSent conn

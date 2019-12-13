@@ -28,7 +28,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
     statelessReset <- isStateLessreset conn header crypt
     if statelessReset then do
           putStrLn "Connection is reset statelessly"
-          setConnectionStatus conn Closing
+          setConnectionState conn Closing
           setCloseReceived conn
           clearThreads conn
       else do
@@ -78,7 +78,7 @@ processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
     return True
 processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
     atomically $ writeTQueue (inputQ conn) $ InpEerror err
-    setConnectionStatus conn Closing
+    setConnectionState conn Closing
     setCloseReceived conn
     setCloseSent conn
     clearThreads conn
@@ -86,7 +86,7 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp _reason) = do
 processFrame conn _ (ConnectionCloseApp err _reason) = do
     putStrLn $ "App: " ++ show err
     atomically $ writeTQueue (inputQ conn) $ InpEerror err
-    setConnectionStatus conn Closing
+    setConnectionState conn Closing
     setCloseReceived conn
     setCloseSent conn
     clearThreads conn

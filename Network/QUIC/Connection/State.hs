@@ -8,8 +8,8 @@ import Network.QUIC.Connection.Types
 
 ----------------------------------------------------------------
 
-setConnectionStatus :: Connection -> ConnectionState -> IO ()
-setConnectionStatus Connection{..} st =
+setConnectionState :: Connection -> ConnectionState -> IO ()
+setConnectionState Connection{..} st =
     atomically $ writeTVar connectionState st
 
 isConnectionOpen :: Connection -> IO Bool
