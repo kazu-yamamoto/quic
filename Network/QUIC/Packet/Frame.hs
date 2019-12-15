@@ -44,6 +44,12 @@ encodeFrame wbuf (Stream sid _off dat _fin) = do
 encodeFrame wbuf NewConnectionID{} = do
     write8 wbuf 0x18
     undefined
+encodeFrame wbuf (PathChallenge pdata) = do
+    write8 wbuf 0x1a
+    copyByteString wbuf $ Short.fromShort pdata
+encodeFrame wbuf (PathResponse pdata) = do
+    write8 wbuf 0x1b
+    copyByteString wbuf $ Short.fromShort pdata
 encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
     write8 wbuf 0x1c
     encodeInt' wbuf $ fromIntegral $ fromTransportError err
@@ -85,6 +91,8 @@ decodeFrame rbuf = do
                   fin = testBit x 1
               decodeStreamFrame rbuf off len fin
       0x18 -> decodeNewConnectionID rbuf
+      0x1a -> decodePathChallenge rbuf
+      0x1b -> decodePathResponse rbuf
       0x1c -> decodeConnectionCloseFrameQUIC rbuf
       0x1d -> decodeConnectionCloseFrameApp rbuf
       _x   -> error $ show _x
@@ -170,3 +178,9 @@ decodeNewConnectionID rbuf = do
     cID <- makeCID <$> extractShortByteString rbuf cidLen
     token <- StatelessResetToken <$> extractShortByteString rbuf 16
     return $ NewConnectionID seqNum rpt cID token
+
+decodePathChallenge :: ReadBuffer -> IO Frame
+decodePathChallenge rbuf = PathChallenge <$> extractShortByteString rbuf 8
+
+decodePathResponse :: ReadBuffer -> IO Frame
+decodePathResponse rbuf = PathResponse <$> extractShortByteString rbuf 8
