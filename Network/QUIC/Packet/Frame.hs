@@ -31,9 +31,10 @@ encodeFrame wbuf (Crypto off cdata) = do
     encodeInt' wbuf $ fromIntegral off
     encodeInt' wbuf $ fromIntegral $ B.length cdata
     copyByteString wbuf cdata
-encodeFrame wbuf (NewToken _) = do
+encodeFrame wbuf (NewToken token) = do
     write8 wbuf 0x07
-    undefined
+    encodeInt' wbuf $ fromIntegral $ B.length token
+    copyByteString wbuf token
 encodeFrame wbuf (Stream sid _off dat _fin) = do
     -- fixme
     write8 wbuf (0x08 .|. 0x02 .|. 0x01)
