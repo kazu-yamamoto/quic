@@ -41,9 +41,14 @@ encodeFrame wbuf (Stream sid _off dat _fin) = do
     encodeInt' wbuf sid
     encodeInt' wbuf $ fromIntegral $ B.length dat
     copyByteString wbuf dat
-encodeFrame wbuf NewConnectionID{} = do
+encodeFrame wbuf (NewConnectionID seqNum rpt cID (StatelessResetToken token)) = do
     write8 wbuf 0x18
-    undefined
+    encodeInt' wbuf $ fromIntegral seqNum
+    encodeInt' wbuf $ fromIntegral rpt
+    let (cid, len) = unpackCID cID
+    write8 wbuf len
+    copyShortByteString wbuf cid
+    copyShortByteString wbuf token
 encodeFrame wbuf (PathChallenge pdata) = do
     write8 wbuf 0x1a
     copyByteString wbuf $ Short.fromShort pdata
