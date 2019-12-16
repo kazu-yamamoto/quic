@@ -13,16 +13,18 @@ import System.Exit
 import Network.QUIC
 
 data Options = Options {
-    optRetry    :: Bool
-  , optKeyFile  :: FilePath
-  , optCertFile :: FilePath
+    optRetry      :: Bool
+  , optKeyLogging :: Bool
+  , optKeyFile    :: FilePath
+  , optCertFile   :: FilePath
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optRetry    = False
-  , optKeyFile  = "serverkey.pem"
-  , optCertFile = "servercert.pem"
+    optRetry      = False
+  , optKeyLogging = False
+  , optKeyFile    = "serverkey.pem"
+  , optCertFile   = "servercert.pem"
   }
 
 options :: [OptDescr (Options -> Options)]
@@ -30,6 +32,9 @@ options = [
     Option ['r'] ["retry"]
     (NoArg (\o -> o { optRetry = True }))
     "requre retry"
+  , Option ['l'] ["key-logging"]
+    (NoArg (\o -> o { optKeyLogging = True }))
+    "print negotiated secrets"
   , Option ['k'] ["key"]
     (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
     "key file"
@@ -67,6 +72,7 @@ main = do
           , scRequireRetry = optRetry
           , scConfig     = defaultConfig {
                 confParameters = exampleParameters
+              , confKeyLogging = optKeyLogging
               }
           }
     withQUICServer conf $ \qs -> forever $ do
