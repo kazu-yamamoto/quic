@@ -63,9 +63,11 @@ main = do
             scAddresses    = [(read addr, read port)]
           , scKey          = optKeyFile
           , scCert         = optCertFile
-          , scParameters   = exampleParameters
           , scALPN         = Just (\_ -> return "hq-24")
           , scRequireRetry = optRetry
+          , scConfig     = defaultConfig {
+                confParameters = exampleParameters
+              }
           }
     withQUICServer conf $ \qs -> forever $ do
         conn <- accept qs

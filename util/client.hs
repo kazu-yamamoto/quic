@@ -15,7 +15,9 @@ main = do
             ccServerName = serverName
           , ccPortName   = portName
           , ccALPN       = return $ Just ["h3-24","hq-24"]
-          , ccParameters = exampleParameters
+          , ccConfig     = defaultConfig {
+                confParameters = exampleParameters
+              }
           }
     withQUICClient conf $ \qc -> do
         conn <- connect qc
