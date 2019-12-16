@@ -12,13 +12,17 @@ import System.Exit
 
 import Network.QUIC
 
+import Common
+
 data Options = Options {
     optKeyLogging :: Bool
+  , optGroups :: Maybe String
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
     optKeyLogging = False
+  , optGroups = Nothing
   }
 
 usage :: String
@@ -29,6 +33,9 @@ options = [
     Option ['l'] ["key-logging"]
     (NoArg (\o -> o { optKeyLogging = True }))
     "print negotiated secrets"
+  , Option ['g'] ["groups"]
+    (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
+    "specify groups"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -56,6 +63,7 @@ main = do
           , ccConfig     = defaultConfig {
                 confParameters = exampleParameters
               , confKeyLogging = optKeyLogging
+              , confGroups     = getGroups optGroups
               }
           }
     withQUICClient conf $ \qc -> do

@@ -12,11 +12,14 @@ import System.Exit
 
 import Network.QUIC
 
+import Common
+
 data Options = Options {
     optRetry      :: Bool
   , optKeyLogging :: Bool
   , optKeyFile    :: FilePath
   , optCertFile   :: FilePath
+  , optGroups     :: Maybe String
   } deriving Show
 
 defaultOptions :: Options
@@ -25,6 +28,7 @@ defaultOptions = Options {
   , optKeyLogging = False
   , optKeyFile    = "serverkey.pem"
   , optCertFile   = "servercert.pem"
+  , optGroups = Nothing
   }
 
 options :: [OptDescr (Options -> Options)]
@@ -41,6 +45,9 @@ options = [
   , Option ['c'] ["cert"]
     (ReqArg (\fl o -> o { optCertFile = fl }) "FILE")
     "certificate file"
+  , Option ['g'] ["groups"]
+    (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
+    "specify groups"
   ]
 
 usage :: String
@@ -73,6 +80,7 @@ main = do
           , scConfig     = defaultConfig {
                 confParameters = exampleParameters
               , confKeyLogging = optKeyLogging
+              , confGroups     = getGroups optGroups
               }
           }
     withQUICServer conf $ \qs -> forever $ do
