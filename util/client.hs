@@ -16,12 +16,14 @@ import Common
 
 data Options = Options {
     optKeyLogging :: Bool
+  , optValidate :: Bool
   , optGroups :: Maybe String
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
     optKeyLogging = False
+  , optValidate = False
   , optGroups = Nothing
   }
 
@@ -33,6 +35,9 @@ options = [
     Option ['l'] ["key-logging"]
     (NoArg (\o -> o { optKeyLogging = True }))
     "print negotiated secrets"
+  , Option ['V'] ["validate"]
+    (NoArg (\o -> o { optValidate = True }))
+    "validate server's certificate"
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
     "specify groups"
@@ -60,6 +65,7 @@ main = do
             ccServerName = addr
           , ccPortName   = port
           , ccALPN       = return $ Just ["h3-24","hq-24"]
+          , ccValidate   = optValidate
           , ccConfig     = defaultConfig {
                 confParameters = exampleParameters
               , confKeyLogging = optKeyLogging

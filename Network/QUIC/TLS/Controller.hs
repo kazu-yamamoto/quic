@@ -29,7 +29,10 @@ clientController ClientConfig{..} = newQUICClient cparams
       }
     eQparams = encodeParametersList $ diffParameters $ confParameters ccConfig
     cshared = def {
-        sharedValidationCache = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
+        sharedValidationCache = if ccValidate then
+                                  def
+                                else
+                                  ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
       , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
       }
     hook = def {

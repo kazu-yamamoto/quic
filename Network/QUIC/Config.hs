@@ -36,6 +36,7 @@ data ClientConfig = ClientConfig {
     ccServerName :: HostName
   , ccPortName   :: ServiceName
   , ccALPN       :: IO (Maybe [ByteString])
+  , ccValidate   :: Bool
   , ccConfig     :: Config
   }
 
@@ -44,6 +45,7 @@ defaultClientConfig = ClientConfig {
     ccServerName = "127.0.0.1"
   , ccPortName   = "13443"
   , ccALPN       = return Nothing
+  , ccValidate   = False
   , ccConfig     = defaultConfig
   }
 
