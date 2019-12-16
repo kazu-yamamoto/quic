@@ -11,46 +11,59 @@ import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Types
 
+----------------------------------------------------------------
+
+data Config = Config {
+    confVersion    :: Version
+  , confCiphers    :: [Cipher]
+  , confGroups     :: [Group]
+  , confParameters :: Parameters
+  , confKeyLogging :: Bool
+  }
+
+defaultConfig :: Config
+defaultConfig = Config {
+    confVersion    = currentDraft
+  , confCiphers    = ciphersuite_strong
+  , confGroups     = [X25519,P256,P384,P521]
+  , confParameters = defaultParameters
+  , confKeyLogging = False
+  }
+
+----------------------------------------------------------------
+
 data ClientConfig = ClientConfig {
-    ccVersion    :: Version
-  , ccServerName :: HostName
+    ccServerName :: HostName
   , ccPortName   :: ServiceName
-  , ccCiphers    :: [Cipher]
   , ccALPN       :: IO (Maybe [ByteString])
-  , ccParameters :: Parameters
+  , ccConfig     :: Config
   }
 
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
-    ccVersion    = currentDraft
-  , ccServerName = "127.0.0.1"
+    ccServerName = "127.0.0.1"
   , ccPortName   = "13443"
-  , ccCiphers    = ciphersuite_strong
   , ccALPN       = return Nothing
-  , ccParameters = defaultParameters
+  , ccConfig     = defaultConfig
   }
 
 ----------------------------------------------------------------
 
 data ServerConfig = ServerConfig {
-    scVersion      :: Version
-  , scAddresses    :: [(IP,PortNumber)]
+    scAddresses    :: [(IP,PortNumber)]
   , scKey          :: FilePath
   , scCert         :: FilePath
-  , scCiphers      :: [Cipher]
   , scALPN         :: Maybe ([ByteString] -> IO ByteString)
-  , scParameters   :: Parameters
   , scRequireRetry :: Bool
+  , scConfig       :: Config
   }
 
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scVersion      = currentDraft
-  , scAddresses    = [("127.0.0.1",13443)]
+    scAddresses    = [("127.0.0.1",13443)]
   , scKey          = "serverkey.pem"
   , scCert         = "servercert.pem"
-  , scCiphers      = ciphersuite_strong
   , scALPN         = Nothing
-  , scParameters   = defaultParameters
   , scRequireRetry = False
+  , scConfig       = defaultConfig
   }

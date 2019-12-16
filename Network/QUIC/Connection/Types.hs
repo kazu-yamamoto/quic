@@ -127,15 +127,17 @@ newConnection rl mid peercid send recv isecs =
 clientConnection :: ClientConfig -> CID -> CID
                  -> SendMany -> Receive -> IO Connection
 clientConnection ClientConfig{..} myCID peerCID send recv = do
-    let isecs = initialSecrets ccVersion peerCID
+    let ver = confVersion ccConfig
+        isecs = initialSecrets ver peerCID
     newConnection Client myCID peerCID send recv isecs
 
 serverConnection :: ServerConfig -> CID -> CID -> OrigCID
                  -> SendMany -> Receive -> IO Connection
 serverConnection ServerConfig{..} myCID peerCID origCID send recv = do
-    let isecs = case origCID of
-          OCFirst oCID -> initialSecrets scVersion oCID
-          OCRetry _    -> initialSecrets scVersion myCID
+    let ver = confVersion scConfig
+        isecs = case origCID of
+          OCFirst oCID -> initialSecrets ver oCID
+          OCRetry _    -> initialSecrets ver myCID
     newConnection Server myCID peerCID send recv isecs
 
 ----------------------------------------------------------------

@@ -13,6 +13,9 @@ module Network.QUIC (
   , withQUICServer
   , QUICServer
   , accept
+  -- * Config
+  , Config(..)
+  , defaultConfig
   -- * IO
   , recvData
   , sendData

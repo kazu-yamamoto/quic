@@ -27,7 +27,7 @@ clientController ClientConfig{..} = newQUICClient cparams
       , clientSupported = supported
       , clientDebug     = debug
       }
-    eQparams = encodeParametersList $ diffParameters ccParameters
+    eQparams = encodeParametersList $ diffParameters $ confParameters ccConfig
     cshared = def {
         sharedValidationCache = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
       , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
@@ -37,10 +37,11 @@ clientController ClientConfig{..} = newQUICClient cparams
       }
     supported = def {
         supportedVersions = [TLS13]
-      , supportedCiphers  = ccCiphers
+      , supportedCiphers  = confCiphers ccConfig
+      , supportedGroups   = confGroups  ccConfig
       }
     debug = def {
-        debugKeyLogger = putStrLn
+        debugKeyLogger = if confKeyLogging ccConfig then putStrLn else \_ -> return ()
       }
 
 serverController :: ServerConfig
@@ -49,8 +50,8 @@ serverController :: ServerConfig
 serverController ServerConfig{..} origCID = do
     Right cred <- credentialLoadX509 scCert scKey
     let qparams = case origCID of
-          OCFirst _    -> scParameters
-          OCRetry oCID -> scParameters { originalConnectionId = Just oCID }
+          OCFirst _    -> confParameters scConfig
+          OCRetry oCID -> (confParameters scConfig) { originalConnectionId = Just oCID }
         eQparams = encodeParametersList $ diffParameters qparams
     let sshared = def {
             sharedCredentials = Credentials [cred]
@@ -69,8 +70,9 @@ serverController ServerConfig{..} origCID = do
       }
     supported = def {
         supportedVersions = [TLS13]
-      , supportedCiphers  = scCiphers
+      , supportedCiphers  = confCiphers scConfig
+      , supportedGroups   = confGroups  scConfig
       }
     debug = def {
-        debugKeyLogger = putStrLn
+        debugKeyLogger = if confKeyLogging scConfig then putStrLn else \_ -> return ()
       }
