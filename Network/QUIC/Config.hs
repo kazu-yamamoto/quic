@@ -14,20 +14,22 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 data Config = Config {
-    confVersion    :: Version
-  , confCiphers    :: [Cipher]
-  , confGroups     :: [Group]
-  , confParameters :: Parameters
-  , confKeyLogging :: Bool
+    confVersion        :: Version
+  , confCiphers        :: [Cipher]
+  , confGroups         :: [Group]
+  , confParameters     :: Parameters
+  , confKeyLogging     :: Bool
+  , confSessionManager :: SessionManager
   }
 
 defaultConfig :: Config
 defaultConfig = Config {
-    confVersion    = currentDraft
-  , confCiphers    = ciphersuite_strong
-  , confGroups     = [X25519,P256,P384,P521]
-  , confParameters = defaultParameters
-  , confKeyLogging = False
+    confVersion        = currentDraft
+  , confCiphers        = ciphersuite_strong
+  , confGroups         = [X25519,P256,P384,P521]
+  , confParameters     = defaultParameters
+  , confKeyLogging     = False
+  , confSessionManager = noSessionManager
   }
 
 ----------------------------------------------------------------

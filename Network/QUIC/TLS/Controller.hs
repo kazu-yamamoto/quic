@@ -34,6 +34,7 @@ clientController ClientConfig{..} = newQUICClient cparams
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
       , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+      , sharedSessionManager = confSessionManager ccConfig
       }
     hook = def {
         onSuggestALPN = ccALPN
@@ -59,6 +60,7 @@ serverController ServerConfig{..} origCID = do
     let sshared = def {
             sharedCredentials = Credentials [cred]
           , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+          , sharedSessionManager = confSessionManager scConfig
           }
     let sparams = def {
         serverShared    = sshared
