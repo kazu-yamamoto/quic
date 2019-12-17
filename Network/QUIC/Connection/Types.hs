@@ -93,6 +93,7 @@ data Connection = Connection {
   , threadIds        :: IORef [Weak ThreadId]
   , connClientCntrl  :: IORef ClientController
   , connToken        :: IORef Token
+  , connTLSMode      :: IORef HandshakeMode13
   }
 
 newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
@@ -121,6 +122,7 @@ newConnection rl mid peercid send recv isecs =
         <*> newIORef []
         <*> newIORef nullClientController
         <*> newIORef emptyToken
+        <*> newIORef FullHandshake
 
 ----------------------------------------------------------------
 

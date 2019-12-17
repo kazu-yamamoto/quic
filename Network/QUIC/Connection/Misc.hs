@@ -4,6 +4,7 @@ module Network.QUIC.Connection.Misc where
 
 import Control.Concurrent
 import Data.IORef
+import Network.TLS.QUIC
 import System.Mem.Weak
 
 import Network.QUIC.Connection.Types
@@ -44,3 +45,11 @@ setToken conn token = writeIORef (connToken conn) token
 
 getToken :: Connection -> IO Token
 getToken conn = readIORef $ connToken conn
+
+----------------------------------------------------------------
+
+setTLSMode :: Connection -> HandshakeMode13 -> IO ()
+setTLSMode conn mode = writeIORef (connTLSMode conn) mode
+
+getTLSMode :: Connection -> IO HandshakeMode13
+getTLSMode conn = readIORef $ connTLSMode conn

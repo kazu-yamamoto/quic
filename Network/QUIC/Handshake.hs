@@ -29,7 +29,7 @@ recvCryptoData conn = do
 
 ----------------------------------------------------------------
 
-handshakeClient :: ClientConfig -> Connection -> IO ()
+handshakeClient :: ClientConfig -> Connection -> IO HandshakeMode13
 handshakeClient conf conn = do
     control <- clientController conf
     setClientController conn control
@@ -57,7 +57,7 @@ sendClientHelloAndRecvServerHello control conn = do
             _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
       _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
 
-recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
+recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO HandshakeMode13
 recvServerFinishedSendClientFinished control conn = loop
   where
     loop = do
@@ -66,16 +66,17 @@ recvServerFinishedSendClientFinished control conn = loop
         case state of
           ClientNeedsMore -> do
               loop
-          SendClientFinished cf exts alpn appSecs -> do
+          SendClientFinished cf exts alpn appSecs mode -> do
               setNegotiatedProto conn alpn
               setParameters conn exts
               setApplicationSecrets conn appSecs
               sendCryptoData conn $ OutHndClientFinished cf
+              return mode
           _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
 ----------------------------------------------------------------
 
-handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
+handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO HandshakeMode13
 handshakeServer conf origCID conn = do
     control <- serverController conf origCID
     (InitialLevel, ch) <- recvCryptoData conn
@@ -100,10 +101,10 @@ handshakeServer conf origCID conn = do
     setApplicationSecrets conn appSecs
     sendCryptoData conn $ OutHndServerHello sh sf
     (HandshakeLevel, cf) <- recvCryptoData conn
-    SendSessionTicket nst <- control $ PutClientFinished cf
+    SendSessionTicket nst mode <- control $ PutClientFinished cf
     sendCryptoData conn $ OutHndServerNST nst
     ServerHandshakeDone <- control ExitServer
-    return ()
+    return mode
 
 setParameters :: Connection -> [ExtensionRaw] -> IO ()
 setParameters conn [ExtensionRaw 0xffa5 params] = do
