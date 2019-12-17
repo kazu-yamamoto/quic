@@ -14,7 +14,7 @@ spec = do
         it "can handshake in the normal case" $ do
             let cc = defaultClientConfig
                 sc = defaultServerConfig
-            testHandshake cc sc
+            testHandshake cc sc FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
             let cc = defaultClientConfig
                 sc = defaultServerConfig {
@@ -22,16 +22,16 @@ spec = do
                                     confGroups = [P256]
                                   }
                      }
-            testHandshake cc sc
+            testHandshake cc sc HelloRetryRequest
         it "can handshake in the case of QUIC retry" $ do
             let cc = defaultClientConfig
                 sc = defaultServerConfig {
                        scRequireRetry = True
                      }
-            testHandshake cc sc
+            testHandshake cc sc FullHandshake
 
-testHandshake :: ClientConfig -> ServerConfig -> IO ()
-testHandshake cc sc = void $ concurrently client server
+testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
+testHandshake cc sc mode = void $ concurrently client server
   where
     sc' = sc {
             scKey  = "test/serverkey.pem"
@@ -40,8 +40,10 @@ testHandshake cc sc = void $ concurrently client server
     client = withQUICClient cc $ \qc -> do
         conn <- connect qc
         isConnectionOpen conn `shouldReturn` True
+        getTLSMode conn `shouldReturn` mode
         close conn
     server = withQUICServer sc' $ \qs -> do
         conn <- accept qs
         isConnectionOpen conn `shouldReturn` True
+        getTLSMode conn `shouldReturn` mode
         close conn
