@@ -39,6 +39,7 @@ data ClientConfig = ClientConfig {
   , ccPortName   :: ServiceName
   , ccALPN       :: IO (Maybe [ByteString])
   , ccValidate   :: Bool
+  , ccResume     :: Maybe (SessionID, SessionData)
   , ccConfig     :: Config
   }
 
@@ -48,6 +49,7 @@ defaultClientConfig = ClientConfig {
   , ccPortName   = "13443"
   , ccALPN       = return Nothing
   , ccValidate   = False
+  , ccResume     = Nothing
   , ccConfig     = defaultConfig
   }
 

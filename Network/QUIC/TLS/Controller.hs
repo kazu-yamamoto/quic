@@ -22,10 +22,11 @@ clientController:: ClientConfig -> IO ClientController
 clientController ClientConfig{..} = newQUICClient cparams
   where
     cparams = (defaultParamsClient ccServerName "") {
-        clientShared    = cshared
-      , clientHooks     = hook
-      , clientSupported = supported
-      , clientDebug     = debug
+        clientShared            = cshared
+      , clientHooks             = hook
+      , clientSupported         = supported
+      , clientDebug             = debug
+      , clientWantSessionResume = ccResume
       }
     eQparams = encodeParametersList $ diffParameters $ confParameters ccConfig
     cshared = def {
