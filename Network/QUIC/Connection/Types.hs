@@ -94,6 +94,7 @@ data Connection = Connection {
   , connClientCntrl  :: IORef ClientController
   , connToken        :: IORef Token
   , connTLSMode      :: IORef HandshakeMode13
+  , resumptionInfo   :: IORef ResumptionInfo
   }
 
 newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
@@ -123,6 +124,7 @@ newConnection rl mid peercid send recv isecs =
         <*> newIORef nullClientController
         <*> newIORef emptyToken
         <*> newIORef FullHandshake
+        <*> newIORef defaultResumptionInfo
 
 ----------------------------------------------------------------
 

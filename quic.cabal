@@ -49,6 +49,7 @@ library
                        Network.QUIC.Types.Frame
                        Network.QUIC.Types.Integer
                        Network.QUIC.Types.Packet
+                       Network.QUIC.Types.Resumption
                        Network.QUIC.Utils
   other-modules:
                        Network.QUIC.Imports
