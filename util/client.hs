@@ -72,11 +72,15 @@ main = do
               , confGroups     = getGroups optGroups
               }
           }
-    withQUICClient conf $ \qc -> do
+    res <- withQUICClient conf $ \qc -> do
+        conn <- connect qc
+        client conn `E.finally` close conn
+    void $ withQUICClient conf { ccResumption = res } $ \qc -> do
         conn <- connect qc
         client conn `E.finally` close conn
 
-client :: Connection -> IO ()
+client :: Connection -> IO ResumptionInfo
 client conn = do
     sendData conn "GET /index.html\r\n"
     recvData conn >>= C8.putStr
+    getResumptionInfo conn
