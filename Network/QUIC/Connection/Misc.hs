@@ -53,3 +53,13 @@ setTLSMode conn mode = writeIORef (connTLSMode conn) mode
 
 getTLSMode :: Connection -> IO HandshakeMode13
 getTLSMode conn = readIORef $ connTLSMode conn
+
+----------------------------------------------------------------
+
+getResumptionInfo :: Connection -> IO ResumptionInfo
+getResumptionInfo conn = readIORef $ resumptionInfo conn
+
+----------------------------------------------------------------
+
+setNewToken :: Connection -> Token -> IO ()
+setNewToken conn token = modifyIORef (resumptionInfo conn) $ \res -> res { resumptionToken = token }

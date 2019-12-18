@@ -69,8 +69,8 @@ processFrame conn lvl (Crypto _off cdat) = do
         | otherwise -> do
               putStrLn "processFrame: Short:Crypto for server"
               return False
-processFrame _ _ NewToken{} = do
-    putStrLn "FIXME: NewToken"
+processFrame conn _ (NewToken token) = do
+    setNewToken conn token
     return True
 processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
     -- fixme: register stateless token

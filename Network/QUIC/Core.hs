@@ -37,7 +37,7 @@ data QUICServer = QUICServer {
 
 ----------------------------------------------------------------
 
-withQUICClient :: ClientConfig -> (QUICClient -> IO ()) -> IO ()
+withQUICClient :: ClientConfig -> (QUICClient -> IO a) -> IO a
 withQUICClient conf body = do
     let qc = QUICClient conf
     body qc
@@ -51,6 +51,7 @@ connect QUICClient{..} = E.handle tlserr $ do
     myCID   <- newCID
     peerCID <- newCID
     conn <- clientConnection clientConfig myCID peerCID send recv
+    setToken conn $ resumptionToken $ ccResumption clientConfig
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn

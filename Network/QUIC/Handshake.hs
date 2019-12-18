@@ -31,7 +31,7 @@ recvCryptoData conn = do
 
 handshakeClient :: ClientConfig -> Connection -> IO HandshakeMode13
 handshakeClient conf conn = do
-    control <- clientController conf
+    control <- clientController conf $ resumptionInfo conn
     setClientController conn control
     sendClientHelloAndRecvServerHello control conn
     recvServerFinishedSendClientFinished control conn

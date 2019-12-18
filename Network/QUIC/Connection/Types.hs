@@ -92,9 +92,9 @@ data Connection = Connection {
   , connectionState  :: TVar ConnectionState -- fixme: stream table
   , threadIds        :: IORef [Weak ThreadId]
   , connClientCntrl  :: IORef ClientController
-  , connToken        :: IORef Token
   , connTLSMode      :: IORef HandshakeMode13
-  , resumptionInfo   :: IORef ResumptionInfo
+  , connToken        :: IORef Token -- client only -- new or retry token
+  , resumptionInfo   :: IORef ResumptionInfo -- client only
   }
 
 newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
@@ -122,8 +122,8 @@ newConnection rl mid peercid send recv isecs =
         <*> newTVarIO NotOpen
         <*> newIORef []
         <*> newIORef nullClientController
-        <*> newIORef emptyToken
         <*> newIORef FullHandshake
+        <*> newIORef emptyToken
         <*> newIORef defaultResumptionInfo
 
 ----------------------------------------------------------------
