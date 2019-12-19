@@ -53,9 +53,8 @@ clearClientController conn = setClientController conn nullClientController
 
 ----------------------------------------------------------------
 
-getCipher :: Connection -> EncryptionLevel -> IO Cipher
-getCipher _ InitialLevel   = return defaultCipher
-getCipher Connection{..} _ = readIORef usedCipher
+getCipher :: Connection -> IO Cipher
+getCipher Connection{..} = readIORef usedCipher
 
 setCipher :: Connection -> Cipher -> IO ()
 setCipher Connection{..} cipher = writeIORef usedCipher cipher

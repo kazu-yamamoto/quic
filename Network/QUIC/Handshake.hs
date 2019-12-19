@@ -9,6 +9,7 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Types
@@ -29,12 +30,13 @@ recvCryptoData conn = do
 
 ----------------------------------------------------------------
 
-handshakeClient :: ClientConfig -> Connection -> Maybe (StreamID,ByteString)
+handshakeClient :: ClientConfig -> Connection
                 -> IO HandshakeMode13
-handshakeClient conf conn mEarlyData = do
-    control <- clientController conf $ resumptionInfo conn
+handshakeClient conf conn = do
+    let sendEarlyData = isJust $ ccEarlyData conf
+    control <- clientController conf (resumptionInfo conn) sendEarlyData
     setClientController conn control
-    sendClientHelloAndRecvServerHello control conn mEarlyData
+    sendClientHelloAndRecvServerHello control conn $ ccEarlyData conf
     recvServerFinishedSendClientFinished control conn
 
 sendClientHelloAndRecvServerHello :: ClientController -> Connection -> Maybe (StreamID,ByteString) -> IO ()

@@ -23,7 +23,9 @@ import Network.QUIC.Types
 decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Either QUICError Plain)
 decryptCrypt conn Crypt{..} lvl = do
     secret <- getRxSecret conn lvl
-    cipher <- getCipher conn lvl
+    cipher <- case lvl of
+      InitialLevel -> return defaultCipher
+      _            -> getCipher conn
     let hpKey = headerProtectionKey cipher secret
         proFlags = Flags (cryptPacket `B.index` 0)
         sampleOffset = cryptPktNumOffset + 4

@@ -29,8 +29,8 @@ sessionManager ref = SessionManager {
   where
     establish sid sdata = modifyIORef ref $ \rs -> rs { resumptionSession = Just (sid,sdata) }
 
-clientController:: ClientConfig -> IORef ResumptionInfo -> IO ClientController
-clientController ClientConfig{..} ref = newQUICClient cparams
+clientController:: ClientConfig -> IORef ResumptionInfo -> Bool -> IO ClientController
+clientController ClientConfig{..} ref sendEarlyData = newQUICClient cparams
   where
     cparams = (defaultParamsClient ccServerName "") {
         clientShared            = cshared
@@ -38,6 +38,7 @@ clientController ClientConfig{..} ref = newQUICClient cparams
       , clientSupported         = supported
       , clientDebug             = debug
       , clientWantSessionResume = resumptionSession ccResumption
+      , clientEarlyData         = if sendEarlyData then Just "" else Nothing
       }
     eQparams = encodeParametersList $ diffParameters $ confParameters ccConfig
     cshared = def {
