@@ -55,6 +55,7 @@ connect QUICClient{..} = E.handle tlserr $ do
     setCryptoOffset conn InitialLevel 0
     setCryptoOffset conn HandshakeLevel 0
     setCryptoOffset conn RTT1Level 0
+    setStreamOffset conn 0 0 -- fixme
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
@@ -119,6 +120,7 @@ accept QUICServer{..} = E.handle tlserr $ do
     setCryptoOffset conn InitialLevel 0
     setCryptoOffset conn HandshakeLevel 0
     setCryptoOffset conn RTT1Level 0
+    setStreamOffset conn 0 0 -- fixme
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn

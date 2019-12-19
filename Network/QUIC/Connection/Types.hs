@@ -53,7 +53,7 @@ data Input = InpStream StreamID ByteString
            | InpApplicationError ApplicationError ReasonPhrase
            deriving Show
 
-data Output = OutStream StreamID ByteString
+data Output = OutStream StreamID ByteString Offset
             | OutControl EncryptionLevel [Frame]
             | OutHndClientHello  ByteString (Maybe (StreamID,ByteString))
             | OutHndServerHello  ByteString ByteString
