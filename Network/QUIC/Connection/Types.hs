@@ -96,6 +96,7 @@ data Connection = Connection {
   , iniSecrets       :: IORef (TrafficSecrets InitialSecret)
   , hndSecrets       :: IORef (TrafficSecrets HandshakeSecret)
   , appSecrets       :: IORef (TrafficSecrets ApplicationSecret)
+  , earlySecret      :: IORef (Maybe (ClientTrafficSecret EarlySecret))
   -- client only
   , connClientCntrl  :: IORef ClientController
   , connToken        :: IORef Token -- new or retry token
@@ -133,6 +134,7 @@ newConnection rl myCID peerCID send recv isecs =
         <*> newIORef isecs
         <*> newIORef dummySecrets
         <*> newIORef dummySecrets
+        <*> newIORef Nothing
         -- client only
         <*> newIORef nullClientController
         <*> newIORef emptyToken

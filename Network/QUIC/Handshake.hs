@@ -38,7 +38,8 @@ handshakeClient conf conn = do
 
 sendClientHelloAndRecvServerHello :: ClientController-> Connection -> IO ()
 sendClientHelloAndRecvServerHello control conn = do
-    SendClientHello ch0 _ <- control GetClientHello
+    SendClientHello ch0 earlySec0 <- control GetClientHello
+    setEarlySecret conn earlySec0
     sendCryptoData conn $ OutHndClientHello ch0 Nothing
     (InitialLevel, sh0) <- recvCryptoData conn
     state0 <- control $ PutServerHello sh0
@@ -46,7 +47,8 @@ sendClientHelloAndRecvServerHello control conn = do
       RecvServerHello cipher hndSecs -> do
           setHandshakeSecrets conn hndSecs
           setCipher conn cipher
-      SendClientHello ch1 _ -> do
+      SendClientHello ch1 earlySec1 -> do
+          setEarlySecret conn earlySec1
           sendCryptoData conn $ OutHndClientHello ch1 Nothing
           (InitialLevel, sh1) <- recvCryptoData conn
           state1 <- control $ PutServerHello sh1
@@ -85,12 +87,14 @@ handshakeServer conf origCID conn = do
       SendRequestRetry hrr -> do
           sendCryptoData conn $ OutHndServerHelloR hrr
           (InitialLevel, ch1) <- recvCryptoData conn
-          SendServerHello sh0 exts cipher _ hndSecs <- control $ PutClientHello ch1
+          SendServerHello sh0 exts cipher earlySec hndSecs <- control $ PutClientHello ch1
+          setEarlySecret conn earlySec
           setHandshakeSecrets conn hndSecs
           setCipher conn cipher
           setParameters conn exts
           return sh0
-      SendServerHello sh0 exts cipher _ hndSecs -> do
+      SendServerHello sh0 exts cipher earlySec hndSecs -> do
+          setEarlySecret conn earlySec
           setHandshakeSecrets conn hndSecs
           setCipher conn cipher
           setParameters conn exts

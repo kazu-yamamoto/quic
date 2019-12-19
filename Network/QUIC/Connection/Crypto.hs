@@ -1,22 +1,29 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Crypto (
     checkEncryptionLevel
-  , setClientController
+  --
   , getClientController
+  , setClientController
   , clearClientController
+  --
   , getCipher
   , setCipher
+  --
   , getPeerParameters
   , setPeerParameters
   , setNegotiatedProto
+  --
+  , getTxSecret
+  , getRxSecret
+  , setEarlySecret
   , setInitialSecrets
   , setHandshakeSecrets
   , setApplicationSecrets
-  , getTxSecret
-  , getRxSecret
-  , setCryptoOffset
+  --
   , modifyCryptoOffset
+  , setCryptoOffset
   ) where
 
 import Control.Concurrent.STM
@@ -69,6 +76,9 @@ setNegotiatedProto Connection{..} malpn = writeIORef negotiatedProto malpn
 
 ----------------------------------------------------------------
 
+setEarlySecret :: Connection -> Maybe (ClientTrafficSecret EarlySecret) -> IO ()
+setEarlySecret Connection{..} msec = writeIORef earlySecret msec
+
 setInitialSecrets :: Connection -> TrafficSecrets InitialSecret -> IO ()
 setInitialSecrets Connection{..} secs = writeIORef iniSecrets secs
 
@@ -85,15 +95,15 @@ setApplicationSecrets Connection{..} secs = do
 ----------------------------------------------------------------
 
 getTxSecret :: Connection -> EncryptionLevel -> IO Secret
-getTxSecret conn RTT0Level      = undefined conn
-getTxSecret conn InitialLevel   = txInitialSecret conn
-getTxSecret conn HandshakeLevel = txHandshakeSecret conn
+getTxSecret conn InitialLevel   = txInitialSecret     conn
+getTxSecret conn RTT0Level      =  xEarlySecret       conn
+getTxSecret conn HandshakeLevel = txHandshakeSecret   conn
 getTxSecret conn RTT1Level      = txApplicationSecret conn
 
 getRxSecret :: Connection -> EncryptionLevel -> IO Secret
-getRxSecret conn RTT0Level      = undefined conn
-getRxSecret conn InitialLevel   = rxInitialSecret conn
-getRxSecret conn HandshakeLevel = rxHandshakeSecret conn
+getRxSecret conn InitialLevel   = rxInitialSecret     conn
+getRxSecret conn RTT0Level      =  xEarlySecret       conn
+getRxSecret conn HandshakeLevel = rxHandshakeSecret   conn
 getRxSecret conn RTT1Level      = rxApplicationSecret conn
 
 ----------------------------------------------------------------
@@ -108,6 +118,17 @@ rxInitialSecret conn = do
     (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ iniSecrets conn
     return $ Secret $ if isClient conn then s else c
 
+----------------------------------------------------------------
+
+xEarlySecret :: Connection -> IO Secret
+xEarlySecret conn = do
+    mc <- readIORef (earlySecret conn)
+    case mc of
+      Nothing                      -> return $ Secret ""
+      Just (ClientTrafficSecret c) -> return $ Secret c
+
+----------------------------------------------------------------
+
 txHandshakeSecret :: Connection -> IO Secret
 txHandshakeSecret conn = do
     (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ hndSecrets conn
@@ -117,6 +138,8 @@ rxHandshakeSecret :: Connection -> IO Secret
 rxHandshakeSecret conn = do
     (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ hndSecrets conn
     return $ Secret $ if isClient conn then s else c
+
+----------------------------------------------------------------
 
 txApplicationSecret :: Connection -> IO Secret
 txApplicationSecret conn = do
