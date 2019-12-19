@@ -100,7 +100,6 @@ processFrame conn lvl Ping = do
     atomically $ writeTQueue (outputQ conn) $ OutControl lvl []
     return True
 processFrame _ _ _frame        = do
-    -- This includes Ping which should be just acknowledged.
     putStrLn "FIXME: processFrame"
     print _frame
     return True
