@@ -36,7 +36,7 @@ handshakeClient conf conn = do
     sendClientHelloAndRecvServerHello control conn
     recvServerFinishedSendClientFinished control conn
 
-sendClientHelloAndRecvServerHello :: ClientController-> Connection -> IO ()
+sendClientHelloAndRecvServerHello :: ClientController -> Connection -> IO ()
 sendClientHelloAndRecvServerHello control conn = do
     SendClientHello ch0 earlySec0 <- control GetClientHello
     setEarlySecret conn earlySec0
