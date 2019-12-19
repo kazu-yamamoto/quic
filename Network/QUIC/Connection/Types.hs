@@ -9,6 +9,8 @@ import Data.Hourglass
 import Data.IORef
 import Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as PSQ
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Network.TLS.QUIC
@@ -32,6 +34,16 @@ data CloseState = CloseState {
     closeSent     :: Bool
   , closeReceived :: Bool
   } deriving (Eq, Show)
+
+----------------------------------------------------------------
+
+newtype StreamState = StreamState Offset deriving (Eq, Show)
+
+newtype StreamTable = StreamTable (Map StreamID StreamState)
+                    deriving (Eq, Show)
+
+emptyStreamTable :: StreamTable
+emptyStreamTable = StreamTable Map.empty
 
 ----------------------------------------------------------------
 
@@ -77,16 +89,14 @@ data Connection = Connection {
   , outputQ          :: OutputQ
   , retransQ         :: IORef RetransQ
   -- State
-  , connectionState  :: TVar ConnectionState -- fixme: stream table
-  -- my packet numbers intentionally using the single space
-  , packetNumber     :: IORef PacketNumber
-  -- peer's packet numbers
+  , connectionState  :: TVar ConnectionState
+  , streamTable      :: IORef StreamTable
+  -- Mine
+  , packetNumber     :: IORef PacketNumber -- the single space
+  -- Peer's
   , iniPacketNumbers :: IORef (Set PacketNumber)
   , hndPacketNumbers :: IORef (Set PacketNumber)
   , appPacketNumbers :: IORef (Set PacketNumber)
-  , iniCryptoOffset  :: IORef Offset
-  , hndCryptoOffset  :: IORef Offset
-  , appCryptoOffset  :: IORef Offset
   -- TLS
   , usedCipher       :: IORef Cipher
   , connTLSMode      :: IORef HandshakeMode13
@@ -115,15 +125,13 @@ newConnection rl myCID peerCID send recv isecs =
         <*> newIORef PSQ.empty
         -- State
         <*> newTVarIO NotOpen
-        -- my packet numbers
+        <*> newIORef emptyStreamTable
+        -- Mine
         <*> newIORef 0
-        -- peer's packet numberss
+        -- Peer's
         <*> newIORef Set.empty
         <*> newIORef Set.empty
         <*> newIORef Set.empty
-        <*> newIORef 0
-        <*> newIORef 0
-        <*> newIORef 0
         -- TLS
         <*> newIORef defaultCipher
         <*> newIORef FullHandshake

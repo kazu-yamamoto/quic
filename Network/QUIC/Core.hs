@@ -52,6 +52,9 @@ connect QUICClient{..} = E.handle tlserr $ do
     peerCID <- newCID
     conn <- clientConnection clientConfig myCID peerCID send recv
     setToken conn $ resumptionToken $ ccResumption clientConfig
+    setCryptoOffset conn InitialLevel 0
+    setCryptoOffset conn HandshakeLevel 0
+    setCryptoOffset conn RTT1Level 0
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
@@ -113,6 +116,9 @@ accept QUICServer{..} = E.handle tlserr $ do
               Nothing  -> NSB.recv s 2048 >>= decodeCryptPackets
               Just pkt -> return [pkt]
     conn <- serverConnection serverConfig myCID peerCID oCID send recv
+    setCryptoOffset conn InitialLevel 0
+    setCryptoOffset conn HandshakeLevel 0
+    setCryptoOffset conn RTT1Level 0
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn

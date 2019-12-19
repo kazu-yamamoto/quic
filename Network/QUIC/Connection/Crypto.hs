@@ -21,9 +21,6 @@ module Network.QUIC.Connection.Crypto (
   , setInitialSecrets
   , setHandshakeSecrets
   , setApplicationSecrets
-  --
-  , modifyCryptoOffset
-  , setCryptoOffset
   ) where
 
 import Control.Concurrent.STM
@@ -150,22 +147,3 @@ rxApplicationSecret :: Connection -> IO Secret
 rxApplicationSecret conn = do
     (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef $ appSecrets conn
     return $ Secret $ if isClient conn then s else c
-
-----------------------------------------------------------------
-
-setCryptoOffset :: Connection -> EncryptionLevel -> Offset -> IO ()
-setCryptoOffset conn lvl len = writeIORef ref len
-  where
-    ref = getCryptoOffset conn lvl
-
-modifyCryptoOffset :: Connection -> EncryptionLevel -> Offset -> IO Offset
-modifyCryptoOffset conn lvl len = atomicModifyIORef' ref modify
-  where
-    ref = getCryptoOffset conn lvl
-    modify off = (off + len, off)
-
-getCryptoOffset :: Connection -> EncryptionLevel -> IORef Offset
-getCryptoOffset conn InitialLevel   = iniCryptoOffset conn
-getCryptoOffset _    RTT0Level      = error "getCryptoOffset"
-getCryptoOffset conn HandshakeLevel = hndCryptoOffset conn
-getCryptoOffset conn RTT1Level      = appCryptoOffset conn
