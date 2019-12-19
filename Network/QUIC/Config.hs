@@ -38,6 +38,7 @@ data ClientConfig = ClientConfig {
   , ccALPN       :: IO (Maybe [ByteString])
   , ccValidate   :: Bool
   , ccResumption :: ResumptionInfo
+  , ccEarlyData  :: Maybe (StreamID,ByteString)
   , ccConfig     :: Config
   }
 
@@ -48,6 +49,7 @@ defaultClientConfig = ClientConfig {
   , ccALPN       = return Nothing
   , ccValidate   = False
   , ccResumption = defaultResumptionInfo
+  , ccEarlyData  = Nothing
   , ccConfig     = defaultConfig
   }
 

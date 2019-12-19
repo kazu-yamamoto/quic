@@ -29,18 +29,19 @@ recvCryptoData conn = do
 
 ----------------------------------------------------------------
 
-handshakeClient :: ClientConfig -> Connection -> IO HandshakeMode13
-handshakeClient conf conn = do
+handshakeClient :: ClientConfig -> Connection -> Maybe (StreamID,ByteString)
+                -> IO HandshakeMode13
+handshakeClient conf conn mEarlyData = do
     control <- clientController conf $ resumptionInfo conn
     setClientController conn control
-    sendClientHelloAndRecvServerHello control conn
+    sendClientHelloAndRecvServerHello control conn mEarlyData
     recvServerFinishedSendClientFinished control conn
 
-sendClientHelloAndRecvServerHello :: ClientController -> Connection -> IO ()
-sendClientHelloAndRecvServerHello control conn = do
+sendClientHelloAndRecvServerHello :: ClientController -> Connection -> Maybe (StreamID,ByteString) -> IO ()
+sendClientHelloAndRecvServerHello control conn mEarlyData = do
     SendClientHello ch0 earlySec0 <- control GetClientHello
     setEarlySecret conn earlySec0
-    sendCryptoData conn $ OutHndClientHello ch0 Nothing
+    sendCryptoData conn $ OutHndClientHello ch0 mEarlyData
     (InitialLevel, sh0) <- recvCryptoData conn
     state0 <- control $ PutServerHello sh0
     case state0 of
