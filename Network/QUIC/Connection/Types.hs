@@ -26,7 +26,7 @@ data Role = Client | Server deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
-data ConnectionState = NotOpen | Open | Closing deriving (Eq, Show)
+data ConnectionState = NotOpen | Open | Closing CloseState deriving (Eq, Show)
 
 data CloseState = CloseState {
     closeSent     :: Bool
@@ -77,7 +77,6 @@ data Connection = Connection {
   , outputQ          :: OutputQ
   , retransQ         :: IORef RetransQ
   -- State
-  , closeState       :: TVar CloseState -- fixme: stream table
   , connectionState  :: TVar ConnectionState -- fixme: stream table
   -- my packet numbers intentionally using the single space
   , packetNumber     :: IORef PacketNumber
@@ -115,7 +114,6 @@ newConnection rl myCID peerCID send recv isecs =
         <*> newTQueueIO
         <*> newIORef PSQ.empty
         -- State
-        <*> newTVarIO (CloseState False False)
         <*> newTVarIO NotOpen
         -- my packet numbers
         <*> newIORef 0

@@ -20,17 +20,24 @@ isConnectionOpen Connection{..} = atomically $ do
 ----------------------------------------------------------------
 
 setCloseSent :: Connection -> IO ()
-setCloseSent Connection{..} =
-    atomically $ modifyTVar closeState (\s -> s { closeSent = True })
+setCloseSent Connection{..} = atomically $ modifyTVar connectionState modify
+  where
+    modify (Closing cs) = Closing $ cs { closeSent = True }
+    modify os           = os
 
 setCloseReceived :: Connection -> IO ()
-setCloseReceived Connection{..} =
-    atomically $ modifyTVar closeState (\s -> s { closeReceived = True })
+setCloseReceived Connection{..} = atomically $ modifyTVar connectionState modify
+  where
+    modify (Closing cs) = Closing $ cs { closeReceived = True }
+    modify os           = os
 
 isCloseSent :: Connection -> IO Bool
-isCloseSent Connection{..} = atomically (closeSent <$> readTVar closeState)
+isCloseSent Connection{..} = atomically (chk <$> readTVar connectionState)
+  where
+    chk (Closing cs) = closeSent cs
+    chk _            = False
 
 waitClosed :: Connection -> IO ()
 waitClosed Connection{..} = atomically $ do
-    cs <- readTVar closeState
-    check (cs == CloseState True True)
+    cs <- readTVar connectionState
+    check (cs == Closing (CloseState True True))
