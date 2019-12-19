@@ -75,12 +75,24 @@ main = do
     res <- withQUICClient conf $ \qc -> do
         conn <- connect qc
         client conn `E.finally` close conn
-    void $ withQUICClient conf { ccResumption = res } $ \qc -> do
+    let conf'
+          | is0RTTPossible res = conf {
+                ccResumption = res
+              , ccEarlyData  = Just (0, "GET /index.html\r\n")
+              }
+          | otherwise = conf { ccResumption = res }
+    void $ withQUICClient conf' $ \qc -> do
         conn <- connect qc
+        when (is0RTTPossible res) $ do
+            putStrLn "------------------------ EarlyData"
+            recvData conn >>= C8.putStr
+            putStrLn "------------------------ EarlyData"
         client conn `E.finally` close conn
 
 client :: Connection -> IO ResumptionInfo
 client conn = do
+    putStrLn "------------------------"
     sendData conn "GET /index.html\r\n"
     recvData conn >>= C8.putStr
+    putStrLn "------------------------"
     getResumptionInfo conn
