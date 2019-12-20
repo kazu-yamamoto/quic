@@ -76,40 +76,36 @@ type Receive  = IO [CryptPacket]
 ----------------------------------------------------------------
 
 data Connection = Connection {
-    role             :: Role
-  , myCID            :: CID
-  , connSend         :: SendMany
-  , connRecv         :: Receive
-  , threadIds        :: IORef [Weak ThreadId]
+    role              :: Role
+  , myCID             :: CID
+  , connSend          :: SendMany
+  , connRecv          :: Receive
+  , threadIds         :: IORef [Weak ThreadId]
   -- Peer
-  , peerCID          :: IORef CID
-  , peerParams       :: IORef Parameters
+  , peerCID           :: IORef CID
+  , peerParams        :: IORef Parameters
   -- Queues
-  , inputQ           :: InputQ
-  , outputQ          :: OutputQ
-  , retransQ         :: IORef RetransQ
+  , inputQ            :: InputQ
+  , outputQ           :: OutputQ
+  , retransQ          :: IORef RetransQ
   -- State
-  , connectionState  :: TVar ConnectionState
-  , streamTable      :: IORef StreamTable
-  -- Mine
-  , packetNumber     :: IORef PacketNumber -- the single space
-  -- Peer's
-  , iniPacketNumbers :: IORef (Set PacketNumber)
-  , hndPacketNumbers :: IORef (Set PacketNumber)
-  , appPacketNumbers :: IORef (Set PacketNumber)
+  , connectionState   :: TVar ConnectionState
+  , packetNumber      :: IORef PacketNumber       -- squeezing three to one
+  , peerPacketNumbers :: IORef (Set PacketNumber) -- squeezing three to one
+  , streamTable       :: IORef StreamTable
   -- TLS
-  , usedCipher       :: IORef Cipher
-  , connTLSMode      :: IORef HandshakeMode13
-  , encryptionLevel  :: TVar EncryptionLevel -- to synchronize
-  , negotiatedProto  :: IORef (Maybe ByteString)
-  , iniSecrets       :: IORef (TrafficSecrets InitialSecret)
-  , hndSecrets       :: IORef (TrafficSecrets HandshakeSecret)
-  , appSecrets       :: IORef (TrafficSecrets ApplicationSecret)
-  , earlySecret      :: IORef (Maybe (ClientTrafficSecret EarlySecret))
+  , usedCipher        :: IORef Cipher
+  , connTLSMode       :: IORef HandshakeMode13
+  , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
+  , negotiatedProto   :: IORef (Maybe ByteString)
+  , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
+  , hndSecrets        :: IORef (TrafficSecrets HandshakeSecret)
+  , appSecrets        :: IORef (TrafficSecrets ApplicationSecret)
+  , earlySecret       :: IORef (Maybe (ClientTrafficSecret EarlySecret))
   -- client only
-  , connClientCntrl  :: IORef ClientController
-  , connToken        :: IORef Token -- new or retry token
-  , resumptionInfo   :: IORef ResumptionInfo
+  , connClientCntrl   :: IORef ClientController
+  , connToken         :: IORef Token -- new or retry token
+  , resumptionInfo    :: IORef ResumptionInfo
   }
 
 newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
@@ -125,13 +121,9 @@ newConnection rl myCID peerCID send recv isecs =
         <*> newIORef PSQ.empty
         -- State
         <*> newTVarIO NotOpen
-        <*> newIORef emptyStreamTable
-        -- Mine
         <*> newIORef 0
-        -- Peer's
         <*> newIORef Set.empty
-        <*> newIORef Set.empty
-        <*> newIORef Set.empty
+        <*> newIORef emptyStreamTable
         -- TLS
         <*> newIORef defaultCipher
         <*> newIORef FullHandshake

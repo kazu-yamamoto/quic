@@ -38,35 +38,43 @@ getPacketNumber Connection{..} = atomicModifyIORef' packetNumber inc
 -- Peer's packet numbers
 
 getPNs :: Connection -> EncryptionLevel -> IO (Set PacketNumber)
-getPNs conn lvl = readIORef ref
+getPNs Connection{..} lvl = get <$> readIORef peerPacketNumbers
   where
-    ref = getPacketNumbers conn lvl
+    get = Set.map (convert lvl) . Set.filter (range lvl)
 
 addPNs :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
-addPNs conn lvl p = atomicModifyIORef' ref add
+addPNs Connection{..} lvl pn = atomicModifyIORef' peerPacketNumbers add
   where
-    ref = getPacketNumbers conn lvl
-    add pns = (Set.insert p pns, ())
+    add pns = (Set.insert (convert lvl pn) pns, ())
 
 clearPNs :: Connection -> EncryptionLevel -> IO ()
-clearPNs conn lvl = atomicModifyIORef' ref clear
+clearPNs Connection{..} lvl = atomicModifyIORef' peerPacketNumbers clear
   where
-    ref = getPacketNumbers conn lvl
-    clear _ = (Set.empty, ())
+    clear pns = (Set.filter (not . range lvl) pns, ())
 
 updatePNs :: Connection -> EncryptionLevel -> Set PacketNumber -> IO ()
-updatePNs conn lvl pns = atomicModifyIORef' ref update
+updatePNs Connection{..} lvl pns = atomicModifyIORef' peerPacketNumbers update
   where
-    ref = getPacketNumbers conn lvl
-    update pns0 = (pns0 Set.\\ pns, ())
+    pns' = Set.map (convert lvl) pns
+    update pns0 = (pns0 Set.\\ pns', ())
 
 ----------------------------------------------------------------
 
-getPacketNumbers :: Connection -> EncryptionLevel -> IORef (Set PacketNumber)
-getPacketNumbers conn InitialLevel   = iniPacketNumbers conn
-getPacketNumbers conn RTT0Level      = appPacketNumbers conn
-getPacketNumbers conn HandshakeLevel = hndPacketNumbers conn
-getPacketNumbers conn RTT1Level      = appPacketNumbers conn
+initialMagic, handshakeMagic :: PacketNumber
+initialMagic   = -2000
+handshakeMagic = -1000
+
+convert :: EncryptionLevel -> PacketNumber -> PacketNumber
+convert InitialLevel   pn = initialMagic - pn
+convert RTT0Level      pn = pn
+convert HandshakeLevel pn = handshakeMagic - pn
+convert RTT1Level      pn = pn
+
+range :: EncryptionLevel -> PacketNumber -> Bool
+range InitialLevel   pn = pn <= initialMagic
+range RTT0Level      pn = 0 <= pn
+range HandshakeLevel pn = initialMagic < pn && pn <= handshakeMagic
+range RTT1Level      pn = 0 <= pn
 
 ----------------------------------------------------------------
 
