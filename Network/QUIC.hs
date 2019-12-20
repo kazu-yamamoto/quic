@@ -26,6 +26,7 @@ module Network.QUIC (
   -- * Types
   , Connection
   , Version(..)
+  , StreamID
   -- ** Parameters
   , Parameters(..)
   , defaultParameters
