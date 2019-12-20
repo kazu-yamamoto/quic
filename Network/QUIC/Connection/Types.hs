@@ -94,14 +94,11 @@ data Connection = Connection {
   , peerPacketNumbers :: IORef (Set PacketNumber) -- squeezing three to one
   , streamTable       :: IORef StreamTable
   -- TLS
-  , usedCipher        :: IORef Cipher
-  , connTLSMode       :: IORef HandshakeMode13
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
-  , negotiatedProto   :: IORef (Maybe ByteString)
   , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
-  , hndSecrets        :: IORef (TrafficSecrets HandshakeSecret)
-  , appSecrets        :: IORef (TrafficSecrets ApplicationSecret)
-  , earlySecret       :: IORef (Maybe (ClientTrafficSecret EarlySecret))
+  , elySecInfo        :: IORef (Maybe EarlySecretInfo)
+  , hndSecInfo        :: IORef (Maybe HandshakeSecretInfo)
+  , appSecInfo        :: IORef (Maybe ApplicationSecretInfo)
   -- client only
   , connClientCntrl   :: IORef ClientController
   , connToken         :: IORef Token -- new or retry token
@@ -125,13 +122,10 @@ newConnection rl myCID peerCID send recv isecs =
         <*> newIORef Set.empty
         <*> newIORef emptyStreamTable
         -- TLS
-        <*> newIORef defaultCipher
-        <*> newIORef FullHandshake
         <*> newTVarIO InitialLevel
-        <*> newIORef Nothing
         <*> newIORef isecs
-        <*> newIORef dummySecrets
-        <*> newIORef dummySecrets
+        <*> newIORef Nothing
+        <*> newIORef Nothing
         <*> newIORef Nothing
         -- client only
         <*> newIORef nullClientController

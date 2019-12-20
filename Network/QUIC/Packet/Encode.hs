@@ -148,9 +148,7 @@ encodeLongHeaderPP _conn wbuf pkttyp ver dCID sCID flags pn = do
 protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO ByteString
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     secret <- getTxSecret conn lvl
-    cipher <- case lvl of
-      InitialLevel -> return defaultCipher
-      _            -> getCipher conn
+    cipher <- getCipher conn lvl
     plaintext0 <- encodeFrames frames
     plaintext <- case mlen of
       Nothing -> return plaintext0

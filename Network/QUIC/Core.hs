@@ -9,7 +9,6 @@ import qualified Control.Exception as E
 import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
-import Network.TLS (cipherID)
 import Network.TLS.QUIC
 import System.Timeout
 
@@ -57,21 +56,12 @@ connect QUICClient{..} = E.handle tlserr $ do
     setCryptoOffset conn HandshakeLevel 0
     setCryptoOffset conn RTT1Level 0
     setStreamOffset conn 0 0 -- fixme
-    let mCipherId = get0RTTCipher $ ccResumption clientConfig
-    case mCipherId of
-      Nothing -> return ()
-      Just cid -> do
-          let mrcid = find (\c -> cipherID c == cid) $ confCiphers $ ccConfig clientConfig
-          case mrcid of
-            Nothing   -> return ()
-            Just rcid -> setCipher conn rcid
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
     writeIORef connref $ Just conn
-    mode <- handshakeClient clientConfig conn
-    setTLSMode conn mode
+    handshakeClient clientConfig conn
     setConnectionState conn Open
     return conn
   where
@@ -134,8 +124,7 @@ accept QUICServer{..} = E.handle tlserr $ do
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
-    mode <- handshakeServer serverConfig oCID conn
-    setTLSMode conn mode
+    handshakeServer serverConfig oCID conn
     setConnectionState conn Open
     return conn
   where
