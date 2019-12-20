@@ -28,8 +28,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
     statelessReset <- isStateLessreset conn header crypt
     if statelessReset then do
           putStrLn "Connection is reset statelessly"
-          setConnectionState conn Closing
-          setCloseReceived conn
+          setConnectionState conn $ Closing $ CloseState False True
           clearThreads conn
       else do
         eplain <- decryptCrypt conn crypt level
@@ -69,8 +68,8 @@ processFrame conn lvl (Crypto _off cdat) = do
         | otherwise -> do
               putStrLn "processFrame: Short:Crypto for server"
               return False
-processFrame _ _ NewToken{} = do
-    putStrLn "FIXME: NewToken"
+processFrame conn _ (NewToken token) = do
+    setNewToken conn token
     return True
 processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
     -- fixme: register stateless token
@@ -78,17 +77,13 @@ processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
     return True
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     atomically $ writeTQueue (inputQ conn) $ InpTransportError err ftyp reason
-    setConnectionState conn Closing
-    setCloseReceived conn
-    setCloseSent conn
+    setConnectionState conn $ Closing $ CloseState True True
     clearThreads conn
     return False
 processFrame conn _ (ConnectionCloseApp err reason) = do
     putStrLn $ "App: " ++ show err
     atomically $ writeTQueue (inputQ conn) $ InpApplicationError err reason
-    setConnectionState conn Closing
-    setCloseReceived conn
-    setCloseSent conn
+    setConnectionState conn $ Closing $ CloseState True True
     clearThreads conn
     return False
 processFrame conn RTT1Level (Stream sid _off dat fin) = do

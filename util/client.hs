@@ -18,6 +18,8 @@ data Options = Options {
     optKeyLogging :: Bool
   , optValidate :: Bool
   , optGroups :: Maybe String
+  , optResumption :: Bool
+  , opt0RTT :: Bool
   } deriving Show
 
 defaultOptions :: Options
@@ -25,6 +27,8 @@ defaultOptions = Options {
     optKeyLogging = False
   , optValidate = False
   , optGroups = Nothing
+  , optResumption = False
+  , opt0RTT = False
   }
 
 usage :: String
@@ -41,6 +45,12 @@ options = [
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
     "specify groups"
+  , Option ['r'] ["resumption"]
+    (NoArg (\o -> o { optResumption = True }))
+    "resume the previous session"
+  , Option ['z'] ["rtt0"]
+    (NoArg (\o -> o { opt0RTT = True }))
+    "resume the previous session and send early data"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -72,11 +82,34 @@ main = do
               , confGroups     = getGroups optGroups
               }
           }
-    withQUICClient conf $ \qc -> do
+    res <- withQUICClient conf $ \qc -> do
         conn <- connect qc
         client conn `E.finally` close conn
+    when (opt0RTT && not (is0RTTPossible res)) $ do
+        putStrLn "0-RTT is not allowed"
+        exitFailure
+    when (optResumption || opt0RTT) $ do
+        let rtt0 = opt0RTT && is0RTTPossible res
+        let conf'
+              | rtt0 = conf {
+                    ccResumption = res
+                  , ccEarlyData  = Just (0, "GET /index.html\r\n")
+                  }
+              | otherwise = conf { ccResumption = res }
+        void $ withQUICClient conf' $ \qc -> do
+            conn <- connect qc
+            if rtt0 then do
+                putStrLn "------------------------ Response for early data"
+                recvData conn >>= C8.putStr
+                putStrLn "------------------------ Response for early data"
+                close conn
+              else
+                void $ client conn `E.finally` close conn
 
-client :: Connection -> IO ()
+client :: Connection -> IO ResumptionInfo
 client conn = do
+    putStrLn "------------------------"
     sendData conn "GET /index.html\r\n"
     recvData conn >>= C8.putStr
+    putStrLn "------------------------"
+    getResumptionInfo conn

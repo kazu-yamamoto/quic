@@ -8,6 +8,7 @@ module Network.QUIC.TLS.Controller (
   ) where
 
 import Data.Default.Class
+import Data.IORef
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
 
@@ -18,15 +19,26 @@ import Network.QUIC.Types
 nullClientController :: ClientController
 nullClientController _ = return ClientHandshakeDone
 
-clientController:: ClientConfig -> IO ClientController
-clientController ClientConfig{..} = newQUICClient cparams
+sessionManager :: IORef ResumptionInfo -> SessionManager
+sessionManager ref = SessionManager {
+    sessionEstablish      = establish
+  , sessionResume         = \_ -> return Nothing
+  , sessionResumeOnlyOnce = \_ -> return Nothing
+  , sessionInvalidate     = \_ -> return ()
+  }
+  where
+    establish sid sdata = modifyIORef ref $ \rs -> rs { resumptionSession = Just (sid,sdata) }
+
+clientController:: ClientConfig -> IORef ResumptionInfo -> Bool -> IO ClientController
+clientController ClientConfig{..} ref sendEarlyData = newQUICClient cparams
   where
     cparams = (defaultParamsClient ccServerName "") {
         clientShared            = cshared
       , clientHooks             = hook
       , clientSupported         = supported
       , clientDebug             = debug
-      , clientWantSessionResume = ccResume
+      , clientWantSessionResume = resumptionSession ccResumption
+      , clientEarlyData         = if sendEarlyData then Just "" else Nothing
       }
     eQparams = encodeParametersList $ diffParameters $ confParameters ccConfig
     cshared = def {
@@ -35,7 +47,7 @@ clientController ClientConfig{..} = newQUICClient cparams
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
       , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
-      , sharedSessionManager = confSessionManager ccConfig
+      , sharedSessionManager = sessionManager ref
       }
     hook = def {
         onSuggestALPN = ccALPN
@@ -61,7 +73,7 @@ serverController ServerConfig{..} origCID = do
     let sshared = def {
             sharedCredentials = Credentials [cred]
           , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
-          , sharedSessionManager = confSessionManager scConfig
+          , sharedSessionManager = scSessionManager
           }
     let sparams = def {
         serverShared    = sshared

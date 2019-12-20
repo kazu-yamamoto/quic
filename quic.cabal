@@ -19,6 +19,7 @@ library
                        Network.QUIC.Connection.Crypto
                        Network.QUIC.Connection.Misc
                        Network.QUIC.Connection.State
+                       Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Transmit
                        Network.QUIC.Connection.Types
                        Network.QUIC.Core
@@ -49,6 +50,7 @@ library
                        Network.QUIC.Types.Frame
                        Network.QUIC.Types.Integer
                        Network.QUIC.Types.Packet
+                       Network.QUIC.Types.Resumption
                        Network.QUIC.Utils
   other-modules:
                        Network.QUIC.Imports

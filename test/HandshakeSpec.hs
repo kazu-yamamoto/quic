@@ -1,8 +1,7 @@
 module HandshakeSpec where
 
-
+import Control.Concurrent
 import Control.Concurrent.Async
-import qualified Control.Exception as E
 import Control.Monad
 import Data.IORef
 import Network.TLS
@@ -33,22 +32,12 @@ spec = do
                      }
             testHandshake cc sc FullHandshake
         it "can handshake in the case of resumption" $ do
-            ref <- newIORef Nothing
             smgr <- newSessionManager
-            let cc = defaultClientConfig {
-                       ccConfig = defaultConfig {
-                                    confSessionManager = sessionManager ref
-                                  }
-                     }
+            let cc = defaultClientConfig
                 sc = defaultServerConfig {
-                       scConfig = defaultConfig {
-                                    confSessionManager = smgr
-                                  }
+                       scSessionManager = smgr
                      }
-                makeCc = do
-                    msession <- readIORef ref
-                    return $ cc { ccResume = msession }
-            testHandshake2 makeCc sc (FullHandshake, PreSharedKey)
+            testHandshake2 cc sc (FullHandshake, PreSharedKey)
 
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
 testHandshake cc sc mode = void $ concurrently client server
@@ -68,29 +57,31 @@ testHandshake cc sc mode = void $ concurrently client server
         getTLSMode conn `shouldReturn` mode
         close conn
 
-testHandshake2 :: IO ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> IO ()
-testHandshake2 makeCc sc (mode1, mode2) = void $ concurrently client server
+testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> IO ()
+testHandshake2 cc1 sc (mode1, mode2) = void $ concurrently client server
   where
     sc' = sc {
             scKey  = "test/serverkey.pem"
           , scCert = "test/servercert.pem"
           }
-    handler (E.SomeException e) = print e
-    runClient cc mode = E.handle handler $ withQUICClient cc $ \qc -> do
+    runClient cc mode = withQUICClient cc $ \qc -> do
         conn <- connect qc
         isConnectionOpen conn `shouldReturn` True
         getTLSMode conn `shouldReturn` mode
+        -- waiting for NST
+        threadDelay 100000
+        res <- getResumptionInfo conn
         close conn
+        return res
     client = do
-        cc1 <- makeCc
-        runClient cc1 mode1
-        cc2 <- makeCc
-        runClient cc2 mode2
+        res <- runClient cc1 mode1
+        let cc2 = cc1 { ccResumption = res }
+        void $ runClient cc2 mode2
     runServer qs = do
         conn <- accept qs
         isConnectionOpen conn `shouldReturn` True
         close conn
-    server = E.handle handler $ withQUICServer sc' $ \qs -> do
+    server = withQUICServer sc' $ \qs -> do
         runServer qs
         runServer qs
 

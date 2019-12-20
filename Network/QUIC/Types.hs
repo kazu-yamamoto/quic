@@ -6,6 +6,7 @@ module Network.QUIC.Types (
   , module Network.QUIC.Types.Frame
   , module Network.QUIC.Types.Integer
   , module Network.QUIC.Types.Packet
+  , module Network.QUIC.Types.Resumption
   ) where
 
 import Network.QUIC.Imports
@@ -15,3 +16,4 @@ import Network.QUIC.Types.Error
 import Network.QUIC.Types.Frame
 import Network.QUIC.Types.Integer
 import Network.QUIC.Types.Packet
+import Network.QUIC.Types.Resumption

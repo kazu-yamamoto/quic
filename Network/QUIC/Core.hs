@@ -9,6 +9,7 @@ import qualified Control.Exception as E
 import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
+import Network.TLS (cipherID)
 import Network.TLS.QUIC
 import System.Timeout
 
@@ -37,7 +38,7 @@ data QUICServer = QUICServer {
 
 ----------------------------------------------------------------
 
-withQUICClient :: ClientConfig -> (QUICClient -> IO ()) -> IO ()
+withQUICClient :: ClientConfig -> (QUICClient -> IO a) -> IO a
 withQUICClient conf body = do
     let qc = QUICClient conf
     body qc
@@ -51,6 +52,19 @@ connect QUICClient{..} = E.handle tlserr $ do
     myCID   <- newCID
     peerCID <- newCID
     conn <- clientConnection clientConfig myCID peerCID send recv
+    setToken conn $ resumptionToken $ ccResumption clientConfig
+    setCryptoOffset conn InitialLevel 0
+    setCryptoOffset conn HandshakeLevel 0
+    setCryptoOffset conn RTT1Level 0
+    setStreamOffset conn 0 0 -- fixme
+    let mCipherId = get0RTTCipher $ ccResumption clientConfig
+    case mCipherId of
+      Nothing -> return ()
+      Just cid -> do
+          let mrcid = find (\c -> cipherID c == cid) $ confCiphers $ ccConfig clientConfig
+          case mrcid of
+            Nothing   -> return ()
+            Just rcid -> setCipher conn rcid
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
@@ -112,6 +126,10 @@ accept QUICServer{..} = E.handle tlserr $ do
               Nothing  -> NSB.recv s 2048 >>= decodeCryptPackets
               Just pkt -> return [pkt]
     conn <- serverConnection serverConfig myCID peerCID oCID send recv
+    setCryptoOffset conn InitialLevel 0
+    setCryptoOffset conn HandshakeLevel 0
+    setCryptoOffset conn RTT1Level 0
+    setStreamOffset conn 0 0 -- fixme
     tid0 <- forkIO $ sender conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
@@ -127,7 +145,7 @@ accept QUICServer{..} = E.handle tlserr $ do
 
 close :: Connection -> IO ()
 close conn = do
-    setConnectionState conn Closing
+    setConnectionState conn $ Closing (CloseState False False)
     let frames = [ConnectionCloseQUIC NoError 0 ""]
     atomically $ writeTQueue (outputQ conn) $ OutControl RTT1Level frames
     setCloseSent conn

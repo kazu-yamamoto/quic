@@ -19,7 +19,6 @@ data Config = Config {
   , confGroups         :: [Group]
   , confParameters     :: Parameters
   , confKeyLogging     :: Bool
-  , confSessionManager :: SessionManager
   }
 
 defaultConfig :: Config
@@ -29,7 +28,6 @@ defaultConfig = Config {
   , confGroups         = [X25519,P256,P384,P521]
   , confParameters     = defaultParameters
   , confKeyLogging     = False
-  , confSessionManager = noSessionManager
   }
 
 ----------------------------------------------------------------
@@ -39,7 +37,8 @@ data ClientConfig = ClientConfig {
   , ccPortName   :: ServiceName
   , ccALPN       :: IO (Maybe [ByteString])
   , ccValidate   :: Bool
-  , ccResume     :: Maybe (SessionID, SessionData)
+  , ccResumption :: ResumptionInfo
+  , ccEarlyData  :: Maybe (StreamID,ByteString)
   , ccConfig     :: Config
   }
 
@@ -49,27 +48,30 @@ defaultClientConfig = ClientConfig {
   , ccPortName   = "13443"
   , ccALPN       = return Nothing
   , ccValidate   = False
-  , ccResume     = Nothing
+  , ccResumption = defaultResumptionInfo
+  , ccEarlyData  = Nothing
   , ccConfig     = defaultConfig
   }
 
 ----------------------------------------------------------------
 
 data ServerConfig = ServerConfig {
-    scAddresses    :: [(IP,PortNumber)]
-  , scKey          :: FilePath
-  , scCert         :: FilePath
-  , scALPN         :: Maybe ([ByteString] -> IO ByteString)
-  , scRequireRetry :: Bool
-  , scConfig       :: Config
+    scAddresses      :: [(IP,PortNumber)]
+  , scKey            :: FilePath
+  , scCert           :: FilePath
+  , scALPN           :: Maybe ([ByteString] -> IO ByteString)
+  , scRequireRetry   :: Bool
+  , scSessionManager :: SessionManager
+  , scConfig         :: Config
   }
 
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scAddresses    = [("127.0.0.1",13443)]
-  , scKey          = "serverkey.pem"
-  , scCert         = "servercert.pem"
-  , scALPN         = Nothing
-  , scRequireRetry = False
-  , scConfig       = defaultConfig
+    scAddresses      = [("127.0.0.1",13443)]
+  , scKey            = "serverkey.pem"
+  , scCert           = "servercert.pem"
+  , scALPN           = Nothing
+  , scRequireRetry   = False
+  , scSessionManager = noSessionManager
+  , scConfig         = defaultConfig
   }

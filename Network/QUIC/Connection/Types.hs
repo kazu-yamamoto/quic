@@ -9,6 +9,8 @@ import Data.Hourglass
 import Data.IORef
 import Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as PSQ
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Network.TLS.QUIC
@@ -26,12 +28,22 @@ data Role = Client | Server deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
-data ConnectionState = NotOpen | Open | Closing deriving (Eq, Show)
+data ConnectionState = NotOpen | Open | Closing CloseState deriving (Eq, Show)
 
 data CloseState = CloseState {
     closeSent     :: Bool
   , closeReceived :: Bool
   } deriving (Eq, Show)
+
+----------------------------------------------------------------
+
+newtype StreamState = StreamState Offset deriving (Eq, Show)
+
+newtype StreamTable = StreamTable (Map StreamID StreamState)
+                    deriving (Eq, Show)
+
+emptyStreamTable :: StreamTable
+emptyStreamTable = StreamTable Map.empty
 
 ----------------------------------------------------------------
 
@@ -41,9 +53,9 @@ data Input = InpStream StreamID ByteString
            | InpApplicationError ApplicationError ReasonPhrase
            deriving Show
 
-data Output = OutStream StreamID ByteString
+data Output = OutStream StreamID ByteString Offset
             | OutControl EncryptionLevel [Frame]
-            | OutHndClientHello  ByteString (Maybe ByteString)
+            | OutHndClientHello  ByteString (Maybe (StreamID,ByteString))
             | OutHndServerHello  ByteString ByteString
             | OutHndServerHelloR ByteString
             | OutHndClientFinished ByteString
@@ -68,61 +80,71 @@ data Connection = Connection {
   , myCID            :: CID
   , connSend         :: SendMany
   , connRecv         :: Receive
-  , iniSecrets       :: IORef (TrafficSecrets InitialSecret)
-  , hndSecrets       :: IORef (TrafficSecrets HandshakeSecret)
-  , appSecrets       :: IORef (TrafficSecrets ApplicationSecret)
-  , peerParams       :: IORef Parameters
+  , threadIds        :: IORef [Weak ThreadId]
+  -- Peer
   , peerCID          :: IORef CID
-  , usedCipher       :: IORef Cipher
-  , negotiatedProto  :: IORef (Maybe ByteString)
+  , peerParams       :: IORef Parameters
+  -- Queues
   , inputQ           :: InputQ
   , outputQ          :: OutputQ
   , retransQ         :: IORef RetransQ
-  -- my packet numbers intentionally using the single space
-  , packetNumber     :: IORef PacketNumber
-  -- peer's packet numbers
+  -- State
+  , connectionState  :: TVar ConnectionState
+  , streamTable      :: IORef StreamTable
+  -- Mine
+  , packetNumber     :: IORef PacketNumber -- the single space
+  -- Peer's
   , iniPacketNumbers :: IORef (Set PacketNumber)
   , hndPacketNumbers :: IORef (Set PacketNumber)
   , appPacketNumbers :: IORef (Set PacketNumber)
-  , iniCryptoOffset  :: IORef Offset
-  , hndCryptoOffset  :: IORef Offset
-  , appCryptoOffset  :: IORef Offset
-  , encryptionLevel  :: TVar EncryptionLevel
-  , closeState       :: TVar CloseState -- fixme: stream table
-  , connectionState  :: TVar ConnectionState -- fixme: stream table
-  , threadIds        :: IORef [Weak ThreadId]
-  , connClientCntrl  :: IORef ClientController
-  , connToken        :: IORef Token
+  -- TLS
+  , usedCipher       :: IORef Cipher
   , connTLSMode      :: IORef HandshakeMode13
+  , encryptionLevel  :: TVar EncryptionLevel -- to synchronize
+  , negotiatedProto  :: IORef (Maybe ByteString)
+  , iniSecrets       :: IORef (TrafficSecrets InitialSecret)
+  , hndSecrets       :: IORef (TrafficSecrets HandshakeSecret)
+  , appSecrets       :: IORef (TrafficSecrets ApplicationSecret)
+  , earlySecret      :: IORef (Maybe (ClientTrafficSecret EarlySecret))
+  -- client only
+  , connClientCntrl  :: IORef ClientController
+  , connToken        :: IORef Token -- new or retry token
+  , resumptionInfo   :: IORef ResumptionInfo
   }
 
 newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
-newConnection rl mid peercid send recv isecs =
-    Connection rl mid send recv
-        <$> newIORef isecs
-        <*> newIORef dummySecrets
-        <*> newIORef dummySecrets
+newConnection rl myCID peerCID send recv isecs =
+    Connection rl myCID send recv
+        <$> newIORef []
+        -- Peer
+        <*> newIORef peerCID
         <*> newIORef defaultParameters
-        <*> newIORef peercid
-        <*> newIORef defaultCipher
-        <*> newIORef Nothing
+        -- Queues
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newIORef PSQ.empty
-        <*> newIORef 0
-        <*> newIORef Set.empty
-        <*> newIORef Set.empty
-        <*> newIORef Set.empty
-        <*> newIORef 0
-        <*> newIORef 0
-        <*> newIORef 0
-        <*> newTVarIO InitialLevel
-        <*> newTVarIO (CloseState False False)
+        -- State
         <*> newTVarIO NotOpen
-        <*> newIORef []
+        <*> newIORef emptyStreamTable
+        -- Mine
+        <*> newIORef 0
+        -- Peer's
+        <*> newIORef Set.empty
+        <*> newIORef Set.empty
+        <*> newIORef Set.empty
+        -- TLS
+        <*> newIORef defaultCipher
+        <*> newIORef FullHandshake
+        <*> newTVarIO InitialLevel
+        <*> newIORef Nothing
+        <*> newIORef isecs
+        <*> newIORef dummySecrets
+        <*> newIORef dummySecrets
+        <*> newIORef Nothing
+        -- client only
         <*> newIORef nullClientController
         <*> newIORef emptyToken
-        <*> newIORef FullHandshake
+        <*> newIORef defaultResumptionInfo
 
 ----------------------------------------------------------------
 

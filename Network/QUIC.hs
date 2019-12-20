@@ -30,6 +30,10 @@ module Network.QUIC (
   , Parameters(..)
   , defaultParameters
   , exampleParameters
+  -- * Information
+  , ResumptionInfo
+  , getResumptionInfo
+  , is0RTTPossible
   ) where
 
 import Network.QUIC.Config
