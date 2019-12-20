@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Network.QUIC.Core where
 
@@ -56,9 +57,9 @@ connect QUICClient{..} = E.handle tlserr $ do
     setCryptoOffset conn HandshakeLevel 0
     setCryptoOffset conn RTT1Level 0
     setStreamOffset conn 0 0 -- fixme
-    tid0 <- forkIO $ sender conn
-    tid1 <- forkIO $ receiver conn
-    tid2 <- forkIO $ resender conn
+    tid0 <- forkIO (sender   conn `E.catch` reportError)
+    tid1 <- forkIO (receiver conn `E.catch` reportError)
+    tid2 <- forkIO (resender conn `E.catch` reportError)
     setThreadIds conn [tid0,tid1,tid2]
     writeIORef connref $ Just conn
     handshakeClient clientConfig conn
@@ -66,6 +67,11 @@ connect QUICClient{..} = E.handle tlserr $ do
     return conn
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
+
+reportError :: E.SomeException -> IO ()
+reportError e
+  | Just E.ThreadKilled <- E.fromException e = return ()
+  | otherwise                                = print e
 
 recvClient :: NS.Socket -> IORef (Maybe Connection) -> IO [CryptPacket]
 recvClient s connref = do
