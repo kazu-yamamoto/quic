@@ -59,7 +59,6 @@ processFrame conn lvl (Crypto _off cdat) = do
           return True
       RTT1Level
         | isClient conn -> do
-              -- fixme: checkint key phase
               control <- getClientController conn
               RecvSessionTicket   <- control $ PutSessionTicket cdat
               ClientHandshakeDone <- control ExitClient
