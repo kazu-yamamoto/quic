@@ -82,25 +82,7 @@ recvServerFinishedSendClientFinished control conn = loop
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     control <- serverController conf origCID
-    (InitialLevel, ch) <- recvCryptoData conn
-    state <- control $ PutClientHello ch
-    sh <- case state of
-      SendRequestRetry hrr -> do
-          sendCryptoData conn $ OutHndServerHelloR hrr
-          (InitialLevel, ch1) <- recvCryptoData conn
-          SendServerHello sh0 exts elySecInf hndSecInf <- control $ PutClientHello ch1
-          setEarlySecretInfo conn elySecInf
-          setHandshakeSecretInfo conn hndSecInf
-          setEncryptionLevel conn HandshakeLevel
-          setParameters conn exts
-          return sh0
-      SendServerHello sh0 exts elySecInf hndSecInf -> do
-          setEarlySecretInfo conn elySecInf
-          setHandshakeSecretInfo conn hndSecInf
-          setEncryptionLevel conn HandshakeLevel
-          setParameters conn exts
-          return sh0
-      _ -> E.throwIO $ HandshakeFailed "handshakeServer"
+    sh <- recvClientHello control conn
     SendServerFinished sf appSecInf <- control GetServerFinished
     setApplicationSecretInfo conn appSecInf
     setEncryptionLevel conn RTT1Level
@@ -110,6 +92,24 @@ handshakeServer conf origCID conn = do
     sendCryptoData conn $ OutHndServerNST nst
     ServerHandshakeDone <- control ExitServer
     return ()
+
+recvClientHello :: ServerController -> Connection -> IO ServerHello
+recvClientHello control conn = do
+    (InitialLevel, ch) <- recvCryptoData conn
+    state <- control $ PutClientHello ch
+    case state of
+      SendRequestRetry hrr -> do
+          sendCryptoData conn $ OutHndServerHelloR hrr
+          recvClientHello control conn
+      SendServerHello sh0 exts elySecInf hndSecInf -> do
+          setEarlySecretInfo conn elySecInf
+          setHandshakeSecretInfo conn hndSecInf
+          setEncryptionLevel conn HandshakeLevel
+          setParameters conn exts
+          return sh0
+      ServerNeedsMore ->
+          recvClientHello control conn
+      _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
 setParameters :: Connection -> [ExtensionRaw] -> IO ()
 setParameters conn [ExtensionRaw 0xffa5 params] = do
