@@ -4,6 +4,7 @@
 module Main where
 
 import Control.Concurrent
+import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString.Char8 as C8
 import System.Console.GetOpt
@@ -84,8 +85,10 @@ main = do
               }
           }
     withQUICServer conf $ \qs -> forever $ do
-        conn <- accept qs
-        void $ forkFinally (server conn) (\_ -> close conn)
+        econn <- E.try $ accept qs
+        case econn of
+          Left (E.SomeException _) -> return ()
+          Right conn -> void $ forkFinally (server conn) (\_ -> close conn)
 
 server :: Connection -> IO ()
 server conn = loop
