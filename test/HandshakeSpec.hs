@@ -54,6 +54,7 @@ testHandshake cc sc mode = void $ concurrently client server
     server = withQUICServer sc' $ \qs -> do
         conn <- accept qs
         isConnectionOpen conn `shouldReturn` True
+        threadDelay 100000 -- waiting for CF
         getTLSMode conn `shouldReturn` mode
         close conn
 
@@ -68,8 +69,7 @@ testHandshake2 cc1 sc (mode1, mode2) = void $ concurrently client server
         conn <- connect qc
         isConnectionOpen conn `shouldReturn` True
         getTLSMode conn `shouldReturn` mode
-        -- waiting for NST
-        threadDelay 100000
+        threadDelay 100000 -- waiting for NST
         res <- getResumptionInfo conn
         close conn
         return res
@@ -80,6 +80,7 @@ testHandshake2 cc1 sc (mode1, mode2) = void $ concurrently client server
     runServer qs = do
         conn <- accept qs
         isConnectionOpen conn `shouldReturn` True
+        threadDelay 100000 -- waiting for CF
         close conn
     server = withQUICServer sc' $ \qs -> do
         runServer qs

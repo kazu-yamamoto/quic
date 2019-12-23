@@ -93,7 +93,9 @@ handshakeServer conf origCID conn = do
 recvClientHello :: ServerController -> Connection -> Bool -> IO ServerHello
 recvClientHello control conn reqZero = do
     (InitialLevel, ch, off) <- recvCryptoData conn
-    when (reqZero && off /= 0) $ E.throwIO $ HandshakeFailed "CH fragment"
+    -- fixme: TLS hello retry: off /= 0
+    -- fixme: TLS hello fragment : off /= 0
+--    when (reqZero && off /= 0) $ E.throwIO $ HandshakeFailed "CH fragment"
     if not reqZero && off == 0 then
         recvClientHello control conn False
       else do
