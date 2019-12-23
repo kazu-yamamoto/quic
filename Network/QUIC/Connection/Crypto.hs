@@ -78,11 +78,15 @@ clearServerController conn = setServerController conn nullServerController
 getCipher :: Connection -> EncryptionLevel -> IO Cipher
 getCipher _ InitialLevel = return defaultCipher
 getCipher Connection{..} RTT0Level = do
-    Just (EarlySecretInfo cipher _) <- readIORef elySecInfo
-    return cipher
+    mx <- readIORef elySecInfo
+    case mx of
+      Just (EarlySecretInfo cipher _) -> return cipher
+      Nothing -> return defaultCipher
 getCipher Connection{..} _ = do
-    Just (HandshakeSecretInfo cipher _) <- readIORef hndSecInfo
-    return cipher
+    mx <- readIORef hndSecInfo
+    case mx of
+      Just (HandshakeSecretInfo cipher _) -> return cipher
+      Nothing -> return defaultCipher
 
 setEarlySecretInfo :: Connection -> Maybe EarlySecretInfo -> IO ()
 setEarlySecretInfo Connection{..} minfo = writeIORef elySecInfo minfo
