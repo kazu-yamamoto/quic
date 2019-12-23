@@ -8,6 +8,10 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString.Char8 as C8
+import Data.IORef
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Network.TLS (SessionManager(..))
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit
@@ -73,12 +77,14 @@ main = do
     (Options{..}, ips) <- compilerOpts args
     when (length ips /= 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
     let [addr,port] = ips
+    smgr <- newSessionManager
     let conf = defaultServerConfig {
             scAddresses    = [(read addr, read port)]
           , scKey          = optKeyFile
           , scCert         = optCertFile
           , scALPN         = Just (\_ -> return "hq-24")
           , scRequireRetry = optRetry
+          , scSessionManager = smgr
           , scConfig     = defaultConfig {
                 confParameters = exampleParameters
               , confKeyLogging = optKeyLogging
@@ -104,3 +110,15 @@ server conn = loop
             C8.putStr bs
             sendData conn "<html><body>Hello world!</body></html>\n"
             server conn
+
+newSessionManager :: IO SessionManager
+newSessionManager = sessionManager <$> newIORef Map.empty
+
+sessionManager ref = SessionManager {
+    sessionResume = \key -> Map.lookup key <$> readIORef ref
+  , sessionResumeOnlyOnce = \key -> Map.lookup key <$> readIORef ref
+  , sessionEstablish = \key val -> atomicModifyIORef' ref $ \m ->
+      (Map.insert key val m, ())
+  , sessionInvalidate = \key -> atomicModifyIORef' ref $ \m ->
+      (Map.delete key m, ())
+  }
