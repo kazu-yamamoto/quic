@@ -5,6 +5,7 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import qualified Data.ByteString as B
 import Control.Concurrent.STM
 import Network.TLS.QUIC
 
@@ -48,14 +49,26 @@ processFrame conn _ (Ack ackInfo _) = do
 processFrame conn lvl (Crypto off cdat) = do
     case lvl of
       InitialLevel   -> do
-          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat off emptyToken
+          atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
           return True
       RTT0Level -> do
           putStrLn $  "processFrame: invalid packet type " ++ show lvl
           return False
-      HandshakeLevel -> do
-          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat off emptyToken
-          return True
+      HandshakeLevel
+        | not (isClient conn) -> do
+              if (cdat `B.index` 0) == 20 then do -- fixme: fragmented
+                  control <- getServerController conn
+                  SendSessionTicket nst <- control $ PutClientFinished cdat
+                  -- fixme: vs sendCryptoData
+                  atomically $ writeTQueue (outputQ conn) $ OutHndServerNST nst
+                  ServerHandshakeDone <- control ExitServer
+                  clearServerController conn
+                else
+                  atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
+              return True
+        | otherwise -> do
+              atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
+              return True
       RTT1Level
         | isClient conn -> do
               control <- getClientController conn
@@ -84,6 +97,11 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setConnectionState conn $ Closing $ CloseState True True
     clearThreads conn
     return False
+processFrame conn RTT0Level (Stream sid _off dat fin) = do
+    -- fixme _off
+    atomically $ writeTQueue (inputQ conn) $ InpStream sid dat
+    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ InpStream sid ""
+    return True
 processFrame conn RTT1Level (Stream sid _off dat fin) = do
     -- fixme _off
     atomically $ writeTQueue (inputQ conn) $ InpStream sid dat

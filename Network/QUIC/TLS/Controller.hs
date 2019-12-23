@@ -4,6 +4,7 @@
 module Network.QUIC.TLS.Controller (
     nullClientController
   , clientController
+  , nullServerController
   , serverController
   ) where
 
@@ -57,6 +58,9 @@ clientController ClientConfig{..} establish sendEarlyData = newQUICClient cparam
     debug = def {
         debugKeyLogger = if confKeyLogging ccConfig then putStrLn else \_ -> return ()
       }
+
+nullServerController :: ServerController
+nullServerController _ = return ServerHandshakeDone
 
 serverController :: ServerConfig
                  -> OrigCID

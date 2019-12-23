@@ -67,9 +67,7 @@ setNewToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci {
 ----------------------------------------------------------------
 
 setServerRoleInfo :: Connection -> (CID -> IO ()) -> (CID -> IO ()) -> IO ()
-setServerRoleInfo Connection{..} regisrer unregister = writeIORef roleInfo si
-  where
-    si = ServerInfo {
-        routeRegister = regisrer
-      , routeUnregister = unregister
-      }
+setServerRoleInfo Connection{..} regisrer unregister = modifyIORef' roleInfo $ \si -> si {
+    routeRegister = regisrer
+  , routeUnregister = unregister
+  }

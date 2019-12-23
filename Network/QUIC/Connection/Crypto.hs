@@ -9,6 +9,10 @@ module Network.QUIC.Connection.Crypto (
   , setClientController
   , clearClientController
   --
+  , getServerController
+  , setServerController
+  , clearServerController
+  --
   , getPeerParameters
   , setPeerParameters
   --
@@ -55,6 +59,19 @@ getClientController Connection{..} = connClientCntrl <$> readIORef roleInfo
 
 clearClientController :: Connection -> IO ()
 clearClientController conn = setClientController conn nullClientController
+
+
+----------------------------------------------------------------
+
+setServerController :: Connection -> ServerController -> IO ()
+setServerController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
+  ci {connServerCntrl = ctl }
+
+getServerController :: Connection -> IO ServerController
+getServerController Connection{..} = connServerCntrl <$> readIORef roleInfo
+
+clearServerController :: Connection -> IO ()
+clearServerController conn = setServerController conn nullServerController
 
 ----------------------------------------------------------------
 

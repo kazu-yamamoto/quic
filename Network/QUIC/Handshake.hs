@@ -21,7 +21,7 @@ sendCryptoData conn out = atomically $ writeTQueue (outputQ conn) out
 
 recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString, Offset)
 recvCryptoData conn = do
-    dat <- atomically $ readTQueue (inputQ conn)
+    dat <- atomically $ readTQueue (cryptoQ conn)
     case dat of
       InpHandshake lvl bs off _  -> return (lvl, bs, off)
       InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
@@ -82,15 +82,12 @@ recvServerFinishedSendClientFinished control conn = loop
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     control <- serverController conf origCID
+    setServerController conn control
     sh <- recvClientHello control conn True
     SendServerFinished sf appSecInf <- control GetServerFinished
     setApplicationSecretInfo conn appSecInf
     setEncryptionLevel conn RTT1Level
     sendCryptoData conn $ OutHndServerHello sh sf
-    (HandshakeLevel, cf, _) <- recvCryptoData conn
-    SendSessionTicket nst <- control $ PutClientFinished cf
-    sendCryptoData conn $ OutHndServerNST nst
-    ServerHandshakeDone <- control ExitServer
     return ()
 
 recvClientHello :: ServerController -> Connection -> Bool -> IO ServerHello

@@ -79,7 +79,8 @@ data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
                            , clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
                            }
-              | ServerInfo { routeRegister   :: CID -> IO ()
+              | ServerInfo { connServerCntrl :: ServerController
+                           , routeRegister   :: CID -> IO ()
                            , routeUnregister :: CID -> IO ()
                            }
 
@@ -92,7 +93,8 @@ defaultClientInfo = ClientInfo {
 
 defaultServerInfo :: RoleInfo
 defaultServerInfo = ServerInfo {
-    routeRegister = \_ -> return ()
+    connServerCntrl = nullServerController
+  , routeRegister = \_ -> return ()
   , routeUnregister = \_ -> return ()
   }
 
@@ -110,6 +112,7 @@ data Connection = Connection {
   , peerParams        :: IORef Parameters
   -- Queues
   , inputQ            :: InputQ
+  , cryptoQ           :: InputQ
   , outputQ           :: OutputQ
   , retransQ          :: IORef RetransQ
   -- State
@@ -135,6 +138,7 @@ newConnection rl myCID peerCID send recv cls isecs =
         <*> newIORef peerCID
         <*> newIORef defaultParameters
         -- Queues
+        <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newIORef PSQ.empty
