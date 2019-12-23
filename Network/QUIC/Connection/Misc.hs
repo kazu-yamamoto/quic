@@ -41,10 +41,10 @@ clearThreads conn = do
 
 setToken :: Connection -> Token -> IO ()
 setToken conn token =
-    modifyIORef' (roleInfo conn) $ \ci -> ci { connToken = token }
+    modifyIORef' (roleInfo conn) $ \ci -> ci { clientInitialToken = token }
 
 getToken :: Connection -> IO Token
-getToken conn = connToken <$> readIORef (roleInfo conn)
+getToken conn = clientInitialToken <$> readIORef (roleInfo conn)
 
 ----------------------------------------------------------------
 
