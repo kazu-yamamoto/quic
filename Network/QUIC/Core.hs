@@ -149,5 +149,6 @@ close conn = do
     atomically $ writeTQueue (outputQ conn) $ OutControl RTT1Level frames
     setCloseSent conn
     void $ timeout 100000 $ waitClosed conn -- fixme: timeout
-    connClose conn
     clearThreads conn
+    -- close the socket after threads reading/writing the socket die.
+    connClose conn
