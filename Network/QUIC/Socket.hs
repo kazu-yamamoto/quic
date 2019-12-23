@@ -1,5 +1,6 @@
 module Network.QUIC.Socket where
 
+import qualified Control.Exception as E
 import Data.IP hiding (addr)
 import Network.Socket
 
@@ -18,9 +19,11 @@ udpServerListenSocket ip = do
     let sa = toSockAddr ip
         family = sockAddrFamily sa
     s <- socket family Datagram defaultProtocol
-    setSocketOption s ReuseAddr 1
---    setSocketOption s IPv6Only 1 -- fixme
-    bind s sa
+    do {
+        setSocketOption s ReuseAddr 1
+--      ; setSocketOption s IPv6Only 1 -- fixme
+      ; bind s sa
+    } `E.onException` close s
     return (s,sa)
 
 udpServerConnectedSocket :: SockAddr -> SockAddr -> IO Socket
@@ -28,9 +31,11 @@ udpServerConnectedSocket mysa peersa = do
     let family = sockAddrFamily mysa
         anysa  = anySockAddr mysa
     s <- socket family Datagram defaultProtocol
-    setSocketOption s ReuseAddr 1
-    bind s anysa      -- (UDP, *:13443, *:*)
-    connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
+    do {
+        setSocketOption s ReuseAddr 1
+      ; bind s anysa      -- (UDP, *:13443, *:*)
+      ; connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
+    } `E.onException` close s
     return s
 
 udpClientConnectedSocket :: HostName -> ServiceName -> IO Socket
@@ -40,5 +45,5 @@ udpClientConnectedSocket host port = do
             }
     addr <- head <$> getAddrInfo (Just hints) (Just host) (Just port)
     s <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-    connect s $ addrAddress addr
+    connect s (addrAddress addr) `E.onException` close s
     return s

@@ -103,6 +103,7 @@ data Connection = Connection {
   , myCID             :: CID
   , connSend          :: SendMany
   , connRecv          :: Receive
+  , connClose         :: IO ()
   , threadIds         :: IORef [Weak ThreadId]
   -- Peer
   , peerCID           :: IORef CID
@@ -126,9 +127,9 @@ data Connection = Connection {
   , roleInfo          :: IORef RoleInfo
   }
 
-newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
-newConnection rl myCID peerCID send recv isecs =
-    Connection rl myCID send recv
+newConnection :: Role -> CID -> CID -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
+newConnection rl myCID peerCID send recv cls isecs =
+    Connection rl myCID send recv cls
         <$> newIORef []
         -- Peer
         <*> newIORef peerCID
@@ -158,20 +159,20 @@ newConnection rl myCID peerCID send recv isecs =
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> CID -> CID
-                 -> SendMany -> Receive -> IO Connection
-clientConnection ClientConfig{..} myCID peerCID send recv = do
+                 -> SendMany -> Receive -> IO () -> IO Connection
+clientConnection ClientConfig{..} myCID peerCID send recv cls = do
     let ver = confVersion ccConfig
         isecs = initialSecrets ver peerCID
-    newConnection Client myCID peerCID send recv isecs
+    newConnection Client myCID peerCID send recv cls isecs
 
 serverConnection :: ServerConfig -> CID -> CID -> OrigCID
-                 -> SendMany -> Receive -> IO Connection
-serverConnection ServerConfig{..} myCID peerCID origCID send recv = do
+                 -> SendMany -> Receive -> IO () -> IO Connection
+serverConnection ServerConfig{..} myCID peerCID origCID send recv cls = do
     let ver = confVersion scConfig
         isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    newConnection Server myCID peerCID send recv isecs
+    newConnection Server myCID peerCID send recv cls isecs
 
 ----------------------------------------------------------------
 

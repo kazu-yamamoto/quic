@@ -49,9 +49,10 @@ connect QUICClient{..} = E.handle tlserr $ do
     connref <- newIORef Nothing
     let send bss = void $ NSB.sendMany s bss
         recv     = recvClient s connref
+        cls      = NS.close s
     myCID   <- newCID
     peerCID <- newCID
-    conn <- clientConnection clientConfig myCID peerCID send recv
+    conn <- clientConnection clientConfig myCID peerCID send recv cls
     setToken conn $ resumptionToken $ ccResumption clientConfig
     setCryptoOffset conn InitialLevel 0
     setCryptoOffset conn HandshakeLevel 0
@@ -121,7 +122,8 @@ accept QUICServer{..} = E.handle tlserr $ do
             case mpkt of
               Nothing  -> NSB.recv s 2048 >>= decodeCryptPackets
               Just pkt -> return [pkt]
-    conn <- serverConnection serverConfig myCID peerCID oCID send recv
+        cls = NS.close s
+    conn <- serverConnection serverConfig myCID peerCID oCID send recv cls
     setCryptoOffset conn InitialLevel 0
     setCryptoOffset conn HandshakeLevel 0
     setCryptoOffset conn RTT1Level 0
@@ -147,4 +149,5 @@ close conn = do
     atomically $ writeTQueue (outputQ conn) $ OutControl RTT1Level frames
     setCloseSent conn
     void $ timeout 100000 $ waitClosed conn -- fixme: timeout
+    connClose conn
     clearThreads conn
