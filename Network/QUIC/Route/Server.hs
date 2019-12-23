@@ -56,6 +56,15 @@ supportedVersions = [Draft24, Draft23]
 
 ----------------------------------------------------------------
 
+lookupRoute :: IORef RouteTable -> CID -> IO (Maybe (TQueue CryptPacket))
+lookupRoute tbl cid = M.lookup cid <$> readIORef tbl
+
+registerRoute :: IORef RouteTable -> TQueue CryptPacket -> CID -> IO ()
+registerRoute tbl q cid = atomicModifyIORef' tbl $ \rt' -> (M.insert cid q rt', ())
+
+unregisterRoute :: IORef RouteTable -> CID -> IO ()
+unregisterRoute tbl cid = atomicModifyIORef' tbl $ \rt' -> (M.delete cid rt', ())
+
 -- fixme: deleting unnecessary Entry
 dispatch :: ServerConfig -> ServerRoute -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> IO ()
 dispatch ServerConfig{..} ServerRoute{..}
@@ -65,8 +74,7 @@ dispatch ServerConfig{..} ServerRoute{..}
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (delete ver supportedVersions)
         send bss
   | token == "" = do
-        rt <- readIORef routeTable
-        let mroute = M.lookup dCID rt
+        mroute <- lookupRoute routeTable dCID
         case mroute of
           Nothing -> do
               newdCID <- newCID
@@ -77,7 +85,7 @@ dispatch ServerConfig{..} ServerRoute{..}
                   send bss
                 else do
                   q <- newTQueueIO
-                  atomicModifyIORef' routeTable $ \rt' -> (M.insert newdCID q rt', ())
+                  registerRoute routeTable q newdCID
                   -- fixme: check listen length
                   atomically $ writeTQueue q cpkt
                   let ent = Accept newdCID sCID (OCFirst dCID) mysa peersa q
@@ -92,14 +100,13 @@ dispatch ServerConfig{..} ServerRoute{..}
               when (dCID /= localCID) $ error "dispatch: fixme"
               when (sCID /= remoteCID) $ error "dispatch: fixme"
               q <- newTQueueIO
-              atomicModifyIORef' routeTable $ \rt' -> (M.insert dCID q rt', ())
+              registerRoute routeTable q dCID
               -- fixme: check listen length
               atomically $ writeTQueue q cpkt
               let ent = Accept dCID sCID (OCRetry origLocalCID) mysa peersa q
               atomically $ writeTQueue acceptQueue ent
 dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ = do
-    rt <- readIORef routeTable
-    let mroute = M.lookup dCID rt
+    mroute <- lookupRoute routeTable dCID
     case mroute of
       Nothing -> pathValidation
       Just _  -> return () -- connected socket is done? No. fixme.
