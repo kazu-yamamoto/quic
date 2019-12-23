@@ -19,16 +19,17 @@ spec = do
         it "describes example of Client Initial draft 24" $ do
             let serverCID = makeCID $ dec16s "8394c8f03e515708"
                 clientCID = makeCID ""
-                send = \_ -> return ()
+                send _ = return ()
                 -- dummy
                 recv = return [CryptPacket (Short $ CID "") (Crypt 0 "")]
+                cls = return ()
             let clientConf = defaultClientConfig
-            clientConn <- clientConnection clientConf clientCID serverCID send recv
+            clientConn <- clientConnection clientConf clientCID serverCID send recv cls
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
                   }
-            serverConn <- serverConnection serverConf serverCID clientCID (OCFirst serverCID) send recv
+            serverConn <- serverConnection serverConf serverCID clientCID (OCFirst serverCID) send recv cls
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Right plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain
