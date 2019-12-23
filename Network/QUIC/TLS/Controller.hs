@@ -77,6 +77,7 @@ serverController ServerConfig{..} origCID = do
       , serverHooks     = hook
       , serverSupported = supported
       , serverDebug     = debug
+      , serverEarlyDataSize = if scEarlyDataSize > 0 then 0xffffffff else 0
       }
     newQUICServer sparams
   where

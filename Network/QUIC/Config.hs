@@ -62,6 +62,7 @@ data ServerConfig = ServerConfig {
   , scALPN           :: Maybe ([ByteString] -> IO ByteString)
   , scRequireRetry   :: Bool
   , scSessionManager :: SessionManager
+  , scEarlyDataSize  :: Int
   , scConfig         :: Config
   }
 
@@ -73,5 +74,6 @@ defaultServerConfig = ServerConfig {
   , scALPN           = Nothing
   , scRequireRetry   = False
   , scSessionManager = noSessionManager
+  , scEarlyDataSize  = 0
   , scConfig         = defaultConfig
   }

@@ -42,9 +42,9 @@ type RouteTable = Map CID (TQueue CryptPacket)
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
 router conf route (s,mysa) = forever $ do
     (bs0,peersa) <- recv
-    (pkt, _bs1) <- decodePacket bs0 -- fixme: _bs1
+    (pkt, bs0RTT) <- decodePacket bs0
     let send bs = void $ NBS.sendTo s bs peersa
-    dispatch conf route pkt mysa peersa send
+    dispatch conf route pkt mysa peersa send bs0RTT
   where
     recv = NBS.recvFrom s 2048
 
@@ -70,10 +70,10 @@ unregisterRoute tbl cid = atomicModifyIORef' tbl $ \rt' -> (M.delete cid rt', ()
 -- Rather, each fragment packet is put into its own queue.
 -- For the first fragment, handshake would success if others are retransmitted.
 -- For the other fragments, handshake will fail since offset is not 0.
-dispatch :: ServerConfig -> ServerRoute -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> IO ()
+dispatch :: ServerConfig -> ServerRoute -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> IO ()
 dispatch ServerConfig{..} ServerRoute{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
-         mysa peersa send
+         mysa peersa send bs0RTT
   | ver /= currentDraft && ver `elem` supportedVersions = do
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (delete ver supportedVersions)
         send bss
@@ -91,6 +91,9 @@ dispatch ServerConfig{..} ServerRoute{..}
                   q <- newTQueueIO
                   -- fixme: check listen length
                   atomically $ writeTQueue q cpkt
+                  when (bs0RTT /= "") $ do
+                      (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
+                      atomically $ writeTQueue q cpktRTT0
                   let ent = Accept newdCID sCID (OCFirst dCID) mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable)
                   atomically $ writeTQueue acceptQueue ent
           Just q -> atomically $ writeTQueue q cpkt -- resend packets
@@ -107,9 +110,9 @@ dispatch ServerConfig{..} ServerRoute{..}
               atomically $ writeTQueue q cpkt
               let ent = Accept dCID sCID (OCRetry origLocalCID) mysa peersa q  (registerRoute routeTable q) (unregisterRoute routeTable)
               atomically $ writeTQueue acceptQueue ent
-dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ = do
+dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ _ = do
     mroute <- lookupRoute routeTable dCID
     case mroute of
       Nothing -> pathValidation
       Just _  -> return () -- connected socket is done? No. fixme.
-dispatch _ _ _ _ _ _ = return ()
+dispatch _ _ _ _ _ _ _ = return ()
