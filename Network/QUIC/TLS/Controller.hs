@@ -8,7 +8,6 @@ module Network.QUIC.TLS.Controller (
   ) where
 
 import Data.Default.Class
-import Data.IORef
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
 
@@ -19,18 +18,16 @@ import Network.QUIC.Types
 nullClientController :: ClientController
 nullClientController _ = return ClientHandshakeDone
 
-sessionManager :: IORef ResumptionInfo -> SessionManager
-sessionManager ref = SessionManager {
+sessionManager :: SessionEstablish -> SessionManager
+sessionManager establish = SessionManager {
     sessionEstablish      = establish
   , sessionResume         = \_ -> return Nothing
   , sessionResumeOnlyOnce = \_ -> return Nothing
   , sessionInvalidate     = \_ -> return ()
   }
-  where
-    establish sid sdata = modifyIORef ref $ \rs -> rs { resumptionSession = Just (sid,sdata) }
 
-clientController:: ClientConfig -> IORef ResumptionInfo -> Bool -> IO ClientController
-clientController ClientConfig{..} ref sendEarlyData = newQUICClient cparams
+clientController:: ClientConfig -> SessionEstablish -> Bool -> IO ClientController
+clientController ClientConfig{..} establish sendEarlyData = newQUICClient cparams
   where
     cparams = (defaultParamsClient ccServerName "") {
         clientShared            = cshared
@@ -47,7 +44,7 @@ clientController ClientConfig{..} ref sendEarlyData = newQUICClient cparams
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
       , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
-      , sharedSessionManager = sessionManager ref
+      , sharedSessionManager = sessionManager establish
       }
     hook = def {
         onSuggestALPN = ccALPN

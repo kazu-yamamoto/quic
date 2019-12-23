@@ -75,6 +75,29 @@ type Receive  = IO [CryptPacket]
 
 ----------------------------------------------------------------
 
+data RoleInfo = ClientInfo { connClientCntrl   :: ClientController
+                           , connToken         :: Token -- new or retry token
+                           , resumptionInfo    :: ResumptionInfo
+                           }
+              | ServerInfo { routeRegister :: CID -> IO ()
+                           , routeUnregister :: CID -> IO ()
+                           }
+
+defaultClientInfo :: RoleInfo
+defaultClientInfo = ClientInfo {
+    connClientCntrl = nullClientController
+  , connToken = emptyToken
+  , resumptionInfo = defaultResumptionInfo
+  }
+
+defaultServerInfo :: RoleInfo
+defaultServerInfo = ServerInfo {
+    routeRegister = \_ -> return ()
+  , routeUnregister = \_ -> return ()
+  }
+
+----------------------------------------------------------------
+
 data Connection = Connection {
     role              :: Role
   , myCID             :: CID
@@ -99,10 +122,8 @@ data Connection = Connection {
   , elySecInfo        :: IORef (Maybe EarlySecretInfo)
   , hndSecInfo        :: IORef (Maybe HandshakeSecretInfo)
   , appSecInfo        :: IORef (Maybe ApplicationSecretInfo)
-  -- client only
-  , connClientCntrl   :: IORef ClientController
-  , connToken         :: IORef Token -- new or retry token
-  , resumptionInfo    :: IORef ResumptionInfo
+  -- Role info
+  , roleInfo          :: IORef RoleInfo
   }
 
 newConnection :: Role -> CID -> CID -> SendMany -> Receive -> TrafficSecrets InitialSecret -> IO Connection
@@ -127,10 +148,12 @@ newConnection rl myCID peerCID send recv isecs =
         <*> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef Nothing
-        -- client only
-        <*> newIORef nullClientController
-        <*> newIORef emptyToken
-        <*> newIORef defaultResumptionInfo
+        -- Role info
+        <*> newIORef initialRoleInfo
+  where
+    initialRoleInfo
+      | rl == Client = defaultClientInfo
+      | otherwise    = defaultServerInfo
 
 ----------------------------------------------------------------
 

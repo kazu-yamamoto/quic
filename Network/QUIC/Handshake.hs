@@ -33,7 +33,7 @@ recvCryptoData conn = do
 handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     let sendEarlyData = isJust $ ccEarlyData conf
-    control <- clientController conf (resumptionInfo conn) sendEarlyData
+    control <- clientController conf (setResumptionSession conn) sendEarlyData
     setClientController conn control
     sendClientHelloAndRecvServerHello control conn $ ccEarlyData conf
     recvServerFinishedSendClientFinished control conn

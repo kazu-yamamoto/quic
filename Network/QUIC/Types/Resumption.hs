@@ -4,6 +4,8 @@ import Network.TLS
 
 import Network.QUIC.Types.Frame
 
+type SessionEstablish = SessionID -> SessionData -> IO ()
+
 data ResumptionInfo = ResumptionInfo {
     resumptionSession :: Maybe (SessionID, SessionData)
   , resumptionToken   :: Token

@@ -47,10 +47,11 @@ checkEncryptionLevel Connection{..} level = atomically $ do
 ----------------------------------------------------------------
 
 setClientController :: Connection -> ClientController -> IO ()
-setClientController Connection{..} ctl = writeIORef connClientCntrl ctl
+setClientController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
+  ci {connClientCntrl = ctl }
 
 getClientController :: Connection -> IO ClientController
-getClientController Connection{..} = readIORef connClientCntrl
+getClientController Connection{..} = connClientCntrl <$> readIORef roleInfo
 
 clearClientController :: Connection -> IO ()
 clearClientController conn = setClientController conn nullClientController

@@ -40,17 +40,25 @@ clearThreads conn = do
 ----------------------------------------------------------------
 
 setToken :: Connection -> Token -> IO ()
-setToken conn token = writeIORef (connToken conn) token
+setToken conn token =
+    modifyIORef' (roleInfo conn) $ \ci -> ci { connToken = token }
 
 getToken :: Connection -> IO Token
-getToken conn = readIORef $ connToken conn
+getToken conn = connToken <$> readIORef (roleInfo conn)
 
 ----------------------------------------------------------------
 
 getResumptionInfo :: Connection -> IO ResumptionInfo
-getResumptionInfo conn = readIORef $ resumptionInfo conn
+getResumptionInfo conn = resumptionInfo <$> readIORef (roleInfo conn)
 
 ----------------------------------------------------------------
 
+setResumptionSession :: Connection -> SessionEstablish
+setResumptionSession conn si sd = modifyIORef' (roleInfo conn) $ \ci -> ci {
+    resumptionInfo = (resumptionInfo ci) { resumptionSession = Just (si,sd) }
+  }
+
 setNewToken :: Connection -> Token -> IO ()
-setNewToken conn token = modifyIORef (resumptionInfo conn) $ \res -> res { resumptionToken = token }
+setNewToken conn token = modifyIORef' (roleInfo conn) $ \ci -> ci {
+    resumptionInfo = (resumptionInfo ci) { resumptionToken = token }
+  }
