@@ -19,11 +19,11 @@ import Network.QUIC.Types
 sendCryptoData :: Connection -> Output -> IO ()
 sendCryptoData conn out = atomically $ writeTQueue (outputQ conn) out
 
-recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString)
+recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString, Offset)
 recvCryptoData conn = do
     dat <- atomically $ readTQueue (inputQ conn)
     case dat of
-      InpHandshake lvl bs _      -> return (lvl, bs)
+      InpHandshake lvl bs off _  -> return (lvl, bs, off)
       InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> error "recvCryptoData"
@@ -43,7 +43,7 @@ sendClientHelloAndRecvServerHello control conn mEarlyData = do
     SendClientHello ch0 mEarlySecInf <- control GetClientHello
     setEarlySecretInfo conn mEarlySecInf
     sendCryptoData conn $ OutHndClientHello ch0 mEarlyData
-    (InitialLevel, sh0) <- recvCryptoData conn
+    (InitialLevel, sh0, _) <- recvCryptoData conn
     state0 <- control $ PutServerHello sh0
     case state0 of
       RecvServerHello hndSecInf -> do
@@ -52,7 +52,7 @@ sendClientHelloAndRecvServerHello control conn mEarlyData = do
       SendClientHello ch1 mEarlySecInf1 -> do
           setEarlySecretInfo conn mEarlySecInf1
           sendCryptoData conn $ OutHndClientHello ch1 Nothing
-          (InitialLevel, sh1) <- recvCryptoData conn
+          (InitialLevel, sh1, _) <- recvCryptoData conn
           state1 <- control $ PutServerHello sh1
           case state1 of
             RecvServerHello hndSecInf -> do
@@ -65,7 +65,7 @@ recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
 recvServerFinishedSendClientFinished control conn = loop
   where
     loop = do
-        (HandshakeLevel, eesf) <- recvCryptoData conn
+        (HandshakeLevel, eesf, _) <- recvCryptoData conn
         state <- control $ PutServerFinished eesf
         case state of
           ClientNeedsMore -> do
@@ -82,34 +82,38 @@ recvServerFinishedSendClientFinished control conn = loop
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     control <- serverController conf origCID
-    sh <- recvClientHello control conn
+    sh <- recvClientHello control conn True
     SendServerFinished sf appSecInf <- control GetServerFinished
     setApplicationSecretInfo conn appSecInf
     setEncryptionLevel conn RTT1Level
     sendCryptoData conn $ OutHndServerHello sh sf
-    (HandshakeLevel, cf) <- recvCryptoData conn
+    (HandshakeLevel, cf, _) <- recvCryptoData conn
     SendSessionTicket nst <- control $ PutClientFinished cf
     sendCryptoData conn $ OutHndServerNST nst
     ServerHandshakeDone <- control ExitServer
     return ()
 
-recvClientHello :: ServerController -> Connection -> IO ServerHello
-recvClientHello control conn = do
-    (InitialLevel, ch) <- recvCryptoData conn
-    state <- control $ PutClientHello ch
-    case state of
-      SendRequestRetry hrr -> do
-          sendCryptoData conn $ OutHndServerHelloR hrr
-          recvClientHello control conn
-      SendServerHello sh0 exts elySecInf hndSecInf -> do
-          setEarlySecretInfo conn elySecInf
-          setHandshakeSecretInfo conn hndSecInf
-          setEncryptionLevel conn HandshakeLevel
-          setParameters conn exts
-          return sh0
-      ServerNeedsMore ->
-          recvClientHello control conn
-      _ -> E.throwIO $ HandshakeFailed "recvClientHello"
+recvClientHello :: ServerController -> Connection -> Bool -> IO ServerHello
+recvClientHello control conn reqZero = do
+    (InitialLevel, ch, off) <- recvCryptoData conn
+    when (reqZero && off /= 0) $ E.throwIO $ HandshakeFailed "CH fragment"
+    if not reqZero && off == 0 then
+        recvClientHello control conn False
+      else do
+        state <- control $ PutClientHello ch
+        case state of
+          SendRequestRetry hrr -> do
+              sendCryptoData conn $ OutHndServerHelloR hrr
+              recvClientHello control conn True
+          SendServerHello sh0 exts elySecInf hndSecInf -> do
+              setEarlySecretInfo conn elySecInf
+              setHandshakeSecretInfo conn hndSecInf
+              setEncryptionLevel conn HandshakeLevel
+              setParameters conn exts
+              return sh0
+          ServerNeedsMore ->
+              recvClientHello control conn False
+          _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
 setParameters :: Connection -> [ExtensionRaw] -> IO ()
 setParameters conn [ExtensionRaw 0xffa5 params] = do

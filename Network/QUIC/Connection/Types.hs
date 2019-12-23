@@ -48,7 +48,7 @@ emptyStreamTable = StreamTable Map.empty
 ----------------------------------------------------------------
 
 data Input = InpStream StreamID ByteString
-           | InpHandshake EncryptionLevel ByteString Token
+           | InpHandshake EncryptionLevel ByteString Offset Token
            | InpTransportError TransportError FrameType ReasonPhrase
            | InpApplicationError ApplicationError ReasonPhrase
            deriving Show

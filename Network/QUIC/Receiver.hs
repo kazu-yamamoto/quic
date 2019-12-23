@@ -45,17 +45,16 @@ processFrame conn _ (Ack ackInfo _) = do
     outs <- catMaybes <$> mapM (releaseOutput conn) pns
     mapM_ (removeAcks conn) outs
     return True
-processFrame conn lvl (Crypto _off cdat) = do
-    --fixme _off
+processFrame conn lvl (Crypto off cdat) = do
     case lvl of
       InitialLevel   -> do
-          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat emptyToken
+          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat off emptyToken
           return True
       RTT0Level -> do
           putStrLn $  "processFrame: invalid packet type " ++ show lvl
           return False
       HandshakeLevel -> do
-          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat emptyToken
+          atomically $ writeTQueue (inputQ conn) $ InpHandshake lvl cdat off emptyToken
           return True
       RTT1Level
         | isClient conn -> do
