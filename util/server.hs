@@ -85,6 +85,7 @@ main = do
           , scALPN         = Just (\_ -> return "hq-24")
           , scRequireRetry = optRetry
           , scSessionManager = smgr
+          , scEarlyDataSize  = 1024
           , scConfig     = defaultConfig {
                 confParameters = exampleParameters
               , confKeyLogging = optKeyLogging
