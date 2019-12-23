@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
@@ -87,7 +88,9 @@ main = do
     withQUICServer conf $ \qs -> forever $ do
         econn <- E.try $ accept qs
         case econn of
-          Left (E.SomeException _) -> return ()
+          Left e
+            | Just E.UserInterrupt <- E.fromException e -> E.throwIO e
+            | otherwise -> return ()
           Right conn -> void $ forkFinally (server conn) (\_ -> close conn)
 
 server :: Connection -> IO ()
