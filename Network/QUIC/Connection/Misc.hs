@@ -43,7 +43,9 @@ setToken :: Connection -> Token -> IO ()
 setToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci { clientInitialToken = token }
 
 getToken :: Connection -> IO Token
-getToken Connection{..} = clientInitialToken <$> readIORef roleInfo
+getToken conn@Connection{..}
+  | isClient conn = clientInitialToken <$> readIORef roleInfo
+  | otherwise     = return emptyToken
 
 ----------------------------------------------------------------
 
