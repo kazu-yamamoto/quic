@@ -21,15 +21,15 @@ getPeerCID Connection{..} = readIORef peerCID
 ----------------------------------------------------------------
 
 setThreadIds :: Connection -> [ThreadId] -> IO ()
-setThreadIds conn tids = do
+setThreadIds Connection{..} tids = do
     wtids <- mapM mkWeakThreadId tids
-    writeIORef (threadIds conn) wtids
+    writeIORef threadIds wtids
 
 clearThreads :: Connection -> IO ()
-clearThreads conn = do
-    wtids <- readIORef (threadIds conn)
+clearThreads Connection{..} = do
+    wtids <- readIORef threadIds
     mapM_ kill wtids
-    writeIORef (threadIds conn) []
+    writeIORef threadIds []
   where
     kill wtid = do
         mtid <- deRefWeak wtid
@@ -40,33 +40,32 @@ clearThreads conn = do
 ----------------------------------------------------------------
 
 setToken :: Connection -> Token -> IO ()
-setToken conn token =
-    modifyIORef' (roleInfo conn) $ \ci -> ci { clientInitialToken = token }
+setToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci { clientInitialToken = token }
 
 getToken :: Connection -> IO Token
-getToken conn = clientInitialToken <$> readIORef (roleInfo conn)
+getToken Connection{..} = clientInitialToken <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 
 getResumptionInfo :: Connection -> IO ResumptionInfo
-getResumptionInfo conn = resumptionInfo <$> readIORef (roleInfo conn)
+getResumptionInfo Connection{..} = resumptionInfo <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 
 setResumptionSession :: Connection -> SessionEstablish
-setResumptionSession conn si sd = modifyIORef' (roleInfo conn) $ \ci -> ci {
+setResumptionSession Connection{..} si sd = modifyIORef' roleInfo $ \ci -> ci {
     resumptionInfo = (resumptionInfo ci) { resumptionSession = Just (si,sd) }
   }
 
 setNewToken :: Connection -> Token -> IO ()
-setNewToken conn token = modifyIORef' (roleInfo conn) $ \ci -> ci {
+setNewToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci {
     resumptionInfo = (resumptionInfo ci) { resumptionToken = token }
   }
 
 ----------------------------------------------------------------
 
 setServerRoleInfo :: Connection -> (CID -> IO ()) -> (CID -> IO ()) -> IO ()
-setServerRoleInfo conn regisrer unregister = writeIORef (roleInfo conn) si
+setServerRoleInfo Connection{..} regisrer unregister = writeIORef roleInfo si
   where
     si = ServerInfo {
         routeRegister = regisrer
