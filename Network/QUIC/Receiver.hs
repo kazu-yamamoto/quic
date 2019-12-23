@@ -5,7 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import qualified Data.ByteString as B
 import Control.Concurrent.STM
 import Network.TLS.QUIC
 
@@ -55,19 +54,16 @@ processFrame conn lvl (Crypto off cdat) = do
           putStrLn $  "processFrame: invalid packet type " ++ show lvl
           return False
       HandshakeLevel
-        | not (isClient conn) -> do
-              if (cdat `B.index` 0) == 20 then do -- fixme: fragmented
-                  control <- getServerController conn
-                  SendSessionTicket nst <- control $ PutClientFinished cdat
-                  -- fixme: vs sendCryptoData
-                  atomically $ writeTQueue (outputQ conn) $ OutHndServerNST nst
-                  ServerHandshakeDone <- control ExitServer
-                  clearServerController conn
-                else
-                  atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
-              return True
-        | otherwise -> do
+          | isClient conn -> do
               atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
+              return True
+         | otherwise -> do
+              control <- getServerController conn
+              SendSessionTicket nst <- control $ PutClientFinished cdat
+              -- fixme: vs sendCryptoData
+              atomically $ writeTQueue (outputQ conn) $ OutHndServerNST nst
+              ServerHandshakeDone <- control ExitServer
+              clearServerController conn
               return True
       RTT1Level
         | isClient conn -> do
