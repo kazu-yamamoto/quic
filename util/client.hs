@@ -100,7 +100,7 @@ main = do
             conn <- connect qc
             if rtt0 then do
                 putStrLn "------------------------ Response for early data"
-                recvData conn >>= C8.putStr
+                recv conn >>= C8.putStr
                 putStrLn "------------------------ Response for early data"
                 close conn
               else
@@ -109,7 +109,7 @@ main = do
 client :: Connection -> IO ResumptionInfo
 client conn = do
     putStrLn "------------------------"
-    sendData conn "GET /\r\n"
-    recvData conn >>= C8.putStr
+    send conn "GET /\r\n"
+    recv conn >>= C8.putStr
     putStrLn "------------------------"
     getResumptionInfo conn

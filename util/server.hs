@@ -104,12 +104,12 @@ server :: Connection -> IO ()
 server conn = loop
   where
     loop = do
-        bs <- recvData conn
+        bs <- recv conn
         if bs == "" then
             putStrLn "Stream finished"
           else do
             C8.putStr bs
-            sendData conn "<html><body>Hello world!</body></html>\n"
+            send conn "<html><body>Hello world!</body></html>\n"
             server conn
 
 newSessionManager :: IO SessionManager
