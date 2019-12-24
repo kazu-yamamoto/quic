@@ -18,7 +18,7 @@ data Config = Config {
   , confCiphers        :: [Cipher]
   , confGroups         :: [Group]
   , confParameters     :: Parameters
-  , confKeyLogging     :: Bool
+  , confKeyLogging     :: String -> IO ()
   }
 
 defaultConfig :: Config
@@ -27,7 +27,7 @@ defaultConfig = Config {
   , confCiphers        = ciphersuite_strong
   , confGroups         = [X25519,P256,P384,P521]
   , confParameters     = defaultParameters
-  , confKeyLogging     = False
+  , confKeyLogging     = \_ -> return ()
   }
 
 ----------------------------------------------------------------
