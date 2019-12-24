@@ -1,5 +1,6 @@
 module Common (
     getGroups
+  , getLogger
   ) where
 
 import Data.Default.Class
@@ -30,3 +31,7 @@ split c s = case break (c==) s of
     ("",r)  -> split c (tail r)
     (s',"") -> [s']
     (s',r)  -> s' : split c (tail r)
+
+getLogger :: Maybe FilePath -> (String -> IO ())
+getLogger Nothing     = \_ -> return ()
+getLogger (Just file) = \str -> appendFile file (str ++ "\n")

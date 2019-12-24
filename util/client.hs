@@ -15,7 +15,7 @@ import Network.QUIC
 import Common
 
 data Options = Options {
-    optKeyLogging :: Bool
+    optKeyLogging :: Maybe FilePath
   , optValidate :: Bool
   , optGroups :: Maybe String
   , optResumption :: Bool
@@ -24,7 +24,7 @@ data Options = Options {
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optKeyLogging = False
+    optKeyLogging = Nothing
   , optValidate = False
   , optGroups = Nothing
   , optResumption = False
@@ -37,8 +37,8 @@ usage = "Usage: client [OPTION] addr port"
 options :: [OptDescr (Options -> Options)]
 options = [
     Option ['l'] ["key-logging"]
-    (NoArg (\o -> o { optKeyLogging = True }))
-    "print negotiated secrets"
+    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
+    "log negotiated secrets"
   , Option ['V'] ["validate"]
     (NoArg (\o -> o { optValidate = True }))
     "validate server's certificate"
@@ -78,7 +78,7 @@ main = do
           , ccValidate   = optValidate
           , ccConfig     = defaultConfig {
                 confParameters = exampleParameters
-              , confKeyLogging = optKeyLogging
+              , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
               }
           }

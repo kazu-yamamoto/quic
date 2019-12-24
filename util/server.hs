@@ -22,7 +22,7 @@ import Common
 
 data Options = Options {
     optRetry      :: Bool
-  , optKeyLogging :: Bool
+  , optKeyLogging :: Maybe FilePath
   , optKeyFile    :: FilePath
   , optCertFile   :: FilePath
   , optGroups     :: Maybe String
@@ -31,7 +31,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optRetry      = False
-  , optKeyLogging = False
+  , optKeyLogging = Nothing
   , optKeyFile    = "serverkey.pem"
   , optCertFile   = "servercert.pem"
   , optGroups = Nothing
@@ -43,8 +43,8 @@ options = [
     (NoArg (\o -> o { optRetry = True }))
     "requre retry"
   , Option ['l'] ["key-logging"]
-    (NoArg (\o -> o { optKeyLogging = True }))
-    "print negotiated secrets"
+    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
+    "log negotiated secrets"
   , Option ['k'] ["key"]
     (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
     "key file"
@@ -88,7 +88,7 @@ main = do
           , scEarlyDataSize  = 1024
           , scConfig     = defaultConfig {
                 confParameters = exampleParameters
-              , confKeyLogging = optKeyLogging
+              , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
               }
           }
