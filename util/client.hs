@@ -93,7 +93,7 @@ main = do
         let conf'
               | rtt0 = conf {
                     ccResumption = res
-                  , ccEarlyData  = Just (0, "GET /index.html\r\n")
+                  , ccEarlyData  = Just (0, "GET /\r\n")
                   }
               | otherwise = conf { ccResumption = res }
         void $ withQUICClient conf' $ \qc -> do
@@ -109,7 +109,7 @@ main = do
 client :: Connection -> IO ResumptionInfo
 client conn = do
     putStrLn "------------------------"
-    sendData conn "GET /index.html\r\n"
+    sendData conn "GET /\r\n"
     recvData conn >>= C8.putStr
     putStrLn "------------------------"
     getResumptionInfo conn
