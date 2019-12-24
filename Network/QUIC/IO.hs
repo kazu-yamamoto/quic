@@ -10,11 +10,11 @@ import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
-sendData :: Connection -> ByteString -> IO ()
-sendData conn bs = sendData' conn 0 bs
+send :: Connection -> ByteString -> IO ()
+send conn bs = send' conn 0 bs
 
-sendData' :: Connection -> StreamID -> ByteString -> IO ()
-sendData' conn sid bs = do
+send' :: Connection -> StreamID -> ByteString -> IO ()
+send' conn sid bs = do
     open <- isConnectionOpen conn
     if open then do
         off <- modifyStreamOffset conn sid $ B.length bs
@@ -22,16 +22,16 @@ sendData' conn sid bs = do
       else
         E.throwIO ConnectionIsNotOpen
 
-recvData :: Connection -> IO ByteString
-recvData conn = do
-    (sid, bs) <- recvData' conn
-    if sid == 0 then return bs else recvData conn
+recv :: Connection -> IO ByteString
+recv conn = do
+    (sid, bs) <- recv' conn
+    if sid == 0 then return bs else recv conn
 
-recvData' :: Connection -> IO (StreamID, ByteString)
-recvData' conn = do
+recv' :: Connection -> IO (StreamID, ByteString)
+recv' conn = do
     mi <- atomically $ readTQueue (inputQ conn)
     case mi of
       InpStream sid bs      -> return (sid, bs)
       InpApplicationError{} -> return (0, "") -- fixme sid
       InpTransportError{}   -> return (0, "") -- fixme sid
-      InpHandshake{}        -> error "recvData'"
+      InpHandshake{}        -> error "recv'"

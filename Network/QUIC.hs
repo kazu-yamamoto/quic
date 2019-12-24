@@ -17,10 +17,10 @@ module Network.QUIC (
   , Config(..)
   , defaultConfig
   -- * IO
-  , recvData
-  , sendData
-  , recvData'
-  , sendData'
+  , recv
+  , send
+  , recv'
+  , send'
   -- * Closing
   , close
   -- * Types
