@@ -11,7 +11,7 @@ import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Network.TLS (SessionManager(..))
+import Network.TLS (SessionManager(..), SessionID, SessionData)
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit
@@ -115,6 +115,7 @@ server conn = loop
 newSessionManager :: IO SessionManager
 newSessionManager = sessionManager <$> newIORef Map.empty
 
+sessionManager :: IORef (Map SessionID SessionData) -> SessionManager
 sessionManager ref = SessionManager {
     sessionResume = \key -> Map.lookup key <$> readIORef ref
   , sessionResumeOnlyOnce = \key -> Map.lookup key <$> readIORef ref
