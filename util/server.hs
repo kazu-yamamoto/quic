@@ -26,6 +26,7 @@ data Options = Options {
   , optKeyFile    :: FilePath
   , optCertFile   :: FilePath
   , optGroups     :: Maybe String
+  , optDebug      :: Bool
   } deriving Show
 
 defaultOptions :: Options
@@ -35,6 +36,7 @@ defaultOptions = Options {
   , optKeyFile    = "serverkey.pem"
   , optCertFile   = "servercert.pem"
   , optGroups = Nothing
+  , optDebug = False
   }
 
 options :: [OptDescr (Options -> Options)]
@@ -54,6 +56,9 @@ options = [
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
     "specify groups"
+  , Option ['d'] ["debug"]
+    (NoArg (\o -> o { optDebug = True }))
+    "print debug info"
   ]
 
 usage :: String
@@ -98,7 +103,9 @@ main = do
           Left e
             | Just E.UserInterrupt <- E.fromException e -> E.throwIO e
             | otherwise -> return ()
-          Right conn -> void $ forkFinally (server conn) (\_ -> close conn)
+          Right conn -> do
+              when optDebug $ getConnectionInfo conn >>= print
+              void $ forkFinally (server conn) (\_ -> close conn)
 
 server :: Connection -> IO ()
 server conn = loop
