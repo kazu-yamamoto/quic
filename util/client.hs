@@ -5,6 +5,7 @@ module Main where
 
 import qualified Control.Exception as E
 import Control.Monad
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
 import System.Console.GetOpt
 import System.Environment
@@ -69,9 +70,14 @@ main :: IO ()
 main = do
     args <- getArgs
     (Options{..}, ips) <- compilerOpts args
-    when (length ips /= 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
-    let [addr,port] = ips
-    let conf = defaultClientConfig {
+    let ipslen = length ips
+    when (ipslen /= 2 && ipslen /= 3) $
+        showUsageAndExit "cannot recognize <addr> and <port>\n"
+    let path | ipslen == 3 = "/" ++ (ips !! 2)
+             | otherwise   = "/"
+        cmd = C8.pack ("GET " ++ path ++ "\r\n")
+        addr:port:_ = ips
+        conf = defaultClientConfig {
             ccServerName = addr
           , ccPortName   = port
           , ccALPN       = return $ Just ["h3-24","hq-24"]
@@ -84,7 +90,7 @@ main = do
           }
     res <- withQUICClient conf $ \qc -> do
         conn <- connect qc
-        client conn `E.finally` close conn
+        client conn cmd `E.finally` close conn
     when (opt0RTT && not (is0RTTPossible res)) $ do
         putStrLn "0-RTT is not allowed"
         exitFailure
@@ -93,7 +99,7 @@ main = do
         let conf'
               | rtt0 = conf {
                     ccResumption = res
-                  , ccEarlyData  = Just (0, "GET /\r\n")
+                  , ccEarlyData  = Just (0, cmd)
                   }
               | otherwise = conf { ccResumption = res }
         void $ withQUICClient conf' $ \qc -> do
@@ -104,12 +110,12 @@ main = do
                 putStrLn "------------------------ Response for early data"
                 close conn
               else
-                void $ client conn `E.finally` close conn
+                void $ client conn cmd `E.finally` close conn
 
-client :: Connection -> IO ResumptionInfo
-client conn = do
+client :: Connection -> ByteString -> IO ResumptionInfo
+client conn cmd = do
     putStrLn "------------------------"
-    send conn "GET /\r\n"
+    send conn cmd
     recv conn >>= C8.putStr
     putStrLn "------------------------"
     getResumptionInfo conn
