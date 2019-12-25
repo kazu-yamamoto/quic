@@ -3,6 +3,7 @@
 
 module Main where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -129,4 +130,5 @@ client conn cmd = do
     when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
     C8.putStr bs
     putStrLn "------------------------"
+    threadDelay 100000
     getResumptionInfo conn
