@@ -98,6 +98,9 @@ main = do
         conn <- connect qc
         when optDebug $ getConnectionInfo conn >>= print
         client conn cmd `E.finally` close conn
+    when (optResumption && not (isResumptionPossible res)) $ do
+        putStrLn "Resumption is not available"
+        exitFailure
     when (opt0RTT && not (is0RTTPossible res)) $ do
         putStrLn "0-RTT is not allowed"
         exitFailure
