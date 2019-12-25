@@ -31,6 +31,7 @@ data Frame = Padding Int
            | PathResponse PathData
            | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
            | ConnectionCloseApp ApplicationError ReasonPhrase
+           | UnknownFrame Int
            deriving (Eq,Show)
 
 type StreamID = Int64

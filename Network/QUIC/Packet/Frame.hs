@@ -88,6 +88,7 @@ decodeFrame rbuf = do
       0x00 -> decodePaddingFrames rbuf
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
+      0x04 -> decodeResetFrame rbuf
       0x06 -> decodeCryptoFrame rbuf
       0x07 -> decodeNewToken rbuf
       x | 0x08 <= x && x <= 0x0f -> do
@@ -100,7 +101,7 @@ decodeFrame rbuf = do
       0x1b -> decodePathResponse rbuf
       0x1c -> decodeConnectionCloseFrameQUIC rbuf
       0x1d -> decodeConnectionCloseFrameApp rbuf
-      _x   -> error $ show _x
+      x    -> return $ UnknownFrame x
 
 decodePaddingFrames :: ReadBuffer -> IO Frame
 decodePaddingFrames rbuf = loop 1
@@ -139,6 +140,9 @@ decodeAckFrame rbuf = do
         range <- fromIntegral <$> decodeInt' rbuf
         let n' = n - 1 :: Int
         getRanges n' (build . ((gap, range) :))
+
+decodeResetFrame :: ReadBuffer -> IO Frame
+decodeResetFrame _ = return RestStream -- fixme
 
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do
