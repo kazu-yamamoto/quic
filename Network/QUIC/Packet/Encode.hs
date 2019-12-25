@@ -31,9 +31,9 @@ import Network.QUIC.Types
 maximumQUICPacketSize :: Int
 maximumQUICPacketSize = 1200
 
--- Not from spec.
+-- Not from spec. retry token is 128 sometime.
 maximumQUICHeaderSize :: BufferSize
-maximumQUICHeaderSize = 128
+maximumQUICHeaderSize = 256
 
 ----------------------------------------------------------------
 
