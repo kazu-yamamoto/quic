@@ -21,6 +21,7 @@ data Options = Options {
   , optGroups :: Maybe String
   , optResumption :: Bool
   , opt0RTT :: Bool
+  , optDebug :: Bool
   } deriving Show
 
 defaultOptions :: Options
@@ -30,6 +31,7 @@ defaultOptions = Options {
   , optGroups = Nothing
   , optResumption = False
   , opt0RTT = False
+  , optDebug = False
   }
 
 usage :: String
@@ -52,6 +54,9 @@ options = [
   , Option ['z'] ["rtt0"]
     (NoArg (\o -> o { opt0RTT = True }))
     "resume the previous session and send early data"
+  , Option ['d'] ["debug"]
+    (NoArg (\o -> o { optDebug = True }))
+    "print debug info"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -90,6 +95,7 @@ main = do
           }
     res <- withQUICClient conf $ \qc -> do
         conn <- connect qc
+        when optDebug $ getConnectionInfo conn >>= print
         client conn cmd `E.finally` close conn
     when (opt0RTT && not (is0RTTPossible res)) $ do
         putStrLn "0-RTT is not allowed"
@@ -104,6 +110,7 @@ main = do
               | otherwise = conf { ccResumption = res }
         void $ withQUICClient conf' $ \qc -> do
             conn <- connect qc
+            when optDebug $ getConnectionInfo conn >>= print
             if rtt0 then do
                 putStrLn "------------------------ Response for early data"
                 recv conn >>= C8.putStr
