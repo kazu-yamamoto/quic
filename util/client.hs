@@ -85,7 +85,7 @@ main = do
         conf = defaultClientConfig {
             ccServerName = addr
           , ccPortName   = port
-          , ccALPN       = return $ Just ["h3-24","hq-24"]
+          , ccALPN       = return $ Just ["hq-24","h3-24"]
           , ccValidate   = optValidate
           , ccConfig     = defaultConfig {
                 confParameters = exampleParameters
@@ -113,7 +113,9 @@ main = do
             when optDebug $ getConnectionInfo conn >>= print
             if rtt0 then do
                 putStrLn "------------------------ Response for early data"
-                recv conn >>= C8.putStr
+                (sid, bs) <- recv' conn
+                when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
+                C8.putStr bs
                 putStrLn "------------------------ Response for early data"
                 close conn
               else
@@ -123,6 +125,8 @@ client :: Connection -> ByteString -> IO ResumptionInfo
 client conn cmd = do
     putStrLn "------------------------"
     send conn cmd
-    recv conn >>= C8.putStr
+    (sid, bs) <- recv' conn
+    when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
+    C8.putStr bs
     putStrLn "------------------------"
     getResumptionInfo conn
