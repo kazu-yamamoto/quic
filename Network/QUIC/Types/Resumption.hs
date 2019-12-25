@@ -22,6 +22,11 @@ is0RTTPossible ri = case resumptionSession ri of
   Nothing      -> False
   Just (_, sd) -> sessionMaxEarlyDataSize sd == 0xffffffff
 
+isResumptionPossible :: ResumptionInfo -> Bool
+isResumptionPossible ri = case resumptionSession ri of
+  Nothing      -> False
+  _            -> True
+
 get0RTTCipher :: ResumptionInfo -> Maybe CipherID
 get0RTTCipher ri = case resumptionSession ri of
   Nothing      -> Nothing

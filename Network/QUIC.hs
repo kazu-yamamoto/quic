@@ -38,6 +38,7 @@ module Network.QUIC (
   , getConnectionInfo
   , ResumptionInfo
   , getResumptionInfo
+  , isResumptionPossible
   , is0RTTPossible
   ) where
 
