@@ -16,22 +16,22 @@ import Network.QUIC
 import Common
 
 data Options = Options {
-    optKeyLogging :: Maybe FilePath
-  , optValidate :: Bool
-  , optGroups :: Maybe String
+    optDebug      :: Bool
+  , opt0RTT       :: Bool
   , optResumption :: Bool
-  , opt0RTT :: Bool
-  , optDebug :: Bool
+  , optValidate   :: Bool
+  , optKeyLogging :: Maybe FilePath
+  , optGroups     :: Maybe String
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optKeyLogging = Nothing
-  , optValidate = False
-  , optGroups = Nothing
+    optDebug      = False
+  , opt0RTT       = False
   , optResumption = False
-  , opt0RTT = False
-  , optDebug = False
+  , optValidate   = False
+  , optKeyLogging = Nothing
+  , optGroups     = Nothing
   }
 
 usage :: String
@@ -39,24 +39,24 @@ usage = "Usage: client [OPTION] addr port"
 
 options :: [OptDescr (Options -> Options)]
 options = [
-    Option ['l'] ["key-logging"]
-    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
-    "log negotiated secrets"
-  , Option ['V'] ["validate"]
-    (NoArg (\o -> o { optValidate = True }))
-    "validate server's certificate"
-  , Option ['g'] ["groups"]
-    (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
-    "specify groups"
-  , Option ['r'] ["resumption"]
-    (NoArg (\o -> o { optResumption = True }))
-    "resume the previous session"
+    Option ['d'] ["debug"]
+    (NoArg (\o -> o { optDebug = True }))
+    "print debug info"
   , Option ['z'] ["rtt0"]
     (NoArg (\o -> o { opt0RTT = True }))
     "resume the previous session and send early data"
-  , Option ['d'] ["debug"]
-    (NoArg (\o -> o { optDebug = True }))
-    "print debug info"
+  , Option ['r'] ["resumption"]
+    (NoArg (\o -> o { optResumption = True }))
+    "resume the previous session"
+  , Option ['V'] ["validate"]
+    (NoArg (\o -> o { optValidate = True }))
+    "validate server's certificate"
+  , Option ['l'] ["key-logging"]
+    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
+    "log negotiated secrets"
+  , Option ['g'] ["groups"]
+    (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
+    "specify groups"
   ]
 
 showUsageAndExit :: String -> IO a

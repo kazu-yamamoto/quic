@@ -21,44 +21,44 @@ import Network.QUIC
 import Common
 
 data Options = Options {
-    optRetry      :: Bool
-  , optKeyLogging :: Maybe FilePath
-  , optKeyFile    :: FilePath
+    optDebug      :: Bool
+  , optRetry      :: Bool
   , optCertFile   :: FilePath
+  , optKeyFile    :: FilePath
+  , optKeyLogging :: Maybe FilePath
   , optGroups     :: Maybe String
-  , optDebug      :: Bool
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optRetry      = False
-  , optKeyLogging = Nothing
-  , optKeyFile    = "serverkey.pem"
+    optDebug      = False
+  , optRetry      = False
   , optCertFile   = "servercert.pem"
-  , optGroups = Nothing
-  , optDebug = False
+  , optKeyFile    = "serverkey.pem"
+  , optKeyLogging = Nothing
+  , optGroups     = Nothing
   }
 
 options :: [OptDescr (Options -> Options)]
 options = [
-    Option ['r'] ["retry"]
+    Option ['d'] ["debug"]
+    (NoArg (\o -> o { optDebug = True }))
+    "print debug info"
+  , Option ['r'] ["retry"]
     (NoArg (\o -> o { optRetry = True }))
     "requre retry"
-  , Option ['l'] ["key-logging"]
-    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
-    "log negotiated secrets"
-  , Option ['k'] ["key"]
-    (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
-    "key file"
   , Option ['c'] ["cert"]
     (ReqArg (\fl o -> o { optCertFile = fl }) "FILE")
     "certificate file"
+  , Option ['k'] ["key"]
+    (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
+    "key file"
+  , Option ['l'] ["key-logging"]
+    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
+    "log negotiated secrets"
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
     "specify groups"
-  , Option ['d'] ["debug"]
-    (NoArg (\o -> o { optDebug = True }))
-    "print debug info"
   ]
 
 usage :: String
