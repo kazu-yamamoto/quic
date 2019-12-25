@@ -96,6 +96,7 @@ recvClient s connref = do
                     setInitialSecrets conn $ initialSecrets ver sCID
                     setToken conn token
                     setCryptoOffset conn InitialLevel 0
+                    setRetried conn True
                     atomically $ writeTQueue (outputQ conn) $ OutHndClientHello cdat mEarydata
                 _ -> return ()
         return Nothing

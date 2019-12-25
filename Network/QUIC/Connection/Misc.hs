@@ -54,6 +54,16 @@ getResumptionInfo Connection{..} = resumptionInfo <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 
+setRetried :: Connection -> Bool -> IO ()
+setRetried Connection{..} r = modifyIORef' roleInfo $ \ci -> ci {
+    retried = r
+  }
+
+getRetried :: Connection -> IO Bool
+getRetried Connection{..} = retried <$> readIORef roleInfo
+
+----------------------------------------------------------------
+
 setResumptionSession :: Connection -> SessionEstablish
 setResumptionSession Connection{..} si sd = modifyIORef' roleInfo $ \ci -> ci {
     resumptionInfo = (resumptionInfo ci) { resumptionSession = Just (si,sd) }

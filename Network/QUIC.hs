@@ -58,6 +58,7 @@ data ConnectionInfo = ConnectionInfo {
     cipher :: Cipher
   , alpn :: Maybe ByteString
   , handshakeMode :: HandshakeMode13
+  , retry :: Bool
   , localCID :: CID
   , remoteCID :: CID
   }
@@ -68,6 +69,7 @@ getConnectionInfo conn = do
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
     mx <- getApplicationSecretInfo conn
+    r <- getRetried conn
     let (mproto, mode) = case mx of
           Nothing -> (Nothing, FullHandshake)
           Just (ApplicationSecretInfo m p _) -> (p, m)
@@ -75,6 +77,7 @@ getConnectionInfo conn = do
         cipher = c
       , alpn = mproto
       , handshakeMode = mode
+      , retry = r
       , localCID = mycid
       , remoteCID = peercid
       }
@@ -84,4 +87,5 @@ instance Show ConnectionInfo where
                            ++ "ALPN: " ++ maybe "none" C8.unpack alpn ++ "\n"
                            ++ "Mode: " ++ show handshakeMode ++ "\n"
                            ++ "Local " ++ show localCID ++ "\n"
-                           ++ "Remote " ++ show remoteCID
+                           ++ "Remote " ++ show remoteCID ++
+                           if retry then "\nQUIC retry" else ""
