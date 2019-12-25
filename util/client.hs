@@ -104,6 +104,7 @@ main = do
     when (opt0RTT && not (is0RTTPossible res)) $ do
         putStrLn "0-RTT is not allowed"
         exitFailure
+    threadDelay 100000
     when (optResumption || opt0RTT) $ do
         let rtt0 = opt0RTT && is0RTTPossible res
         let conf'
@@ -133,5 +134,5 @@ client conn cmd = do
     when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
     C8.putStr bs
     putStrLn "------------------------"
-    threadDelay 100000
+    threadDelay 300000
     getResumptionInfo conn
