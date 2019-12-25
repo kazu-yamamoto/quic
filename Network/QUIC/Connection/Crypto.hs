@@ -23,6 +23,9 @@ module Network.QUIC.Connection.Crypto (
   , getRxSecret
   , setInitialSecrets
   --
+  , getEarlySecretInfo
+  , getHandshakeSecretInfo
+  , getApplicationSecretInfo
   , setEarlySecretInfo
   , setHandshakeSecretInfo
   , setApplicationSecretInfo
@@ -96,6 +99,15 @@ setHandshakeSecretInfo Connection{..} info = writeIORef hndSecInfo $ Just info
 
 setApplicationSecretInfo :: Connection -> ApplicationSecretInfo -> IO ()
 setApplicationSecretInfo Connection{..} info = writeIORef appSecInfo $ Just info
+
+getEarlySecretInfo :: Connection -> IO (Maybe EarlySecretInfo)
+getEarlySecretInfo Connection{..} = readIORef elySecInfo
+
+getHandshakeSecretInfo :: Connection -> IO (Maybe HandshakeSecretInfo)
+getHandshakeSecretInfo Connection{..} = readIORef hndSecInfo
+
+getApplicationSecretInfo :: Connection -> IO (Maybe ApplicationSecretInfo)
+getApplicationSecretInfo Connection{..} = readIORef appSecInfo
 
 ----------------------------------------------------------------
 
