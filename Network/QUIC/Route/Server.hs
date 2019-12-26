@@ -68,8 +68,10 @@ unregisterRoute tbl cid = atomicModifyIORef' tbl $ \rt' -> (M.delete cid rt', ()
 -- If client initial is fragmented into multiple packets,
 -- there is no way to put the all packets into a single queue.
 -- Rather, each fragment packet is put into its own queue.
--- For the first fragment, handshake would success if others are retransmitted.
--- For the other fragments, handshake will fail since offset is not 0.
+-- For the first fragment, handshake would successif others are
+-- retransmitted.
+-- For the other fragments, handshake will fail since its socket
+-- cannot be connected.
 dispatch :: ServerConfig -> ServerRoute -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> IO ()
 dispatch ServerConfig{..} ServerRoute{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
