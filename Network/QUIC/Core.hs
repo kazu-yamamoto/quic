@@ -81,24 +81,26 @@ recvClient s connref = do
   where
     go (PacketIV _)   = return Nothing
     go (PacketIC pkt) = return $ Just pkt
-    go (PacketIR (RetryPacket ver _dCID sCID _oCID token))  = do
+    go (PacketIR (RetryPacket ver dCID sCID oCID token))  = do
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
-        -- fixme: many checking
         mconn <- readIORef connref
         case mconn of
           Nothing   -> return ()
           Just conn -> do
-              mr <- releaseOutput conn 0
-              case mr of
-                Just (Retrans (OutHndClientHello cdat mEarydata) _ _) -> do
-                    setPeerCID conn sCID
-                    setInitialSecrets conn $ initialSecrets ver sCID
-                    setToken conn token
-                    setCryptoOffset conn InitialLevel 0
-                    setRetried conn True
-                    atomically $ writeTQueue (outputQ conn) $ OutHndClientHello cdat mEarydata
-                _ -> return ()
+              let localCID = myCID conn
+              remoteCID <- getPeerCID conn
+              when (dCID == localCID && oCID == remoteCID) $ do
+                  mr <- releaseOutput conn 0
+                  case mr of
+                    Just (Retrans (OutHndClientHello cdat mEarydata) _ _) -> do
+                        setPeerCID conn sCID
+                        setInitialSecrets conn $ initialSecrets ver sCID
+                        setToken conn token
+                        setCryptoOffset conn InitialLevel 0
+                        setRetried conn True
+                        atomically $ writeTQueue (outputQ conn) $ OutHndClientHello cdat mEarydata
+                    _ -> return ()
         return Nothing
 
 ----------------------------------------------------------------
