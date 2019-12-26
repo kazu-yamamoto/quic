@@ -60,7 +60,9 @@ setRetried Connection{..} r = modifyIORef' roleInfo $ \ci -> ci {
   }
 
 getRetried :: Connection -> IO Bool
-getRetried Connection{..} = resumptionRetry . resumptionInfo <$> readIORef roleInfo
+getRetried conn@Connection{..}
+  | isClient conn = resumptionRetry . resumptionInfo <$> readIORef roleInfo
+  | otherwise     = return False
 
 ----------------------------------------------------------------
 
