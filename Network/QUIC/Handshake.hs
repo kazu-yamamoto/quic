@@ -122,6 +122,8 @@ recvClientHello control conn = loop (0 :: Int)
                   return sh0
               ServerNeedsMore -> do
                   -- yield
+                  -- To prevent CI0' above.
+                  sendCryptoData conn $ OutControl InitialLevel []
                   loop expectedOff'
               _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
