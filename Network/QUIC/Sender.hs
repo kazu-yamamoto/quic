@@ -76,7 +76,9 @@ construct conn out lvl frames genLowerAck mTargetSize = do
               RTT0Level      -> PlainPacket (RTT0      currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')
               HandshakeLevel -> PlainPacket (Handshake currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')
               RTT1Level      -> PlainPacket (Short                  peercid)             (Plain (Flags 0) mypn frames')
-        when (frames /= []) $ keepOutput conn mypn out lvl pns
+        -- fixme: how to receive AKC for 0-RTT?
+        when (frames /= [] && lvl /= RTT0Level) $
+            keepOutput conn mypn out lvl pns
         encodePlainPacket conn ppkt mlen
 
 ----------------------------------------------------------------
