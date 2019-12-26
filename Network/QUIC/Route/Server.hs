@@ -80,36 +80,41 @@ dispatch ServerConfig{..} ServerRoute{..}
   | token == "" = do
         mroute <- lookupRoute routeTable dCID
         case mroute of
-          Nothing -> do
-              newdCID <- newCID
-              if scRequireRetry then do
-                  let retryToken = RetryToken currentDraft newdCID sCID dCID
-                  newtoken <- encryptRetryToken tokenSecret retryToken
-                  bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
-                  send bss
-                else do
-                  q <- newTQueueIO
-                  -- fixme: check listen length
-                  atomically $ writeTQueue q cpkt
-                  when (bs0RTT /= "") $ do
-                      (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
-                      atomically $ writeTQueue q cpktRTT0
-                  let ent = Accept newdCID sCID (OCFirst dCID) mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable)
-                  atomically $ writeTQueue acceptQueue ent
+          Nothing
+            | scRequireRetry -> sendRetry
+            | otherwise      -> pushToAcceptQ1
           Just q -> atomically $ writeTQueue q cpkt -- resend packets
   | otherwise = do
         mretryToken <- decryptRetryToken tokenSecret token
         case mretryToken of
-          Nothing -> return ()
-          Just RetryToken{..} -> do
-              when (tokenVersion /= ver) $ error "dispatch: fixme"
-              when (dCID /= localCID) $ error "dispatch: fixme"
-              when (sCID /= remoteCID) $ error "dispatch: fixme"
-              q <- newTQueueIO
-              -- fixme: check listen length
-              atomically $ writeTQueue q cpkt
-              let ent = Accept dCID sCID (OCRetry origLocalCID) mysa peersa q  (registerRoute routeTable q) (unregisterRoute routeTable)
-              atomically $ writeTQueue acceptQueue ent
+          Just rtoken
+            | isRetryTokenValid rtoken -> pushToAcceptQ2  rtoken
+          _ -> sendRetry
+  where
+    pushToAcceptQ d s oc = do
+        q <- newTQueueIO
+        -- fixme: check listen length
+        atomically $ writeTQueue q cpkt
+        let ent = Accept d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable)
+        atomically $ writeTQueue acceptQueue ent
+        return q
+    pushToAcceptQ1 = do
+        newdCID <- newCID
+        q <- pushToAcceptQ newdCID sCID (OCFirst dCID)
+        when (bs0RTT /= "") $ do
+            (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
+            atomically $ writeTQueue q cpktRTT0
+    pushToAcceptQ2 RetryToken{..} = do
+        _ <- pushToAcceptQ dCID sCID (OCRetry origLocalCID)
+        return ()
+    isRetryTokenValid RetryToken{..}
+      = tokenVersion == ver && dCID == localCID && sCID == remoteCID
+    sendRetry = do
+        newdCID <- newCID
+        let retryToken = RetryToken currentDraft newdCID sCID dCID
+        newtoken <- encryptRetryToken tokenSecret retryToken
+        bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
+        send bss
 dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ _ = do
     mroute <- lookupRoute routeTable dCID
     case mroute of
