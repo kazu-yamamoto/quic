@@ -105,6 +105,7 @@ main = do
         putStrLn "0-RTT is not allowed"
         exitFailure
     threadDelay 100000
+    putStrLn "<<<< next connection >>>>"
     when (optResumption || opt0RTT) $ do
         let rtt0 = opt0RTT && is0RTTPossible res
         let conf'
