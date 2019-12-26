@@ -148,8 +148,8 @@ sender conn = loop
 
 resender :: Connection -> IO ()
 resender conn = forever $ do
-    threadDelay 250000
-    outs <- getRetransmissions conn (MilliSeconds 25)
+    threadDelay 100000
+    outs <- getRetransmissions conn (MilliSeconds 250)
     open <- isConnectionOpen conn
     -- Some implementations do not return Ack for Initial and Handshake
     -- correctly. We should consider that the success of handshake
