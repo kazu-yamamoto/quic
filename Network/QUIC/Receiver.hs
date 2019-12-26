@@ -51,7 +51,7 @@ processFrame conn lvl (Crypto off cdat) = do
           atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
           return True
       RTT0Level -> do
-          putStrLn $  "processFrame: invalid packet type " ++ show lvl
+          putStrLn $ "processFrame: invalid packet type " ++ show lvl
           return False
       HandshakeLevel
           | isClient conn -> do
@@ -78,9 +78,9 @@ processFrame conn lvl (Crypto off cdat) = do
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     return True
-processFrame _ _ (NewConnectionID sn _ _cid _token)  = do
+processFrame _ _ (NewConnectionID _sn _ _cid _token)  = do
     -- fixme: register stateless token
-    putStrLn $ "FIXME: NewConnectionID " ++ show sn
+--    putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     atomically $ writeTQueue (inputQ conn)  $ InpTransportError err ftyp reason

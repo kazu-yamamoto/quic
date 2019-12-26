@@ -84,7 +84,7 @@ recvClient s connref = do
     go (PacketIR (RetryPacket ver _dCID sCID _oCID token))  = do
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
-        -- fixme: may checking
+        -- fixme: many checking
         mconn <- readIORef connref
         case mconn of
           Nothing   -> return ()
