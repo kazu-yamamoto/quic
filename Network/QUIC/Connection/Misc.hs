@@ -56,11 +56,11 @@ getResumptionInfo Connection{..} = resumptionInfo <$> readIORef roleInfo
 
 setRetried :: Connection -> Bool -> IO ()
 setRetried Connection{..} r = modifyIORef' roleInfo $ \ci -> ci {
-    retried = r
+    resumptionInfo = (resumptionInfo ci) { resumptionRetry = r}
   }
 
 getRetried :: Connection -> IO Bool
-getRetried Connection{..} = retried <$> readIORef roleInfo
+getRetried Connection{..} = resumptionRetry . resumptionInfo <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 

@@ -78,7 +78,6 @@ type Receive  = IO [CryptPacket]
 data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
                            , clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
-                           , retried            :: Bool
                            }
               | ServerInfo { connServerCntrl :: ServerController
                            , routeRegister   :: CID -> IO ()
@@ -90,7 +89,6 @@ defaultClientInfo = ClientInfo {
     connClientCntrl = nullClientController
   , clientInitialToken = emptyToken
   , resumptionInfo = defaultResumptionInfo
-  , retried = False
   }
 
 defaultServerInfo :: RoleInfo
