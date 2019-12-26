@@ -99,6 +99,12 @@ recvClientHello control conn = loop (0 :: Int)
   where
     loop expectedOff = do
         (InitialLevel, ch, off) <- recvCryptoData conn
+        -- Suppose that client Initial are fragmented, say, CI0 and CI1.
+        -- A socket for CI0 is connected to peer's address/port.
+        -- CI1 goes to another connection and is rejected because
+        -- socket for CI1 cannot be connected.
+        -- CI0 and CI1 would be resent by the client.
+        -- So, CI0' should be filtered out.
         if expectedOff /= off then
             loop expectedOff
           else do
