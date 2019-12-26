@@ -4,6 +4,7 @@ module Network.QUIC.Handshake where
 
 import Control.Concurrent.STM
 import qualified Control.Exception as E
+import qualified Data.ByteString as B
 import Data.ByteString hiding (putStrLn)
 import Network.TLS.QUIC
 
@@ -86,29 +87,27 @@ handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     control <- serverController conf origCID
     setServerController conn control
-    sh <- recvClientHello control conn True
+    sh <- recvClientHello control conn
     SendServerFinished sf appSecInf <- control GetServerFinished
     setApplicationSecretInfo conn appSecInf
     setEncryptionLevel conn RTT1Level
     sendCryptoData conn $ OutHndServerHello sh sf
     return ()
 
-recvClientHello :: ServerController -> Connection -> Bool -> IO ServerHello
-recvClientHello control conn reqZero0 = loop reqZero0
+recvClientHello :: ServerController -> Connection -> IO ServerHello
+recvClientHello control conn = loop (0 :: Int)
   where
-    loop reqZero = do
+    loop expectedOff = do
         (InitialLevel, ch, off) <- recvCryptoData conn
-        -- fixme: TLS hello retry: off /= 0
-        -- fixme: TLS hello fragment : off /= 0
-        -- when (reqZero && off /= 0) $ E.throwIO $ HandshakeFailed "CH fragment"
-        if not reqZero && off == 0 then
-            loop False
+        if expectedOff /= off then
+            loop expectedOff
           else do
             state <- control $ PutClientHello ch
+            let expectedOff' = expectedOff + B.length ch
             case state of
               SendRequestRetry hrr -> do
                   sendCryptoData conn $ OutHndServerHelloR hrr
-                  loop True
+                  loop expectedOff'
               SendServerHello sh0 exts elySecInf hndSecInf -> do
                   setEarlySecretInfo conn elySecInf
                   setHandshakeSecretInfo conn hndSecInf
@@ -117,7 +116,7 @@ recvClientHello control conn reqZero0 = loop reqZero0
                   return sh0
               ServerNeedsMore -> do
                   -- yield
-                  loop False
+                  loop expectedOff'
               _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
 setParameters :: Connection -> [ExtensionRaw] -> IO ()
