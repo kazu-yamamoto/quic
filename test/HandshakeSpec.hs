@@ -1,8 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module HandshakeSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
+import Data.ByteString
 import Data.IORef
 import Network.TLS
 import Test.Hspec
@@ -37,7 +40,15 @@ spec = do
                 sc = defaultServerConfig {
                        scSessionManager = smgr
                      }
-            testHandshake2 cc sc (FullHandshake, PreSharedKey)
+            testHandshake2 cc sc (FullHandshake, PreSharedKey) Nothing
+        it "can handshake in the case of 0-RTT" $ do
+            smgr <- newSessionManager
+            let cc = defaultClientConfig
+                sc = defaultServerConfig {
+                       scSessionManager = smgr
+                     , scEarlyDataSize  = 1024
+                     }
+            testHandshake2 cc sc (FullHandshake, RTT0) (Just "early data")
 
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
 testHandshake cc sc mode = void $ concurrently client server
@@ -58,8 +69,8 @@ testHandshake cc sc mode = void $ concurrently client server
         getTLSMode conn `shouldReturn` mode
         close conn
 
-testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> IO ()
-testHandshake2 cc1 sc (mode1, mode2) = void $ concurrently client server
+testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Maybe ByteString -> IO ()
+testHandshake2 cc1 sc (mode1, mode2) mEarlyData = void $ concurrently client server
   where
     sc' = sc {
             scKey  = "test/serverkey.pem"
@@ -75,7 +86,11 @@ testHandshake2 cc1 sc (mode1, mode2) = void $ concurrently client server
         return res
     client = do
         res <- runClient cc1 mode1
-        let cc2 = cc1 { ccResumption = res }
+        let cc2 = cc1 { ccResumption = res
+                      , ccEarlyData = case mEarlyData of
+                          Nothing -> Nothing
+                          Just bs -> Just (0, bs)
+                      }
         void $ runClient cc2 mode2
     runServer qs = do
         conn <- accept qs
