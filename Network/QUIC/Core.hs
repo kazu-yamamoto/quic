@@ -151,6 +151,9 @@ accept QUICServer{..} = E.handle tlserr $ do
 
 close :: Connection -> IO ()
 close conn = do
+    unless (isClient conn) $ do
+        unregister <- getUnregister conn
+        unregister $ myCID conn
     setConnectionState conn $ Closing (CloseState False False)
     let frames = [ConnectionCloseQUIC NoError 0 ""]
     atomically $ writeTQueue (outputQ conn) $ OutControl RTT1Level frames

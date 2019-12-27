@@ -83,3 +83,6 @@ setServerRoleInfo Connection{..} regisrer unregister = modifyIORef' roleInfo $ \
     routeRegister = regisrer
   , routeUnregister = unregister
   }
+
+getUnregister :: Connection -> IO (CID -> IO ())
+getUnregister Connection{..}  = routeUnregister <$> readIORef roleInfo
