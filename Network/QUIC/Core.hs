@@ -46,27 +46,29 @@ withQUICClient conf body = do
 connect :: QUICClient -> IO Connection
 connect QUICClient{..} = E.handle tlserr $ do
     s <- udpClientConnectedSocket (ccServerName clientConfig) (ccPortName clientConfig)
-    connref <- newIORef Nothing
-    let send bss = void $ NSB.sendMany s bss
-        recv     = recvClient s connref
-        cls      = NS.close s
-    myCID   <- newCID
-    peerCID <- newCID
-    conn <- clientConnection clientConfig myCID peerCID send recv cls
-    setToken conn $ resumptionToken $ ccResumption clientConfig
-    setCryptoOffset conn InitialLevel 0
-    setCryptoOffset conn HandshakeLevel 0
-    setCryptoOffset conn RTT1Level 0
-    setStreamOffset conn 0 0 -- fixme
-    tid0 <- forkIO (sender   conn `E.catch` reportError)
-    tid1 <- forkIO (receiver conn `E.catch` reportError)
-    tid2 <- forkIO (resender conn `E.catch` reportError)
-    setThreadIds conn [tid0,tid1,tid2]
-    writeIORef connref $ Just conn
-    handshakeClient clientConfig conn
-    setConnectionState conn Open
-    return conn
+    setup s `E.onException` NS.close s
   where
+    setup s = do
+        connref <- newIORef Nothing
+        let send bss = void $ NSB.sendMany s bss
+            recv     = recvClient s connref
+            cls      = NS.close s
+        myCID   <- newCID
+        peerCID <- newCID
+        conn <- clientConnection clientConfig myCID peerCID send recv cls
+        setToken conn $ resumptionToken $ ccResumption clientConfig
+        setCryptoOffset conn InitialLevel 0
+        setCryptoOffset conn HandshakeLevel 0
+        setCryptoOffset conn RTT1Level 0
+        setStreamOffset conn 0 0 -- fixme
+        tid0 <- forkIO (sender   conn `E.catch` reportError)
+        tid1 <- forkIO (receiver conn `E.catch` reportError)
+        tid2 <- forkIO (resender conn `E.catch` reportError)
+        setThreadIds conn [tid0,tid1,tid2]
+        writeIORef connref $ Just conn
+        handshakeClient clientConfig conn
+        setConnectionState conn Open
+        return conn
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 
 reportError :: E.SomeException -> IO ()
@@ -119,27 +121,29 @@ accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
     Accept myCID peerCID oCID mysa peersa q register unregister <- atomically $ readTQueue $ acceptQueue serverRoute
     s <- udpServerConnectedSocket mysa peersa
-    let send bss = void $ NSB.sendMany s bss
-        recv = do
-            mpkt <- atomically $ tryReadTQueue q
-            case mpkt of
-              Nothing  -> NSB.recv s 2048 >>= decodeCryptPackets
-              Just pkt -> return [pkt]
-        cls = NS.close s
-    conn <- serverConnection serverConfig myCID peerCID oCID send recv cls
-    setCryptoOffset conn InitialLevel 0
-    setCryptoOffset conn HandshakeLevel 0
-    setCryptoOffset conn RTT1Level 0
-    setStreamOffset conn 0 0 -- fixme
-    tid0 <- forkIO $ sender conn
-    tid1 <- forkIO $ receiver conn
-    tid2 <- forkIO $ resender conn
-    setThreadIds conn [tid0,tid1,tid2]
-    handshakeServer serverConfig oCID conn
-    setServerRoleInfo conn register unregister
-    register myCID
-    setConnectionState conn Open
-    return conn
+    let setup = do
+            let send bss = void $ NSB.sendMany s bss
+                recv = do
+                    mpkt <- atomically $ tryReadTQueue q
+                    case mpkt of
+                      Nothing  -> NSB.recv s 2048 >>= decodeCryptPackets
+                      Just pkt -> return [pkt]
+                cls = NS.close s
+            conn <- serverConnection serverConfig myCID peerCID oCID send recv cls
+            setCryptoOffset conn InitialLevel 0
+            setCryptoOffset conn HandshakeLevel 0
+            setCryptoOffset conn RTT1Level 0
+            setStreamOffset conn 0 0 -- fixme
+            tid0 <- forkIO $ sender conn
+            tid1 <- forkIO $ receiver conn
+            tid2 <- forkIO $ resender conn
+            setThreadIds conn [tid0,tid1,tid2]
+            handshakeServer serverConfig oCID conn
+            setServerRoleInfo conn register unregister
+            register myCID
+            setConnectionState conn Open
+            return conn
+    setup `E.onException` NS.close s
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 
