@@ -18,7 +18,6 @@ module Network.QUIC.Connection.Transmit (
 import Data.Hourglass
 import Data.IORef
 import qualified Data.IntPSQ as PSQ
-import Data.Set (Set)
 import qualified Data.Set as Set
 import System.Hourglass
 
@@ -37,26 +36,26 @@ getPacketNumber Connection{..} = atomicModifyIORef' packetNumber inc
 ----------------------------------------------------------------
 -- Peer's packet numbers
 
-getPNs :: Connection -> EncryptionLevel -> IO (Set PacketNumber)
+getPNs :: Connection -> EncryptionLevel -> IO PeerPacketNumbers
 getPNs Connection{..} lvl = get <$> readIORef peerPacketNumbers
   where
-    get = Set.map (convert lvl) . Set.filter (range lvl)
+    get (PeerPacketNumbers pns)  = PeerPacketNumbers . Set.map (convert lvl) . Set.filter (range lvl) $ pns
 
 addPNs :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
 addPNs Connection{..} lvl pn = atomicModifyIORef' peerPacketNumbers add
   where
-    add pns = (Set.insert (convert lvl pn) pns, ())
+    add (PeerPacketNumbers pns) = (PeerPacketNumbers (Set.insert (convert lvl pn) pns), ())
 
 clearPNs :: Connection -> EncryptionLevel -> IO ()
 clearPNs Connection{..} lvl = atomicModifyIORef' peerPacketNumbers clear
   where
-    clear pns = (Set.filter (not . range lvl) pns, ())
+    clear (PeerPacketNumbers pns) = (PeerPacketNumbers (Set.filter (not . range lvl) pns), ())
 
-updatePNs :: Connection -> EncryptionLevel -> Set PacketNumber -> IO ()
-updatePNs Connection{..} lvl pns = atomicModifyIORef' peerPacketNumbers update
+updatePNs :: Connection -> EncryptionLevel -> PeerPacketNumbers -> IO ()
+updatePNs Connection{..} lvl (PeerPacketNumbers pns) = atomicModifyIORef' peerPacketNumbers update
   where
     pns' = Set.map (convert lvl) pns
-    update pns0 = (pns0 Set.\\ pns', ())
+    update (PeerPacketNumbers pns0) = (PeerPacketNumbers (pns0 Set.\\ pns'), ())
 
 ----------------------------------------------------------------
 
@@ -81,18 +80,18 @@ range RTT1Level      pn = 0 <= pn
 removeAcks :: Connection -> Retrans -> IO ()
 removeAcks conn (Retrans _ lvl pns) = updatePNs conn lvl pns
 
-nullPNs :: Set PacketNumber -> Bool
-nullPNs = Set.null
+nullPNs :: PeerPacketNumbers -> Bool
+nullPNs (PeerPacketNumbers pns) = Set.null pns
 
-fromPNs :: Set PacketNumber -> [PacketNumber]
-fromPNs = Set.toDescList
+fromPNs :: PeerPacketNumbers -> [PacketNumber]
+fromPNs (PeerPacketNumbers pns) = Set.toDescList pns
 
 ----------------------------------------------------------------
 
-keepOutput :: Connection -> PacketNumber -> Output -> EncryptionLevel -> Set PacketNumber -> IO ()
+keepOutput :: Connection -> PacketNumber -> Output -> EncryptionLevel -> PeerPacketNumbers -> IO ()
 keepOutput Connection{..} pn out lvl pns = do
     tm <- timeCurrentP
-    atomicModifyIORef' retransQ (add tm)
+    atomicModifyIORef' retransDB (add tm)
   where
     pn' = fromIntegral pn
     ent = Retrans out lvl pns
@@ -100,7 +99,7 @@ keepOutput Connection{..} pn out lvl pns = do
 
 releaseOutput :: Connection -> PacketNumber -> IO (Maybe Retrans)
 releaseOutput Connection{..} pn = do
-    atomicModifyIORef' retransQ del
+    atomicModifyIORef' retransDB del
   where
     pn' = fromIntegral pn
     del psq = (PSQ.delete pn' psq, snd <$> PSQ.lookup pn' psq)
@@ -122,7 +121,7 @@ getRetransmissions :: Connection -> MilliSeconds -> IO [Output]
 getRetransmissions Connection{..} milli = do
     tm <- timeCurrentP
     let tm' = tm `timeDel` milli
-    atomicModifyIORef' retransQ (split tm')
+    atomicModifyIORef' retransDB (split tm')
   where
     split x psq = (psq', map getOutput rets)
       where

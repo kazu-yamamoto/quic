@@ -69,8 +69,8 @@ construct conn out lvl frames genLowerAck mTargetSize = do
         mypn <- getPacketNumber conn
         pns <- getPNs conn lvl
         let frames'
-              | null pns  = frames
-              | otherwise = Ack (toAckInfo $ fromPNs pns) 0 : frames
+              | nullPNs pns = frames
+              | otherwise   = Ack (toAckInfo $ fromPNs pns) 0 : frames
         let ppkt = case lvl of
               InitialLevel   -> PlainPacket (Initial   currentDraft peercid mycid token) (Plain (Flags 0) mypn frames')
               RTT0Level      -> PlainPacket (RTT0      currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')

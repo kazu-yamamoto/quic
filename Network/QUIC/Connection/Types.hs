@@ -62,10 +62,13 @@ data Output = OutStream StreamID ByteString Offset
             | OutHndServerNST ByteString
             deriving Show
 
+newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
+                          deriving (Eq, Show)
+
 type InputQ  = TQueue Input
 type OutputQ = TQueue Output
-type RetransQ = IntPSQ ElapsedP Retrans
-data Retrans  = Retrans Output EncryptionLevel (Set PacketNumber)
+type RetransDB = IntPSQ ElapsedP Retrans
+data Retrans = Retrans Output EncryptionLevel PeerPacketNumbers
 
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
@@ -114,11 +117,11 @@ data Connection = Connection {
   , inputQ            :: InputQ
   , cryptoQ           :: InputQ
   , outputQ           :: OutputQ
-  , retransQ          :: IORef RetransQ
+  , retransDB         :: IORef RetransDB
   -- State
   , connectionState   :: TVar ConnectionState
-  , packetNumber      :: IORef PacketNumber       -- squeezing three to one
-  , peerPacketNumbers :: IORef (Set PacketNumber) -- squeezing three to one
+  , packetNumber      :: IORef PacketNumber      -- squeezing three to one
+  , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
   , streamTable       :: IORef StreamTable
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
@@ -145,7 +148,7 @@ newConnection rl myCID peerCID send recv cls isecs =
         -- State
         <*> newTVarIO NotOpen
         <*> newIORef 0
-        <*> newIORef Set.empty
+        <*> newIORef (PeerPacketNumbers Set.empty)
         <*> newIORef emptyStreamTable
         -- TLS
         <*> newTVarIO InitialLevel
