@@ -8,9 +8,9 @@ module Network.QUIC.Connection.Transmit (
   , clearPNs
   , nullPNs
   , fromPNs
-  , removeAcks
   , keepOutput
   , releaseOutput
+  , removeAcks
   , getRetransmissions
   , MilliSeconds(..)
   ) where
@@ -77,9 +77,6 @@ range RTT1Level      pn = 0 <= pn
 
 ----------------------------------------------------------------
 
-removeAcks :: Connection -> Retrans -> IO ()
-removeAcks conn (Retrans _ lvl pns) = updatePNs conn lvl pns
-
 nullPNs :: PeerPacketNumbers -> Bool
 nullPNs (PeerPacketNumbers pns) = Set.null pns
 
@@ -103,6 +100,9 @@ releaseOutput Connection{..} pn = do
   where
     pn' = fromIntegral pn
     del psq = (PSQ.delete pn' psq, snd <$> PSQ.lookup pn' psq)
+
+removeAcks :: Connection -> Retrans -> IO ()
+removeAcks conn (Retrans _ lvl pns) = updatePNs conn lvl pns
 
 ----------------------------------------------------------------
 
