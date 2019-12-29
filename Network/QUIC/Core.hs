@@ -95,7 +95,7 @@ recvClient s connref = do
               when (dCID == localCID && oCID == remoteCID) $ do
                   mr <- releaseOutput conn 0
                   case mr of
-                    Just (Retrans (OutHndClientHello cdat mEarydata) _ _) -> do
+                    Just (OutHndClientHello cdat mEarydata) -> do
                         setPeerCID conn sCID
                         setInitialSecrets conn $ initialSecrets ver sCID
                         setToken conn token

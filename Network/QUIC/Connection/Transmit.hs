@@ -10,7 +10,7 @@ module Network.QUIC.Connection.Transmit (
   , fromPNs
   , keepOutput
   , releaseOutput
-  , removeAcks
+  , releaseOutputRemoveAcks
   , getRetransmissions
   , MilliSeconds(..)
   ) where
@@ -94,15 +94,26 @@ keepOutput Connection{..} pn out lvl pns = do
     ent = Retrans out lvl pns
     add tm psq = (PSQ.insert pn' tm ent psq, ())
 
-releaseOutput :: Connection -> PacketNumber -> IO (Maybe Retrans)
-releaseOutput Connection{..} pn = do
+releaseOutput :: Connection -> PacketNumber -> IO (Maybe Output)
+releaseOutput conn pn = do
+    mr <- getRetrans conn pn
+    case mr of
+      Nothing                -> return Nothing
+      Just (Retrans out _ _) -> return $ Just out
+
+releaseOutputRemoveAcks :: Connection -> PacketNumber -> IO ()
+releaseOutputRemoveAcks conn pn = do
+    mr <- getRetrans conn pn
+    case mr of
+      Nothing                  -> return ()
+      Just (Retrans _ lvl pns) -> updatePNs conn lvl pns
+
+getRetrans :: Connection -> PacketNumber -> IO (Maybe Retrans)
+getRetrans Connection{..} pn = do
     atomicModifyIORef' retransDB del
   where
     pn' = fromIntegral pn
     del psq = (PSQ.delete pn' psq, snd <$> PSQ.lookup pn' psq)
-
-removeAcks :: Connection -> Retrans -> IO ()
-removeAcks conn (Retrans _ lvl pns) = updatePNs conn lvl pns
 
 ----------------------------------------------------------------
 
