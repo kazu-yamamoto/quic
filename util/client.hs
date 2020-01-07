@@ -94,6 +94,7 @@ main = do
               , confGroups     = getGroups optGroups
               }
           }
+    putStrLn "------------------------"
     res <- withQUICClient conf $ \qc -> do
         conn <- connect qc
         when optDebug $ getConnectionInfo conn >>= print
@@ -105,7 +106,6 @@ main = do
         putStrLn "0-RTT is not allowed"
         exitFailure
     threadDelay 100000
-    putStrLn "<<<< next connection >>>>"
     when (optResumption || opt0RTT) $ do
         let rtt0 = opt0RTT && is0RTTPossible res
         let conf'
@@ -114,6 +114,8 @@ main = do
                   , ccEarlyData  = Just (0, cmd)
                   }
               | otherwise = conf { ccResumption = res }
+        putStrLn "<<<< next connection >>>>"
+        putStrLn "------------------------"
         void $ withQUICClient conf' $ \qc -> do
             conn <- connect qc
             when optDebug $ getConnectionInfo conn >>= print
