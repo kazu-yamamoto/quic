@@ -40,13 +40,20 @@ newServerRoute = ServerRoute <$> generateTokenSecret <*> newIORef M.empty <*> ne
 type RouteTable = Map CID (TQueue CryptPacket)
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
-router conf route (s,mysa) = forever $ do
-    (bs0,peersa) <- recv
-    (pkt, bs0RTT) <- decodePacket bs0
-    let send bs = void $ NBS.sendTo s bs peersa
-    dispatch conf route pkt mysa peersa send bs0RTT
+router conf route (s,mysa) = do
+    let (opt,cmsgid) = case mysa of
+          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
+          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
+          _               -> error "router"
+    setSocketOption s opt 1
+    forever $ do
+        (peersa, bs0, cmsgs, _) <- recv
+        let Just cmsg = lookupCmsg cmsgid cmsgs
+        (pkt, bs0RTT) <- decodePacket bs0
+        let send bs = void $ NBS.sendMsg s peersa [bs] [cmsg] 0
+        dispatch conf route pkt mysa peersa send bs0RTT
   where
-    recv = NBS.recvFrom s 2048
+    recv = NBS.recvMsg s 2048 64 0
 
 pathValidation :: IO ()
 pathValidation = undefined
