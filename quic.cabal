@@ -18,6 +18,7 @@ library
                        Network.QUIC.Connection
                        Network.QUIC.Connection.Crypto
                        Network.QUIC.Connection.Misc
+                       Network.QUIC.Connection.PacketNumber
                        Network.QUIC.Connection.State
                        Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Transmit
