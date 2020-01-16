@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -41,16 +42,22 @@ type RouteTable = Map CID (TQueue CryptPacket)
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
 router conf route (s,mysa) = do
-    let (opt,cmsgid) = case mysa of
+    let (opt,_cmsgid) = case mysa of
           SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
           SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
           _               -> error "router"
     setSocketOption s opt 1
     forever $ do
-        (peersa, bs0, cmsgs, _) <- recv
-        let Just cmsg = lookupCmsg cmsgid cmsgs
+        (peersa, bs0, _cmsgs, _) <- recv
+        -- macOS overrides the local address of the socket
+        -- if in_pktinfo is used.
+#if defined(darwin_HOST_OS)
+        let cmsgs' = []
+#else
+        let cmsgs' = filterCmsg _cmsgid _cmsgs
+#endif
         (pkt, bs0RTT) <- decodePacket bs0
-        let send bs = void $ NBS.sendMsg s peersa [bs] [cmsg] 0
+        let send bs = void $ NBS.sendMsg s peersa [bs] cmsgs' 0
         dispatch conf route pkt mysa peersa send bs0RTT
   where
     recv = NBS.recvMsg s 2048 64 0
