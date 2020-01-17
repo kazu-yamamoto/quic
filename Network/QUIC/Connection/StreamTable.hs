@@ -1,4 +1,9 @@
-module Network.QUIC.Connection.StreamTable where
+module Network.QUIC.Connection.StreamTable (
+    setStreamOffset
+  , modifyStreamOffset
+  , setCryptoOffset
+  , modifyCryptoOffset
+  ) where
 
 import Data.IORef
 import qualified Data.Map.Strict as Map

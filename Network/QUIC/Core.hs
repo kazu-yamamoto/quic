@@ -67,7 +67,7 @@ connect QUICClient{..} = E.handle tlserr $ do
         setThreadIds conn [tid0,tid1,tid2]
         writeIORef connref $ Just conn
         handshakeClient clientConfig conn
-        setConnectionState conn Open
+        setConnectionOpen conn
         return conn
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 
@@ -141,7 +141,7 @@ accept QUICServer{..} = E.handle tlserr $ do
             handshakeServer serverConfig oCID conn
             setServerRoleInfo conn register unregister
             register myCID
-            setConnectionState conn Open
+            setConnectionOpen conn
             return conn
     setup `E.onException` NS.close s
   where
@@ -154,7 +154,6 @@ close conn = do
     unless (isClient conn) $ do
         unregister <- getUnregister conn
         unregister $ myCID conn
-    setConnectionState conn $ Closing (CloseState False False)
     let frames = [ConnectionCloseQUIC NoError 0 ""]
     atomically $ writeTQueue (outputQ conn) $ OutControl RTT1Level frames
     setCloseSent conn

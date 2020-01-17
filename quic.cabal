@@ -16,13 +16,6 @@ library
   exposed-modules:     Network.QUIC
                        Network.QUIC.Config
                        Network.QUIC.Connection
-                       Network.QUIC.Connection.Crypto
-                       Network.QUIC.Connection.Misc
-                       Network.QUIC.Connection.PacketNumber
-                       Network.QUIC.Connection.State
-                       Network.QUIC.Connection.StreamTable
-                       Network.QUIC.Connection.Transmit
-                       Network.QUIC.Connection.Types
                        Network.QUIC.Core
                        Network.QUIC.Handshake
                        Network.QUIC.IO
@@ -54,6 +47,13 @@ library
                        Network.QUIC.Types.Resumption
                        Network.QUIC.Utils
   other-modules:
+                       Network.QUIC.Connection.Crypto
+                       Network.QUIC.Connection.Misc
+                       Network.QUIC.Connection.PacketNumber
+                       Network.QUIC.Connection.State
+                       Network.QUIC.Connection.StreamTable
+                       Network.QUIC.Connection.Transmit
+                       Network.QUIC.Connection.Types
                        Network.QUIC.Imports
   -- other-extensions:
   build-depends:       base >= 4.7 && < 5

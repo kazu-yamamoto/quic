@@ -1,11 +1,79 @@
 module Network.QUIC.Connection (
-    module Network.QUIC.Connection.Crypto
-  , module Network.QUIC.Connection.Misc
-  , module Network.QUIC.Connection.PacketNumber
-  , module Network.QUIC.Connection.State
-  , module Network.QUIC.Connection.StreamTable
-  , module Network.QUIC.Connection.Transmit
-  , module Network.QUIC.Connection.Types
+    Connection
+  , clientConnection
+  , serverConnection
+  , isClient
+  , myCID
+  , connSend
+  , connRecv
+  , connClose
+  , inputQ -- fixme
+  , outputQ
+  , cryptoQ
+  --
+  , Input(..)
+  , Output(..)
+  -- * Packet numbers
+  , getPacketNumber
+  , getPNs
+  , addPNs
+  , clearPNs
+  , nullPNs
+  , fromPNs
+  -- * Crypto
+  , setEncryptionLevel
+  , checkEncryptionLevel
+  , getClientController
+  , setClientController
+  , clearClientController
+  , getServerController
+  , setServerController
+  , clearServerController
+  , getPeerParameters
+  , setPeerParameters
+  , getCipher
+  , getTLSMode
+  , getTxSecret
+  , getRxSecret
+  , setInitialSecrets
+  , getEarlySecretInfo
+  , getHandshakeSecretInfo
+  , getApplicationSecretInfo
+  , setEarlySecretInfo
+  , setHandshakeSecretInfo
+  , setApplicationSecretInfo
+  -- * Misc
+  , setPeerCID
+  , getPeerCID
+  , setThreadIds
+  , clearThreads
+  , setToken
+  , getToken
+  , getResumptionInfo
+  , setRetried
+  , getRetried
+  , setResumptionSession
+  , setNewToken
+  , setServerRoleInfo
+  , getUnregister
+  -- * Transmit
+  , keepOutput
+  , releaseOutput
+  , releaseOutputRemoveAcks
+  , getRetransmissions
+  , MilliSeconds(..)
+  -- * State
+  , setConnectionOpen
+  , isConnectionOpen
+  , setCloseSent
+  , setCloseReceived
+  , isCloseSent
+  , waitClosed
+  -- * Stream
+  , setStreamOffset
+  , modifyStreamOffset
+  , setCryptoOffset
+  , modifyCryptoOffset
   ) where
 
 import Network.QUIC.Connection.Crypto
