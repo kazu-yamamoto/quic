@@ -10,9 +10,6 @@ module Network.QUIC.Connection (
   , inputQ -- fixme
   , outputQ
   , cryptoQ
-  --
-  , Input(..)
-  , Output(..)
   -- * Packet numbers
   , getPacketNumber
   , getPNs
