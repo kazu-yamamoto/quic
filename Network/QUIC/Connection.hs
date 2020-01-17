@@ -13,11 +13,11 @@ module Network.QUIC.Connection (
   -- * Packet numbers
   , getPacketNumber
   , PeerPacketNumbers
-  , getPNs
-  , addPNs
-  , clearPNs
-  , nullPNs
-  , fromPNs
+  , getPeerPacketNumbers
+  , addPeerPacketNumbers
+  , clearPeerPacketNumbers
+  , nullPeerPacketNumbers
+  , fromPeerPacketNumbers
   -- * Crypto
   , setEncryptionLevel
   , checkEncryptionLevel

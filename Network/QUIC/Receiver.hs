@@ -34,7 +34,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
         case eplain of
           Right (Plain _ pn fs) -> do
               rets <- mapM (processFrame conn level) fs
-              when (and rets) $ addPNs conn level pn
+              when (and rets) $ addPeerPacketNumbers conn level pn
           Left err -> print err
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool

@@ -38,38 +38,38 @@ construct conn out lvl frames genLowerAck mTargetSize = do
   where
     mycid = myCID conn
     constructAckPacket HandshakeLevel peercid token = do
-        pns <- getPNs conn InitialLevel
-        if nullPNs pns then
+        pns <- getPeerPacketNumbers conn InitialLevel
+        if nullPeerPacketNumbers pns then
             return []
           else do
             -- This packet will not be acknowledged.
-            clearPNs conn InitialLevel
+            clearPeerPacketNumbers conn InitialLevel
             mypn <- getPacketNumber conn
             let header   = Initial currentDraft peercid mycid token
-                ackFrame = Ack (toAckInfo $ fromPNs pns) 0
+                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers pns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
     constructAckPacket RTT1Level peercid _ = do
-        pns <- getPNs conn HandshakeLevel
-        if nullPNs pns then
+        pns <- getPeerPacketNumbers conn HandshakeLevel
+        if nullPeerPacketNumbers pns then
             return []
           else do
             -- This packet will not be acknowledged.
-            clearPNs conn HandshakeLevel
+            clearPeerPacketNumbers conn HandshakeLevel
             mypn <- getPacketNumber conn
             let header   = Handshake currentDraft peercid mycid
-                ackFrame = Ack (toAckInfo $ fromPNs pns) 0
+                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers pns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
     constructAckPacket _ _ _ = return []
     constructTargetPacket peercid mlen token = do
         mypn <- getPacketNumber conn
-        pns <- getPNs conn lvl
+        pns <- getPeerPacketNumbers conn lvl
         let frames'
-              | nullPNs pns = frames
-              | otherwise   = Ack (toAckInfo $ fromPNs pns) 0 : frames
+              | nullPeerPacketNumbers pns = frames
+              | otherwise   = Ack (toAckInfo $ fromPeerPacketNumbers pns) 0 : frames
         let ppkt = case lvl of
               InitialLevel   -> PlainPacket (Initial   currentDraft peercid mycid token) (Plain (Flags 0) mypn frames')
               RTT0Level      -> PlainPacket (RTT0      currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')

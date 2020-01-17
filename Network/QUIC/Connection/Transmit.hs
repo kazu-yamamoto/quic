@@ -42,7 +42,7 @@ releaseOutputRemoveAcks conn pn = do
     mr <- getRetrans conn pn
     case mr of
       Nothing                  -> return ()
-      Just (Retrans _ lvl pns) -> updatePNs conn lvl pns
+      Just (Retrans _ lvl pns) -> updatePeerPacketNumbers conn lvl pns
 
 getRetrans :: Connection -> PacketNumber -> IO (Maybe Retrans)
 getRetrans Connection{..} pn = do

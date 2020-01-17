@@ -2,12 +2,12 @@
 
 module Network.QUIC.Connection.PacketNumber (
     getPacketNumber
-  , getPNs
-  , addPNs
-  , updatePNs
-  , clearPNs
-  , nullPNs
-  , fromPNs
+  , getPeerPacketNumbers
+  , addPeerPacketNumbers
+  , updatePeerPacketNumbers
+  , clearPeerPacketNumbers
+  , nullPeerPacketNumbers
+  , fromPeerPacketNumbers
   ) where
 
 import Data.IORef
@@ -27,23 +27,23 @@ getPacketNumber Connection{..} = atomicModifyIORef' packetNumber inc
 ----------------------------------------------------------------
 -- Peer's packet numbers
 
-getPNs :: Connection -> EncryptionLevel -> IO PeerPacketNumbers
-getPNs Connection{..} lvl = get <$> readIORef peerPacketNumbers
+getPeerPacketNumbers :: Connection -> EncryptionLevel -> IO PeerPacketNumbers
+getPeerPacketNumbers Connection{..} lvl = get <$> readIORef peerPacketNumbers
   where
     get (PeerPacketNumbers pns)  = PeerPacketNumbers . Set.map (convert lvl) . Set.filter (range lvl) $ pns
 
-addPNs :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
-addPNs Connection{..} lvl pn = atomicModifyIORef' peerPacketNumbers add
+addPeerPacketNumbers :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
+addPeerPacketNumbers Connection{..} lvl pn = atomicModifyIORef' peerPacketNumbers add
   where
     add (PeerPacketNumbers pns) = (PeerPacketNumbers (Set.insert (convert lvl pn) pns), ())
 
-clearPNs :: Connection -> EncryptionLevel -> IO ()
-clearPNs Connection{..} lvl = atomicModifyIORef' peerPacketNumbers clear
+clearPeerPacketNumbers :: Connection -> EncryptionLevel -> IO ()
+clearPeerPacketNumbers Connection{..} lvl = atomicModifyIORef' peerPacketNumbers clear
   where
     clear (PeerPacketNumbers pns) = (PeerPacketNumbers (Set.filter (not . range lvl) pns), ())
 
-updatePNs :: Connection -> EncryptionLevel -> PeerPacketNumbers -> IO ()
-updatePNs Connection{..} lvl (PeerPacketNumbers pns) = atomicModifyIORef' peerPacketNumbers update
+updatePeerPacketNumbers :: Connection -> EncryptionLevel -> PeerPacketNumbers -> IO ()
+updatePeerPacketNumbers Connection{..} lvl (PeerPacketNumbers pns) = atomicModifyIORef' peerPacketNumbers update
   where
     pns' = Set.map (convert lvl) pns
     update (PeerPacketNumbers pns0) = (PeerPacketNumbers (pns0 Set.\\ pns'), ())
@@ -68,8 +68,8 @@ range RTT1Level      pn = 0 <= pn
 
 ----------------------------------------------------------------
 
-nullPNs :: PeerPacketNumbers -> Bool
-nullPNs (PeerPacketNumbers pns) = Set.null pns
+nullPeerPacketNumbers :: PeerPacketNumbers -> Bool
+nullPeerPacketNumbers (PeerPacketNumbers pns) = Set.null pns
 
-fromPNs :: PeerPacketNumbers -> [PacketNumber]
-fromPNs (PeerPacketNumbers pns) = Set.toDescList pns
+fromPeerPacketNumbers :: PeerPacketNumbers -> [PacketNumber]
+fromPeerPacketNumbers (PeerPacketNumbers pns) = Set.toDescList pns
