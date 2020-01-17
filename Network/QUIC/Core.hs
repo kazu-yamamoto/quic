@@ -101,7 +101,7 @@ recvClient s connref = do
                         setToken conn token
                         setCryptoOffset conn InitialLevel 0
                         setRetried conn True
-                        atomically $ writeTQueue (outputQ conn) $ OutHndClientHello cdat mEarydata
+                        putOutput conn $ OutHndClientHello cdat mEarydata
                     _ -> return ()
         return Nothing
 
@@ -155,7 +155,7 @@ close conn = do
         unregister <- getUnregister conn
         unregister $ myCID conn
     let frames = [ConnectionCloseQUIC NoError 0 ""]
-    atomically $ writeTQueue (outputQ conn) $ OutControl RTT1Level frames
+    putOutput conn $ OutControl RTT1Level frames
     setCloseSent conn
     void $ timeout 100000 $ waitClosed conn -- fixme: timeout
     clearThreads conn

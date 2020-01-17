@@ -6,7 +6,6 @@ module Network.QUIC.Sender (
   ) where
 
 import Control.Concurrent
-import Control.Concurrent.STM
 import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
@@ -87,7 +86,7 @@ sender :: Connection -> IO ()
 sender conn = loop
   where
     loop = forever $ do
-        out <- atomically $ readTQueue $ outputQ conn
+        out <- takeOutput conn
         case out of
           OutHndClientHello ch mEarlyData -> do
               frame <- cryptoFrame conn ch InitialLevel
@@ -157,7 +156,7 @@ resender conn = forever $ do
     let outs'
          | open      = filter isEstablished outs
          | otherwise = outs
-    mapM_ (atomically . writeTQueue (outputQ conn)) outs'
+    mapM_ (putOutput conn) outs'
 
 isEstablished :: Output -> Bool
 isEstablished OutStream{}       = True

@@ -2,7 +2,6 @@
 
 module Network.QUIC.Handshake where
 
-import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as B
 import Data.ByteString hiding (putStrLn)
@@ -18,11 +17,11 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 sendCryptoData :: Connection -> Output -> IO ()
-sendCryptoData conn out = atomically $ writeTQueue (outputQ conn) out
+sendCryptoData = putOutput
 
 recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString, Offset)
 recvCryptoData conn = do
-    dat <- atomically $ readTQueue (cryptoQ conn)
+    dat <- takeCrypto conn
     case dat of
       InpHandshake lvl bs off _  -> return (lvl, bs, off)
       InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs

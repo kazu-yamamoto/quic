@@ -5,7 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Control.Concurrent.STM
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection
@@ -47,20 +46,20 @@ processFrame conn _ (Ack ackInfo _) = do
 processFrame conn lvl (Crypto off cdat) = do
     case lvl of
       InitialLevel   -> do
-          atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
+          putCrypto conn $ InpHandshake lvl cdat off emptyToken
           return True
       RTT0Level -> do
           putStrLn $ "processFrame: invalid packet type " ++ show lvl
           return False
       HandshakeLevel
           | isClient conn -> do
-              atomically $ writeTQueue (cryptoQ conn) $ InpHandshake lvl cdat off emptyToken
+              putCrypto conn $ InpHandshake lvl cdat off emptyToken
               return True
          | otherwise -> do
               control <- getServerController conn
               SendSessionTicket nst <- control $ PutClientFinished cdat
               -- fixme: vs sendCryptoData
-              atomically $ writeTQueue (outputQ conn) $ OutHndServerNST nst
+              putOutput conn $ OutHndServerNST nst
               ServerHandshakeDone <- control ExitServer
               clearServerController conn
               return True
@@ -82,34 +81,34 @@ processFrame _ _ (NewConnectionID _sn _ _cid _token)  = do
 --    putStrLn $ "FIXME: NewConnectionID " ++ show sn
     return True
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
-    atomically $ writeTQueue (inputQ conn)  $ InpTransportError err ftyp reason
+    putInput conn $ InpTransportError err ftyp reason
     -- to cancel handshake
-    atomically $ writeTQueue (cryptoQ conn) $ InpTransportError err ftyp reason
+    putCrypto conn $ InpTransportError err ftyp reason
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
     return False
 processFrame conn _ (ConnectionCloseApp err reason) = do
     putStrLn $ "App: " ++ show err
-    atomically $ writeTQueue (inputQ conn)  $ InpApplicationError err reason
+    putInput conn $ InpApplicationError err reason
     -- to cancel handshake
-    atomically $ writeTQueue (cryptoQ conn) $ InpApplicationError err reason
+    putCrypto conn $ InpApplicationError err reason
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
     return False
 processFrame conn RTT0Level (Stream sid _off dat fin) = do
     -- fixme _off
-    atomically $ writeTQueue (inputQ conn) $ InpStream sid dat
-    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ InpStream sid ""
+    putInput conn $ InpStream sid dat
+    when (fin && dat /= "") $ putInput conn $ InpStream sid ""
     return True
 processFrame conn RTT1Level (Stream sid _off dat fin) = do
     -- fixme _off
-    atomically $ writeTQueue (inputQ conn) $ InpStream sid dat
-    when (fin && dat /= "") $ atomically $ writeTQueue (inputQ conn) $ InpStream sid ""
+    putInput conn $ InpStream sid dat
+    when (fin && dat /= "") $ putInput conn $ InpStream sid ""
     return True
 processFrame conn lvl Ping = do
-    atomically $ writeTQueue (outputQ conn) $ OutControl lvl []
+    putOutput conn $ OutControl lvl []
     return True
 processFrame _ _ _frame        = do
     putStrLn "FIXME: processFrame"

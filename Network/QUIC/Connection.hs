@@ -7,9 +7,6 @@ module Network.QUIC.Connection (
   , connSend
   , connRecv
   , connClose
-  , inputQ -- fixme
-  , outputQ
-  , cryptoQ
   -- * Packet numbers
   , getPacketNumber
   , getPNs
@@ -71,11 +68,19 @@ module Network.QUIC.Connection (
   , modifyStreamOffset
   , setCryptoOffset
   , modifyCryptoOffset
+  -- * Queue
+  , takeInput
+  , putInput
+  , takeCrypto
+  , putCrypto
+  , takeOutput
+  , putOutput
   ) where
 
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.PacketNumber
+import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Transmit

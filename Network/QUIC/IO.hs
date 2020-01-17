@@ -2,7 +2,6 @@
 
 module Network.QUIC.IO where
 
-import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as B
 
@@ -18,7 +17,7 @@ send' conn sid bs = do
     open <- isConnectionOpen conn
     if open then do
         off <- modifyStreamOffset conn sid $ B.length bs
-        atomically $ writeTQueue (outputQ conn) $ OutStream sid bs off
+        putOutput conn $ OutStream sid bs off
       else
         E.throwIO ConnectionIsNotOpen
 
@@ -29,7 +28,7 @@ recv conn = do
 
 recv' :: Connection -> IO (StreamID, ByteString)
 recv' conn = do
-    mi <- atomically $ readTQueue (inputQ conn)
+    mi <- takeInput conn
     case mi of
       InpStream sid bs      -> return (sid, bs)
       InpApplicationError{} -> return (0, "") -- fixme sid
