@@ -7,8 +7,6 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Hourglass
 import Data.IORef
-import Data.IntPSQ (IntPSQ)
-import qualified Data.IntPSQ as PSQ
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -52,8 +50,14 @@ newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
 
 type InputQ  = TQueue Input
 type OutputQ = TQueue Output
-type RetransDB = IntPSQ ElapsedP Retrans
-data Retrans = Retrans Output EncryptionLevel PeerPacketNumbers
+type RetransDB = [Retrans]
+data Retrans = Retrans {
+    retransTime          :: ElapsedP
+  , retransLevel         :: EncryptionLevel
+  , retransPacketNumbers :: [PacketNumber]
+  , retransOutput        :: Output
+  , retransACKs          :: PeerPacketNumbers
+  }
 
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
@@ -129,7 +133,7 @@ newConnection rl myCID peerCID send recv cls isecs =
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
-        <*> newIORef PSQ.empty
+        <*> newIORef []
         -- State
         <*> newTVarIO NotOpen
         <*> newIORef 0
