@@ -2,13 +2,17 @@ module Network.QUIC.Connection (
     Connection
   , clientConnection
   , serverConnection
+  , SendMany
+  , Receive
   , isClient
   , myCID
+  -- * Backend
   , connSend
   , connRecv
   , connClose
   -- * Packet numbers
   , getPacketNumber
+  , PeerPacketNumbers
   , getPNs
   , addPNs
   , clearPNs
