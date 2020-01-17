@@ -142,7 +142,7 @@ decodeAckFrame rbuf = do
         getRanges n' (build . ((gap, range) :))
 
 decodeResetFrame :: ReadBuffer -> IO Frame
-decodeResetFrame _ = return RestStream -- fixme
+decodeResetFrame _ = return ResetStream -- fixme
 
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do

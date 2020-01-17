@@ -14,7 +14,7 @@ type FrameType = Int
 data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
-           | RestStream -- fixme
+           | ResetStream -- fixme
            | StopSending -- fixme
            | Crypto Offset CryptoData
            | NewToken Token
