@@ -49,7 +49,7 @@ newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
                           deriving (Eq, Show)
 
 type InputQ  = TQueue Input
-type OutputQ = TQueue Output
+type OutputQ = TQueue (Output,[PacketNumber])
 type RetransDB = [Retrans]
 data Retrans = Retrans {
     retransTime          :: ElapsedP

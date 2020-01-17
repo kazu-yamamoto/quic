@@ -17,9 +17,12 @@ takeCrypto conn = atomically $ readTQueue (cryptoQ conn)
 putCrypto :: Connection -> Input -> IO ()
 putCrypto conn inp = atomically $ writeTQueue (cryptoQ conn) inp
 
-takeOutput :: Connection -> IO Output
+takeOutput :: Connection -> IO (Output,[PacketNumber])
 takeOutput conn = atomically $ readTQueue (outputQ conn)
 
 putOutput :: Connection -> Output -> IO ()
-putOutput conn inp = atomically $ writeTQueue (outputQ conn) inp
+putOutput conn out = atomically $ writeTQueue (outputQ conn) (out,[])
+
+putOutput' :: Connection -> (Output,[PacketNumber]) -> IO ()
+putOutput' conn outpns = atomically $ writeTQueue (outputQ conn) outpns
 

@@ -23,8 +23,8 @@ cryptoFrame conn crypto lvl = do
 
 ----------------------------------------------------------------
 
-construct :: Connection -> Output -> EncryptionLevel -> [Frame] -> Bool -> Maybe Int -> IO [ByteString]
-construct conn out lvl frames genLowerAck mTargetSize = do
+construct :: Connection -> Output -> [PacketNumber] -> EncryptionLevel -> [Frame] -> Bool -> Maybe Int -> IO [ByteString]
+construct conn out pns lvl frames genLowerAck mTargetSize = do
     token <- getToken conn
     peercid <- getPeerCID conn
     if genLowerAck then do
@@ -38,38 +38,38 @@ construct conn out lvl frames genLowerAck mTargetSize = do
   where
     mycid = myCID conn
     constructAckPacket HandshakeLevel peercid token = do
-        pns <- getPeerPacketNumbers conn InitialLevel
-        if nullPeerPacketNumbers pns then
+        ppns <- getPeerPacketNumbers conn InitialLevel
+        if nullPeerPacketNumbers ppns then
             return []
           else do
             -- This packet will not be acknowledged.
             clearPeerPacketNumbers conn InitialLevel
             mypn <- getPacketNumber conn
             let header   = Initial currentDraft peercid mycid token
-                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers pns) 0
+                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
     constructAckPacket RTT1Level peercid _ = do
-        pns <- getPeerPacketNumbers conn HandshakeLevel
-        if nullPeerPacketNumbers pns then
+        ppns <- getPeerPacketNumbers conn HandshakeLevel
+        if nullPeerPacketNumbers ppns then
             return []
           else do
             -- This packet will not be acknowledged.
             clearPeerPacketNumbers conn HandshakeLevel
             mypn <- getPacketNumber conn
             let header   = Handshake currentDraft peercid mycid
-                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers pns) 0
+                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
     constructAckPacket _ _ _ = return []
     constructTargetPacket peercid mlen token = do
         mypn <- getPacketNumber conn
-        pns <- getPeerPacketNumbers conn lvl
+        ppns <- getPeerPacketNumbers conn lvl
         let frames'
-              | nullPeerPacketNumbers pns = frames
-              | otherwise   = Ack (toAckInfo $ fromPeerPacketNumbers pns) 0 : frames
+              | nullPeerPacketNumbers ppns = frames
+              | otherwise   = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0 : frames
         let ppkt = case lvl of
               InitialLevel   -> PlainPacket (Initial   currentDraft peercid mycid token) (Plain (Flags 0) mypn frames')
               RTT0Level      -> PlainPacket (RTT0      currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')
@@ -77,7 +77,7 @@ construct conn out lvl frames genLowerAck mTargetSize = do
               RTT1Level      -> PlainPacket (Short                  peercid)             (Plain (Flags 0) mypn frames')
         -- fixme: how to receive AKC for 0-RTT?
         when (frames /= [] && lvl /= RTT0Level) $
-            keepOutput conn mypn out lvl pns
+            keepOutput conn (mypn:pns) out lvl ppns
         encodePlainPacket conn ppkt mlen
 
 ----------------------------------------------------------------
@@ -86,7 +86,7 @@ sender :: Connection -> IO ()
 sender conn = loop
   where
     loop = forever $ do
-        out <- takeOutput conn
+        (out,pns) <- takeOutput conn
         case out of
           OutHndClientHello ch mEarlyData -> do
               frame <- cryptoFrame conn ch InitialLevel
@@ -94,53 +94,53 @@ sender conn = loop
               -- fixme: the case where mEarlyData is larger.
               case mEarlyData of
                 Nothing -> do
-                    bss <- construct conn out InitialLevel frames False $ Just maximumQUICPacketSize
+                    bss <- construct conn out pns InitialLevel frames False $ Just maximumQUICPacketSize
                     connSend conn bss
                 Just (sid,earlyData) -> do
                     let out0 = OutHndClientHello ch Nothing
-                    bss0 <- construct conn out0 InitialLevel frames False Nothing
+                    bss0 <- construct conn out0 pns InitialLevel frames False Nothing
                     let size = maximumQUICPacketSize - sum (map B.length bss0)
                     off <- modifyStreamOffset conn sid $ B.length earlyData
                     let out1 = OutStream sid earlyData off
-                    bss1 <- construct conn out1 RTT0Level [Stream sid off earlyData True] False $ Just size
+                    bss1 <- construct conn out1 pns RTT0Level [Stream sid off earlyData True] False $ Just size
                     connSend conn (bss0 ++ bss1)
           OutHndServerHello  sh sf -> do
               frame0 <- cryptoFrame conn sh InitialLevel
-              bss0 <- construct conn out InitialLevel [frame0] False Nothing
+              bss0 <- construct conn out pns InitialLevel [frame0] False Nothing
               -- 824 = 1024 - 200 (size of sh)
               -- but 900 is good enough...
               let (sf1,sf2) = B.splitAt 824 sf
               if sf2 == "" then do
                   let size = maximumQUICPacketSize - sum (map B.length bss0)
                   frame1 <- cryptoFrame conn sf1 HandshakeLevel
-                  bss1 <- construct conn out HandshakeLevel [frame1] False $ Just size
+                  bss1 <- construct conn out pns HandshakeLevel [frame1] False $ Just size
                   connSend conn (bss0 ++ bss1)
                 else do
                   let size = maximumQUICPacketSize - sum (map B.length bss0)
                   frame1 <- cryptoFrame conn sf1 HandshakeLevel
-                  bss1 <- construct conn out HandshakeLevel [frame1] False $ Just size
+                  bss1 <- construct conn out pns HandshakeLevel [frame1] False $ Just size
                   frame2 <- cryptoFrame conn sf2 HandshakeLevel
-                  bss2 <- construct conn out HandshakeLevel [frame2] False $ Just maximumQUICPacketSize
+                  bss2 <- construct conn out pns HandshakeLevel [frame2] False $ Just maximumQUICPacketSize
                   connSend conn (bss0 ++ bss1)
                   connSend conn bss2
           OutHndServerHelloR sh -> do
               frame <- cryptoFrame conn sh InitialLevel
-              bss <- construct conn out InitialLevel [frame] False $ Just maximumQUICPacketSize
+              bss <- construct conn out pns InitialLevel [frame] False $ Just maximumQUICPacketSize
               connSend conn bss
           OutHndClientFinished cf -> do
               -- fixme size
               frame <- cryptoFrame conn cf HandshakeLevel
-              bss <- construct conn out HandshakeLevel [frame] True $ Just maximumQUICPacketSize
+              bss <- construct conn out pns HandshakeLevel [frame] True $ Just maximumQUICPacketSize
               connSend conn bss
           OutHndServerNST nst -> do
               frame <- cryptoFrame conn nst RTT1Level
-              bss <- construct conn out RTT1Level [frame] True $ Just maximumQUICPacketSize
+              bss <- construct conn out pns RTT1Level [frame] True $ Just maximumQUICPacketSize
               connSend conn bss
           OutControl lvl frames -> do
-              bss <- construct conn out lvl frames False $ Just maximumQUICPacketSize
+              bss <- construct conn out pns lvl frames False $ Just maximumQUICPacketSize
               connSend conn bss
           OutStream sid dat off -> do
-              bss <- construct conn out RTT1Level [Stream sid off dat True] False $ Just maximumQUICPacketSize
+              bss <- construct conn out pns RTT1Level [Stream sid off dat True] False $ Just maximumQUICPacketSize
               connSend conn bss
 
 ----------------------------------------------------------------
@@ -148,18 +148,18 @@ sender conn = loop
 resender :: Connection -> IO ()
 resender conn = forever $ do
     threadDelay 100000
-    outs <- getRetransmissions conn (MilliSeconds 250)
+    outpns <- getRetransmissions conn (MilliSeconds 250)
     open <- isConnectionOpen conn
     -- Some implementations do not return Ack for Initial and Handshake
     -- correctly. We should consider that the success of handshake
     -- implicitly acknowledge them.
-    let outs'
-         | open      = filter isEstablished outs
-         | otherwise = outs
-    mapM_ (putOutput conn) outs'
+    let outpns'
+         | open      = filter isEstablished outpns
+         | otherwise = outpns
+    mapM_ (putOutput' conn) outpns'
 
-isEstablished :: Output -> Bool
-isEstablished OutStream{}       = True
-isEstablished OutControl{}      = True
-isEstablished OutHndServerNST{} = True
-isEstablished _                 = False
+isEstablished :: (Output,[PacketNumber]) -> Bool
+isEstablished (OutStream{},_)       = True
+isEstablished (OutControl{},_)      = True
+isEstablished (OutHndServerNST{},_) = True
+isEstablished _                     = False

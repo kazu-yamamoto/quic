@@ -79,6 +79,7 @@ module Network.QUIC.Connection (
   , putCrypto
   , takeOutput
   , putOutput
+  , putOutput'
   ) where
 
 import Network.QUIC.Connection.Crypto

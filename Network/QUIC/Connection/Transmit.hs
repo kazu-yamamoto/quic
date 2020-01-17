@@ -20,11 +20,10 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-keepOutput :: Connection -> PacketNumber -> Output -> EncryptionLevel -> PeerPacketNumbers -> IO ()
-keepOutput Connection{..} pn out lvl ppns = do
+keepOutput :: Connection -> [PacketNumber] -> Output -> EncryptionLevel -> PeerPacketNumbers -> IO ()
+keepOutput Connection{..} pns out lvl ppns = do
     tm <- timeCurrentP
-    let pn' = fromIntegral pn
-        ent = Retrans tm lvl [pn'] out ppns
+    let ent = Retrans tm lvl pns out ppns
     atomicModifyIORef' retransDB (\lst -> (ent:lst, ()))
 
 releaseOutput :: Connection -> PacketNumber -> IO (Maybe Output)
@@ -45,11 +44,10 @@ deleteRetrans :: Connection -> PacketNumber -> IO (Maybe Retrans)
 deleteRetrans Connection{..} pn = do
     atomicModifyIORef' retransDB del
   where
-    pn' = fromIntegral pn
-    del []                                = ([], Nothing)
+    del []                               = ([], Nothing)
     del (x:xs)
-      | pn' `elem` retransPacketNumbers x = (xs, Just x)
-      | otherwise                         = x |> del xs
+      | pn `elem` retransPacketNumbers x = (xs, Just x)
+      | otherwise                        = x |> del xs
     a |> (as, b) = (a:as, b)
 
 ----------------------------------------------------------------
@@ -65,11 +63,13 @@ timeDel (ElapsedP sec nano) milli
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
 
-getRetransmissions :: Connection -> MilliSeconds -> IO [Output]
+getRetransmissions :: Connection -> MilliSeconds -> IO [(Output,[PacketNumber])]
 getRetransmissions Connection{..} milli = do
     tm <- timeCurrentP
     let tm' = tm `timeDel` milli
         split = span (\x -> retransTime x > tm')
-    map retransOutput <$> atomicModifyIORef' retransDB split
+    map mk <$> atomicModifyIORef' retransDB split
+ where
+   mk x = (retransOutput x, retransPacketNumbers x)
 
 ----------------------------------------------------------------
