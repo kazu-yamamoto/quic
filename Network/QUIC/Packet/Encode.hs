@@ -37,7 +37,7 @@ maximumQUICHeaderSize = 256
 
 ----------------------------------------------------------------
 
--- This is not used internally.
+-- | This is not used internally.
 encodePacket :: Connection -> PacketO -> IO [ByteString]
 encodePacket _    (PacketOV pkt) = (:[]) <$> encodeVersionNegotiationPacket pkt
 encodePacket _    (PacketOR pkt) = (:[]) <$> encodeRetryPacket pkt

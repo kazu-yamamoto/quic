@@ -30,13 +30,6 @@ library
                        Network.QUIC.TLS.Controller
                        Network.QUIC.TLS.Crypto
                        Network.QUIC.Packet
-                       Network.QUIC.Packet.Decode
-                       Network.QUIC.Packet.Decrypt
-                       Network.QUIC.Packet.Encode
-                       Network.QUIC.Packet.Frame
-                       Network.QUIC.Packet.Header
-                       Network.QUIC.Packet.Number
-                       Network.QUIC.Packet.Version
                        Network.QUIC.Types
                        Network.QUIC.Types.Ack
                        Network.QUIC.Types.CID
@@ -57,6 +50,13 @@ library
                        Network.QUIC.Connection.Transmit
                        Network.QUIC.Connection.Types
                        Network.QUIC.Imports
+                       Network.QUIC.Packet.Decode
+                       Network.QUIC.Packet.Decrypt
+                       Network.QUIC.Packet.Encode
+                       Network.QUIC.Packet.Frame
+                       Network.QUIC.Packet.Header
+                       Network.QUIC.Packet.Number
+                       Network.QUIC.Packet.Version
   -- other-extensions:
   build-depends:       base >= 4.7 && < 5
                      , base16-bytestring

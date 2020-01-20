@@ -1,10 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Packet.Decode (
-    decodeCryptPackets
+    decodePacket
   , decodePackets
-  , decodePacket
-  , decodeVersion
+  , decodeCryptPackets
   , decodeStatelessResetToken
   ) where
 

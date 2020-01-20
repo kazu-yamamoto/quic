@@ -1,6 +1,18 @@
 {-# LANGUAGE BinaryLiterals #-}
 
-module Network.QUIC.Packet.Header where
+module Network.QUIC.Packet.Header (
+    isLong
+  , isShort
+  , protectFlags
+  , unprotectFlags
+  , encodeLongHeaderFlags
+  , encodeShortHeaderFlags
+  , decodeLongHeaderPacketType
+  , encodePktNumLength
+  , decodePktNumLength
+  , versionNegotiationPacketType
+  , retryPacketType
+  ) where
 
 import Network.QUIC.Imports
 import Network.QUIC.Types

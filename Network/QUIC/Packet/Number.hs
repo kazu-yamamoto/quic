@@ -1,4 +1,7 @@
-module Network.QUIC.Packet.Number where
+module Network.QUIC.Packet.Number (
+    encodePacketNumber
+  , decodePacketNumber
+  ) where
 
 import Network.QUIC.Imports
 import Network.QUIC.Types

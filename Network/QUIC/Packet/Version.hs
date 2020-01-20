@@ -1,4 +1,7 @@
-module Network.QUIC.Packet.Version where
+module Network.QUIC.Packet.Version (
+    encodeVersion
+  , decodeVersion
+  ) where
 
 import Network.QUIC.Imports
 import Network.QUIC.Types

@@ -1,4 +1,7 @@
-module Network.QUIC.Packet.Frame where
+module Network.QUIC.Packet.Frame (
+    encodeFrames
+  , decodeFrames
+  ) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
