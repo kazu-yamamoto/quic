@@ -13,6 +13,7 @@ module Network.QUIC.Route.Server (
   ) where
 
 import Control.Concurrent.STM
+import qualified Crypto.Token as CT
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -30,13 +31,13 @@ import Network.QUIC.Types
 data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue CryptPacket) (CID -> IO ()) (CID -> IO ())
 
 data ServerRoute = ServerRoute {
-    tokenSecret  :: TokenSecret
+    tokenManager :: CT.TokenManager
   , routeTable   :: IORef RouteTable
   , acceptQueue  :: TQueue Accept
   }
 
 newServerRoute :: IO ServerRoute
-newServerRoute = ServerRoute <$> generateTokenSecret <*> newIORef M.empty <*> newTQueueIO
+newServerRoute = ServerRoute <$> CT.spawnTokenManager CT.defaultConfig <*> newIORef M.empty <*> newTQueueIO
 
 type RouteTable = Map CID (TQueue CryptPacket)
 
@@ -101,7 +102,7 @@ dispatch ServerConfig{..} ServerRoute{..}
             | otherwise      -> pushToAcceptQ1
           Just q -> atomically $ writeTQueue q cpkt -- resend packets
   | otherwise = do
-        mretryToken <- decryptRetryToken tokenSecret token
+        mretryToken <- decryptRetryToken tokenManager token
         case mretryToken of
           Just rtoken
             | isRetryTokenValid rtoken -> pushToAcceptQ2  rtoken
@@ -128,7 +129,7 @@ dispatch ServerConfig{..} ServerRoute{..}
     sendRetry = do
         newdCID <- newCID
         let retryToken = RetryToken currentDraft newdCID sCID dCID
-        newtoken <- encryptRetryToken tokenSecret retryToken
+        newtoken <- encryptRetryToken tokenManager retryToken
         bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
         send bss
 dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ _ = do
