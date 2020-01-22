@@ -76,7 +76,7 @@ recvServerFinishedSendClientFinished control conn = loop (0 :: Int)
           SendClientFinished cf exts appSecInf -> do
               setApplicationSecretInfo conn appSecInf
               setEncryptionLevel conn RTT1Level
-              setParameters conn exts
+              setPeerParams conn exts
               sendCryptoData conn $ OutHndClientFinished cf
           _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
@@ -117,7 +117,7 @@ recvClientHello control conn = loop (0 :: Int)
                   setEarlySecretInfo conn elySecInf
                   setHandshakeSecretInfo conn hndSecInf
                   setEncryptionLevel conn HandshakeLevel
-                  setParameters conn exts
+                  setPeerParams conn exts
                   return sh0
               ServerNeedsMore -> do
                   -- yield
@@ -126,8 +126,8 @@ recvClientHello control conn = loop (0 :: Int)
                   loop expectedOff'
               _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
-setParameters :: Connection -> [ExtensionRaw] -> IO ()
-setParameters conn [ExtensionRaw 0xffa5 params] = do
+setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
+setPeerParams conn [ExtensionRaw 0xffa5 params] = do
     let Just plist = decodeParametersList params
     setPeerParameters conn plist
-setParameters _ _ = return ()
+setPeerParams _ _ = return ()
