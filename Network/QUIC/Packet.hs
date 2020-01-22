@@ -26,9 +26,10 @@ module Network.QUIC.Packet (
   , decodePktNumLength
   , versionNegotiationPacketType
   , retryPacketType
-  -- * Version
-  , encodeVersion
-  , decodeVersion
+  -- * Token
+  , RetryToken(..)
+  , encryptRetryToken
+  , decryptRetryToken
   ) where
 
 import Network.QUIC.Packet.Decode
@@ -36,4 +37,4 @@ import Network.QUIC.Packet.Decrypt
 import Network.QUIC.Packet.Encode
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
-import Network.QUIC.Packet.Version
+import Network.QUIC.Packet.Token

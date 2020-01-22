@@ -22,7 +22,6 @@ import qualified Network.Socket.ByteString as NBS
 import Network.QUIC.Config
 import Network.QUIC.Imports
 import Network.QUIC.Packet
-import Network.QUIC.Route.Token
 import Network.QUIC.TLS
 import Network.QUIC.Types
 

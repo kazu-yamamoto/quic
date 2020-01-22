@@ -1,8 +1,7 @@
-module Network.QUIC.Route.Token (
+module Network.QUIC.Packet.Token (
     RetryToken(..)
   , encryptRetryToken
   , decryptRetryToken
-  , TokenManager
   ) where
 
 import Crypto.Token
@@ -10,7 +9,7 @@ import Foreign.Storable
 import Foreign.Ptr
 import Network.ByteOrder
 
-import Network.QUIC.Packet
+import Network.QUIC.Packet.Version
 import Network.QUIC.TLS
 import Network.QUIC.Types
 

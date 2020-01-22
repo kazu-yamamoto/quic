@@ -22,7 +22,6 @@ library
                        Network.QUIC.Packet
                        Network.QUIC.Parameters
                        Network.QUIC.Receiver
-                       Network.QUIC.Route.Token
                        Network.QUIC.Sender
                        Network.QUIC.Server
                        Network.QUIC.Socket
@@ -55,6 +54,7 @@ library
                        Network.QUIC.Packet.Frame
                        Network.QUIC.Packet.Header
                        Network.QUIC.Packet.Number
+                       Network.QUIC.Packet.Token
                        Network.QUIC.Packet.Version
   -- other-extensions:
   build-depends:       base >= 4.7 && < 5
