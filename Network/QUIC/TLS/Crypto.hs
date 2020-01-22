@@ -35,9 +35,6 @@ module Network.QUIC.TLS.Crypto (
   , TrafficSecrets
   , ClientTrafficSecret(..)
   , ServerTrafficSecret(..)
-  -- * Low level
-  , aes256gcmEncrypt
-  , aes256gcmDecrypt
   ) where
 
 import qualified Control.Exception as E
