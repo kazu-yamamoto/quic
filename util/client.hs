@@ -97,7 +97,9 @@ main = do
     putStrLn "------------------------"
     res <- withQUICClient conf $ \qc -> do
         conn <- connect qc
-        when optDebug $ getConnectionInfo conn >>= print
+        when optDebug $ do
+            threadDelay 10000
+            getConnectionInfo conn >>= print
         client conn cmd `E.finally` close conn
     when (optResumption && not (isResumptionPossible res)) $ do
         putStrLn "Resumption is not available"
@@ -118,7 +120,9 @@ main = do
         putStrLn "------------------------"
         void $ withQUICClient conf' $ \qc -> do
             conn <- connect qc
-            when optDebug $ getConnectionInfo conn >>= print
+            when optDebug $ do
+                threadDelay 10000
+                getConnectionInfo conn >>= print
             if rtt0 then do
                 putStrLn "------------------------ Response for early data"
                 (sid, bs) <- recv' conn

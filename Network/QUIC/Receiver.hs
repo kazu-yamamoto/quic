@@ -75,10 +75,11 @@ processFrame conn lvl (Crypto off cdat) = do
               return False
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
+    putStrLn "processFrame: NewToken"
     return True
 processFrame _ _ (NewConnectionID _sn _ _cid _token)  = do
     -- fixme: register stateless token
---    putStrLn $ "FIXME: NewConnectionID " ++ show sn
+    putStrLn $ "processFrame: NewConnectionID " ++ show _sn
     return True
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     putInput conn $ InpTransportError err ftyp reason
@@ -89,7 +90,7 @@ processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     clearThreads conn
     return False
 processFrame conn _ (ConnectionCloseApp err reason) = do
-    putStrLn $ "App: " ++ show err
+    putStrLn $ "processFrame: ConnectionCloseApp " ++ show err
     putInput conn $ InpApplicationError err reason
     -- to cancel handshake
     putCrypto conn $ InpApplicationError err reason
@@ -111,8 +112,7 @@ processFrame conn lvl Ping = do
     putOutput conn $ OutControl lvl []
     return True
 processFrame _ _ _frame        = do
-    putStrLn "FIXME: processFrame"
-    print _frame
+    putStrLn $ "processFrame: " ++ show _frame
     return True
 
 -- QUIC version 1 uses only short packets for stateless reset.
