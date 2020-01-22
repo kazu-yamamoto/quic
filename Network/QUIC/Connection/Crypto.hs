@@ -123,7 +123,7 @@ setPeerParameters Connection{..} plist = do
 
 getTLSMode :: Connection -> IO HandshakeMode13
 getTLSMode Connection{..} = do
-    minfo <- readIORef $ appSecInfo
+    minfo <- readIORef appSecInfo
     case minfo of
       Nothing -> error "getTLSMode"
       Just (ApplicationSecretInfo mode _ _) -> return mode
@@ -187,7 +187,7 @@ rxHandshakeSecret conn = do
 
 xHandshakeSecret :: Connection -> IO (Secret, Secret)
 xHandshakeSecret Connection{..} = do
-    minfo <- readIORef $ hndSecInfo
+    minfo <- readIORef hndSecInfo
     case minfo of
       Nothing -> return (Secret "", Secret "")
       Just (HandshakeSecretInfo _ (ClientTrafficSecret c, ServerTrafficSecret s)) -> return (Secret c, Secret s)
@@ -206,7 +206,7 @@ rxApplicationSecret conn = do
 
 xApplicationSecret :: Connection -> IO (Secret, Secret)
 xApplicationSecret Connection{..} = do
-    minfo <- readIORef $ appSecInfo
+    minfo <- readIORef appSecInfo
     case minfo of
       Nothing -> return (Secret "", Secret "")
       Just (ApplicationSecretInfo _ _ (ClientTrafficSecret c, ServerTrafficSecret s)) -> return (Secret c, Secret s)

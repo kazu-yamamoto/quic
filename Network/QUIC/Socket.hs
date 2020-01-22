@@ -20,7 +20,7 @@ udpServerListenSocket ip = do
         family = sockAddrFamily sa
     s <- socket family Datagram defaultProtocol
     do { setSocketOption s ReuseAddr 1
-       ; withFdSocket s $ setCloseOnExecIfNeeded
+       ; withFdSocket s setCloseOnExecIfNeeded
  --      ; setSocketOption s IPv6Only 1 -- fixme
        ; bind s sa
        } `E.onException` close s
@@ -32,7 +32,7 @@ udpServerConnectedSocket mysa peersa = do
         anysa  = anySockAddr mysa
     s <- socket family Datagram defaultProtocol
     do { setSocketOption s ReuseAddr 1
-       ; withFdSocket s $ setCloseOnExecIfNeeded
+       ; withFdSocket s setCloseOnExecIfNeeded
        ; bind s anysa      -- (UDP, *:13443, *:*)
        ; connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
        } `E.onException` close s

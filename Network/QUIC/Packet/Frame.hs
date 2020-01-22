@@ -66,7 +66,7 @@ encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
     copyShortByteString wbuf reason
 encodeFrame wbuf (ConnectionCloseApp (ApplicationError err) reason) = do
     write8 wbuf 0x1d
-    encodeInt' wbuf $ fromIntegral $ err
+    encodeInt' wbuf $ fromIntegral err
     encodeInt' wbuf $ fromIntegral $ Short.length reason
     copyShortByteString wbuf reason
 encodeFrame _ _ = undefined

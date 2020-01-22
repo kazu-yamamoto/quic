@@ -27,7 +27,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data QUICClient = QUICClient {
+newtype QUICClient = QUICClient {
     clientConfig :: ClientConfig
   }
 

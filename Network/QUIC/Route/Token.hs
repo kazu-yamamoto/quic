@@ -1,6 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 module Network.QUIC.Route.Token (
     RetryToken(..)
   , encryptRetryToken
