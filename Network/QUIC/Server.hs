@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Route.Server (
+module Network.QUIC.Server (
     ServerRoute(..)
   , RouteTable
   , Accept(..)

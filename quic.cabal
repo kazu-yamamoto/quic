@@ -19,17 +19,16 @@ library
                        Network.QUIC.Core
                        Network.QUIC.Handshake
                        Network.QUIC.IO
+                       Network.QUIC.Packet
                        Network.QUIC.Parameters
                        Network.QUIC.Receiver
-                       Network.QUIC.Route
-                       Network.QUIC.Route.Server
                        Network.QUIC.Route.Token
                        Network.QUIC.Sender
+                       Network.QUIC.Server
                        Network.QUIC.Socket
                        Network.QUIC.TLS
                        Network.QUIC.TLS.Controller
                        Network.QUIC.TLS.Crypto
-                       Network.QUIC.Packet
                        Network.QUIC.Types
                        Network.QUIC.Types.Ack
                        Network.QUIC.Types.CID
