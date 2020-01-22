@@ -3,9 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Route.Server (
-    ServerConfig(..)
-  , defaultServerConfig
-  , ServerRoute(..)
+    ServerRoute(..)
   , RouteTable
   , Accept(..)
   , newServerRoute
