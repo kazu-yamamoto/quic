@@ -19,7 +19,9 @@ data TransportError = NoError
                     | FinalSizeError
                     | FrameEncodingError
                     | TransportParameterError
+                    | ConnectionIdLimitError
                     | ProtocolViolation
+                    | InvalidToken
                     | CryptoBufferExceeded
                     | CryptoError TLS.AlertDescription
                     | UnknownError Int
@@ -35,7 +37,9 @@ fromTransportError StreamStateError        = 0x5
 fromTransportError FinalSizeError          = 0x6
 fromTransportError FrameEncodingError      = 0x7
 fromTransportError TransportParameterError = 0x8
+fromTransportError ConnectionIdLimitError  = 0x9
 fromTransportError ProtocolViolation       = 0xa
+fromTransportError InvalidToken            = 0xb
 fromTransportError CryptoBufferExceeded    = 0xd
 fromTransportError (CryptoError desc)      =
     0x100 + fromIntegral (fromAlertDescription desc)
@@ -51,7 +55,9 @@ toTransportError 0x5 = StreamStateError
 toTransportError 0x6 = FinalSizeError
 toTransportError 0x7 = FrameEncodingError
 toTransportError 0x8 = TransportParameterError
+toTransportError 0x9 = ConnectionIdLimitError
 toTransportError 0xa = ProtocolViolation
+toTransportError 0xb = InvalidToken
 toTransportError 0xd = CryptoBufferExceeded
 toTransportError n
   | 0x100 <= n && n <= 0x1ff = case mdesc of
