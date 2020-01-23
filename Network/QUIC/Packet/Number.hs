@@ -39,11 +39,13 @@ encodePacketNumber largestPN pn = (diff, bytes)
 -- True
 decodePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
 decodePacketNumber largestPN truncatedPN bytes
-  | candidatePN <= expectedPN - pnHwin = candidatePN + pnWin
+  | candidatePN <= expectedPN - pnHwin
+ && candidatePN <  mx - pnWin          = candidatePN + pnWin
   | candidatePN >  expectedPN + pnHwin
- && candidatePN >  pnWin               = candidatePN - pnWin
+ && candidatePN >= pnWin               = candidatePN - pnWin
   | otherwise                          = candidatePN
   where
+    mx = 1 `shiftL` 62
     pnNbits = bytes * 8
     expectedPN = largestPN + 1
     pnWin = 1 `shiftL` pnNbits
