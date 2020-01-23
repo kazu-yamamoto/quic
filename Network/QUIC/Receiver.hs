@@ -118,13 +118,11 @@ processFrame conn RTT1Level (Stream sid _off dat fin) = do
 processFrame conn lvl Ping = do
     putOutput conn $ OutControl lvl []
     return True
-{-
-processFrame conn lvl HandshakeDone = do
+processFrame conn _ HandshakeDone = do
     control <- getClientController conn
     ClientHandshakeDone <- control ExitClient
     clearClientController conn
     return True
--}
 processFrame _ _ _frame        = do
     putStrLn $ "processFrame: " ++ show _frame
     return True
