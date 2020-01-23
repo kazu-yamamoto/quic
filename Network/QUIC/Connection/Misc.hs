@@ -1,6 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.QUIC.Connection.Misc where
+module Network.QUIC.Connection.Misc (
+    setPeerCID
+  , getPeerCID
+  , setThreadIds
+  , clearThreads
+  ) where
 
 import Control.Concurrent
 import Data.IORef
@@ -8,7 +13,6 @@ import System.Mem.Weak
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.TLS
-import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
@@ -36,53 +40,3 @@ clearThreads Connection{..} = do
         case mtid of
           Nothing  -> return ()
           Just tid -> killThread tid
-
-----------------------------------------------------------------
-
-setToken :: Connection -> Token -> IO ()
-setToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci { clientInitialToken = token }
-
-getToken :: Connection -> IO Token
-getToken conn@Connection{..}
-  | isClient conn = clientInitialToken <$> readIORef roleInfo
-  | otherwise     = return emptyToken
-
-----------------------------------------------------------------
-
-getResumptionInfo :: Connection -> IO ResumptionInfo
-getResumptionInfo Connection{..} = resumptionInfo <$> readIORef roleInfo
-
-----------------------------------------------------------------
-
-setRetried :: Connection -> Bool -> IO ()
-setRetried Connection{..} r = modifyIORef' roleInfo $ \ci -> ci {
-    resumptionInfo = (resumptionInfo ci) { resumptionRetry = r}
-  }
-
-getRetried :: Connection -> IO Bool
-getRetried conn@Connection{..}
-  | isClient conn = resumptionRetry . resumptionInfo <$> readIORef roleInfo
-  | otherwise     = return False
-
-----------------------------------------------------------------
-
-setResumptionSession :: Connection -> SessionEstablish
-setResumptionSession Connection{..} si sd = modifyIORef' roleInfo $ \ci -> ci {
-    resumptionInfo = (resumptionInfo ci) { resumptionSession = Just (si,sd) }
-  }
-
-setNewToken :: Connection -> Token -> IO ()
-setNewToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci {
-    resumptionInfo = (resumptionInfo ci) { resumptionToken = token }
-  }
-
-----------------------------------------------------------------
-
-setServerRoleInfo :: Connection -> (CID -> IO ()) -> (CID -> IO ()) -> IO ()
-setServerRoleInfo Connection{..} regisrer unregister = modifyIORef' roleInfo $ \si -> si {
-    routeRegister = regisrer
-  , routeUnregister = unregister
-  }
-
-getUnregister :: Connection -> IO (CID -> IO ())
-getUnregister Connection{..}  = routeUnregister <$> readIORef roleInfo

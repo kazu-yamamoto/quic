@@ -5,14 +5,6 @@ module Network.QUIC.Connection.Crypto (
     setEncryptionLevel
   , checkEncryptionLevel
   --
-  , getClientController
-  , setClientController
-  , clearClientController
-  --
-  , getServerController
-  , setServerController
-  , clearServerController
-  --
   , getPeerParameters
   , setPeerParameters
   --
@@ -50,31 +42,6 @@ checkEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 checkEncryptionLevel Connection{..} level = atomically $ do
     l <- readTVar encryptionLevel
     check (l >= level)
-
-----------------------------------------------------------------
-
-setClientController :: Connection -> ClientController -> IO ()
-setClientController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
-  ci {connClientCntrl = ctl }
-
-getClientController :: Connection -> IO ClientController
-getClientController Connection{..} = connClientCntrl <$> readIORef roleInfo
-
-clearClientController :: Connection -> IO ()
-clearClientController conn = setClientController conn nullClientController
-
-
-----------------------------------------------------------------
-
-setServerController :: Connection -> ServerController -> IO ()
-setServerController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
-  ci {connServerCntrl = ctl }
-
-getServerController :: Connection -> IO ServerController
-getServerController Connection{..} = connServerCntrl <$> readIORef roleInfo
-
-clearServerController :: Connection -> IO ()
-clearServerController conn = setServerController conn nullServerController
 
 ----------------------------------------------------------------
 

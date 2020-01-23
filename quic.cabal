@@ -43,6 +43,7 @@ library
                        Network.QUIC.Connection.Misc
                        Network.QUIC.Connection.PacketNumber
                        Network.QUIC.Connection.Queue
+                       Network.QUIC.Connection.Role
                        Network.QUIC.Connection.State
                        Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Transmit

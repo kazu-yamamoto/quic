@@ -139,7 +139,7 @@ accept QUICServer{..} = E.handle tlserr $ do
             tid2 <- forkIO $ resender conn
             setThreadIds conn [tid0,tid1,tid2]
             handshakeServer serverConfig oCID conn
-            setServerRoleInfo conn register unregister
+            setRegister conn register unregister
             register myCID
             setConnectionOpen conn
             return conn

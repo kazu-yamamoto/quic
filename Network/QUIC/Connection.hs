@@ -21,12 +21,6 @@ module Network.QUIC.Connection (
   -- * Crypto
   , setEncryptionLevel
   , checkEncryptionLevel
-  , getClientController
-  , setClientController
-  , clearClientController
-  , getServerController
-  , setServerController
-  , clearServerController
   , getPeerParameters
   , setPeerParameters
   , getCipher
@@ -45,15 +39,6 @@ module Network.QUIC.Connection (
   , getPeerCID
   , setThreadIds
   , clearThreads
-  , setToken
-  , getToken
-  , getResumptionInfo
-  , setRetried
-  , getRetried
-  , setResumptionSession
-  , setNewToken
-  , setServerRoleInfo
-  , getUnregister
   -- * Transmit
   , keepOutput
   , releaseOutput
@@ -80,12 +65,29 @@ module Network.QUIC.Connection (
   , takeOutput
   , putOutput
   , putOutput'
+  -- * Role
+  , getClientController
+  , setClientController
+  , clearClientController
+  , getServerController
+  , setServerController
+  , clearServerController
+  , setToken
+  , getToken
+  , getResumptionInfo
+  , setRetried
+  , getRetried
+  , setResumptionSession
+  , setNewToken
+  , setRegister
+  , getUnregister
   ) where
 
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Queue
+import Network.QUIC.Connection.Role
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Transmit
