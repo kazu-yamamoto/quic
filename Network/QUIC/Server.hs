@@ -107,7 +107,11 @@ dispatch ServerConfig{..} ServerRoute{..}
             | isRetryToken ct -> do
                   ok <- isRetryTokenValid ct
                   if ok then pushToAcceptQ2 ct else sendRetry
-            | otherwise -> pushToAcceptQ1
+            | otherwise -> do
+                  mroute <- lookupRoute routeTable dCID
+                  case mroute of
+                    Nothing -> pushToAcceptQ1
+                    Just q -> atomically $ writeTQueue q cpkt -- resend packets
           _ -> sendRetry
   where
     pushToAcceptQ d s oc = do
