@@ -1,10 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StrictData #-}
 
 module Network.QUIC.Connection.Types where
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
 import Data.Map (Map)
@@ -72,20 +74,22 @@ data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
                            , resumptionInfo     :: ResumptionInfo
                            }
               | ServerInfo { connServerCntrl :: ServerController
+                           , tokenManager    :: ~CT.TokenManager
                            , routeRegister   :: CID -> IO ()
                            , routeUnregister :: CID -> IO ()
                            }
 
-defaultClientInfo :: RoleInfo
-defaultClientInfo = ClientInfo {
+defaultClientRoleInfo :: RoleInfo
+defaultClientRoleInfo = ClientInfo {
     connClientCntrl = nullClientController
   , clientInitialToken = emptyToken
   , resumptionInfo = defaultResumptionInfo
   }
 
-defaultServerInfo :: RoleInfo
-defaultServerInfo = ServerInfo {
+defaultServerRoleInfo :: RoleInfo
+defaultServerRoleInfo = ServerInfo {
     connServerCntrl = nullServerController
+  , tokenManager = undefined
   , routeRegister = \_ -> return ()
   , routeUnregister = \_ -> return ()
   }
@@ -149,8 +153,8 @@ newConnection rl myCID peerCID send recv cls isecs =
         <*> newIORef initialRoleInfo
   where
     initialRoleInfo
-      | rl == Client = defaultClientInfo
-      | otherwise    = defaultServerInfo
+      | rl == Client = defaultClientRoleInfo
+      | otherwise    = defaultServerRoleInfo
 
 ----------------------------------------------------------------
 

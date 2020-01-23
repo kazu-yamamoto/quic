@@ -28,9 +28,9 @@ import Network.QUIC.Types
 data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue CryptPacket) (CID -> IO ()) (CID -> IO ())
 
 data ServerRoute = ServerRoute {
-    tokenManager :: CT.TokenManager
-  , routeTable   :: IORef RouteTable
-  , acceptQueue  :: TQueue Accept
+    tokenMgr    :: CT.TokenManager
+  , routeTable  :: IORef RouteTable
+  , acceptQueue :: TQueue Accept
   }
 
 newServerRoute :: IO ServerRoute
@@ -99,7 +99,7 @@ dispatch ServerConfig{..} ServerRoute{..}
             | otherwise      -> pushToAcceptQ1
           Just q -> atomically $ writeTQueue q cpkt -- resend packets
   | otherwise = do
-        mretryToken <- decryptRetryToken tokenManager token
+        mretryToken <- decryptRetryToken tokenMgr token
         case mretryToken of
           Just rtoken
             | isRetryTokenValid rtoken -> pushToAcceptQ2  rtoken
@@ -126,7 +126,7 @@ dispatch ServerConfig{..} ServerRoute{..}
     sendRetry = do
         newdCID <- newCID
         let retryToken = RetryToken currentDraft newdCID sCID dCID
-        newtoken <- encryptRetryToken tokenManager retryToken
+        newtoken <- encryptRetryToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
         send bss
 dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ _ = do

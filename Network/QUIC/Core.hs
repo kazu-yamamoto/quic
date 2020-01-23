@@ -130,6 +130,7 @@ accept QUICServer{..} = E.handle tlserr $ do
                       Just pkt -> return [pkt]
                 cls = NS.close s
             conn <- serverConnection serverConfig myCID peerCID oCID send recv cls
+            setTokenManager conn $ tokenMgr serverRoute
             setCryptoOffset conn InitialLevel 0
             setCryptoOffset conn HandshakeLevel 0
             setCryptoOffset conn RTT1Level 0

@@ -16,8 +16,11 @@ module Network.QUIC.Connection.Role (
   , setNewToken
   , setRegister
   , getUnregister
+  , setTokenManager
+  , getTokenManager
   ) where
 
+import qualified Crypto.Token as CT
 import Data.IORef
 import Network.TLS.QUIC
 
@@ -98,4 +101,14 @@ setRegister Connection{..} regisrer unregister = modifyIORef' roleInfo $ \si -> 
   }
 
 getUnregister :: Connection -> IO (CID -> IO ())
-getUnregister Connection{..}  = routeUnregister <$> readIORef roleInfo
+getUnregister Connection{..} = routeUnregister <$> readIORef roleInfo
+
+----------------------------------------------------------------
+
+setTokenManager :: Connection -> CT.TokenManager -> IO ()
+setTokenManager Connection{..} mgr = modifyIORef' roleInfo $ \si -> si {
+    tokenManager = mgr
+  }
+
+getTokenManager :: Connection -> IO CT.TokenManager
+getTokenManager Connection{..} = tokenManager <$> readIORef roleInfo
