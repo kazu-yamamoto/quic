@@ -17,6 +17,7 @@ data Version = Negotiation
              | Draft22
              | Draft23
              | Draft24
+             | Draft25
              | UnknownVersion Word32
              deriving (Eq, Show)
 
