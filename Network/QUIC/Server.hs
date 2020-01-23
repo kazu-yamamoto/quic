@@ -12,12 +12,14 @@ module Network.QUIC.Server (
 
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
+import Data.Hourglass (Seconds(..), timeDiff)
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
 import Network.ByteOrder
 import Network.Socket
 import qualified Network.Socket.ByteString as NBS
+import Time.System (timeCurrent)
 
 import Network.QUIC.Config
 import Network.QUIC.Imports
@@ -99,10 +101,13 @@ dispatch ServerConfig{..} ServerRoute{..}
             | otherwise      -> pushToAcceptQ1
           Just q -> atomically $ writeTQueue q cpkt -- resend packets
   | otherwise = do
-        mretryToken <- decryptRetryToken tokenMgr token
-        case mretryToken of
-          Just rtoken
-            | isRetryTokenValid rtoken -> pushToAcceptQ2  rtoken
+        mct <- decryptToken tokenMgr token
+        case mct of
+          Just ct
+            | isRetryToken ct -> do
+                  ok <- isRetryTokenValid ct
+                  if ok then pushToAcceptQ2 ct else sendRetry
+            | otherwise -> pushToAcceptQ1
           _ -> sendRetry
   where
     pushToAcceptQ d s oc = do
@@ -118,15 +123,22 @@ dispatch ServerConfig{..} ServerRoute{..}
         when (bs0RTT /= "") $ do
             (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
             atomically $ writeTQueue q cpktRTT0
-    pushToAcceptQ2 RetryToken{..} = do
-        _ <- pushToAcceptQ dCID sCID (OCRetry origLocalCID)
+    pushToAcceptQ2 (CryptoToken _ _ (Just (_,_,o))) = do
+        _ <- pushToAcceptQ dCID sCID (OCRetry o)
         return ()
-    isRetryTokenValid RetryToken{..}
-      = tokenVersion == ver && dCID == localCID && sCID == remoteCID
+    pushToAcceptQ2 _ = return ()
+    isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
+        tim0 <- timeCurrent
+        let diff = tim `timeDiff` tim0
+        return $ tver == ver
+              && diff <= Seconds 30 -- fixme
+              && dCID == l
+              && sCID == r
+    isRetryTokenValid _ = return False
     sendRetry = do
         newdCID <- newCID
-        let retryToken = RetryToken currentDraft newdCID sCID dCID
-        newtoken <- encryptRetryToken tokenMgr retryToken
+        retryToken <- generateRetryToken newdCID sCID dCID
+        newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
         send bss
 dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ _ = do

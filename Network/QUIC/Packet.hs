@@ -27,9 +27,12 @@ module Network.QUIC.Packet (
   , versionNegotiationPacketType
   , retryPacketType
   -- * Token
-  , RetryToken(..)
-  , encryptRetryToken
-  , decryptRetryToken
+  , CryptoToken(..)
+  , isRetryToken
+  , generateToken
+  , generateRetryToken
+  , encryptToken
+  , decryptToken
   ) where
 
 import Network.QUIC.Packet.Decode

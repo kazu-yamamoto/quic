@@ -1,61 +1,100 @@
 module Network.QUIC.Packet.Token (
-    RetryToken(..)
-  , encryptRetryToken
-  , decryptRetryToken
+    CryptoToken(..)
+  , isRetryToken
+  , generateToken
+  , generateRetryToken
+  , encryptToken
+  , decryptToken
   ) where
 
-import Crypto.Token
+import qualified Crypto.Token as CT
 import Foreign.Storable
 import Foreign.Ptr
 import Network.ByteOrder
+import Data.Hourglass (Elapsed(..), Seconds(..))
+import Time.System (timeCurrent)
 
+import Network.QUIC.Imports
 import Network.QUIC.Packet.Version
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data RetryToken = RetryToken {
-    tokenVersion :: Version
-  , localCID     :: CID
-  , remoteCID    :: CID
-  , origLocalCID :: CID
+data CryptoToken = CryptoToken {
+    tokenQUICVersion :: Version
+  , tokenCreatedTime :: Elapsed
+  , tokenCIDs        :: Maybe (CID, CID, CID) -- local, remote, orig local
   }
 
-encryptRetryToken :: TokenManager -> RetryToken -> IO ByteString
-encryptRetryToken = encryptToken
-
-decryptRetryToken :: TokenManager -> ByteString -> IO (Maybe RetryToken)
-decryptRetryToken = decryptToken
+isRetryToken :: CryptoToken -> Bool
+isRetryToken token = isJust $ tokenCIDs token
 
 ----------------------------------------------------------------
 
-instance Storable RetryToken where
-    sizeOf (RetryToken _ver lCID rCID oCID) =
-        let (_, llen) = unpackCID lCID
-            (_, rlen) = unpackCID rCID
-            (_, olen) = unpackCID oCID
-        in 7 + fromIntegral (llen + rlen + olen)
+generateToken :: IO CryptoToken
+generateToken = do
+    t <- timeCurrent
+    return $ CryptoToken currentDraft t Nothing
+
+generateRetryToken :: CID -> CID -> CID -> IO CryptoToken
+generateRetryToken l r o = do
+    t <- timeCurrent
+    return $ CryptoToken currentDraft t $ Just (l,r,o)
+
+----------------------------------------------------------------
+
+encryptToken :: CT.TokenManager -> CryptoToken -> IO Token
+encryptToken = CT.encryptToken
+
+decryptToken :: CT.TokenManager -> Token -> IO (Maybe CryptoToken)
+decryptToken = CT.decryptToken
+
+----------------------------------------------------------------
+
+-- length includes its field
+instance Storable CryptoToken where
+    sizeOf (CryptoToken _ _ Nothing) = 1 + 4 + 8 + 1
+    sizeOf (CryptoToken _ _ (Just (l,r,o))) =
+        let (_, llen) = unpackCID l
+            (_, rlen) = unpackCID r
+            (_, olen) = unpackCID o
+        in 1 + 4 + 8 + 1 + 3 + fromIntegral (llen + rlen + olen)
     alignment _ = 4
     peek ptr = do
-        rbuf <- newReadBuffer (castPtr ptr) 1024 -- fixme
+        len0 <- peek (castPtr ptr :: Ptr Word8)
+        let len = fromIntegral len0 - 1
+        rbuf <- newReadBuffer (castPtr (ptr `plusPtr` 1)) len
         ver  <- decodeVersion <$> read32 rbuf
-        llen <- fromIntegral <$> read8 rbuf
-        lCID <- makeCID <$> extractShortByteString rbuf llen
-        rlen <- fromIntegral <$> read8 rbuf
-        rCID <- makeCID <$> extractShortByteString rbuf rlen
-        olen <- fromIntegral <$> read8 rbuf
-        oCID <- makeCID <$> extractShortByteString rbuf olen
-        return $ RetryToken ver lCID rCID oCID
-    poke ptr rt@(RetryToken ver lCID rCID oCID) = do
-        wbuf <- newWriteBuffer (castPtr ptr) (sizeOf rt)
+        tim  <- Elapsed . Seconds . fromIntegral <$> read64 rbuf
+        typ <- read8 rbuf
+        case typ of
+          0 -> return $ CryptoToken ver tim Nothing
+          _ -> do
+              llen <- fromIntegral <$> read8 rbuf
+              lCID <- makeCID <$> extractShortByteString rbuf llen
+              rlen <- fromIntegral <$> read8 rbuf
+              rCID <- makeCID <$> extractShortByteString rbuf rlen
+              olen <- fromIntegral <$> read8 rbuf
+              oCID <- makeCID <$> extractShortByteString rbuf olen
+              return $ CryptoToken ver tim $ Just (lCID, rCID, oCID)
+    poke ptr rt@(CryptoToken ver tim mcids) = do
+        let len = sizeOf rt
+        wbuf <- newWriteBuffer (castPtr ptr) len
+        write8 wbuf $ fromIntegral len
         write32 wbuf $ encodeVersion ver
-        let (lcid, llen) = unpackCID lCID
-        write8 wbuf llen
-        copyShortByteString wbuf lcid
-        let (rcid, rlen) = unpackCID rCID
-        write8 wbuf rlen
-        copyShortByteString wbuf rcid
-        let (ocid, olen) = unpackCID oCID
-        write8 wbuf olen
-        copyShortByteString wbuf ocid
+        let Elapsed (Seconds t) = tim
+        write64 wbuf $ fromIntegral t
+        case mcids of
+          Nothing      -> write8 wbuf 0
+          Just (l,r,o) -> do
+              write8 wbuf 1
+              let (lcid, llen) = unpackCID l
+              write8 wbuf llen
+              copyShortByteString wbuf lcid
+              let (rcid, rlen) = unpackCID r
+              write8 wbuf rlen
+              copyShortByteString wbuf rcid
+              let (ocid, olen) = unpackCID o
+              write8 wbuf olen
+              copyShortByteString wbuf ocid
