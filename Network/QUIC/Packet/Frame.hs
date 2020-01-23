@@ -69,6 +69,8 @@ encodeFrame wbuf (ConnectionCloseApp (ApplicationError err) reason) = do
     encodeInt' wbuf $ fromIntegral err
     encodeInt' wbuf $ fromIntegral $ Short.length reason
     copyShortByteString wbuf reason
+encodeFrame wbuf HandshakeDone =
+    write8 wbuf 0x1e
 encodeFrame _ _ = undefined
 
 ----------------------------------------------------------------
@@ -104,6 +106,7 @@ decodeFrame rbuf = do
       0x1b -> decodePathResponse rbuf
       0x1c -> decodeConnectionCloseFrameQUIC rbuf
       0x1d -> decodeConnectionCloseFrameApp rbuf
+      0x1e -> return $ HandshakeDone
       x    -> return $ UnknownFrame x
 
 decodePaddingFrames :: ReadBuffer -> IO Frame
