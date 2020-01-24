@@ -97,9 +97,9 @@ decodeFrame rbuf = do
       0x06 -> decodeCryptoFrame rbuf
       0x07 -> decodeNewToken rbuf
       x | 0x08 <= x && x <= 0x0f -> do
-              let off = testBit x 3
-                  len = testBit x 2
-                  fin = testBit x 1
+              let off = testBit x 2
+                  len = testBit x 1
+                  fin = testBit x 0
               decodeStreamFrame rbuf off len fin
       0x18 -> decodeNewConnectionID rbuf
       0x1a -> decodePathChallenge rbuf
