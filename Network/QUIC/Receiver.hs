@@ -73,9 +73,8 @@ processFrame conn lvl (Crypto off cdat) = do
       RTT1Level
         | isClient conn -> do
               control <- getClientController conn
-              RecvSessionTicket   <- control $ PutSessionTicket cdat
-              ClientHandshakeDone <- control ExitClient
-              clearClientController conn
+              -- RecvSessionTicket or ClientHandshakeDone
+              _ <- control $ PutSessionTicket cdat
               return True
         | otherwise -> do
               putStrLn "processFrame: Short:Crypto for server"
