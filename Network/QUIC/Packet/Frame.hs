@@ -38,10 +38,15 @@ encodeFrame wbuf (NewToken token) = do
     write8 wbuf 0x07
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
-encodeFrame wbuf (Stream sid _off dat _fin) = do
-    -- fixme
-    write8 wbuf (0x08 .|. 0x02 .|. 0x01)
+encodeFrame wbuf (Stream sid off dat fin) = do
+    let flag0 = 0x08 .|. 0x02 -- len
+        flag1 | off /= 0  = flag0 .|. 0x04 -- off
+              | otherwise = flag0
+        flag2 | fin       = flag1 .|. 0x01 -- fin
+              | otherwise = flag1
+    write8 wbuf flag2
     encodeInt' wbuf sid
+    when (off /= 0) $ encodeInt' wbuf $ fromIntegral off
     encodeInt' wbuf $ fromIntegral $ B.length dat
     copyByteString wbuf dat
 encodeFrame wbuf (NewConnectionID seqNum rpt cID (StatelessResetToken token)) = do

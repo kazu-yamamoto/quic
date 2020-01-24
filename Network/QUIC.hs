@@ -21,8 +21,9 @@ module Network.QUIC (
   -- * IO
   , recv
   , send
-  , recv'
-  , send'
+  , recvStream
+  , sendStream
+  , closeStream
   -- * Closing
   , close
   -- * Types

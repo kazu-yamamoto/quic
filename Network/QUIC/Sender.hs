@@ -101,7 +101,7 @@ sender conn = loop
                     bss0 <- construct conn out0 pns InitialLevel frames False Nothing
                     let size = maximumQUICPacketSize - sum (map B.length bss0)
                     off <- modifyStreamOffset conn sid $ B.length earlyData
-                    let out1 = OutStream sid earlyData off
+                    let out1 = OutStream sid earlyData off True
                     bss1 <- construct conn out1 pns RTT0Level [Stream sid off earlyData True] False $ Just size
                     connSend conn (bss0 ++ bss1)
           OutHndServerHello  sh sf -> do
@@ -139,8 +139,8 @@ sender conn = loop
           OutControl lvl frames -> do
               bss <- construct conn out pns lvl frames False $ Just maximumQUICPacketSize
               connSend conn bss
-          OutStream sid dat off -> do
-              bss <- construct conn out pns RTT1Level [Stream sid off dat True] False $ Just maximumQUICPacketSize
+          OutStream sid dat off fin -> do
+              bss <- construct conn out pns RTT1Level [Stream sid off dat fin] False $ Just maximumQUICPacketSize
               connSend conn bss
 
 ----------------------------------------------------------------
