@@ -68,7 +68,7 @@ processFrame conn lvl (Crypto off cdat) = do
               cryptoToken <- generateToken
               mgr <- getTokenManager conn
               token <- encryptToken mgr cryptoToken
-              putOutput conn $ OutControl lvl [NewToken token]
+              putOutput conn $ OutControl RTT1Level [NewToken token]
               return True
       RTT1Level
         | isClient conn -> do
