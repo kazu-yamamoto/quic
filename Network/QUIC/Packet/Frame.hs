@@ -99,6 +99,7 @@ decodeFrame rbuf = do
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
       0x04 -> decodeResetFrame rbuf
+      0x05 -> decodeStopSending rbuf
       0x06 -> decodeCryptoFrame rbuf
       0x07 -> decodeNewToken rbuf
       x | 0x08 <= x && x <= 0x0f -> do
@@ -157,6 +158,12 @@ decodeAckFrame rbuf = do
 
 decodeResetFrame :: ReadBuffer -> IO Frame
 decodeResetFrame _ = return ResetStream -- fixme
+
+decodeStopSending :: ReadBuffer -> IO Frame
+decodeStopSending rbuf = do
+    sID <- decodeInt' rbuf
+    err <- ApplicationError . fromIntegral <$> decodeInt' rbuf
+    return $ StopSending sID err
 
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do

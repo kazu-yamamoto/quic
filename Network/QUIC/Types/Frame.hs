@@ -15,7 +15,7 @@ data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
            | ResetStream -- fixme
-           | StopSending -- fixme
+           | StopSending StreamID ApplicationError
            | Crypto Offset CryptoData
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
