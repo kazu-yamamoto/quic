@@ -8,6 +8,7 @@ module Network.QUIC.Server (
   , Accept(..)
   , newServerRoute
   , router
+  , CT.killTokenManager
   ) where
 
 import Control.Concurrent.STM

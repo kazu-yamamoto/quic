@@ -113,7 +113,9 @@ withQUICServer conf body = do
     ssas <- mapM  udpServerListenSocket $ scAddresses conf
     tids <- mapM (runRouter route) ssas
     let qs = QUICServer conf route
-    body qs `E.finally` mapM_ killThread tids
+    body qs `E.finally` do
+        killTokenManager $ tokenMgr route
+        mapM_ killThread tids
   where
     runRouter route ssa@(s,_) = forkFinally (router conf route ssa) (\_ -> NS.close s)
 
