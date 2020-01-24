@@ -149,7 +149,7 @@ clientH3 conn = do
     sendStream conn  6 $ BS.pack [2]
     sendStream conn 10 $ BS.pack [3]
     sendStream conn  0 $ BS.pack [1,31,0,0,209,214,80,134,160,228,29,19,157,9,193,95,80,143,170,105,210,154,217,98,169,146,74,196,161,40,49,106,79]
-    closeStream conn 0
+    shutdownStream conn 0
     void $ forever $ do
         (sid, bs) <- recvStream conn
         putStrLn $ "SID: " ++ show sid
@@ -162,6 +162,7 @@ clientHQ :: ByteString -> Connection -> IO ResumptionInfo
 clientHQ cmd conn = do
     putStrLn "------------------------"
     send conn cmd
+    shutdown conn
     (sid, bs) <- recvStream conn
     when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
     C8.putStr bs
