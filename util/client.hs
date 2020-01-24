@@ -156,10 +156,10 @@ clientH3 conn = do
   where
     loop = do
         (sid, bs) <- recvStream conn
+        putStrLn $ "SID: " ++ show sid
         if bs == "" then
             putStrLn "Connection finished"
           else do
-            putStrLn $ "SID: " ++ show sid
             print $ BS.unpack bs
             loop
 
