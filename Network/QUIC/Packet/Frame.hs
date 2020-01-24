@@ -106,6 +106,9 @@ decodeFrame rbuf = do
                   len = testBit x 1
                   fin = testBit x 0
               decodeStreamFrame rbuf off len fin
+      0x10 -> decodeMaxData rbuf
+      0x12 -> decodeMaxStreams rbuf
+      0x13 -> decodeMaxStreams rbuf
       0x18 -> decodeNewConnectionID rbuf
       0x1a -> decodePathChallenge rbuf
       0x1b -> decodePathResponse rbuf
@@ -174,6 +177,12 @@ decodeStreamFrame rbuf hasOff hasLen fin = do
              len <- remainingSize rbuf
              extractByteString rbuf len
     return $ Stream sID off dat fin
+
+decodeMaxData :: ReadBuffer -> IO Frame
+decodeMaxData rbuf = MaxData . fromIntegral <$> decodeInt' rbuf
+
+decodeMaxStreams :: ReadBuffer -> IO Frame
+decodeMaxStreams rbuf = MaxStreams . fromIntegral <$> decodeInt' rbuf
 
 decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameQUIC rbuf = do

@@ -19,9 +19,9 @@ data Frame = Padding Int
            | Crypto Offset CryptoData
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
-           | MaxData -- fixme
+           | MaxData Int
            | MaxStreamData -- fixme
-           | MaxStreams -- fixme
+           | MaxStreams Int
            | DataBlocked -- fixme
            | StreamDataBlocked -- fixme
            | StreamsBlocked -- fixme
