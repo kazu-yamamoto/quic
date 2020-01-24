@@ -7,6 +7,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import System.Console.GetOpt
 import System.Environment
@@ -97,10 +98,14 @@ main = do
     putStrLn "------------------------"
     res <- withQUICClient conf $ \qc -> do
         conn <- connect qc
+        info <- getConnectionInfo conn
         when optDebug $ do
             threadDelay 10000
-            getConnectionInfo conn >>= print
-        client conn cmd `E.finally` close conn
+            print info
+        let client = case alpn info of
+              Just "hq-24" -> clientHQ cmd
+              _            -> clientH3
+        client conn `E.finally` close conn
     when (optResumption && not (isResumptionPossible res)) $ do
         putStrLn "Resumption is not available"
         exitFailure
@@ -113,31 +118,51 @@ main = do
         let conf'
               | rtt0 = conf {
                     ccResumption = res
-                  , ccEarlyData  = Just (0, cmd)
+                  , ccEarlyData  = Just (0, cmd) -- fixme
                   }
               | otherwise = conf { ccResumption = res }
         putStrLn "<<<< next connection >>>>"
         putStrLn "------------------------"
         void $ withQUICClient conf' $ \qc -> do
             conn <- connect qc
+            info <- getConnectionInfo conn
             when optDebug $ do
                 threadDelay 10000
-                getConnectionInfo conn >>= print
+                print info
             if rtt0 then do
                 putStrLn "------------------------ Response for early data"
-                (sid, bs) <- recv' conn
-                when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
-                C8.putStr bs
+                (sid, bs) <- recvStream conn
+                putStrLn $ "SID: " ++ show sid
+                C8.putStrLn bs
                 putStrLn "------------------------ Response for early data"
                 close conn
-              else
-                void $ client conn cmd `E.finally` close conn
+              else do
+                let client = case alpn info of
+                      Just "hq-24" -> clientHQ cmd
+                      _            -> clientH3
+                void $ client conn `E.finally` close conn
 
-client :: Connection -> ByteString -> IO ResumptionInfo
-client conn cmd = do
+clientH3 :: Connection -> IO ResumptionInfo
+clientH3 conn = do
+    putStrLn "------------------------"
+    sendStream conn  2 $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
+    sendStream conn  6 $ BS.pack [2]
+    sendStream conn 10 $ BS.pack [3]
+    sendStream conn  0 $ BS.pack [1,31,0,0,209,214,80,134,160,228,29,19,157,9,193,95,80,143,170,105,210,154,217,98,169,146,74,196,161,40,49,106,79]
+    closeStream conn 0
+    void $ forever $ do
+        (sid, bs) <- recvStream conn
+        putStrLn $ "SID: " ++ show sid
+        print $ BS.unpack bs
+    putStrLn "------------------------"
+    threadDelay 300000
+    getResumptionInfo conn
+
+clientHQ :: ByteString -> Connection -> IO ResumptionInfo
+clientHQ cmd conn = do
     putStrLn "------------------------"
     send conn cmd
-    (sid, bs) <- recv' conn
+    (sid, bs) <- recvStream conn
     when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
     C8.putStr bs
     putStrLn "------------------------"
