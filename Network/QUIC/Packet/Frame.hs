@@ -108,6 +108,7 @@ decodeFrame rbuf = do
                   fin = testBit x 0
               decodeStreamFrame rbuf off len fin
       0x10 -> decodeMaxData rbuf
+      0x11 -> decodeMaxStreamData rbuf
       0x12 -> decodeMaxStreams rbuf
       0x13 -> decodeMaxStreams rbuf
       0x18 -> decodeNewConnectionID rbuf
@@ -187,6 +188,12 @@ decodeStreamFrame rbuf hasOff hasLen fin = do
 
 decodeMaxData :: ReadBuffer -> IO Frame
 decodeMaxData rbuf = MaxData . fromIntegral <$> decodeInt' rbuf
+
+decodeMaxStreamData :: ReadBuffer -> IO Frame
+decodeMaxStreamData rbuf = do
+    sID <- decodeInt' rbuf
+    maxstrdata <- fromIntegral <$> decodeInt' rbuf
+    return $ MaxStreamData sID maxstrdata
 
 decodeMaxStreams :: ReadBuffer -> IO Frame
 decodeMaxStreams rbuf = MaxStreams . fromIntegral <$> decodeInt' rbuf

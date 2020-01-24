@@ -20,7 +20,7 @@ data Frame = Padding Int
            | NewToken Token
            | Stream StreamID Offset StreamData Fin
            | MaxData Int
-           | MaxStreamData -- fixme
+           | MaxStreamData StreamID Int
            | MaxStreams Int
            | DataBlocked -- fixme
            | StreamDataBlocked -- fixme
