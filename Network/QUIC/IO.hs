@@ -21,8 +21,11 @@ sendStream conn sid bs = do
       else
         E.throwIO ConnectionIsNotOpen
 
-closeStream :: Connection -> StreamID -> IO ()
-closeStream conn sid = do
+shutdown :: Connection -> IO ()
+shutdown conn = shutdownStream conn 0
+
+shutdownStream :: Connection -> StreamID -> IO ()
+shutdownStream conn sid = do
     open <- isConnectionOpen conn
     if open then do
         off <- modifyStreamOffset conn sid 0
