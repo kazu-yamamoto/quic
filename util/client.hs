@@ -150,13 +150,18 @@ clientH3 conn = do
     sendStream conn 10 $ BS.pack [3]
     sendStream conn  0 $ BS.pack [1,31,0,0,209,214,80,134,160,228,29,19,157,9,193,95,80,143,170,105,210,154,217,98,169,146,74,196,161,40,49,106,79]
     shutdownStream conn 0
-    void $ forever $ do
-        (sid, bs) <- recvStream conn
-        putStrLn $ "SID: " ++ show sid
-        print $ BS.unpack bs
+    loop
     putStrLn "------------------------"
-    threadDelay 300000
     getResumptionInfo conn
+  where
+    loop = do
+        (sid, bs) <- recvStream conn
+        if bs == "" then
+            putStrLn "Connection finished"
+          else do
+            putStrLn $ "SID: " ++ show sid
+            print $ BS.unpack bs
+            loop
 
 clientHQ :: ByteString -> Connection -> IO ResumptionInfo
 clientHQ cmd conn = do
