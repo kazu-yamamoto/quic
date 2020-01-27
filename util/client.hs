@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE StrictData #-}
 
 module Main where
 
@@ -16,6 +18,7 @@ import System.Exit
 import Network.QUIC
 
 import Common
+import H3
 
 data Options = Options {
     optDebug      :: Bool
@@ -104,7 +107,7 @@ main = do
             print info
         let client = case alpn info of
               Just "hq-24" -> clientHQ cmd
-              _            -> clientH3
+              _            -> clientH3 addr
         client conn `E.finally` close conn
     when (optResumption && not (isResumptionPossible res)) $ do
         putStrLn "Resumption is not available"
@@ -139,16 +142,29 @@ main = do
               else do
                 let client = case alpn info of
                       Just "hq-24" -> clientHQ cmd
-                      _            -> clientH3
+                      _            -> clientH3 addr
                 void $ client conn `E.finally` close conn
 
-clientH3 :: Connection -> IO ResumptionInfo
-clientH3 conn = do
+clientHQ :: ByteString -> Connection -> IO ResumptionInfo
+clientHQ cmd conn = do
     putStrLn "------------------------"
+    send conn cmd
+    shutdown conn
+    (sid, bs) <- recvStream conn
+    when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
+    C8.putStr bs
+    putStrLn "------------------------"
+    threadDelay 300000
+    getResumptionInfo conn
+
+clientH3 :: String -> Connection -> IO ResumptionInfo
+clientH3 authority conn = do
+    putStrLn "------------------------"
+    hdrblk <- taglen 1 <$> qpackClient authority
     sendStream conn  2 $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
     sendStream conn  6 $ BS.pack [2]
     sendStream conn 10 $ BS.pack [3]
-    sendStream conn  0 $ BS.pack [1,31,0,0,209,214,80,134,160,228,29,19,157,9,193,95,80,143,170,105,210,154,217,98,169,146,74,196,161,40,49,106,79]
+    sendStream conn  0 hdrblk
     shutdownStream conn 0
     loop
     putStrLn "------------------------"
@@ -162,15 +178,3 @@ clientH3 conn = do
           else do
             print $ BS.unpack bs
             loop
-
-clientHQ :: ByteString -> Connection -> IO ResumptionInfo
-clientHQ cmd conn = do
-    putStrLn "------------------------"
-    send conn cmd
-    shutdown conn
-    (sid, bs) <- recvStream conn
-    when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
-    C8.putStr bs
-    putStrLn "------------------------"
-    threadDelay 300000
-    getResumptionInfo conn

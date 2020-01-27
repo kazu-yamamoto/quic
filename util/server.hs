@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE StrictData #-}
 
 module Main where
 
@@ -21,6 +22,7 @@ import System.Exit
 import Network.QUIC
 
 import Common
+import H3
 
 data Options = Options {
     optDebug      :: Bool
@@ -127,7 +129,7 @@ serverHQ conn = loop
             putStrLn "Connection finished"
           else do
             C8.putStr bs
-            send conn "<html><body>Hello world!</body></html>\n"
+            send conn html
             loop
 
 serverH3 :: Connection -> IO ()
@@ -135,17 +137,20 @@ serverH3 conn = do
     sendStream conn 3 $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
     sendStream conn 7 $ BS.pack [2]
     sendStream conn 11 $ BS.pack [3]
-    loop
+    hdrblock <- taglen 1 <$> qpackServer
+    let bdyblock = taglen 0 html
+        hdrbdy = BS.concat [hdrblock,bdyblock]
+    loop hdrbdy
   where
-    loop = do
+    loop hdrbdy = do
         (sid, bs) <- recvStream conn
         putStrLn $ "SID: " ++ show sid
         if bs == "" then
             putStrLn "Connection finished"
           else do
             print $ BS.unpack bs
-            when (sid == 0) $ sendStream conn 0 $ BS.pack [1,27,0,0,219,95,77,143,170,105,210,154,217,98,169,146,74,196,162,11,103,114,217,244,84,3,49,52,55,0,64,147,60,104,116,109,108,62,60,104,101,97,100,62,60,116,105,116,108,101,62,52,48,52,32,78,111,116,32,70,111,117,110,100,60,47,116,105,116,108,101,62,60,47,104,101,97,100,62,60,98,111,100,121,62,60,104,49,62,52,48,52,32,78,111,116,32,70,111,117,110,100,60,47,104,49,62,60,104,114,62,60,97,100,100,114,101,115,115,62,110,103,104,116,116,112,51,47,110,103,116,99,112,50,32,115,101,114,118,101,114,32,97,116,32,112,111,114,116,32,49,51,52,52,51,60,47,97,100,100,114,101,115,115,62,60,47,98,111,100,121,62,60,47,104,116,109,108,62,1,19,0,1,47,6,242,181,83,36,149,137,100,38,194,142,149,141,39,1,48]
-            loop
+            when (sid == 0) $ sendStream conn 0 hdrbdy
+            loop hdrbdy
 
 newSessionManager :: IO SessionManager
 newSessionManager = sessionManager <$> newIORef Map.empty
