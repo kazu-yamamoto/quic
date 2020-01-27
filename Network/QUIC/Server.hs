@@ -63,9 +63,6 @@ router conf route (s,mysa) = do
   where
     recv = NBS.recvMsg s 2048 64 0
 
-pathValidation :: IO ()
-pathValidation = undefined
-
 supportedVersions :: [Version]
 supportedVersions = [Draft24, Draft23]
 
@@ -147,8 +144,9 @@ dispatch ServerConfig{..} ServerRoute{..}
         bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
         send bss
 dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ _ = do
+    -- fixme: packets for closed connections also match here.
     mroute <- lookupRoute routeTable dCID
     case mroute of
-      Nothing -> pathValidation
-      Just _  -> return () -- connected socket is done? No. fixme.
-dispatch _ _ _ _ _ _ _ = return ()
+      Nothing -> putStrLn "Path validation"
+      Just _  -> putStrLn "NAT rebiding"
+dispatch _ _ _ _ _ _ _ = return () -- throwing away
