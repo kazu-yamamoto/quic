@@ -121,7 +121,7 @@ withQUICServer conf body = do
 
 accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
-    Accept myCID peerCID oCID mysa peersa q register unregister <- atomically $ readTQueue $ acceptQueue serverRoute
+    Accept myCID peerCID oCID mysa peersa q register unregister retried <- atomically $ readTQueue $ acceptQueue serverRoute
     s <- udpServerConnectedSocket mysa peersa
     let setup = do
             let send bss = void $ NSB.sendMany s bss
@@ -137,6 +137,7 @@ accept QUICServer{..} = E.handle tlserr $ do
             setCryptoOffset conn HandshakeLevel 0
             setCryptoOffset conn RTT1Level 0
             setStreamOffset conn 0 0 -- fixme
+            setRetried conn retried
             tid0 <- forkIO $ sender conn
             tid1 <- forkIO $ receiver conn
             tid2 <- forkIO $ resender conn

@@ -71,14 +71,16 @@ getResumptionInfo Connection{..} = resumptionInfo <$> readIORef roleInfo
 ----------------------------------------------------------------
 
 setRetried :: Connection -> Bool -> IO ()
-setRetried Connection{..} r = modifyIORef' roleInfo $ \ci -> ci {
-    resumptionInfo = (resumptionInfo ci) { resumptionRetry = r}
-  }
+setRetried conn@Connection{..} r
+  | isClient conn = modifyIORef' roleInfo $ \ci -> ci {
+        resumptionInfo = (resumptionInfo ci) { resumptionRetry = r}
+        }
+  | otherwise     = modifyIORef' roleInfo $ \si -> si { askRetry = r }
 
 getRetried :: Connection -> IO Bool
 getRetried conn@Connection{..}
   | isClient conn = resumptionRetry . resumptionInfo <$> readIORef roleInfo
-  | otherwise     = return False
+  | otherwise     = askRetry <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 

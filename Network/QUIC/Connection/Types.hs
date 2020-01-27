@@ -77,6 +77,7 @@ data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
                            , tokenManager    :: ~CT.TokenManager
                            , routeRegister   :: CID -> IO ()
                            , routeUnregister :: CID -> IO ()
+                           , askRetry        :: Bool
                            }
 
 defaultClientRoleInfo :: RoleInfo
@@ -92,6 +93,7 @@ defaultServerRoleInfo = ServerInfo {
   , tokenManager = undefined
   , routeRegister = \_ -> return ()
   , routeUnregister = \_ -> return ()
+  , askRetry = False
   }
 
 ----------------------------------------------------------------

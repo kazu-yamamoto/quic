@@ -28,7 +28,7 @@ import Network.QUIC.Packet
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
-data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue CryptPacket) (CID -> IO ()) (CID -> IO ())
+data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue CryptPacket) (CID -> IO ()) (CID -> IO ()) Bool -- retried
 
 data ServerRoute = ServerRoute {
     tokenMgr    :: CT.TokenManager
@@ -115,21 +115,21 @@ dispatch ServerConfig{..} ServerRoute{..}
                     Just q -> atomically $ writeTQueue q cpkt -- resend packets
           _ -> sendRetry
   where
-    pushToAcceptQ d s oc = do
+    pushToAcceptQ d s oc retried = do
         q <- newTQueueIO
         -- fixme: check listen length
         atomically $ writeTQueue q cpkt
-        let ent = Accept d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable)
+        let ent = Accept d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable) retried
         atomically $ writeTQueue acceptQueue ent
         return q
     pushToAcceptQ1 = do
         newdCID <- newCID
-        q <- pushToAcceptQ newdCID sCID (OCFirst dCID)
+        q <- pushToAcceptQ newdCID sCID (OCFirst dCID) False
         when (bs0RTT /= "") $ do
             (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
             atomically $ writeTQueue q cpktRTT0
     pushToAcceptQ2 (CryptoToken _ _ (Just (_,_,o))) = do
-        _ <- pushToAcceptQ dCID sCID (OCRetry o)
+        _ <- pushToAcceptQ dCID sCID (OCRetry o) True
         return ()
     pushToAcceptQ2 _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
