@@ -161,11 +161,10 @@ clientH3 :: String -> Connection -> IO ResumptionInfo
 clientH3 authority conn = do
     putStrLn "------------------------"
     hdrblk <- taglen 1 <$> qpackClient authority
-    sendStream conn  2 $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
-    sendStream conn  6 $ BS.pack [2]
-    sendStream conn 10 $ BS.pack [3]
-    sendStream conn  0 hdrblk
-    shutdownStream conn 0
+    sendStream conn  2 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
+    sendStream conn  6 False $ BS.pack [2]
+    sendStream conn 10 False $ BS.pack [3]
+    sendStream conn  0 True hdrblk
     loop
     putStrLn "------------------------"
     getResumptionInfo conn

@@ -121,22 +121,18 @@ main = do
               void $ forkFinally (server conn) (\_ -> close conn)
 
 serverHQ :: Connection -> IO ()
-serverHQ conn = loop
-  where
-    loop = do
-        bs <- recv conn
-        if bs == "" then
-            putStrLn "Connection finished"
-          else do
-            C8.putStr bs
-            send conn html
-            loop
+serverHQ conn = do
+    bs <- recv conn
+    C8.putStr bs
+    send conn html
+    shutdown conn
+    putStrLn "Connection finished"
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = do
-    sendStream conn 3 $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
-    sendStream conn 7 $ BS.pack [2]
-    sendStream conn 11 $ BS.pack [3]
+    sendStream conn  3 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
+    sendStream conn  7 False $ BS.pack [2]
+    sendStream conn 11 False $ BS.pack [3]
     hdrblock <- taglen 1 <$> qpackServer
     let bdyblock = taglen 0 html
         hdrbdy = BS.concat [hdrblock,bdyblock]
@@ -146,10 +142,10 @@ serverH3 conn = do
         (sid, bs) <- recvStream conn
         putStrLn $ "SID: " ++ show sid
         if bs == "" then
-            putStrLn "Connection finished"
+            loop hdrbdy
           else do
             print $ BS.unpack bs
-            when (sid == 0) $ sendStream conn 0 hdrbdy
+            when ((sid `mod` 4) == 0) $ sendStream conn sid True hdrbdy
             loop hdrbdy
 
 newSessionManager :: IO SessionManager
