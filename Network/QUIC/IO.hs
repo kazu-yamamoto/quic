@@ -10,14 +10,14 @@ import Network.QUIC.Imports
 import Network.QUIC.Types
 
 send :: Connection -> ByteString -> IO ()
-send conn bs = sendStream conn 0 bs
+send conn dat = sendStream conn 0 False dat
 
-sendStream :: Connection -> StreamID -> ByteString -> IO ()
-sendStream conn sid bs = do
+sendStream :: Connection -> StreamID -> Bool -> ByteString -> IO ()
+sendStream conn sid fin dat = do
     open <- isConnectionOpen conn
     if open then do
-        off <- modifyStreamOffset conn sid $ B.length bs
-        putOutput conn $ OutStream sid bs off False
+        off <- modifyStreamOffset conn sid $ B.length dat
+        putOutput conn $ OutStream sid dat off fin
       else
         E.throwIO ConnectionIsNotOpen
 
