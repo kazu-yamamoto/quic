@@ -101,7 +101,16 @@ main = do
           , scSessionManager = smgr
           , scEarlyDataSize  = 1024
           , scConfig     = defaultConfig {
-                confParameters = exampleParameters
+                confParameters = defaultParameters {
+                      maxStreamDataBidiLocal  =  262144
+                    , maxStreamDataBidiRemote =  262144
+                    , maxStreamDataUni        =  262144
+                    , maxData                 = 1048576
+                    , maxStreamsBidi          =     100
+                    , maxStreamsUni           =       3
+                    , idleTimeout             =   30000
+                    , activeConnectionIdLimit =       7
+                    }
               , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
               }
