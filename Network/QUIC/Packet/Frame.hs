@@ -49,6 +49,11 @@ encodeFrame wbuf (Stream sid off dat fin) = do
     when (off /= 0) $ encodeInt' wbuf $ fromIntegral off
     encodeInt' wbuf $ fromIntegral $ B.length dat
     copyByteString wbuf dat
+encodeFrame wbuf (MaxStreams dir ms) = do
+    case dir of
+      Bidi -> write8 wbuf 0x12
+      Uni  -> write8 wbuf 0x13
+    encodeInt' wbuf $ fromIntegral ms
 encodeFrame wbuf (NewConnectionID seqNum rpt cID (StatelessResetToken token)) = do
     write8 wbuf 0x18
     encodeInt' wbuf $ fromIntegral seqNum
@@ -109,8 +114,8 @@ decodeFrame rbuf = do
               decodeStreamFrame rbuf off len fin
       0x10 -> decodeMaxData rbuf
       0x11 -> decodeMaxStreamData rbuf
-      0x12 -> decodeMaxStreams rbuf
-      0x13 -> decodeMaxStreams rbuf
+      0x12 -> decodeMaxStreams rbuf Bidi
+      0x13 -> decodeMaxStreams rbuf Uni
       0x18 -> decodeNewConnectionID rbuf
       0x1a -> decodePathChallenge rbuf
       0x1b -> decodePathResponse rbuf
@@ -195,8 +200,8 @@ decodeMaxStreamData rbuf = do
     maxstrdata <- fromIntegral <$> decodeInt' rbuf
     return $ MaxStreamData sID maxstrdata
 
-decodeMaxStreams :: ReadBuffer -> IO Frame
-decodeMaxStreams rbuf = MaxStreams . fromIntegral <$> decodeInt' rbuf
+decodeMaxStreams :: ReadBuffer -> Direction -> IO Frame
+decodeMaxStreams rbuf dir = MaxStreams dir . fromIntegral <$> decodeInt' rbuf
 
 decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameQUIC rbuf = do

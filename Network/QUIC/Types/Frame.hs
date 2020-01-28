@@ -11,6 +11,8 @@ import Network.QUIC.Types.Error
 
 type FrameType = Int
 
+data Direction = Uni | Bidi deriving (Eq, Show)
+
 data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
@@ -21,7 +23,7 @@ data Frame = Padding Int
            | Stream StreamID Offset StreamData Fin
            | MaxData Int
            | MaxStreamData StreamID Int
-           | MaxStreams Int
+           | MaxStreams Direction Int
            | DataBlocked -- fixme
            | StreamDataBlocked -- fixme
            | StreamsBlocked -- fixme
