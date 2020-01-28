@@ -4,19 +4,23 @@
 
 module Network.QUIC.Server (
     ServerRoute(..)
-  , RouteTable
-  , Accept(..)
   , newServerRoute
   , router
-  , CT.killTokenManager
-  , RecvQ
-  , readRecvQ
-  , writeRecvQ
+  , RouteTable
+  , Accept(..)
   , readAcceptQ
+  , ServerRecvQ
   , RecvCryptPacket(..)
+  , readServerRecvQ
+  , writeServerRecvQ
+  , recvServer
+  , readerServer
+  , CT.killTokenManager
   ) where
 
+import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import Data.Hourglass (Seconds(..), timeDiff)
 import Data.IORef
@@ -24,18 +28,19 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Network.ByteOrder
 import Network.Socket
-import qualified Network.Socket.ByteString as NBS
+import qualified Network.Socket.ByteString as NSB
 import Time.System (timeCurrent)
 
 import Network.QUIC.Config
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data Accept = Accept CID CID OrigCID SockAddr SockAddr RecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
+data Accept = Accept CID CID OrigCID SockAddr SockAddr ServerRecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
 
 data ServerRoute = ServerRoute {
     tokenMgr    :: CT.TokenManager
@@ -46,7 +51,7 @@ data ServerRoute = ServerRoute {
 newServerRoute :: IO ServerRoute
 newServerRoute = ServerRoute <$> CT.spawnTokenManager CT.defaultConfig <*> newIORef M.empty <*> newAcceptQ
 
-type RouteTable = Map CID RecvQ
+type RouteTable = Map CID ServerRecvQ
 
 ----------------------------------------------------------------
 
@@ -65,16 +70,16 @@ writeAcceptQ (AcceptQ q) x = atomically $ writeTQueue q x
 
 data RecvCryptPacket = Through CryptPacket | NATRebinding CryptPacket SockAddr
 
-newtype RecvQ = RecvQ (TQueue RecvCryptPacket)
+newtype ServerRecvQ = ServerRecvQ (TQueue RecvCryptPacket)
 
-newRecvQ :: IO RecvQ
-newRecvQ = RecvQ <$> newTQueueIO
+newServerRecvQ :: IO ServerRecvQ
+newServerRecvQ = ServerRecvQ <$> newTQueueIO
 
-readRecvQ :: RecvQ -> IO RecvCryptPacket
-readRecvQ (RecvQ q) = atomically $ readTQueue q
+readServerRecvQ :: ServerRecvQ -> IO RecvCryptPacket
+readServerRecvQ (ServerRecvQ q) = atomically $ readTQueue q
 
-writeRecvQ :: RecvQ -> RecvCryptPacket -> IO ()
-writeRecvQ (RecvQ q) x = atomically $ writeTQueue q x
+writeServerRecvQ :: ServerRecvQ -> RecvCryptPacket -> IO ()
+writeServerRecvQ (ServerRecvQ q) x = atomically $ writeTQueue q x
 
 ----------------------------------------------------------------
 
@@ -95,20 +100,20 @@ router conf route (s,mysa) = do
         let cmsgs' = filterCmsg _cmsgid _cmsgs
 #endif
         (pkt, bs0RTT) <- decodePacket bs0
-        let send bs = void $ NBS.sendMsg s peersa [bs] cmsgs' 0
+        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
         dispatch conf route pkt mysa peersa send bs0RTT
   where
-    recv = NBS.recvMsg s 2048 64 0
+    recv = NSB.recvMsg s 2048 64 0
 
 supportedVersions :: [Version]
 supportedVersions = [Draft24, Draft23]
 
 ----------------------------------------------------------------
 
-lookupRoute :: IORef RouteTable -> CID -> IO (Maybe RecvQ)
+lookupRoute :: IORef RouteTable -> CID -> IO (Maybe ServerRecvQ)
 lookupRoute tbl cid = M.lookup cid <$> readIORef tbl
 
-registerRoute :: IORef RouteTable -> RecvQ -> CID -> IO ()
+registerRoute :: IORef RouteTable -> ServerRecvQ -> CID -> IO ()
 registerRoute tbl q cid = atomicModifyIORef' tbl $ \rt' -> (M.insert cid q rt', ())
 
 unregisterRoute :: IORef RouteTable -> CID -> IO ()
@@ -134,7 +139,7 @@ dispatch ServerConfig{..} ServerRoute{..}
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptQ1
-          Just q -> writeRecvQ q (Through cpkt) -- resend packets
+          Just q -> writeServerRecvQ q (Through cpkt) -- resend packets
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -146,13 +151,13 @@ dispatch ServerConfig{..} ServerRoute{..}
                   mroute <- lookupRoute routeTable dCID
                   case mroute of
                     Nothing -> pushToAcceptQ1
-                    Just q -> writeRecvQ q (Through cpkt) -- resend packets
+                    Just q -> writeServerRecvQ q (Through cpkt) -- resend packets
           _ -> sendRetry
   where
     pushToAcceptQ d s oc retried = do
-        q <- newRecvQ
+        q <- newServerRecvQ
         -- fixme: check listen length
-        writeRecvQ q (Through cpkt)
+        writeServerRecvQ q (Through cpkt)
         let ent = Accept d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable) retried
         writeAcceptQ acceptQueue ent
         return q
@@ -161,7 +166,7 @@ dispatch ServerConfig{..} ServerRoute{..}
         q <- pushToAcceptQ newdCID sCID (OCFirst dCID) False
         when (bs0RTT /= "") $ do
             (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
-            writeRecvQ q (Through cpktRTT0)
+            writeServerRecvQ q (Through cpktRTT0)
     pushToAcceptQ2 (CryptoToken _ _ (Just (_,_,o))) = do
         _ <- pushToAcceptQ dCID sCID (OCRetry o) True
         return ()
@@ -187,5 +192,30 @@ dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa
       Nothing -> putStrLn "Path validation"
       Just q  -> do
           putStrLn $ "NAT rebiding to " ++ show peersa
-          writeRecvQ q (NATRebinding cpkt peersa)
+          writeServerRecvQ q (NATRebinding cpkt peersa)
 dispatch _ _ _ _ _ _ _ = return () -- throwing away
+
+----------------------------------------------------------------
+
+-- readerServer dies when the socket is closed.
+readerServer :: Socket -> ServerRecvQ -> IO ()
+readerServer s q = E.handle ignore $ forever $ do
+    pkts <- NSB.recv s 2048 >>= decodeCryptPackets
+    mapM (\pkt -> writeServerRecvQ q (Through pkt)) pkts
+  where
+    ignore (E.SomeException _) = return ()
+
+recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr)
+           -> IO CryptPacket
+recvServer mysa q sref = do
+    rp <- readServerRecvQ q
+    case rp of
+      Through pkt -> return pkt
+      NATRebinding pkt peersa1 -> do
+          (s,peersa) <- readIORef sref
+          when (peersa /= peersa1) $ do
+              s1 <- udpServerConnectedSocket mysa peersa1
+              writeIORef sref (s1,peersa1)
+              void $ forkIO $ readerServer s1 q
+              close s
+          return pkt

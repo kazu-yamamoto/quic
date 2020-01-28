@@ -21,7 +21,7 @@ spec = do
                 clientCID = makeCID ""
                 tx _ = return ()
                 -- dummy
-                rx = return [CryptPacket (Short $ CID "") (Crypt 0 "")]
+                rx = return $ CryptPacket (Short $ CID "") (Crypt 0 "")
                 cls = return ()
             let clientConf = defaultClientConfig
             clientConn <- clientConnection clientConf clientCID serverCID tx rx cls

@@ -65,7 +65,7 @@ dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 type SendMany = [ByteString] -> IO ()
-type Receive  = IO [CryptPacket]
+type Receive  = IO CryptPacket
 
 ----------------------------------------------------------------
 

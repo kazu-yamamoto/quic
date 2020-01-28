@@ -14,9 +14,7 @@ import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 receiver :: Connection -> IO ()
-receiver conn = forever $ do
-    cpkts <- connRecv conn
-    mapM_ (processCryptPacket conn) cpkts
+receiver conn = forever (connRecv conn >>= processCryptPacket conn)
 
 processCryptPacket :: Connection -> CryptPacket -> IO ()
 processCryptPacket conn (CryptPacket header crypt) = do
