@@ -9,6 +9,11 @@ module Network.QUIC.Server (
   , newServerRoute
   , router
   , CT.killTokenManager
+  , RecvQ
+  , readRecvQ
+  , writeRecvQ
+  , readAcceptQ
+  , RecvCryptPacket(..)
   ) where
 
 import Control.Concurrent.STM
@@ -28,18 +33,50 @@ import Network.QUIC.Packet
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
-data Accept = Accept CID CID OrigCID SockAddr SockAddr (TQueue CryptPacket) (CID -> IO ()) (CID -> IO ()) Bool -- retried
+----------------------------------------------------------------
+
+data Accept = Accept CID CID OrigCID SockAddr SockAddr RecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
 
 data ServerRoute = ServerRoute {
     tokenMgr    :: CT.TokenManager
   , routeTable  :: IORef RouteTable
-  , acceptQueue :: TQueue Accept
+  , acceptQueue :: AcceptQ
   }
 
 newServerRoute :: IO ServerRoute
-newServerRoute = ServerRoute <$> CT.spawnTokenManager CT.defaultConfig <*> newIORef M.empty <*> newTQueueIO
+newServerRoute = ServerRoute <$> CT.spawnTokenManager CT.defaultConfig <*> newIORef M.empty <*> newAcceptQ
 
-type RouteTable = Map CID (TQueue CryptPacket)
+type RouteTable = Map CID RecvQ
+
+----------------------------------------------------------------
+
+newtype AcceptQ = AcceptQ (TQueue Accept)
+
+newAcceptQ :: IO AcceptQ
+newAcceptQ = AcceptQ <$> newTQueueIO
+
+readAcceptQ :: AcceptQ -> IO Accept
+readAcceptQ (AcceptQ q) = atomically $ readTQueue q
+
+writeAcceptQ :: AcceptQ -> Accept -> IO ()
+writeAcceptQ (AcceptQ q) x = atomically $ writeTQueue q x
+
+----------------------------------------------------------------
+
+data RecvCryptPacket = Through CryptPacket | NATRebinding CryptPacket SockAddr
+
+newtype RecvQ = RecvQ (TQueue RecvCryptPacket)
+
+newRecvQ :: IO RecvQ
+newRecvQ = RecvQ <$> newTQueueIO
+
+readRecvQ :: RecvQ -> IO RecvCryptPacket
+readRecvQ (RecvQ q) = atomically $ readTQueue q
+
+writeRecvQ :: RecvQ -> RecvCryptPacket -> IO ()
+writeRecvQ (RecvQ q) x = atomically $ writeTQueue q x
+
+----------------------------------------------------------------
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
 router conf route (s,mysa) = do
@@ -68,10 +105,10 @@ supportedVersions = [Draft24, Draft23]
 
 ----------------------------------------------------------------
 
-lookupRoute :: IORef RouteTable -> CID -> IO (Maybe (TQueue CryptPacket))
+lookupRoute :: IORef RouteTable -> CID -> IO (Maybe RecvQ)
 lookupRoute tbl cid = M.lookup cid <$> readIORef tbl
 
-registerRoute :: IORef RouteTable -> TQueue CryptPacket -> CID -> IO ()
+registerRoute :: IORef RouteTable -> RecvQ -> CID -> IO ()
 registerRoute tbl q cid = atomicModifyIORef' tbl $ \rt' -> (M.insert cid q rt', ())
 
 unregisterRoute :: IORef RouteTable -> CID -> IO ()
@@ -97,7 +134,7 @@ dispatch ServerConfig{..} ServerRoute{..}
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptQ1
-          Just q -> atomically $ writeTQueue q cpkt -- resend packets
+          Just q -> writeRecvQ q (Through cpkt) -- resend packets
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -109,22 +146,22 @@ dispatch ServerConfig{..} ServerRoute{..}
                   mroute <- lookupRoute routeTable dCID
                   case mroute of
                     Nothing -> pushToAcceptQ1
-                    Just q -> atomically $ writeTQueue q cpkt -- resend packets
+                    Just q -> writeRecvQ q (Through cpkt) -- resend packets
           _ -> sendRetry
   where
     pushToAcceptQ d s oc retried = do
-        q <- newTQueueIO
+        q <- newRecvQ
         -- fixme: check listen length
-        atomically $ writeTQueue q cpkt
+        writeRecvQ q (Through cpkt)
         let ent = Accept d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable) retried
-        atomically $ writeTQueue acceptQueue ent
+        writeAcceptQ acceptQueue ent
         return q
     pushToAcceptQ1 = do
         newdCID <- newCID
         q <- pushToAcceptQ newdCID sCID (OCFirst dCID) False
         when (bs0RTT /= "") $ do
             (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
-            atomically $ writeTQueue q cpktRTT0
+            writeRecvQ q (Through cpktRTT0)
     pushToAcceptQ2 (CryptoToken _ _ (Just (_,_,o))) = do
         _ <- pushToAcceptQ dCID sCID (OCRetry o) True
         return ()
@@ -143,10 +180,12 @@ dispatch ServerConfig{..} ServerRoute{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
         send bss
-dispatch _ ServerRoute{..} (PacketIC (CryptPacket (Short dCID) _)) _ _ _ _ = do
+dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.
     mroute <- lookupRoute routeTable dCID
     case mroute of
       Nothing -> putStrLn "Path validation"
-      Just _  -> putStrLn "NAT rebiding"
+      Just q  -> do
+          putStrLn $ "NAT rebiding to " ++ show peersa
+          writeRecvQ q (NATRebinding cpkt peersa)
 dispatch _ _ _ _ _ _ _ = return () -- throwing away

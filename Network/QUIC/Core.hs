@@ -5,7 +5,6 @@
 module Network.QUIC.Core where
 
 import Control.Concurrent
-import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Data.IORef
 import qualified Network.Socket as NS
@@ -119,18 +118,40 @@ withQUICServer conf body = do
   where
     runRouter route ssa@(s,_) = forkFinally (router conf route ssa) (\_ -> NS.close s)
 
+-- reader dies when the socket is closed.
+reader :: NS.Socket -> RecvQ -> IO ()
+reader s q = E.handle ignore $ forever $ do
+    pkts <- NSB.recv s 2048 >>= decodeCryptPackets
+    mapM (\pkt -> writeRecvQ q (Through pkt)) pkts
+  where
+    ignore (E.SomeException _) = return ()
+
 accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
-    Accept myCID peerCID oCID mysa peersa q register unregister retried <- atomically $ readTQueue $ acceptQueue serverRoute
-    s <- udpServerConnectedSocket mysa peersa
-    let setup = do
-            let send bss = void $ NSB.sendMany s bss
+    Accept myCID peerCID oCID mysa peersa0 q register unregister retried
+      <- readAcceptQ $ acceptQueue serverRoute
+    s0 <- udpServerConnectedSocket mysa peersa0
+    sref <- newIORef (s0,peersa0)
+    void $ forkIO $ reader s0 q -- killed by "close s"
+    let cls = do
+            (s,_) <- readIORef sref
+            NS.close s
+        setup = do
+            let send bss = void $ do
+                    (s,_) <- readIORef sref
+                    NSB.sendMany s bss
                 recv = do
-                    mpkt <- atomically $ tryReadTQueue q
-                    case mpkt of
-                      Nothing  -> NSB.recv s 2048 >>= decodeCryptPackets
-                      Just pkt -> return [pkt]
-                cls = NS.close s
+                    x <- readRecvQ q
+                    case x of
+                      Through pkt -> return [pkt]
+                      NATRebinding pkt peersa1 -> do
+                          (s,peersa) <- readIORef sref
+                          when (peersa /= peersa1) $ do
+                              s1 <- udpServerConnectedSocket mysa peersa1
+                              writeIORef sref (s1,peersa1)
+                              void $ forkIO $ reader s1 q
+                              NS.close s
+                          return [pkt]
             conn <- serverConnection serverConfig myCID peerCID oCID send recv cls
             setTokenManager conn $ tokenMgr serverRoute
             setCryptoOffset conn InitialLevel 0
@@ -138,16 +159,16 @@ accept QUICServer{..} = E.handle tlserr $ do
             setCryptoOffset conn RTT1Level 0
             setStreamOffset conn 0 0 -- fixme
             setRetried conn retried
-            tid0 <- forkIO $ sender conn
-            tid1 <- forkIO $ receiver conn
-            tid2 <- forkIO $ resender conn
+            tid0 <- forkIO (sender   conn `E.catch` reportError)
+            tid1 <- forkIO (receiver conn `E.catch` reportError)
+            tid2 <- forkIO (resender conn `E.catch` reportError)
             setThreadIds conn [tid0,tid1,tid2]
             handshakeServer serverConfig oCID conn
             setRegister conn register unregister
             register myCID
             setConnectionOpen conn
             return conn
-    setup `E.onException` NS.close s
+    setup `E.onException` cls
   where
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 

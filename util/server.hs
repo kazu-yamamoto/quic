@@ -149,8 +149,9 @@ serverH3 conn = do
   where
     loop hdrbdy = do
         (sid, bs) <- recvStream conn
-        putStrLn $ "SID: " ++ show sid
-        if bs == "" then
+        putStr $ "SID: " ++ show sid ++ " "
+        if bs == "" then do
+            putStr "\n"
             loop hdrbdy
           else do
             print $ BS.unpack bs

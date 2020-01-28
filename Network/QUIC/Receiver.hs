@@ -59,16 +59,19 @@ processFrame conn lvl (Crypto off cdat) = do
               return True
          | otherwise -> do
               control <- getServerController conn
-              SendSessionTicket nst <- control $ PutClientFinished cdat
-              -- aka sendCryptoData
-              putOutput conn $ OutHndServerNST nst
-              -- todo: sending "HandshakeDone" here
-              ServerHandshakeDone <- control ExitServer
-              clearServerController conn
-              cryptoToken <- generateToken
-              mgr <- getTokenManager conn
-              token <- encryptToken mgr cryptoToken
-              putOutput conn $ OutControl RTT1Level [NewToken token]
+              res <- control $ PutClientFinished cdat
+              case res of
+                SendSessionTicket nst -> do
+                    -- aka sendCryptoData
+                    putOutput conn $ OutHndServerNST nst
+                    -- todo: sending "HandshakeDone" here
+                    ServerHandshakeDone <- control ExitServer
+                    clearServerController conn
+                    cryptoToken <- generateToken
+                    mgr <- getTokenManager conn
+                    token <- encryptToken mgr cryptoToken
+                    putOutput conn $ OutControl RTT1Level [NewToken token]
+                _ -> return ()
               return True
       RTT1Level
         | isClient conn -> do
