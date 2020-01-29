@@ -10,6 +10,7 @@ import Network.QUIC.Types.Frame
 ----------------------------------------------------------------
 
 data Version = Negotiation
+             | UnknownVersion Word32
              | Draft18
              | Draft19
              | Draft20
@@ -18,8 +19,7 @@ data Version = Negotiation
              | Draft23
              | Draft24
              | Draft25
-             | UnknownVersion Word32
-             deriving (Eq, Show)
+             deriving (Eq, Ord, Show)
 
 ----------------------------------------------------------------
 
