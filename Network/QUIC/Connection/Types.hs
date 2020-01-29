@@ -129,8 +129,8 @@ data Connection = Connection {
   , connVersion       :: IORef Version
   }
 
-newConnection :: Role -> Version -> CID -> CID -> SendMany -> Receive -> IO () -> IO Connection
-newConnection rl ver myCID peerCID send recv cls =
+newConnection :: Role -> Version -> CID -> CID -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
+newConnection rl ver myCID peerCID send recv cls isecs =
     Connection rl myCID send recv cls
         <$> newIORef []
         -- Peer
@@ -148,7 +148,7 @@ newConnection rl ver myCID peerCID send recv cls =
         <*> newIORef emptyStreamTable
         -- TLS
         <*> newTVarIO InitialLevel
-        <*> newIORef defaultTrafficSecrets
+        <*> newIORef isecs
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
         <*> newIORef (ApplicationSecretInfo FullHandshake Nothing defaultTrafficSecrets)
@@ -169,21 +169,16 @@ clientConnection :: ClientConfig -> CID -> CID
                  -> SendMany -> Receive -> IO () -> IO Connection
 clientConnection ClientConfig{..} myCID peerCID send recv cls = do
     let ver = head $ confVersions ccConfig -- fixme
-    conn <- newConnection Client ver myCID peerCID send recv cls
-    let isecs = initialSecrets ver peerCID
-    -- overridden in Retry or VersionNegotiation
-    writeIORef (iniSecrets conn) isecs
-    return conn
+        isecs = initialSecrets ver peerCID
+    newConnection Client ver myCID peerCID send recv cls isecs
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
                  -> SendMany -> Receive -> IO () -> IO Connection
 serverConnection ServerConfig{..} ver myCID peerCID origCID send recv cls = do
-    conn <- newConnection Server ver myCID peerCID send recv cls
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    writeIORef (iniSecrets conn) isecs
-    return conn
+    newConnection Server ver myCID peerCID send recv cls isecs
 
 ----------------------------------------------------------------
 
