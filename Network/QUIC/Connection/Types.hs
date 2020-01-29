@@ -120,16 +120,17 @@ data Connection = Connection {
   , streamTable       :: IORef StreamTable
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
-  , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
+  , iniSecrets        :: IORef (Maybe (TrafficSecrets InitialSecret))
   , elySecInfo        :: IORef (Maybe EarlySecretInfo)
   , hndSecInfo        :: IORef (Maybe HandshakeSecretInfo)
   , appSecInfo        :: IORef (Maybe ApplicationSecretInfo)
-  -- Role info
+  -- Misc
   , roleInfo          :: IORef RoleInfo
+  , connVersion       :: IORef Version
   }
 
-newConnection :: Role -> CID -> CID -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
-newConnection rl myCID peerCID send recv cls isecs =
+newConnection :: Role -> Version -> CID -> CID -> SendMany -> Receive -> IO () -> IO Connection
+newConnection rl ver myCID peerCID send recv cls =
     Connection rl myCID send recv cls
         <$> newIORef []
         -- Peer
@@ -147,12 +148,13 @@ newConnection rl myCID peerCID send recv cls isecs =
         <*> newIORef emptyStreamTable
         -- TLS
         <*> newTVarIO InitialLevel
-        <*> newIORef isecs
         <*> newIORef Nothing
         <*> newIORef Nothing
         <*> newIORef Nothing
-        -- Role info
+        <*> newIORef Nothing
+        -- Misc
         <*> newIORef initialRoleInfo
+        <*> newIORef ver
   where
     initialRoleInfo
       | rl == Client = defaultClientRoleInfo
@@ -163,18 +165,22 @@ newConnection rl myCID peerCID send recv cls isecs =
 clientConnection :: ClientConfig -> CID -> CID
                  -> SendMany -> Receive -> IO () -> IO Connection
 clientConnection ClientConfig{..} myCID peerCID send recv cls = do
-    let ver = confVersion ccConfig
-        isecs = initialSecrets ver peerCID
-    newConnection Client myCID peerCID send recv cls isecs
+    let ver = head $ confVersions ccConfig -- fixme
+    conn <- newConnection Client ver myCID peerCID send recv cls
+    let isecs = initialSecrets ver peerCID
+    -- overridden in Retry or VersionNegotiation
+    writeIORef (iniSecrets conn) $ Just isecs
+    return conn
 
-serverConnection :: ServerConfig -> CID -> CID -> OrigCID
+serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
                  -> SendMany -> Receive -> IO () -> IO Connection
-serverConnection ServerConfig{..} myCID peerCID origCID send recv cls = do
-    let ver = confVersion scConfig
-        isecs = case origCID of
+serverConnection ServerConfig{..} ver myCID peerCID origCID send recv cls = do
+    conn <- newConnection Server ver myCID peerCID send recv cls
+    let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    newConnection Server myCID peerCID send recv cls isecs
+    writeIORef (iniSecrets conn) $ Just isecs
+    return conn
 
 ----------------------------------------------------------------
 

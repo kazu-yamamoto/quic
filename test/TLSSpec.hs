@@ -21,7 +21,7 @@ spec = do
             ----------------------------------------------------------------
             -- shared keys
             let dcID = makeCID (dec16s "8394c8f03e515708")
-            let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret currentDraft dcID
+            let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret Draft24 dcID
             client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "fda3953aecc040e48b34e27ef87de3a6098ecf0e38b7e032c5c57bcbd5975b84")
             let ckey = aeadKey defaultCipher (Secret cis)
             ckey `shouldBe` Key (dec16 "af7fd7efebd21878ff66811248983694")
@@ -29,7 +29,7 @@ spec = do
             civ `shouldBe` IV (dec16 "8681359410a70bb9c92f0420")
             let chp = headerProtectionKey defaultCipher (Secret cis)
             chp `shouldBe` Key (dec16 "a980b8b4fb7d9fbc13e814c23164253d")
-            let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret currentDraft dcID
+            let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret Draft24 dcID
             server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "554366b81912ff90be41f17e8022213090ab17d8149179bcadf222f29ff2ddd5")
             let skey = aeadKey defaultCipher (Secret sis)
             skey `shouldBe` Key (dec16 "5d51da9ee897a21b2659ccc7e5bfa577")
@@ -40,7 +40,7 @@ spec = do
 
         it "describes the examples of Client Initial draft 23" $ do
             let dcID = makeCID (dec16s "8394c8f03e515708")
-                ClientTrafficSecret cis = clientInitialSecret currentDraft dcID
+                ClientTrafficSecret cis = clientInitialSecret Draft24 dcID
                 ckey = aeadKey defaultCipher (Secret cis)
                 civ = initialVector defaultCipher (Secret cis)
                 chp = headerProtectionKey defaultCipher (Secret cis)

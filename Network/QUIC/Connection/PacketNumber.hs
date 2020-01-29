@@ -1,7 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.PacketNumber (
-    getPacketNumber
+    setPacketNumber
+  , getPacketNumber
   , getPeerPacketNumbers
   , addPeerPacketNumbers
   , updatePeerPacketNumbers
@@ -23,6 +24,9 @@ getPacketNumber :: Connection -> IO PacketNumber
 getPacketNumber Connection{..} = atomicModifyIORef' packetNumber inc
   where
     inc pn = (pn + 1, pn)
+
+setPacketNumber :: Connection -> PacketNumber -> IO ()
+setPacketNumber Connection{..} n = writeIORef packetNumber n
 
 ----------------------------------------------------------------
 -- Peer's packet numbers

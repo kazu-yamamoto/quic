@@ -47,7 +47,7 @@ connect QUICClient{..} = E.handle tlserr $ do
     sref <- newIORef s0
     connref <- newIORef Nothing
     q <- newClientRecvQ
-    void $ forkIO $ readerClient s0 q connref -- killed by "close s0"
+    void $ forkIO $ readerClient clientConfig s0 q connref -- killed by "close s0"
     let cls = do
             s <- readIORef sref
             NS.close s
@@ -92,7 +92,7 @@ withQUICServer conf body = do
 
 accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
-    Accept myCID peerCID oCID mysa peersa0 q register unregister retried
+    Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried
       <- readAcceptQ $ acceptQueue serverRoute
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,peersa0)
@@ -105,7 +105,7 @@ accept QUICServer{..} = E.handle tlserr $ do
             NSB.sendMany s bss
         recv = recvServer mysa q sref
         setup = do
-            conn <- serverConnection serverConfig myCID peerCID oCID send recv cls
+            conn <- serverConnection serverConfig ver myCID peerCID oCID send recv cls
             setTokenManager conn $ tokenMgr serverRoute
             setCryptoOffset conn InitialLevel 0
             setCryptoOffset conn HandshakeLevel 0

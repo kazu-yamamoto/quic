@@ -29,7 +29,7 @@ spec = do
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
                   }
-            serverConn <- serverConnection serverConf serverCID clientCID (OCFirst serverCID) tx rx cls
+            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) tx rx cls
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Right plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain

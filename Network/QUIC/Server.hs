@@ -40,7 +40,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data Accept = Accept CID CID OrigCID SockAddr SockAddr ServerRecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
+data Accept = Accept Version CID CID OrigCID SockAddr SockAddr ServerRecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
 
 data ServerRoute = ServerRoute {
     tokenMgr    :: CT.TokenManager
@@ -105,9 +105,6 @@ router conf route (s,mysa) = do
   where
     recv = NSB.recvMsg s 2048 64 0
 
-supportedVersions :: [Version]
-supportedVersions = [Draft24, Draft23]
-
 ----------------------------------------------------------------
 
 lookupRoute :: IORef RouteTable -> CID -> IO (Maybe ServerRecvQ)
@@ -130,8 +127,8 @@ dispatch :: ServerConfig -> ServerRoute -> PacketI -> SockAddr -> SockAddr -> (B
 dispatch ServerConfig{..} ServerRoute{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
          mysa peersa send bs0RTT
-  | ver /= currentDraft && ver `elem` supportedVersions = do
-        bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (delete ver supportedVersions)
+  | ver `notElem` confVersions scConfig = do
+        bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (confVersions scConfig)
         send bss
   | token == "" = do
         mroute <- lookupRoute routeTable dCID
@@ -158,7 +155,7 @@ dispatch ServerConfig{..} ServerRoute{..}
         q <- newServerRecvQ
         -- fixme: check listen length
         writeServerRecvQ q (Through cpkt)
-        let ent = Accept d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable) retried
+        let ent = Accept ver d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable) retried
         writeAcceptQ acceptQueue ent
         return q
     pushToAcceptQ1 = do
@@ -181,9 +178,9 @@ dispatch ServerConfig{..} ServerRoute{..}
     isRetryTokenValid _ = return False
     sendRetry = do
         newdCID <- newCID
-        retryToken <- generateRetryToken newdCID sCID dCID
+        retryToken <- generateRetryToken ver newdCID sCID dCID
         newtoken <- encryptToken tokenMgr retryToken
-        bss <- encodeRetryPacket $ RetryPacket currentDraft sCID newdCID dCID newtoken
+        bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID dCID newtoken
         send bss
 dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.

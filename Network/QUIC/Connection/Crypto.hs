@@ -98,7 +98,7 @@ getTLSMode Connection{..} = do
 ----------------------------------------------------------------
 
 setInitialSecrets :: Connection -> TrafficSecrets InitialSecret -> IO ()
-setInitialSecrets Connection{..} secs = writeIORef iniSecrets secs
+setInitialSecrets Connection{..} secs = writeIORef iniSecrets $ Just secs
 
 ----------------------------------------------------------------
 
@@ -128,8 +128,11 @@ rxInitialSecret conn = do
 
 xInitialSecret :: Connection -> IO (Secret, Secret)
 xInitialSecret Connection{..} = do
-    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef iniSecrets
-    return (Secret c, Secret s)
+    mx <- readIORef iniSecrets
+    case mx of
+      Nothing                      -> return (Secret "", Secret "")
+      Just (ClientTrafficSecret c
+           ,ServerTrafficSecret s) -> return (Secret c, Secret s)
 
 ----------------------------------------------------------------
 

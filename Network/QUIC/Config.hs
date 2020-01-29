@@ -14,7 +14,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 data Config = Config {
-    confVersion        :: Version
+    confVersions       :: [Version] -- ^ preferred order
   , confCiphers        :: [Cipher]
   , confGroups         :: [Group]
   , confParameters     :: Parameters
@@ -23,7 +23,7 @@ data Config = Config {
 
 defaultConfig :: Config
 defaultConfig = Config {
-    confVersion        = currentDraft
+    confVersions       = [Draft24,Draft25]
   , confCiphers        = ciphersuite_strong
   , confGroups         = [X25519,P256,P384,P521]
   , confParameters     = defaultParameters

@@ -21,9 +21,6 @@ data Version = Negotiation
              | UnknownVersion Word32
              deriving (Eq, Show)
 
-currentDraft :: Version
-currentDraft = Draft24
-
 ----------------------------------------------------------------
 
 data PacketI = PacketIV VersionNegotiationPacket

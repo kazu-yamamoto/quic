@@ -32,15 +32,15 @@ isRetryToken token = isJust $ tokenCIDs token
 
 ----------------------------------------------------------------
 
-generateToken :: IO CryptoToken
-generateToken = do
+generateToken :: Version -> IO CryptoToken
+generateToken ver = do
     t <- timeCurrent
-    return $ CryptoToken currentDraft t Nothing
+    return $ CryptoToken ver t Nothing
 
-generateRetryToken :: CID -> CID -> CID -> IO CryptoToken
-generateRetryToken l r o = do
+generateRetryToken :: Version -> CID -> CID -> CID -> IO CryptoToken
+generateRetryToken ver l r o = do
     t <- timeCurrent
-    return $ CryptoToken currentDraft t $ Just (l,r,o)
+    return $ CryptoToken ver t $ Just (l,r,o)
 
 ----------------------------------------------------------------
 

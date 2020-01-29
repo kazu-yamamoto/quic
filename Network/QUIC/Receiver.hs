@@ -65,7 +65,7 @@ processFrame conn lvl (Crypto off cdat) = do
                     -- todo: sending "HandshakeDone" here
                     ServerHandshakeDone <- control ExitServer
                     clearServerController conn
-                    cryptoToken <- generateToken
+                    cryptoToken <- generateToken =<< getVersion conn
                     mgr <- getTokenManager conn
                     token <- encryptToken mgr cryptoToken
                     putOutput conn $ OutControl RTT1Level [NewToken token]

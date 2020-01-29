@@ -1,7 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Misc (
-    setPeerCID
+    setVersion
+  , getVersion
+  , setPeerCID
   , getPeerCID
   , setThreadIds
   , clearThreads
@@ -12,7 +14,15 @@ import Data.IORef
 import System.Mem.Weak
 
 import Network.QUIC.Connection.Types
-import Network.QUIC.TLS
+import Network.QUIC.Types
+
+----------------------------------------------------------------
+
+setVersion :: Connection -> Version -> IO ()
+setVersion Connection{..} ver = writeIORef connVersion ver
+
+getVersion :: Connection -> IO Version
+getVersion Connection{..} = readIORef connVersion
 
 ----------------------------------------------------------------
 

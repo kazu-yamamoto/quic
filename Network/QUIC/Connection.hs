@@ -11,6 +11,7 @@ module Network.QUIC.Connection (
   , connRecv
   , connClose
   -- * Packet numbers
+  , setPacketNumber
   , getPacketNumber
   , PeerPacketNumbers
   , getPeerPacketNumbers
@@ -35,6 +36,8 @@ module Network.QUIC.Connection (
   , setHandshakeSecretInfo
   , setApplicationSecretInfo
   -- * Misc
+  , setVersion
+  , getVersion
   , setPeerCID
   , getPeerCID
   , setThreadIds

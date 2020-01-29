@@ -25,19 +25,20 @@ cryptoFrame conn crypto lvl = do
 
 construct :: Connection -> Output -> [PacketNumber] -> EncryptionLevel -> [Frame] -> Bool -> Maybe Int -> IO [ByteString]
 construct conn out pns lvl frames genLowerAck mTargetSize = do
+    ver <- getVersion conn
     token <- getToken conn
     peercid <- getPeerCID conn
     if genLowerAck then do
-        bss0 <- constructAckPacket lvl peercid token
+        bss0 <- constructAckPacket lvl ver peercid token
         let total = sum (map B.length bss0)
             mTargetSize' = subtract total <$> mTargetSize
-        bss1 <- constructTargetPacket peercid mTargetSize' token
+        bss1 <- constructTargetPacket ver peercid mTargetSize' token
         return (bss0 ++ bss1)
       else
-        constructTargetPacket peercid mTargetSize token
+        constructTargetPacket ver peercid mTargetSize token
   where
     mycid = myCID conn
-    constructAckPacket HandshakeLevel peercid token = do
+    constructAckPacket HandshakeLevel ver peercid token = do
         ppns <- getPeerPacketNumbers conn InitialLevel
         if nullPeerPacketNumbers ppns then
             return []
@@ -45,12 +46,12 @@ construct conn out pns lvl frames genLowerAck mTargetSize = do
             -- This packet will not be acknowledged.
             clearPeerPacketNumbers conn InitialLevel
             mypn <- getPacketNumber conn
-            let header   = Initial currentDraft peercid mycid token
+            let header   = Initial ver peercid mycid token
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
-    constructAckPacket RTT1Level peercid _ = do
+    constructAckPacket RTT1Level ver peercid _ = do
         ppns <- getPeerPacketNumbers conn HandshakeLevel
         if nullPeerPacketNumbers ppns then
             return []
@@ -58,23 +59,23 @@ construct conn out pns lvl frames genLowerAck mTargetSize = do
             -- This packet will not be acknowledged.
             clearPeerPacketNumbers conn HandshakeLevel
             mypn <- getPacketNumber conn
-            let header   = Handshake currentDraft peercid mycid
+            let header   = Handshake ver peercid mycid
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
-    constructAckPacket _ _ _ = return []
-    constructTargetPacket peercid mlen token = do
+    constructAckPacket _ _ _ _ = return []
+    constructTargetPacket ver peercid mlen token = do
         mypn <- getPacketNumber conn
         ppns <- getPeerPacketNumbers conn lvl
         let frames'
               | nullPeerPacketNumbers ppns = frames
               | otherwise   = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0 : frames
         let ppkt = case lvl of
-              InitialLevel   -> PlainPacket (Initial   currentDraft peercid mycid token) (Plain (Flags 0) mypn frames')
-              RTT0Level      -> PlainPacket (RTT0      currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')
-              HandshakeLevel -> PlainPacket (Handshake currentDraft peercid mycid)       (Plain (Flags 0) mypn frames')
-              RTT1Level      -> PlainPacket (Short                  peercid)             (Plain (Flags 0) mypn frames')
+              InitialLevel   -> PlainPacket (Initial   ver peercid mycid token) (Plain (Flags 0) mypn frames')
+              RTT0Level      -> PlainPacket (RTT0      ver peercid mycid)       (Plain (Flags 0) mypn frames')
+              HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames')
+              RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames')
         -- fixme: how to receive AKC for 0-RTT?
         when (frames /= [] && lvl /= RTT0Level) $
             keepOutput conn (mypn:pns) out lvl ppns
