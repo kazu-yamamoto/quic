@@ -80,10 +80,13 @@ compilerOpts argv =
       (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
       (_,_,errs) -> showUsageAndExit $ concat errs
 
-chooseALPN :: [ByteString] -> IO ByteString
-chooseALPN protos
-  | "hq-24" `elem` protos = return "hq-24"
-  | otherwise             = return "h3-24"
+chooseALPN :: Version -> [ByteString] -> IO ByteString
+chooseALPN ver protos
+  | h3X `elem` protos = return h3X
+  | hqX `elem` protos = return hqX
+  | otherwise         = return "" -- fixme
+  where
+    (h3X, hqX) = makeProtos ver
 
 main :: IO ()
 main = do
@@ -125,8 +128,8 @@ main = do
               info <- getConnectionInfo conn
               when optDebug $ print info
               let server = case alpn info of
-                    Just "hq-24" -> serverHQ
-                    _            -> serverH3
+                    Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
+                    _                                       -> serverH3
               void $ forkFinally (server conn) (\_ -> close conn)
 
 serverHQ :: Connection -> IO ()

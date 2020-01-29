@@ -35,7 +35,7 @@ defaultConfig = Config {
 data ClientConfig = ClientConfig {
     ccServerName :: HostName
   , ccPortName   :: ServiceName
-  , ccALPN       :: IO (Maybe [ByteString])
+  , ccALPN       :: Version -> IO (Maybe [ByteString])
   , ccValidate   :: Bool
   , ccResumption :: ResumptionInfo
   , ccEarlyData  :: Maybe (StreamID,ByteString)
@@ -46,7 +46,7 @@ defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
     ccServerName = "127.0.0.1"
   , ccPortName   = "13443"
-  , ccALPN       = return Nothing
+  , ccALPN       = \_ -> return Nothing
   , ccValidate   = False
   , ccResumption = defaultResumptionInfo
   , ccEarlyData  = Nothing
@@ -59,7 +59,7 @@ data ServerConfig = ServerConfig {
     scAddresses      :: [(IP,PortNumber)]
   , scKey            :: FilePath
   , scCert           :: FilePath
-  , scALPN           :: Maybe ([ByteString] -> IO ByteString)
+  , scALPN           :: Maybe (Version -> [ByteString] -> IO ByteString)
   , scRequireRetry   :: Bool
   , scSessionManager :: SessionManager
   , scEarlyDataSize  :: Int

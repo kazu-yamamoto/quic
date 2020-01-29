@@ -27,8 +27,8 @@ sessionManager establish = SessionManager {
   , sessionInvalidate     = \_ -> return ()
   }
 
-clientController:: ClientConfig -> SessionEstablish -> Bool -> IO ClientController
-clientController ClientConfig{..} establish sendEarlyData = newQUICClient cparams
+clientController:: ClientConfig -> Version -> SessionEstablish -> Bool ->IO ClientController
+clientController ClientConfig{..} ver establish sendEarlyData = newQUICClient cparams
   where
     cparams = (defaultParamsClient ccServerName "") {
         clientShared            = cshared
@@ -48,7 +48,7 @@ clientController ClientConfig{..} establish sendEarlyData = newQUICClient cparam
       , sharedSessionManager = sessionManager establish
       }
     hook = def {
-        onSuggestALPN = ccALPN
+        onSuggestALPN = ccALPN ver
       }
     supported = def {
         supportedVersions = [TLS13]
@@ -63,9 +63,10 @@ nullServerController :: ServerController
 nullServerController _ = return ServerHandshakeDone
 
 serverController :: ServerConfig
+                 -> Version
                  -> OrigCID
                  -> IO ServerController
-serverController ServerConfig{..} origCID = do
+serverController ServerConfig{..} ver origCID = do
     Right cred <- credentialLoadX509 scCert scKey
     let qparams = case origCID of
           OCFirst _    -> confParameters scConfig
@@ -86,7 +87,9 @@ serverController ServerConfig{..} origCID = do
     newQUICServer sparams
   where
     hook = def {
-        onALPNClientSuggest = scALPN
+        onALPNClientSuggest = case scALPN of
+          Nothing -> Nothing
+          Just io -> Just $ io ver
       }
     supported = def {
         supportedVersions = [TLS13]

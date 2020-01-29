@@ -9,6 +9,7 @@ module H3 (
   , qpackServer
   , taglen
   , html
+  , makeProtos
   ) where
 
 import Data.Bits
@@ -17,7 +18,9 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import Data.Word
 import Network.HPACK.Internal
+import Text.Printf
 
+import Network.QUIC
 import Network.QUIC.Types
 
 name :: ByteString
@@ -59,3 +62,10 @@ taglen i bs = BS.concat [tag,len,bs]
 
 html :: ByteString
 html = "<html><head><title>Welcome to QUIC in Haskell</title></head><body><p>Welcome to QUIC in Haskell. Currently draft-24 is supported. This server asks clients to retry if no token/retry_token is provided. HTTP 0.9, HTTP/3 and QPACK implementations are a toy and hard-coded.</p></body></html>"
+
+makeProtos :: Version -> (ByteString, ByteString)
+makeProtos ver = (h3X,hqX)
+  where
+    verbs = C8.pack $ printf "%d" $ fromVersion ver
+    h3X = "h3-" `BS.append` verbs
+    hqX = "hq-" `BS.append` verbs

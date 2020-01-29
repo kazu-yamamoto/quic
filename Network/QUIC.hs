@@ -30,6 +30,7 @@ module Network.QUIC (
   -- * Types
   , Connection
   , Version(..)
+  , fromVersion
   , StreamID
   -- ** Parameters
   , Parameters(..)
@@ -49,6 +50,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Core
 import Network.QUIC.IO
 import Network.QUIC.Imports
+import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Types
 

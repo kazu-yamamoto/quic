@@ -90,7 +90,8 @@ main = do
         conf = defaultClientConfig {
             ccServerName = addr
           , ccPortName   = port
-          , ccALPN       = return $ Just ["hq-24","h3-24"]
+          , ccALPN       = \ver -> let (h3X, hqX) = makeProtos ver
+                                   in return $ Just [h3X,hqX]
           , ccValidate   = optValidate
           , ccConfig     = defaultConfig {
                 confParameters = exampleParameters
@@ -106,8 +107,8 @@ main = do
             threadDelay 10000
             print info
         let client = case alpn info of
-              Just "hq-24" -> clientHQ cmd
-              _            -> clientH3 addr
+              Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
+              _                                       -> clientH3 addr
         client conn `E.finally` close conn
     when (optResumption && not (isResumptionPossible res)) $ do
         putStrLn "Resumption is not available"

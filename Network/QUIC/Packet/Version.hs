@@ -1,6 +1,7 @@
 module Network.QUIC.Packet.Version (
     encodeVersion
   , decodeVersion
+  , fromVersion
   ) where
 
 import Network.QUIC.Imports
@@ -33,3 +34,8 @@ decodeVersion 0xff000017 = Draft23
 decodeVersion 0xff000018 = Draft24
 decodeVersion 0xff000019 = Draft25
 decodeVersion w          = UnknownVersion w
+
+----------------------------------------------------------------
+
+fromVersion :: Version -> Int
+fromVersion ver = fromIntegral (0x000000ff .&. encodeVersion ver)
