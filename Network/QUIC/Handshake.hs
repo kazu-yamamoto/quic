@@ -113,8 +113,8 @@ recvClientHello control conn = loop (0 :: Int)
               SendRequestRetry hrr -> do
                   sendCryptoData conn $ OutHndServerHelloR hrr
                   loop expectedOff'
-              SendServerHello sh0 exts elySecInf hndSecInf -> do
-                  setEarlySecretInfo conn elySecInf
+              SendServerHello sh0 exts mEarlySecInf hndSecInf -> do
+                  setEarlySecretInfo conn mEarlySecInf
                   setHandshakeSecretInfo conn hndSecInf
                   setEncryptionLevel conn HandshakeLevel
                   setPeerParams conn exts

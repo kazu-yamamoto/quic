@@ -120,10 +120,10 @@ data Connection = Connection {
   , streamTable       :: IORef StreamTable
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
-  , iniSecrets        :: IORef (Maybe (TrafficSecrets InitialSecret))
-  , elySecInfo        :: IORef (Maybe EarlySecretInfo)
-  , hndSecInfo        :: IORef (Maybe HandshakeSecretInfo)
-  , appSecInfo        :: IORef (Maybe ApplicationSecretInfo)
+  , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
+  , elySecInfo        :: IORef EarlySecretInfo
+  , hndSecInfo        :: IORef HandshakeSecretInfo
+  , appSecInfo        :: IORef ApplicationSecretInfo
   -- Misc
   , roleInfo          :: IORef RoleInfo
   , connVersion       :: IORef Version
@@ -148,10 +148,10 @@ newConnection rl ver myCID peerCID send recv cls =
         <*> newIORef emptyStreamTable
         -- TLS
         <*> newTVarIO InitialLevel
-        <*> newIORef Nothing
-        <*> newIORef Nothing
-        <*> newIORef Nothing
-        <*> newIORef Nothing
+        <*> newIORef defaultTrafficSecrets
+        <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
+        <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
+        <*> newIORef (ApplicationSecretInfo FullHandshake Nothing defaultTrafficSecrets)
         -- Misc
         <*> newIORef initialRoleInfo
         <*> newIORef ver
@@ -159,6 +159,9 @@ newConnection rl ver myCID peerCID send recv cls =
     initialRoleInfo
       | rl == Client = defaultClientRoleInfo
       | otherwise    = defaultServerRoleInfo
+
+defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
+defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
@@ -169,7 +172,7 @@ clientConnection ClientConfig{..} myCID peerCID send recv cls = do
     conn <- newConnection Client ver myCID peerCID send recv cls
     let isecs = initialSecrets ver peerCID
     -- overridden in Retry or VersionNegotiation
-    writeIORef (iniSecrets conn) $ Just isecs
+    writeIORef (iniSecrets conn) isecs
     return conn
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
@@ -179,7 +182,7 @@ serverConnection ServerConfig{..} ver myCID peerCID origCID send recv cls = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    writeIORef (iniSecrets conn) $ Just isecs
+    writeIORef (iniSecrets conn) isecs
     return conn
 
 ----------------------------------------------------------------

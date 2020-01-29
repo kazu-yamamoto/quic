@@ -48,32 +48,29 @@ checkEncryptionLevel Connection{..} level = atomically $ do
 getCipher :: Connection -> EncryptionLevel -> IO Cipher
 getCipher _ InitialLevel = return defaultCipher
 getCipher Connection{..} RTT0Level = do
-    mx <- readIORef elySecInfo
-    case mx of
-      Just (EarlySecretInfo cipher _) -> return cipher
-      Nothing -> return defaultCipher
+    EarlySecretInfo cipher _ <- readIORef elySecInfo
+    return cipher
 getCipher Connection{..} _ = do
-    mx <- readIORef hndSecInfo
-    case mx of
-      Just (HandshakeSecretInfo cipher _) -> return cipher
-      Nothing -> return defaultCipher
+    HandshakeSecretInfo cipher _ <- readIORef hndSecInfo
+    return cipher
 
 setEarlySecretInfo :: Connection -> Maybe EarlySecretInfo -> IO ()
-setEarlySecretInfo Connection{..} minfo = writeIORef elySecInfo minfo
+setEarlySecretInfo _ Nothing = return ()
+setEarlySecretInfo Connection{..} (Just info) = writeIORef elySecInfo info
 
 setHandshakeSecretInfo :: Connection -> HandshakeSecretInfo -> IO ()
-setHandshakeSecretInfo Connection{..} info = writeIORef hndSecInfo $ Just info
+setHandshakeSecretInfo Connection{..} info = writeIORef hndSecInfo info
 
 setApplicationSecretInfo :: Connection -> ApplicationSecretInfo -> IO ()
-setApplicationSecretInfo Connection{..} info = writeIORef appSecInfo $ Just info
+setApplicationSecretInfo Connection{..} info = writeIORef appSecInfo info
 
-getEarlySecretInfo :: Connection -> IO (Maybe EarlySecretInfo)
+getEarlySecretInfo :: Connection -> IO EarlySecretInfo
 getEarlySecretInfo Connection{..} = readIORef elySecInfo
 
-getHandshakeSecretInfo :: Connection -> IO (Maybe HandshakeSecretInfo)
+getHandshakeSecretInfo :: Connection -> IO HandshakeSecretInfo
 getHandshakeSecretInfo Connection{..} = readIORef hndSecInfo
 
-getApplicationSecretInfo :: Connection -> IO (Maybe ApplicationSecretInfo)
+getApplicationSecretInfo :: Connection -> IO ApplicationSecretInfo
 getApplicationSecretInfo Connection{..} = readIORef appSecInfo
 
 ----------------------------------------------------------------
@@ -90,15 +87,13 @@ setPeerParameters Connection{..} plist = do
 
 getTLSMode :: Connection -> IO HandshakeMode13
 getTLSMode Connection{..} = do
-    minfo <- readIORef appSecInfo
-    case minfo of
-      Nothing -> error "getTLSMode"
-      Just (ApplicationSecretInfo mode _ _) -> return mode
+    (ApplicationSecretInfo mode _ _) <- readIORef appSecInfo
+    return mode
 
 ----------------------------------------------------------------
 
 setInitialSecrets :: Connection -> TrafficSecrets InitialSecret -> IO ()
-setInitialSecrets Connection{..} secs = writeIORef iniSecrets $ Just secs
+setInitialSecrets Connection{..} secs = writeIORef iniSecrets secs
 
 ----------------------------------------------------------------
 
@@ -128,20 +123,15 @@ rxInitialSecret conn = do
 
 xInitialSecret :: Connection -> IO (Secret, Secret)
 xInitialSecret Connection{..} = do
-    mx <- readIORef iniSecrets
-    case mx of
-      Nothing                      -> return (Secret "", Secret "")
-      Just (ClientTrafficSecret c
-           ,ServerTrafficSecret s) -> return (Secret c, Secret s)
+    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef iniSecrets
+    return (Secret c, Secret s)
 
 ----------------------------------------------------------------
 
 xEarlySecret :: Connection -> IO Secret
 xEarlySecret Connection{..} = do
-    minfo <- readIORef elySecInfo
-    case minfo of
-      Nothing                                          -> return $ Secret ""
-      Just (EarlySecretInfo _ (ClientTrafficSecret c)) -> return $ Secret c
+    (EarlySecretInfo _ (ClientTrafficSecret c)) <- readIORef elySecInfo
+    return $ Secret c
 
 ----------------------------------------------------------------
 
@@ -157,10 +147,8 @@ rxHandshakeSecret conn = do
 
 xHandshakeSecret :: Connection -> IO (Secret, Secret)
 xHandshakeSecret Connection{..} = do
-    minfo <- readIORef hndSecInfo
-    case minfo of
-      Nothing -> return (Secret "", Secret "")
-      Just (HandshakeSecretInfo _ (ClientTrafficSecret c, ServerTrafficSecret s)) -> return (Secret c, Secret s)
+    HandshakeSecretInfo _ (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef hndSecInfo
+    return (Secret c, Secret s)
 
 ----------------------------------------------------------------
 
@@ -176,7 +164,5 @@ rxApplicationSecret conn = do
 
 xApplicationSecret :: Connection -> IO (Secret, Secret)
 xApplicationSecret Connection{..} = do
-    minfo <- readIORef appSecInfo
-    case minfo of
-      Nothing -> return (Secret "", Secret "")
-      Just (ApplicationSecretInfo _ _ (ClientTrafficSecret c, ServerTrafficSecret s)) -> return (Secret c, Secret s)
+    ApplicationSecretInfo _ _ (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef appSecInfo
+    return (Secret c, Secret s)

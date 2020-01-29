@@ -70,11 +70,8 @@ getConnectionInfo conn = do
     let mycid = myCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
-    mx <- getApplicationSecretInfo conn
+    ApplicationSecretInfo mode mproto _ <- getApplicationSecretInfo conn
     r <- getRetried conn
-    let (mproto, mode) = case mx of
-          Nothing -> (Nothing, FullHandshake)
-          Just (ApplicationSecretInfo m p _) -> (p, m)
     return ConnectionInfo {
         cipher = c
       , alpn = mproto
