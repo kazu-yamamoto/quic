@@ -84,63 +84,61 @@ construct conn out pns lvl frames genLowerAck mTargetSize = do
 ----------------------------------------------------------------
 
 sender :: Connection -> IO ()
-sender conn = loop
-  where
-    loop = forever $ do
-        (out,pns) <- takeOutput conn
-        case out of
-          OutHndClientHello ch mEarlyData -> do
-              frame <- cryptoFrame conn ch InitialLevel
-              let frames = [frame]
-              -- fixme: the case where mEarlyData is larger.
-              case mEarlyData of
-                Nothing -> do
-                    bss <- construct conn out pns InitialLevel frames False $ Just maximumQUICPacketSize
-                    connSend conn bss
-                Just (sid,earlyData) -> do
-                    let out0 = OutHndClientHello ch Nothing
-                    bss0 <- construct conn out0 pns InitialLevel frames False Nothing
-                    let size = maximumQUICPacketSize - sum (map B.length bss0)
-                    off <- modifyStreamOffset conn sid $ B.length earlyData
-                    let out1 = OutStream sid earlyData off True
-                    bss1 <- construct conn out1 pns RTT0Level [Stream sid off earlyData True] False $ Just size
-                    connSend conn (bss0 ++ bss1)
-          OutHndServerHello  sh sf -> do
-              frame0 <- cryptoFrame conn sh InitialLevel
-              bss0 <- construct conn out pns InitialLevel [frame0] False Nothing
-              -- 824 = 1024 - 200 (size of sh)
-              -- but 900 is good enough...
-              let (sf1,sf2) = B.splitAt 824 sf
-              let size = maximumQUICPacketSize - sum (map B.length bss0)
-              frame1 <- cryptoFrame conn sf1 HandshakeLevel
-              bss1 <- construct conn out pns HandshakeLevel [frame1] False $ Just size
-              connSend conn (bss0 ++ bss1)
-              let sendRest rsf0 = do
-                    let (rsf,rest) = B.splitAt 1024 rsf0
-                    rframe <- cryptoFrame conn rsf HandshakeLevel
-                    rbss <- construct conn out pns HandshakeLevel [rframe] False $ Just maximumQUICPacketSize
-                    connSend conn rbss
-                    when (rest /= "") $ sendRest rest
-              sendRest sf2
-          OutHndServerHelloR sh -> do
-              frame <- cryptoFrame conn sh InitialLevel
-              bss <- construct conn out pns InitialLevel [frame] False $ Just maximumQUICPacketSize
-              connSend conn bss
-          OutHndClientFinished cf -> do
-              -- fixme size
-              frame <- cryptoFrame conn cf HandshakeLevel
-              bss <- construct conn out pns HandshakeLevel [frame] True $ Just maximumQUICPacketSize
-              connSend conn bss
-          OutHndServerNST nst -> do
-              frame <- cryptoFrame conn nst RTT1Level
-              bss <- construct conn out pns RTT1Level [frame] True $ Just maximumQUICPacketSize
-              connSend conn bss
-          OutControl lvl frames -> do
-              bss <- construct conn out pns lvl frames False $ Just maximumQUICPacketSize
-              connSend conn bss
-          OutStream sid dat off fin -> do
-              bss <- construct conn out pns RTT1Level [Stream sid off dat fin] False $ Just maximumQUICPacketSize
-              connSend conn bss
+sender conn = forever $ do
+    (out,pns) <- takeOutput conn
+    case out of
+      OutHndClientHello ch mEarlyData -> do
+          frame <- cryptoFrame conn ch InitialLevel
+          let frames = [frame]
+          -- fixme: the case where mEarlyData is larger.
+          case mEarlyData of
+            Nothing -> do
+                bss <- construct conn out pns InitialLevel frames False $ Just maximumQUICPacketSize
+                connSend conn bss
+            Just (sid,earlyData) -> do
+                let out0 = OutHndClientHello ch Nothing
+                bss0 <- construct conn out0 pns InitialLevel frames False Nothing
+                let size = maximumQUICPacketSize - sum (map B.length bss0)
+                off <- modifyStreamOffset conn sid $ B.length earlyData
+                let out1 = OutStream sid earlyData off True
+                bss1 <- construct conn out1 pns RTT0Level [Stream sid off earlyData True] False $ Just size
+                connSend conn (bss0 ++ bss1)
+      OutHndServerHello  sh sf -> do
+          frame0 <- cryptoFrame conn sh InitialLevel
+          bss0 <- construct conn out pns InitialLevel [frame0] False Nothing
+          -- 824 = 1024 - 200 (size of sh)
+          -- but 900 is good enough...
+          let (sf1,sf2) = B.splitAt 824 sf
+          let size = maximumQUICPacketSize - sum (map B.length bss0)
+          frame1 <- cryptoFrame conn sf1 HandshakeLevel
+          bss1 <- construct conn out pns HandshakeLevel [frame1] False $ Just size
+          connSend conn (bss0 ++ bss1)
+          let sendRest rsf0 = do
+                let (rsf,rest) = B.splitAt 1024 rsf0
+                rframe <- cryptoFrame conn rsf HandshakeLevel
+                rbss <- construct conn out pns HandshakeLevel [rframe] False $ Just maximumQUICPacketSize
+                connSend conn rbss
+                when (rest /= "") $ sendRest rest
+          sendRest sf2
+      OutHndServerHelloR sh -> do
+          frame <- cryptoFrame conn sh InitialLevel
+          bss <- construct conn out pns InitialLevel [frame] False $ Just maximumQUICPacketSize
+          connSend conn bss
+      OutHndClientFinished cf -> do
+          -- fixme size
+          frame <- cryptoFrame conn cf HandshakeLevel
+          bss <- construct conn out pns HandshakeLevel [frame] True $ Just maximumQUICPacketSize
+          connSend conn bss
+      OutHndServerNST nst -> do
+          frame <- cryptoFrame conn nst RTT1Level
+          bss <- construct conn out pns RTT1Level [frame] True $ Just maximumQUICPacketSize
+          connSend conn bss
+      OutControl lvl frames -> do
+          bss <- construct conn out pns lvl frames False $ Just maximumQUICPacketSize
+          connSend conn bss
+      OutStream sid dat off fin -> do
+          bss <- construct conn out pns RTT1Level [Stream sid off dat fin] False $ Just maximumQUICPacketSize
+          connSend conn bss
 
 ----------------------------------------------------------------
 
