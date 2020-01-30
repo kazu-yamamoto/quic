@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TupleSections #-}
 
 module Main where
 
@@ -63,7 +64,7 @@ options = [
   ]
 
 usage :: String
-usage = "Usage: server [OPTION] addr port"
+usage = "Usage: server [OPTION] addr [addrs] port"
 
 showUsageAndExit :: String -> IO a
 showUsageAndExit msg = do
@@ -89,11 +90,13 @@ main :: IO ()
 main = do
     args <- getArgs
     (Options{..}, ips) <- compilerOpts args
-    when (length ips /= 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
-    let [addr,port] = ips
+    when (length ips < 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
+    let port = read (last ips)
+        addrs = read <$> init ips
+        aps = (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
     let conf = defaultServerConfig {
-            scAddresses    = [(read addr, read port)]
+            scAddresses    = aps
           , scKey          = optKeyFile
           , scCert         = optCertFile
           , scALPN         = Just chooseALPN
