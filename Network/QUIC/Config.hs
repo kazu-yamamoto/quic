@@ -23,7 +23,7 @@ data Config = Config {
 
 defaultConfig :: Config
 defaultConfig = Config {
-    confVersions       = [Draft24,Draft25]
+    confVersions       = [Draft25,Draft24]
   , confCiphers        = ciphersuite_strong
   , confGroups         = [X25519,P256,P384,P521]
   , confParameters     = defaultParameters
