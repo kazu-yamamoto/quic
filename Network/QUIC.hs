@@ -59,7 +59,8 @@ import Network.TLS hiding (Version)
 import Network.TLS.QUIC
 
 data ConnectionInfo = ConnectionInfo {
-    cipher :: Cipher
+    version :: Version
+  , cipher :: Cipher
   , alpn :: Maybe ByteString
   , handshakeMode :: HandshakeMode13
   , retry :: Bool
@@ -74,8 +75,10 @@ getConnectionInfo conn = do
     c <- getCipher conn RTT1Level
     ApplicationSecretInfo mode mproto _ <- getApplicationSecretInfo conn
     r <- getRetried conn
+    v <- getVersion conn
     return ConnectionInfo {
-        cipher = c
+        version = v
+      , cipher = c
       , alpn = mproto
       , handshakeMode = mode
       , retry = r
@@ -84,7 +87,8 @@ getConnectionInfo conn = do
       }
 
 instance Show ConnectionInfo where
-    show ConnectionInfo{..} = "Cipher: " ++ show cipher ++ "\n"
+    show ConnectionInfo{..} = "Version: " ++ show version ++ "\n"
+                           ++ "Cipher: " ++ show cipher ++ "\n"
                            ++ "ALPN: " ++ maybe "none" C8.unpack alpn ++ "\n"
                            ++ "Mode: " ++ show handshakeMode ++ "\n"
                            ++ "Local " ++ show localCID ++ "\n"
