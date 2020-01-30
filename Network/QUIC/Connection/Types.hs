@@ -165,11 +165,10 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-clientConnection :: ClientConfig -> CID -> CID
+clientConnection :: ClientConfig -> Version -> CID -> CID
                  -> SendMany -> Receive -> IO () -> IO Connection
-clientConnection ClientConfig{..} myCID peerCID send recv cls = do
-    let ver = head $ confVersions ccConfig -- fixme
-        isecs = initialSecrets ver peerCID
+clientConnection ClientConfig{..} ver myCID peerCID send recv cls = do
+    let isecs = initialSecrets ver peerCID
     newConnection Client ver myCID peerCID send recv cls isecs
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID

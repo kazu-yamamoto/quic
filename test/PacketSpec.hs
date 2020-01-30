@@ -24,7 +24,8 @@ spec = do
                 rx = return $ CryptPacket (Short $ CID "") (Crypt 0 "")
                 cls = return ()
             let clientConf = defaultClientConfig
-            clientConn <- clientConnection clientConf clientCID serverCID tx rx cls
+                ver = head $ confVersions $ ccConfig clientConf
+            clientConn <- clientConnection clientConf ver clientCID serverCID tx rx cls
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"

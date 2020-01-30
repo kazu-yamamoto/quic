@@ -27,6 +27,8 @@ recvCryptoData conn = do
       InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> error "recvCryptoData"
+      InpVersion Nothing         -> E.throwIO VersionNegotiationFailed
+      InpVersion (Just ver)      -> E.throwIO $ NextVersion ver
 
 ----------------------------------------------------------------
 

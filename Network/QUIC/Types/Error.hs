@@ -1,6 +1,5 @@
 module Network.QUIC.Types.Error where
 
-import qualified Control.Exception as E
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
@@ -68,13 +67,3 @@ toTransportError n
     mdesc = toAlertDescription $ fromIntegral (n - 0x100)
 
 type ReasonPhrase = Bytes
-
-data QUICError = PacketCannotBeDecrypted
-               | VersionIsUnknown Word32
-               | TransportErrorOccurs TransportError ReasonPhrase
-               | ApplicationErrorOccurs ApplicationError ReasonPhrase
-               | ConnectionIsNotOpen
-               | HandshakeFailed String
-               deriving (Eq, Show)
-
-instance E.Exception QUICError

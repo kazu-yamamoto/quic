@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Core where
 
@@ -9,6 +10,7 @@ import qualified Control.Exception as E
 import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
+import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 import System.Timeout
 
@@ -38,16 +40,42 @@ data QUICServer = QUICServer {
 
 withQUICClient :: ClientConfig -> (QUICClient -> IO a) -> IO a
 withQUICClient conf body = do
+    when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
     let qc = QUICClient conf
     body qc
 
 connect :: QUICClient -> IO Connection
-connect QUICClient{..} = E.handle tlserr $ do
-    s0 <- udpClientConnectedSocket (ccServerName clientConfig) (ccPortName clientConfig)
+connect QUICClient{..} = do
+    let firstVersion = head $ confVersions $ ccConfig clientConfig
+    ex0 <- E.try $ connect' firstVersion
+    case ex0 of
+      Right conn0 -> return conn0
+      Left se0 -> case check se0 of
+        Left  se0' -> E.throwIO se0'
+        Right ver -> do
+            ex1 <- E.try $ connect' ver
+            case ex1 of
+              Right conn1 -> return conn1
+              Left se1 -> case check se1 of
+                Left  se1' -> E.throwIO se1'
+                Right _    -> E.throwIO VersionNegotiationFailed
+  where
+    connect' ver = do
+        (conn,cls) <- createClientConnection clientConfig ver
+        handshakeClientConnection clientConfig conn `E.onException` cls
+        return conn
+    check se
+      | Just e@(TLS.Error_Protocol _) <- E.fromException se =
+                Left $ HandshakeFailed $ show $ errorToAlertDescription e
+      | Just (NextVersion ver) <- E.fromException se = Right ver
+      | Just (e :: QUICError)  <- E.fromException se = Left e
+      | otherwise = Left $ BadThingHappen se
+
+createClientConnection :: ClientConfig -> Version -> IO (Connection, IO ())
+createClientConnection conf@ClientConfig{..} ver = do
+    s0 <- udpClientConnectedSocket ccServerName ccPortName
     sref <- newIORef s0
-    connref <- newIORef Nothing
     q <- newClientRecvQ
-    void $ forkIO $ readerClient clientConfig s0 q connref -- killed by "close s0"
     let cls = do
             s <- readIORef sref
             NS.close s
@@ -55,26 +83,26 @@ connect QUICClient{..} = E.handle tlserr $ do
             s <- readIORef sref
             void $ NSB.sendMany s bss
         recv = recvClient q
-    let setup = do
-            myCID   <- newCID
-            peerCID <- newCID
-            conn <- clientConnection clientConfig myCID peerCID send recv cls
-            setToken conn $ resumptionToken $ ccResumption clientConfig
-            setCryptoOffset conn InitialLevel 0
-            setCryptoOffset conn HandshakeLevel 0
-            setCryptoOffset conn RTT1Level 0
-            setStreamOffset conn 0 0 -- fixme
-            tid0 <- forkIO (sender   conn `E.catch` reportError)
-            tid1 <- forkIO (receiver conn `E.catch` reportError)
-            tid2 <- forkIO (resender conn `E.catch` reportError)
-            setThreadIds conn [tid0,tid1,tid2]
-            writeIORef connref $ Just conn
-            handshakeClient clientConfig conn
-            setConnectionOpen conn
-            return conn
-    setup `E.onException` cls
-  where
-    tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
+    myCID   <- newCID
+    peerCID <- newCID
+    conn <- clientConnection conf ver myCID peerCID send recv cls
+    -- killed by "close s0"
+    void $ forkIO $ readerClient conf s0 q conn
+    return (conn,cls)
+
+handshakeClientConnection :: ClientConfig -> Connection -> IO ()
+handshakeClientConnection conf@ClientConfig{..} conn = do
+    setToken conn $ resumptionToken ccResumption
+    setCryptoOffset conn InitialLevel 0
+    setCryptoOffset conn HandshakeLevel 0
+    setCryptoOffset conn RTT1Level 0
+    setStreamOffset conn 0 0 -- fixme
+    tid0 <- forkIO (sender   conn `E.catch` reportError)
+    tid1 <- forkIO (receiver conn `E.catch` reportError)
+    tid2 <- forkIO (resender conn `E.catch` reportError)
+    setThreadIds conn [tid0,tid1,tid2]
+    handshakeClient conf conn
+    setConnectionOpen conn
 
 ----------------------------------------------------------------
 

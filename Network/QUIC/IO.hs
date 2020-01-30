@@ -45,4 +45,5 @@ recvStream conn = do
       InpStream sid bs      -> return (sid, bs)
       InpApplicationError{} -> return (0, "") -- fixme sid
       InpTransportError{}   -> return (0, "") -- fixme sid
+      InpVersion{}          -> error "recvStream"
       InpHandshake{}        -> error "recvStream"

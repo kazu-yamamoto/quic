@@ -1,4 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Client (
     ClientRecvQ
@@ -9,9 +11,10 @@ module Network.QUIC.Client (
 
 import Control.Concurrent.STM
 import qualified Control.Exception as E
-import Data.IORef
+import qualified GHC.IO.Exception as E
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
+import qualified System.IO.Error as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -32,49 +35,38 @@ writeClientRecvQ :: ClientRecvQ -> CryptPacket -> IO ()
 writeClientRecvQ (ClientRecvQ q) x = atomically $ writeTQueue q x
 
 -- readerClient dies when the socket is closed.
-readerClient :: ClientConfig -> Socket -> ClientRecvQ -> IORef (Maybe Connection) -> IO ()
-readerClient ClientConfig{..} s q connref = E.handle ignore $ forever $ do
+readerClient :: ClientConfig -> Socket -> ClientRecvQ -> Connection -> IO ()
+readerClient ClientConfig{..} s q conn = E.handle handler $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
   where
-    ignore (E.SomeException _) = return ()
+    handler se
+      | Just (e :: E.IOException) <- E.fromException se =
+            when (E.ioeGetErrorType e /= E.InvalidArgument) $ print e
+      | otherwise = print se
     putQ (PacketIV (VersionNegotiationPacket dCID sCID peerVers)) = do
-        mconn <- readIORef connref
-        case mconn of
-          Nothing   -> return ()
-          Just conn -> do
-              mr <- releaseOutput conn 0
-              let myVers = confVersions ccConfig
-              case myVers `intersect` peerVers of
-                []    -> return ()
-                ver:_ -> do
-                    ok <- checkCIDs conn dCID sCID
-                    when ok $ case mr of
-                      Just (OutHndClientHello cdat mEarydata) -> do
-                          setPacketNumber conn 0
-                          setVersion conn ver
-                          setInitialSecrets conn $ initialSecrets ver sCID
-                          putOutput conn $ OutHndClientHello cdat mEarydata
-                      _ -> return ()
+        let myVers = confVersions ccConfig
+        mver <- case myVers `intersect` peerVers of
+                  []    -> return Nothing
+                  ver:_ -> do
+                      ok <- checkCIDs conn dCID sCID
+                      return $ if ok then Just ver else Nothing
+        putCrypto conn $ InpVersion mver
     putQ (PacketIC pkt) = writeClientRecvQ q pkt
-    putQ (PacketIR (RetryPacket ver dCID sCID oCID token))  = do
+    putQ (PacketIR (RetryPacket ver dCID sCID oCID token)) = do
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
-        mconn <- readIORef connref
-        case mconn of
-          Nothing   -> return ()
-          Just conn -> do
-              mr <- releaseOutput conn 0
-              ok <- checkCIDs conn dCID oCID
-              when ok $ case mr of
-                Just (OutHndClientHello cdat mEarydata) -> do
-                    setPeerCID conn sCID
-                    setInitialSecrets conn $ initialSecrets ver sCID
-                    setToken conn token
-                    setCryptoOffset conn InitialLevel 0
-                    setRetried conn True
-                    putOutput conn $ OutHndClientHello cdat mEarydata
-                _ -> return ()
+        mr <- releaseOutput conn 0
+        ok <- checkCIDs conn dCID oCID
+        when ok $ case mr of
+          Just (OutHndClientHello cdat mEarydata) -> do
+              setPeerCID conn sCID
+              setInitialSecrets conn $ initialSecrets ver sCID
+              setToken conn token
+              setCryptoOffset conn InitialLevel 0
+              setRetried conn True
+              putOutput conn $ OutHndClientHello cdat mEarydata
+          _ -> return ()
 
 checkCIDs :: Connection -> CID -> CID -> IO Bool
 checkCIDs conn dCID sCID = do

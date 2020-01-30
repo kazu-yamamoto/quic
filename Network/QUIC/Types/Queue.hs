@@ -9,6 +9,7 @@ data Input = InpStream StreamID ByteString
            | InpHandshake EncryptionLevel ByteString Offset Token
            | InpTransportError TransportError FrameType ReasonPhrase
            | InpApplicationError ApplicationError ReasonPhrase
+           | InpVersion (Maybe Version)
            deriving Show
 
 data Output = OutStream StreamID ByteString Offset Bool
