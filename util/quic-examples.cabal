@@ -1,0 +1,42 @@
+name:                quic-examples
+version:             0.0.0
+synopsis:            QUIC examples
+description:         Example server and client for Haskell QUIC library
+license:             BSD3
+license-file:        LICENSE
+author:              Kazu Yamamoto
+maintainer:          kazu@iij.ad.jp
+-- copyright:
+category:            Web
+build-type:          Simple
+-- extra-source-files:  ChangeLog.md
+cabal-version:       >= 1.10
+
+executable server
+  default-language:     Haskell2010
+  hs-source-dirs:       .
+  main-is:              server.hs
+  other-modules:        H3
+                        Common
+  ghc-options:          -Wall -threaded -rtsopts
+  build-depends:        base >= 4.0 && < 5
+                      , bytestring
+                      , data-default-class
+                      , http2
+                      , quic
+                      , tls
+                      , tls-session-manager
+
+executable client
+  default-language:     Haskell2010
+  hs-source-dirs:       .
+  main-is:              client.hs
+  other-modules:        H3
+                        Common
+  ghc-options:          -Wall -threaded -rtsopts
+  build-depends:        base >= 4.0 && < 5
+                      , bytestring
+                      , data-default-class
+                      , http2
+                      , quic
+                      , tls
