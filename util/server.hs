@@ -11,10 +11,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
-import Data.IORef
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Network.TLS (SessionManager(..), SessionID, SessionData)
+import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit
@@ -94,7 +91,7 @@ main = do
     (Options{..}, ips) <- compilerOpts args
     when (length ips /= 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
     let [addr,port] = ips
-    smgr <- newSessionManager
+    smgr <- SM.newSessionManager SM.defaultConfig
     let conf = defaultServerConfig {
             scAddresses    = [(read addr, read port)]
           , scKey          = optKeyFile
@@ -160,16 +157,3 @@ serverH3 conn = do
             print $ BS.unpack bs
             when ((sid `mod` 4) == 0) $ sendStream conn sid True hdrbdy
             loop hdrbdy
-
-newSessionManager :: IO SessionManager
-newSessionManager = sessionManager <$> newIORef Map.empty
-
-sessionManager :: IORef (Map SessionID SessionData) -> SessionManager
-sessionManager ref = SessionManager {
-    sessionResume = \key -> Map.lookup key <$> readIORef ref
-  , sessionResumeOnlyOnce = \key -> Map.lookup key <$> readIORef ref
-  , sessionEstablish = \key val -> atomicModifyIORef' ref $ \m ->
-      (Map.insert key val m, ())
-  , sessionInvalidate = \key -> atomicModifyIORef' ref $ \m ->
-      (Map.delete key m, ())
-  }
