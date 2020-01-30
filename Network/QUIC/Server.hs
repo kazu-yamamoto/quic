@@ -84,7 +84,7 @@ writeServerRecvQ (ServerRecvQ q) x = atomically $ writeTQueue q x
 ----------------------------------------------------------------
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
-router conf route (s,mysa) = do
+router conf route (s,mysa) = E.handle ignore $ do
     let (opt,_cmsgid) = case mysa of
           SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
           SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
@@ -180,7 +180,7 @@ dispatch ServerConfig{..} ServerRoute{..}
         newdCID <- newCID
         retryToken <- generateRetryToken ver newdCID sCID dCID
         newtoken <- encryptToken tokenMgr retryToken
-        bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID dCID newtoken
+        bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
 dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.
@@ -199,8 +199,9 @@ readerServer :: Socket -> ServerRecvQ -> IO ()
 readerServer s q = E.handle ignore $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets
     mapM (\pkt -> writeServerRecvQ q (Through pkt)) pkts
-  where
-    ignore (E.SomeException _) = return ()
+
+ignore :: E.SomeException -> IO ()
+ignore (E.SomeException e) = print e
 
 recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr)
            -> IO CryptPacket

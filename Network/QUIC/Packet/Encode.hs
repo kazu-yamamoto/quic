@@ -57,16 +57,25 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
 ----------------------------------------------------------------
 
 encodeRetryPacket :: RetryPacket -> IO ByteString
-encodeRetryPacket (RetryPacket ver dCID sCID odCID token) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
+encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
+    save wbuf
     -- fixme: randomizing unused bits
     let Flags flags = retryPacketType
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
     let (odcid, odcidlen) = unpackCID odCID
-    write8 wbuf odcidlen
-    copyShortByteString wbuf odcid
-    copyByteString wbuf token
+    if ver >= Draft25 then do
+        copyByteString wbuf token
+        siz <- savingSize wbuf
+        pseudo0 <- extractByteString wbuf $ negate siz
+        let tag = calculateIntegrityTag odCID pseudo0
+        copyByteString wbuf tag
+      else do
+        write8 wbuf odcidlen
+        copyShortByteString wbuf odcid
+        copyByteString wbuf token
     -- no header protection
+encodeRetryPacket _ = error "encodeRetryPacket"
 
 ----------------------------------------------------------------
 

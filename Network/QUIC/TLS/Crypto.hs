@@ -35,6 +35,8 @@ module Network.QUIC.TLS.Crypto (
   , TrafficSecrets
   , ClientTrafficSecret(..)
   , ServerTrafficSecret(..)
+  -- * Misc
+  , calculateIntegrityTag
   ) where
 
 import qualified Control.Exception as E
@@ -44,6 +46,7 @@ import Crypto.Error (throwCryptoError)
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Short as Short
 import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
@@ -259,3 +262,16 @@ bsXORpad iv pn = B.pack $ zipWith xor ivl pnl
     ivl = B.unpack iv
     diff = B.length iv - B.length pn
     pnl = replicate diff 0 ++ B.unpack pn
+
+----------------------------------------------------------------
+
+calculateIntegrityTag :: CID -> ByteString -> ByteString
+calculateIntegrityTag oCID pseudo0 =
+    aes128gcmEncrypt key nonce "" (AddDat pseudo)
+  where
+    (ocid, ocidlen) = unpackCID oCID
+    pseudo = B.concat [B.singleton ocidlen
+                      , Short.fromShort ocid
+                      ,pseudo0]
+    key = Key "\x4d\x32\xec\xdb\x2a\x21\x33\xc8\x41\xe4\x04\x3d\xf2\x7d\x44\x30"
+    nonce = Nonce "\x4d\x16\x11\xd0\x55\x13\xa5\x52\xc5\x87\xd5\x75"

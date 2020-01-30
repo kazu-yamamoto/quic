@@ -37,7 +37,8 @@ data PacketO = PacketOV VersionNegotiationPacket
 data VersionNegotiationPacket = VersionNegotiationPacket CID CID [Version]
                               deriving (Eq, Show)
 
-data RetryPacket = RetryPacket Version CID CID CID Token deriving (Eq, Show)
+data RetryPacket = RetryPacket Version CID CID Token (Either CID (ByteString,ByteString))
+                 deriving (Eq, Show)
 
 data Header = Initial   Version  CID CID Token
             | RTT0      Version  CID CID
