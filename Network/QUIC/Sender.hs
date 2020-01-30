@@ -9,6 +9,7 @@ import Control.Concurrent
 import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
+import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Types
@@ -84,7 +85,7 @@ construct conn out pns lvl frames genLowerAck mTargetSize = do
 ----------------------------------------------------------------
 
 sender :: Connection -> IO ()
-sender conn = forever $ do
+sender conn = handle (handlerIO conn) $ forever $ do
     (out,pns) <- takeOutput conn
     case out of
       OutHndClientHello ch mEarlyData -> do
@@ -143,7 +144,7 @@ sender conn = forever $ do
 ----------------------------------------------------------------
 
 resender :: Connection -> IO ()
-resender conn = forever $ do
+resender conn = handle (handlerIO conn) $ forever $ do
     threadDelay 100000
     outpns <- getRetransmissions conn (MilliSeconds 250)
     open <- isConnectionOpen conn

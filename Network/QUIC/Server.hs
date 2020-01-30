@@ -20,7 +20,6 @@ module Network.QUIC.Server (
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import Data.Hourglass (Seconds(..), timeDiff)
 import Data.IORef
@@ -32,6 +31,7 @@ import qualified Network.Socket.ByteString as NSB
 import Time.System (timeCurrent)
 
 import Network.QUIC.Config
+import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Socket
@@ -84,7 +84,7 @@ writeServerRecvQ (ServerRecvQ q) x = atomically $ writeTQueue q x
 ----------------------------------------------------------------
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
-router conf route (s,mysa) = E.handle ignore $ do
+router conf route (s,mysa) = handle handler $ do
     let (opt,_cmsgid) = case mysa of
           SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
           SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
@@ -197,12 +197,9 @@ dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
 -- readerServer dies when the socket is closed.
 readerServer :: Socket -> ServerRecvQ -> IO ()
-readerServer s q = E.handle ignore $ forever $ do
+readerServer s q = handle handler $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets
     mapM (\pkt -> writeServerRecvQ q (Through pkt)) pkts
-
-ignore :: E.SomeException -> IO ()
-ignore (E.SomeException e) = print e
 
 recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr)
            -> IO CryptPacket

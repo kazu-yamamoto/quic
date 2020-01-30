@@ -10,14 +10,12 @@ module Network.QUIC.Client (
   ) where
 
 import Control.Concurrent.STM
-import qualified Control.Exception as E
-import qualified GHC.IO.Exception as E
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
-import qualified System.IO.Error as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.TLS
@@ -36,14 +34,10 @@ writeClientRecvQ (ClientRecvQ q) x = atomically $ writeTQueue q x
 
 -- readerClient dies when the socket is closed.
 readerClient :: ClientConfig -> Socket -> ClientRecvQ -> Connection -> IO ()
-readerClient ClientConfig{..} s q conn = E.handle handler $ forever $ do
+readerClient ClientConfig{..} s q conn = handle handler $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
   where
-    handler se
-      | Just (e :: E.IOException) <- E.fromException se =
-            when (E.ioeGetErrorType e /= E.InvalidArgument) $ print e
-      | otherwise = print se
     putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV (VersionNegotiationPacket dCID sCID peerVers)) = do
         let myVers = confVersions ccConfig

@@ -50,6 +50,7 @@ library
                        Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Transmit
                        Network.QUIC.Connection.Types
+                       Network.QUIC.Exception
                        Network.QUIC.Imports
                        Network.QUIC.Packet.Decode
                        Network.QUIC.Packet.Decrypt

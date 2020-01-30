@@ -97,9 +97,9 @@ handshakeClientConnection conf@ClientConfig{..} conn = do
     setCryptoOffset conn HandshakeLevel 0
     setCryptoOffset conn RTT1Level 0
     setStreamOffset conn 0 0 -- fixme
-    tid0 <- forkIO (sender   conn `E.catch` reportError)
-    tid1 <- forkIO (receiver conn `E.catch` reportError)
-    tid2 <- forkIO (resender conn `E.catch` reportError)
+    tid0 <- forkIO $ sender   conn
+    tid1 <- forkIO $ receiver conn
+    tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
     handshakeClient conf conn
     setConnectionOpen conn
@@ -140,9 +140,9 @@ accept QUICServer{..} = E.handle tlserr $ do
             setCryptoOffset conn RTT1Level 0
             setStreamOffset conn 0 0 -- fixme
             setRetried conn retried
-            tid0 <- forkIO (sender   conn `E.catch` reportError)
-            tid1 <- forkIO (receiver conn `E.catch` reportError)
-            tid2 <- forkIO (resender conn `E.catch` reportError)
+            tid0 <- forkIO $ sender   conn
+            tid1 <- forkIO $ receiver conn
+            tid2 <- forkIO $ resender conn
             setThreadIds conn [tid0,tid1,tid2]
             handshakeServer serverConfig oCID conn
             setRegister conn register unregister
@@ -167,10 +167,3 @@ close conn = do
     clearThreads conn
     -- close the socket after threads reading/writing the socket die.
     connClose conn
-
-----------------------------------------------------------------
-
-reportError :: E.SomeException -> IO ()
-reportError e
-  | Just E.ThreadKilled <- E.fromException e = return ()
-  | otherwise                                = print e

@@ -39,16 +39,18 @@ recv conn = do
     case mi of
       InpStream 0   bs      -> return bs
       InpStream _   _       -> return ""
+      InpError _            -> return ""
       InpApplicationError{} -> return ""
       InpTransportError{}   -> return ""
-      InpVersion{}          -> error "recvStream"
-      InpHandshake{}        -> error "recvStream"
+      InpVersion{}          -> E.throwIO MustNotReached
+      InpHandshake{}        -> E.throwIO MustNotReached
 
 recvStream :: Connection -> IO (StreamID, ByteString)
 recvStream conn = do
     mi <- takeInput conn
     case mi of
       InpStream sid bs        -> return (sid, bs)
+      InpError e              -> E.throwIO e
       InpApplicationError e r -> E.throwIO $ ApplicationErrorOccurs e r
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached

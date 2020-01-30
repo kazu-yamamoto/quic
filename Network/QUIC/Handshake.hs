@@ -24,11 +24,12 @@ recvCryptoData conn = do
     dat <- takeCrypto conn
     case dat of
       InpHandshake lvl bs off _  -> return (lvl, bs, off)
+      InpVersion (Just ver)      -> E.throwIO $ NextVersion ver
+      InpVersion Nothing         -> E.throwIO   VersionNegotiationFailed
+      InpError e                 -> E.throwIO e
       InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
-      InpStream{}                -> error "recvCryptoData"
-      InpVersion Nothing         -> E.throwIO VersionNegotiationFailed
-      InpVersion (Just ver)      -> E.throwIO $ NextVersion ver
+      InpStream{}                -> E.throwIO   MustNotReached
 
 ----------------------------------------------------------------
 

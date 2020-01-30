@@ -10,6 +10,7 @@ data QUICError = PacketCannotBeDecrypted
                | VersionIsUnknown Word32
                | TransportErrorOccurs TransportError ReasonPhrase
                | ApplicationErrorOccurs ApplicationError ReasonPhrase
+               | ConnectionIsClosed
                | ConnectionIsNotOpen
                | HandshakeFailed String
                | NoVersionIsSpecified

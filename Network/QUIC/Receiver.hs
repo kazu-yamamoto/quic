@@ -5,16 +5,19 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import qualified Control.Exception as E
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection
+import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 receiver :: Connection -> IO ()
-receiver conn = forever (connRecv conn >>= processCryptPacket conn)
+receiver conn = E.handle handler $ forever
+    (connRecv conn >>= processCryptPacket conn)
 
 processCryptPacket :: Connection -> CryptPacket -> IO ()
 processCryptPacket conn (CryptPacket header crypt) = do
