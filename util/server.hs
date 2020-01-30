@@ -133,8 +133,11 @@ main = do
                     _                                       -> serverH3
               void $ forkFinally (server conn) (\_ -> close conn)
 
+onE :: IO b -> IO a -> IO a
+h `onE` b = b `E.onException` h
+
 serverHQ :: Connection -> IO ()
-serverHQ conn = do
+serverHQ conn = putStrLn "Connection terminated" `onE` do
     mbs <- timeout 5000000 $ recv conn
     case mbs of
       Nothing -> putStrLn "Connection timeout"
@@ -145,7 +148,7 @@ serverHQ conn = do
           putStrLn "Connection finished"
 
 serverH3 :: Connection -> IO ()
-serverH3 conn = do
+serverH3 conn = putStrLn "Connection terminated" `onE` do
     sendStream conn  3 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
     sendStream conn  7 False $ BS.pack [2]
     sendStream conn 11 False $ BS.pack [3]
