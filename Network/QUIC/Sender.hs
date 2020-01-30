@@ -111,19 +111,17 @@ sender conn = loop
               -- 824 = 1024 - 200 (size of sh)
               -- but 900 is good enough...
               let (sf1,sf2) = B.splitAt 824 sf
-              if sf2 == "" then do
-                  let size = maximumQUICPacketSize - sum (map B.length bss0)
-                  frame1 <- cryptoFrame conn sf1 HandshakeLevel
-                  bss1 <- construct conn out pns HandshakeLevel [frame1] False $ Just size
-                  connSend conn (bss0 ++ bss1)
-                else do
-                  let size = maximumQUICPacketSize - sum (map B.length bss0)
-                  frame1 <- cryptoFrame conn sf1 HandshakeLevel
-                  bss1 <- construct conn out pns HandshakeLevel [frame1] False $ Just size
-                  frame2 <- cryptoFrame conn sf2 HandshakeLevel
-                  bss2 <- construct conn out pns HandshakeLevel [frame2] False $ Just maximumQUICPacketSize
-                  connSend conn (bss0 ++ bss1)
-                  connSend conn bss2
+              let size = maximumQUICPacketSize - sum (map B.length bss0)
+              frame1 <- cryptoFrame conn sf1 HandshakeLevel
+              bss1 <- construct conn out pns HandshakeLevel [frame1] False $ Just size
+              connSend conn (bss0 ++ bss1)
+              let sendRest rsf0 = do
+                    let (rsf,rest) = B.splitAt 1024 rsf0
+                    rframe <- cryptoFrame conn rsf HandshakeLevel
+                    rbss <- construct conn out pns HandshakeLevel [rframe] False $ Just maximumQUICPacketSize
+                    connSend conn rbss
+                    when (rest /= "") $ sendRest rest
+              sendRest sf2
           OutHndServerHelloR sh -> do
               frame <- cryptoFrame conn sh InitialLevel
               bss <- construct conn out pns InitialLevel [frame] False $ Just maximumQUICPacketSize
