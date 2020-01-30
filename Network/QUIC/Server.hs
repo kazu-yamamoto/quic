@@ -190,6 +190,7 @@ dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa
       Just q  -> do
           putStrLn $ "NAT rebiding to " ++ show peersa
           writeServerRecvQ q (NATRebinding cpkt peersa)
+dispatch _ _ (PacketIB _)  _ _ _ _ = print BrokenPacket
 dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
 ----------------------------------------------------------------
