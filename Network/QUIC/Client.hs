@@ -44,6 +44,7 @@ readerClient ClientConfig{..} s q conn = E.handle handler $ forever $ do
       | Just (e :: E.IOException) <- E.fromException se =
             when (E.ioeGetErrorType e /= E.InvalidArgument) $ print e
       | otherwise = print se
+    putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV (VersionNegotiationPacket dCID sCID peerVers)) = do
         let myVers = confVersions ccConfig
         mver <- case myVers `intersect` peerVers of

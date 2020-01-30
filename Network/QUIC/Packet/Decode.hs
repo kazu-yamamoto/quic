@@ -26,6 +26,7 @@ decodeCryptPackets bs0 = unwrap <$> decodePackets bs0
     unwrap (_:xs)          = unwrap xs
     unwrap []              = []
 
+-- Client uses this.
 decodePackets :: ByteString -> IO [PacketI]
 decodePackets bs0 = loop bs0 id
   where
@@ -34,8 +35,9 @@ decodePackets bs0 = loop bs0 id
         (pkt, rest) <- decodePacket bs
         loop rest (build . (pkt :))
 
+-- Server uses this.
 decodePacket :: ByteString -> IO (PacketI, ByteString)
-decodePacket bs = withReadBuffer bs $ \rbuf -> do
+decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     save rbuf
     proFlags <- Flags <$> read8 rbuf
     let short = isShort proFlags
@@ -44,6 +46,9 @@ decodePacket bs = withReadBuffer bs $ \rbuf -> do
     let rest = B.drop siz bs
     return (pkt, rest)
   where
+    handler (E.SomeException e) = do
+        print e
+        return (PacketIB BrokenPacket,"")
     decode rbuf _proFlags True = do
         header <- Short . makeCID <$> extractShortByteString rbuf myCIDLength
         PacketIC . CryptPacket header <$> makeShortCrypt bs rbuf
@@ -52,7 +57,6 @@ decodePacket bs = withReadBuffer bs $ \rbuf -> do
         case ver of
           Negotiation      -> do
               decodeVersionNegotiationPacket rbuf dCID sCID
-          UnknownVersion v -> E.throwIO $ VersionIsUnknown v
           _                -> case decodeLongHeaderPacketType proFlags of
             RetryPacketType     -> do
                 decodeRetryPacket rbuf proFlags ver dCID sCID
@@ -101,11 +105,10 @@ decodeVersionNegotiationPacket rbuf dCID sCID = do
     return $ PacketIV $ VersionNegotiationPacket dCID sCID vers
   where
     decodeVersions siz vers
-      | siz <  0  = error "decodeVersionNegotiationPacket"
-      | siz == 0  = return $ vers []
-      | otherwise = do
+      | siz >= 4  = do
             ver <- decodeVersion <$> read32 rbuf
             decodeVersions (siz - 4) ((ver :) . vers)
+      | otherwise = return $ vers []
 
 decodeRetryPacket :: ReadBuffer -> Flags Protected -> Version -> CID -> CID -> IO PacketI
 decodeRetryPacket rbuf _proFlags version dCID sCID

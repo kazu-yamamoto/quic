@@ -26,6 +26,7 @@ data Version = Negotiation
 data PacketI = PacketIV VersionNegotiationPacket
              | PacketIR RetryPacket
              | PacketIC CryptPacket
+             | PacketIB BrokenPacket
              deriving (Eq, Show)
 
 -- Not used internally. Only for 'encodePacket'.
@@ -39,6 +40,8 @@ data VersionNegotiationPacket = VersionNegotiationPacket CID CID [Version]
 
 data RetryPacket = RetryPacket Version CID CID Token (Either CID (ByteString,ByteString))
                  deriving (Eq, Show)
+
+data BrokenPacket = BrokenPacket deriving (Eq, Show)
 
 data Header = Initial   Version  CID CID Token
             | RTT0      Version  CID CID
