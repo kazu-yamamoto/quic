@@ -16,6 +16,7 @@ import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit
+import System.Timeout
 
 import Network.QUIC
 
@@ -134,11 +135,14 @@ main = do
 
 serverHQ :: Connection -> IO ()
 serverHQ conn = do
-    bs <- recv conn
-    C8.putStr bs
-    send conn html
-    shutdown conn
-    putStrLn "Connection finished"
+    mbs <- timeout 5000000 $ recv conn
+    case mbs of
+      Nothing -> putStrLn "Connection timeout"
+      Just bs -> do
+          C8.putStr bs
+          send conn html
+          shutdown conn
+          putStrLn "Connection finished"
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = do
@@ -151,12 +155,11 @@ serverH3 conn = do
     loop hdrbdy
   where
     loop hdrbdy = do
-        (sid, bs) <- recvStream conn
-        putStr $ "SID: " ++ show sid ++ " "
-        if bs == "" then do
-            putStr "\n"
-            loop hdrbdy
-          else do
-            print $ BS.unpack bs
-            when ((sid `mod` 4) == 0) $ sendStream conn sid True hdrbdy
-            loop hdrbdy
+        mx <- timeout 5000000 $ recvStream conn
+        case mx of
+          Nothing -> putStrLn "Connection timeout"
+          Just (sid, bs) -> do
+              putStr $ "SID: " ++ show sid ++ " "
+              print $ BS.unpack bs
+              when ((sid `mod` 4) == 0) $ sendStream conn sid True hdrbdy
+              loop hdrbdy
