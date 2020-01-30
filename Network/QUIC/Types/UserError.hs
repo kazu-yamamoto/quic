@@ -16,6 +16,7 @@ data QUICError = PacketCannotBeDecrypted
                | VersionNegotiationFailed
                | NextVersion Version
                | BadThingHappen E.SomeException
+               | MustNotReached
                deriving (Show)
 
 instance E.Exception QUICError

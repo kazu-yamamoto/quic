@@ -35,15 +35,20 @@ shutdownStream conn sid = do
 
 recv :: Connection -> IO ByteString
 recv conn = do
-    (sid, bs) <- recvStream conn
-    if sid == 0 then return bs else recv conn
+    mi <- takeInput conn
+    case mi of
+      InpStream 0   bs      -> return bs
+      InpStream _   _       -> return ""
+      InpApplicationError{} -> return ""
+      InpTransportError{}   -> return ""
+      InpVersion{}          -> error "recvStream"
+      InpHandshake{}        -> error "recvStream"
 
 recvStream :: Connection -> IO (StreamID, ByteString)
 recvStream conn = do
     mi <- takeInput conn
     case mi of
-      InpStream sid bs      -> return (sid, bs)
-      InpApplicationError{} -> return (0, "") -- fixme sid
-      InpTransportError{}   -> return (0, "") -- fixme sid
-      InpVersion{}          -> error "recvStream"
-      InpHandshake{}        -> error "recvStream"
+      InpStream sid bs        -> return (sid, bs)
+      InpApplicationError e r -> E.throwIO $ ApplicationErrorOccurs e r
+      InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
+      _                       -> E.throwIO MustNotReached
