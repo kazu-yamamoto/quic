@@ -20,6 +20,7 @@ data Version = Negotiation
              | Draft23
              | Draft24
              | Draft25
+             | GreasingVersion
              deriving (Eq, Ord, Show)
 
 ----------------------------------------------------------------
