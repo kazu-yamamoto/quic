@@ -5,6 +5,7 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 import Network.TLS.QUIC
 
@@ -124,8 +125,10 @@ processFrame conn lvl Ping = do
     return True
 processFrame conn _ HandshakeDone = do
     control <- getClientController conn
-    ClientHandshakeDone <- control ExitClient
-    clearClientController conn
+    void $ forkIO $ do
+        threadDelay 2000000
+        ClientHandshakeDone <- control ExitClient
+        clearClientController conn
     return True
 processFrame _ _ _frame        = do
     putStrLn $ "processFrame: " ++ show _frame
