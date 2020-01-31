@@ -119,7 +119,7 @@ main = do
               , confGroups     = getGroups optGroups
               }
           }
-    withQUICServer conf $ \qs -> forever $ do
+    E.handle (\(E.SomeException e) -> print e) $ withQUICServer conf $ \qs -> forever $ do
         econn <- E.try $ accept qs
         case econn of
           Left e
