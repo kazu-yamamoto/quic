@@ -37,6 +37,7 @@ data Frame = Padding Int
            | UnknownFrame Int
            deriving (Eq,Show)
 
+-- | Stream identifier.
 type StreamID = Int64
 type Delay = Int
 

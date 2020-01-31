@@ -13,14 +13,16 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+-- | Common configuration.
 data Config = Config {
-    confVersions       :: [Version] -- ^ preferred order
+    confVersions       :: [Version] -- ^ Versions in the preferred order.
   , confCiphers        :: [Cipher]
   , confGroups         :: [Group]
   , confParameters     :: Parameters
   , confKeyLogging     :: String -> IO ()
   }
 
+-- | The default value for common configuration.
 defaultConfig :: Config
 defaultConfig = Config {
     confVersions       = [Draft25,Draft24]
@@ -32,6 +34,7 @@ defaultConfig = Config {
 
 ----------------------------------------------------------------
 
+-- | Client configuration.
 data ClientConfig = ClientConfig {
     ccServerName :: HostName
   , ccPortName   :: ServiceName
@@ -42,6 +45,7 @@ data ClientConfig = ClientConfig {
   , ccConfig     :: Config
   }
 
+-- | The default value for client configuration.
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
     ccServerName = "127.0.0.1"
@@ -55,6 +59,7 @@ defaultClientConfig = ClientConfig {
 
 ----------------------------------------------------------------
 
+-- | Server configuration.
 data ServerConfig = ServerConfig {
     scAddresses      :: [(IP,PortNumber)]
   , scKey            :: FilePath
@@ -66,6 +71,7 @@ data ServerConfig = ServerConfig {
   , scConfig         :: Config
   }
 
+-- | The default value for server configuration.
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
     scAddresses      = [("127.0.0.1",13443)]

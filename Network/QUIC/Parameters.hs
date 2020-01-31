@@ -66,6 +66,7 @@ toParametersKeyId 13 = Just ParametersPreferredAddress
 toParametersKeyId 14 = Just ParametersActiveConnectionIdLimit
 toParametersKeyId _ = Nothing
 
+-- | QUIC transport parameters.
 data Parameters = Parameters {
     originalConnectionId    :: Maybe CID
   , idleTimeout             :: Int -- Milliseconds
@@ -84,6 +85,7 @@ data Parameters = Parameters {
   , activeConnectionIdLimit :: Int
   } deriving (Eq,Show)
 
+-- | The default value for QUIC transport parameters.
 defaultParameters :: Parameters
 defaultParameters = Parameters {
     originalConnectionId    = Nothing
@@ -213,6 +215,7 @@ decodeParametersList bs = unsafeDupablePerformIO $
                val <- extractByteString rbuf $ fromIntegral len
                go rbuf (build . ((keyid,val):))
 
+-- | An example parameters obsoleted in the near future.
 exampleParameters :: Parameters
 exampleParameters = defaultParameters {
     maxStreamDataBidiLocal  =  262144

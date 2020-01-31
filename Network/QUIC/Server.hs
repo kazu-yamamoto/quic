@@ -7,6 +7,7 @@ module Network.QUIC.Server (
   , newServerRoute
   , router
   , RouteTable
+  , AcceptQ
   , Accept(..)
   , readAcceptQ
   , ServerRecvQ

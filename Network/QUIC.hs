@@ -1,32 +1,32 @@
 {-# LANGUAGE RecordWildCards #-}
 
--- https://quicwg.org/base-drafts/
-
+-- | This main module provides APIs for QUIC.
 module Network.QUIC (
-  -- * Client
+  -- * Creating a connection for client
     ClientConfig(..)
   , defaultClientConfig
   , withQUICClient
   , QUICClient
   , connect
-  -- * Server
+  -- * Running a server and accepting connections
   , ServerConfig(..)
   , defaultServerConfig
   , withQUICServer
   , QUICServer
   , accept
-  -- * Config
+  -- * Common configuration
   , Config(..)
   , defaultConfig
-  -- * IO
+  -- * Closing connection
+  , close
+  -- * Basic IO
   , recv
   , send
   , shutdown
+  -- * Advanced IO
   , recvStream
   , sendStream
   , shutdownStream
-  -- * Closing
-  , close
   -- * Types
   , Connection
   , Version(..)
@@ -43,6 +43,8 @@ module Network.QUIC (
   , getResumptionInfo
   , isResumptionPossible
   , is0RTTPossible
+  -- * Errors
+  , QUICError(..)
   ) where
 
 import Network.QUIC.Config
@@ -58,6 +60,7 @@ import qualified Data.ByteString.Char8 as C8
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
 
+-- | Information about a connection.
 data ConnectionInfo = ConnectionInfo {
     version :: Version
   , cipher :: Cipher
@@ -68,6 +71,7 @@ data ConnectionInfo = ConnectionInfo {
   , remoteCID :: CID
   }
 
+-- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
     let mycid = myCID conn

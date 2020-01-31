@@ -37,5 +37,6 @@ decodeVersion w          = UnknownVersion w
 
 ----------------------------------------------------------------
 
+-- | Extracting a draft version. This would be obsoleted in the future.
 fromVersion :: Version -> Int
 fromVersion ver = fromIntegral (0x000000ff .&. encodeVersion ver)

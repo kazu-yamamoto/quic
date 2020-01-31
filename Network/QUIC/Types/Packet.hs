@@ -9,6 +9,7 @@ import Network.QUIC.Types.Frame
 
 ----------------------------------------------------------------
 
+-- | QUIC version.
 data Version = Negotiation
              | UnknownVersion Word32
              | Draft18

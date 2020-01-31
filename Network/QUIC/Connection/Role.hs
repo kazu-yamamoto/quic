@@ -65,6 +65,7 @@ getToken conn@Connection{..}
 
 ----------------------------------------------------------------
 
+-- | Getting information about resumption.
 getResumptionInfo :: Connection -> IO ResumptionInfo
 getResumptionInfo Connection{..} = resumptionInfo <$> readIORef roleInfo
 

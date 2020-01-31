@@ -27,10 +27,12 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+-- | Data type to represent a QUIC client.
 newtype QUICClient = QUICClient {
     clientConfig :: ClientConfig
   }
 
+-- | Data type to represent a QUIC server.
 data QUICServer = QUICServer {
     serverConfig :: ServerConfig
   , serverRoute  :: ServerRoute
@@ -38,12 +40,14 @@ data QUICServer = QUICServer {
 
 ----------------------------------------------------------------
 
+-- | Creating 'QUICClient' and running an IO action.
 withQUICClient :: ClientConfig -> (QUICClient -> IO a) -> IO a
 withQUICClient conf body = do
     when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
     let qc = QUICClient conf
     body qc
 
+-- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
 connect :: QUICClient -> IO Connection
 connect QUICClient{..} = do
     let firstVersion = head $ confVersions $ ccConfig clientConfig
@@ -106,6 +110,7 @@ handshakeClientConnection conf@ClientConfig{..} conn = do
 
 ----------------------------------------------------------------
 
+-- | Creating 'QUICServer' and running an IO action.
 withQUICServer :: ServerConfig -> (QUICServer -> IO ()) -> IO ()
 withQUICServer conf body = do
     route <- newServerRoute
@@ -118,6 +123,7 @@ withQUICServer conf body = do
   where
     runRouter route ssa@(s,_) = forkFinally (router conf route ssa) (\_ -> NS.close s)
 
+-- | Accepting a connection from a client and returning a 'Connection'.
 accept :: QUICServer -> IO Connection
 accept QUICServer{..} = E.handle tlserr $ do
     Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried

@@ -9,6 +9,7 @@ import Network.QUIC.Types.Frame
 
 type SessionEstablish = SessionID -> SessionData -> IO ()
 
+-- | Information about resumption
 data ResumptionInfo = ResumptionInfo {
     resumptionSession :: Maybe (SessionID, SessionData)
   , resumptionToken   :: Token
@@ -22,6 +23,7 @@ defaultResumptionInfo = ResumptionInfo {
   , resumptionRetry   = False
   }
 
+-- | Is 0RTT possible?
 is0RTTPossible :: ResumptionInfo -> Bool
 is0RTTPossible ResumptionInfo{..} =
     rtt0OK && (not resumptionRetry || resumptionToken /= emptyToken)
@@ -30,6 +32,7 @@ is0RTTPossible ResumptionInfo{..} =
       Nothing      -> False
       Just (_, sd) -> sessionMaxEarlyDataSize sd == 0xffffffff
 
+-- | Is resumption possible?
 isResumptionPossible :: ResumptionInfo -> Bool
 isResumptionPossible ResumptionInfo{..} = isJust resumptionSession
 

@@ -15,9 +15,9 @@ data QUICError = PacketCannotBeDecrypted
                | HandshakeFailed String
                | NoVersionIsSpecified
                | VersionNegotiationFailed
-               | NextVersion Version
                | BadThingHappen E.SomeException
-               | MustNotReached
+               | NextVersion Version -- ^ Internal usage only.
+               | MustNotReached -- ^ Internal usage only.
                deriving (Show)
 
 instance E.Exception QUICError

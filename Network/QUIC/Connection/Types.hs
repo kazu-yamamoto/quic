@@ -98,6 +98,7 @@ defaultServerRoleInfo = ServerInfo {
 
 ----------------------------------------------------------------
 
+-- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role
   , myCID             :: CID
