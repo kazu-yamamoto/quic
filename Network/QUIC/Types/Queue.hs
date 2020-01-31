@@ -15,7 +15,7 @@ data Input = InpStream StreamID ByteString
            | InpError QUICError
            deriving Show
 
-data Output = OutStream StreamID ByteString Offset Bool
+data Output = OutStream StreamID ByteString Bool
             | OutControl EncryptionLevel [Frame]
             | OutHndClientHello  ByteString (Maybe (StreamID,ByteString))
             | OutHndServerHello  ByteString ByteString

@@ -3,7 +3,6 @@
 module Network.QUIC.IO where
 
 import qualified Control.Exception as E
-import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
@@ -17,9 +16,8 @@ send conn dat = sendStream conn 0 False dat
 sendStream :: Connection -> StreamID -> Bool -> ByteString -> IO ()
 sendStream conn sid fin dat = do
     open <- isConnectionOpen conn
-    if open then do
-        off <- modifyStreamOffset conn sid $ B.length dat
-        putOutput conn $ OutStream sid dat off fin
+    if open then
+        putOutput conn $ OutStream sid dat fin
       else
         E.throwIO ConnectionIsNotOpen
 
@@ -32,8 +30,7 @@ shutdownStream :: Connection -> StreamID -> IO ()
 shutdownStream conn sid = do
     open <- isConnectionOpen conn
     if open then do
-        off <- modifyStreamOffset conn sid 0
-        putOutput conn $ OutStream sid "" off True
+        putOutput conn $ OutStream sid "" True
       else
         E.throwIO ConnectionIsNotOpen
 
