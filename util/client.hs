@@ -22,21 +22,25 @@ import H3
 
 data Options = Options {
     optDebug      :: Bool
-  , opt0RTT       :: Bool
-  , optResumption :: Bool
-  , optValidate   :: Bool
   , optKeyLogging :: Maybe FilePath
   , optGroups     :: Maybe String
+  , optValidate   :: Bool
+  , optVerNego    :: Bool
+  , optResumption :: Bool
+  , opt0RTT       :: Bool
+  , optQuantum    :: Bool
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
     optDebug      = False
-  , opt0RTT       = False
-  , optResumption = False
-  , optValidate   = False
   , optKeyLogging = Nothing
   , optGroups     = Nothing
+  , optValidate   = False
+  , optVerNego    = False
+  , optResumption = False
+  , opt0RTT       = False
+  , optQuantum    = False
   }
 
 usage :: String
@@ -47,21 +51,27 @@ options = [
     Option ['d'] ["debug"]
     (NoArg (\o -> o { optDebug = True }))
     "print debug info"
-  , Option ['z'] ["rtt0"]
-    (NoArg (\o -> o { opt0RTT = True }))
-    "resume the previous session and send early data"
-  , Option ['r'] ["resumption"]
-    (NoArg (\o -> o { optResumption = True }))
-    "resume the previous session"
-  , Option ['V'] ["validate"]
-    (NoArg (\o -> o { optValidate = True }))
-    "validate server's certificate"
   , Option ['l'] ["key-logging"]
     (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
     "log negotiated secrets"
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
     "specify groups"
+  , Option ['c'] ["validate"]
+    (NoArg (\o -> o { optValidate = True }))
+    "validate server's certificate"
+  , Option ['V'] ["vernego"]
+    (NoArg (\o -> o { optVerNego = True }))
+    "try version negotiation"
+  , Option ['R'] ["resumption"]
+    (NoArg (\o -> o { optResumption = True }))
+    "try session resumption"
+  , Option ['Z'] ["0rtt"]
+    (NoArg (\o -> o { opt0RTT = True }))
+    "try sending early data"
+  , Option ['Q'] ["resumption"]
+    (NoArg (\o -> o { optQuantum = True }))
+    "try sending large Initials"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -94,7 +104,11 @@ main = do
                                    in return $ Just [h3X,hqX]
           , ccValidate   = optValidate
           , ccConfig     = defaultConfig {
-                confParameters = exampleParameters
+                confVersions   = if optVerNego then
+                                   GreasingVersion : confVersions defaultConfig
+                                 else
+                                   confVersions defaultConfig
+              , confParameters = exampleParameters
               , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
               }
