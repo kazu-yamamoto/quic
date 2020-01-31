@@ -25,21 +25,21 @@ import H3
 
 data Options = Options {
     optDebug      :: Bool
-  , optRetry      :: Bool
-  , optCertFile   :: FilePath
-  , optKeyFile    :: FilePath
   , optKeyLogging :: Maybe FilePath
   , optGroups     :: Maybe String
+  , optCertFile   :: FilePath
+  , optKeyFile    :: FilePath
+  , optRetry      :: Bool
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
     optDebug      = False
-  , optRetry      = False
-  , optCertFile   = "servercert.pem"
-  , optKeyFile    = "serverkey.pem"
   , optKeyLogging = Nothing
   , optGroups     = Nothing
+  , optCertFile   = "servercert.pem"
+  , optKeyFile    = "serverkey.pem"
+  , optRetry      = False
   }
 
 options :: [OptDescr (Options -> Options)]
@@ -47,21 +47,21 @@ options = [
     Option ['d'] ["debug"]
     (NoArg (\o -> o { optDebug = True }))
     "print debug info"
-  , Option ['r'] ["retry"]
-    (NoArg (\o -> o { optRetry = True }))
-    "requre retry"
-  , Option ['c'] ["cert"]
-    (ReqArg (\fl o -> o { optCertFile = fl }) "FILE")
-    "certificate file"
-  , Option ['k'] ["key"]
-    (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
-    "key file"
   , Option ['l'] ["key-logging"]
     (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
     "log negotiated secrets"
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
     "specify groups"
+  , Option ['c'] ["cert"]
+    (ReqArg (\fl o -> o { optCertFile = fl }) "FILE")
+    "certificate file"
+  , Option ['k'] ["key"]
+    (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
+    "key file"
+  , Option ['S'] ["retry"]
+    (NoArg (\o -> o { optRetry = True }))
+    "requre statelsss retry"
   ]
 
 usage :: String
