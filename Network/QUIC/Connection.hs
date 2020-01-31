@@ -14,6 +14,7 @@ module Network.QUIC.Connection (
   , setPacketNumber
   , getPacketNumber
   , PeerPacketNumbers
+  , emptyPeerPacketNumbers
   , getPeerPacketNumbers
   , addPeerPacketNumbers
   , clearPeerPacketNumbers
@@ -43,9 +44,9 @@ module Network.QUIC.Connection (
   , setThreadIds
   , clearThreads
   -- * Transmit
-  , keepOutput
-  , releaseOutput
-  , releaseOutputRemoveAcks
+  , keepPlainPacket
+  , releasePlainPacket
+  , releasePlainPacketRemoveAcks
   , getRetransmissions
   , MilliSeconds(..)
   -- * State
@@ -67,7 +68,7 @@ module Network.QUIC.Connection (
   , putCrypto
   , takeOutput
   , putOutput
-  , putOutput'
+  , putOutputPP
   -- * Role
   , getClientController
   , setClientController

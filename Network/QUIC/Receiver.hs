@@ -43,7 +43,7 @@ processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True
 processFrame conn _ (Ack ackInfo _) = do
     let pns = fromAckInfo ackInfo
-    mapM_ (releaseOutputRemoveAcks conn) pns
+    mapM_ (releasePlainPacketRemoveAcks conn) pns
     return True
 processFrame conn lvl (Crypto off cdat) = do
     case lvl of

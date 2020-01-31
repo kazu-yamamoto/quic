@@ -50,14 +50,17 @@ emptyStreamTable = StreamTable Map.empty
 newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
                           deriving (Eq, Show)
 
+emptyPeerPacketNumbers :: PeerPacketNumbers
+emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
+
 type InputQ  = TQueue Input
-type OutputQ = TQueue (Output,[PacketNumber])
+type OutputQ = TQueue Output
 type RetransDB = [Retrans]
 data Retrans = Retrans {
     retransTime          :: ElapsedP
   , retransLevel         :: EncryptionLevel
   , retransPacketNumbers :: [PacketNumber]
-  , retransOutput        :: Output
+  , retransPlainPacket   :: PlainPacket
   , retransACKs          :: PeerPacketNumbers
   }
 

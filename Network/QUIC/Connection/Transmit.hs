@@ -1,9 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Transmit (
-    keepOutput
-  , releaseOutput
-  , releaseOutputRemoveAcks
+    keepPlainPacket
+  , releasePlainPacket
+  , releasePlainPacketRemoveAcks
   , getRetransmissions
   , MilliSeconds(..)
   ) where
@@ -19,21 +19,21 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-keepOutput :: Connection -> [PacketNumber] -> Output -> EncryptionLevel -> PeerPacketNumbers -> IO ()
-keepOutput Connection{..} pns out lvl ppns = do
+keepPlainPacket :: Connection -> [PacketNumber] -> PlainPacket -> EncryptionLevel -> PeerPacketNumbers -> IO ()
+keepPlainPacket Connection{..} pns out lvl ppns = do
     tm <- timeCurrentP
     let ent = Retrans tm lvl pns out ppns
     atomicModifyIORef' retransDB (\lst -> (ent:lst, ()))
 
-releaseOutput :: Connection -> PacketNumber -> IO (Maybe Output)
-releaseOutput conn pn = do
+releasePlainPacket :: Connection -> PacketNumber -> IO (Maybe PlainPacket)
+releasePlainPacket conn pn = do
     mx <- deleteRetrans conn pn
     case mx of
       Nothing -> return Nothing
-      Just x  -> return $ Just $ retransOutput x
+      Just x  -> return $ Just $ retransPlainPacket x
 
-releaseOutputRemoveAcks :: Connection -> PacketNumber -> IO ()
-releaseOutputRemoveAcks conn pn = do
+releasePlainPacketRemoveAcks :: Connection -> PacketNumber -> IO ()
+releasePlainPacketRemoveAcks conn pn = do
     mx <- deleteRetrans conn pn
     case mx of
       Nothing -> return ()
@@ -62,13 +62,13 @@ timeDel (ElapsedP sec nano) milli
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
 
-getRetransmissions :: Connection -> MilliSeconds -> IO [(Output,[PacketNumber])]
+getRetransmissions :: Connection -> MilliSeconds -> IO [(PlainPacket,[PacketNumber])]
 getRetransmissions Connection{..} milli = do
     tm <- timeCurrentP
     let tm' = tm `timeDel` milli
         split = span (\x -> retransTime x > tm')
     map mk <$> atomicModifyIORef' retransDB split
  where
-   mk x = (retransOutput x, retransPacketNumbers x)
+   mk x = (retransPlainPacket x, retransPacketNumbers x)
 
 ----------------------------------------------------------------

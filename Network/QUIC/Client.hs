@@ -51,16 +51,15 @@ readerClient ClientConfig{..} s q conn = handle handler $ forever $ do
     putQ (PacketIR (RetryPacket ver dCID sCID token ex)) = do
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
-        mr <- releaseOutput conn 0
+        mppkt <- releasePlainPacket conn 0
         ok <- checkCIDs conn dCID ex
-        when ok $ case mr of
-          Just (OutHndClientHello cdat mEarydata) -> do
+        when ok $ case mppkt of
+          Just ppkt -> do
               setPeerCID conn sCID
               setInitialSecrets conn $ initialSecrets ver sCID
               setToken conn token
-              setCryptoOffset conn InitialLevel 0
               setRetried conn True
-              putOutput conn $ OutHndClientHello cdat mEarydata
+              putOutput conn $ OutPlainPacket ppkt []
           _ -> return ()
 
 checkCIDs :: Connection -> CID -> Either CID (ByteString,ByteString) -> IO Bool
