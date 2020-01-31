@@ -187,7 +187,10 @@ dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa
     -- fixme: packets for closed connections also match here.
     mroute <- lookupRoute routeTable dCID
     case mroute of
-      Nothing -> putStrLn "Path validation"
+      Nothing -> do
+          putStrLn "No routing"
+          print dCID
+          print peersa
       Just q  -> do
           putStrLn $ "NAT rebiding to " ++ show peersa
           writeServerRecvQ q (NATRebinding cpkt peersa)
