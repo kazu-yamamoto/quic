@@ -25,20 +25,19 @@ processCryptPacket conn (CryptPacket header crypt) = do
     checkEncryptionLevel conn level
     when (isClient conn && level == HandshakeLevel) $
         setPeerCID conn $ headerPeerCID header
-    eplain <- decryptCrypt conn crypt level
-    case eplain of
-      Right (Plain _ pn fs) -> do
+    mplain <- decryptCrypt conn crypt level
+    case mplain of
+      Just (Plain _ pn fs) -> do
           rets <- mapM (processFrame conn level) fs
           when (and rets) $ addPeerPacketNumbers conn level pn
-      Left err -> do
-        putStrLn $ "processCryptPacket: " ++ show err
-        statelessReset <- isStateLessreset conn header crypt
-        if statelessReset then do
-            putStrLn "Connection is reset statelessly"
-            setCloseReceived conn
-            clearThreads conn
-          else
-            return () -- fixme: sending statelss reset
+      Nothing -> do
+          putStrLn "Connection is reset statelessly"
+          statelessReset <- isStateLessreset conn header crypt
+          if statelessReset then do
+              setCloseReceived conn
+              clearThreads conn
+            else
+              return () -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
 processFrame _ _ Padding{} = return True

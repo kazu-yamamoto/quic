@@ -6,8 +6,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Types.Error
 import Network.QUIC.Types.Packet
 
-data QUICError = PacketCannotBeDecrypted
-               | VersionIsUnknown Word32
+data QUICError = VersionIsUnknown Word32
                | TransportErrorOccurs TransportError ReasonPhrase
                | ApplicationErrorOccurs ApplicationError ReasonPhrase
                | ConnectionIsClosed

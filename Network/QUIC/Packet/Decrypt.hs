@@ -8,6 +8,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
 import Foreign.Ptr
 import Network.ByteOrder
+import qualified Control.Exception as E
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
@@ -19,8 +20,8 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Either QUICError Plain)
-decryptCrypt conn Crypt{..} lvl = do
+decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
+decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
     secret <- getRxSecret conn lvl
     cipher <- getCipher conn lvl
     let hpKey = headerProtectionKey cipher secret
@@ -43,10 +44,12 @@ decryptCrypt conn Crypt{..} lvl = do
         void $ copy (p `plusPtr` cryptPktNumOffset) $ B.take epnLen bytePN
     let mpayload = decrypt cipher secret ciphertext header pn
     case mpayload of
-      Nothing      -> return $ Left PacketCannotBeDecrypted
+      Nothing      -> return Nothing
       Just payload -> do
           frames <- decodeFrames payload
-          return $ Right $ Plain rawFlags pn frames
+          return $ Just $ Plain rawFlags pn frames
+  where
+    handler (E.SomeException _) = return Nothing
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
