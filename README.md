@@ -2,9 +2,9 @@
 
 This package implements QUIC based on Haskell lightweight threads.
 
-- APIs are found in the (`Network.QUIC`)[Network/QUIC.hs] module.
-- Example client and server are found in the (`util/`)[util/] directory.
-- Implementation plan and status are found in #2.
+- APIs are found in the [`Network.QUIC`](https://github.com/kazu-yamamoto/quic/blob/master/Network/QUIC.hs) module.
+- Example client and server are found in the [`util/`](https://github.com/kazu-yamamoto/quic/tree/master/util) directory.
+- Implementation plan and status are found in [#2](https://github.com/kazu-yamamoto/quic/issues/2).
 
 This package should cover:
 
@@ -21,4 +21,4 @@ The followings will be implemented in another package, probably in [`http2`](htt
 
 To build this package, some unreleased packages are necessary. So, you are not recommended to try this package at this moment.
 
-For QUIC APIs in TLS can be found in the [handshake-controller](https://github.com/kazu-yamamoto/hs-tls/tree/handshake-controller) branch. This APIs are based on Haskell lightweight threads.
+For QUIC APIs in TLS can be found in the [handshake-controller](https://github.com/kazu-yamamoto/hs-tls/tree/handshake-controller) branch.
