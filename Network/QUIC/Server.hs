@@ -91,7 +91,7 @@ router conf route (s,mysa) = handle handler $ do
           SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
           _               -> error "router"
     setSocketOption s opt 1
-    forever $ do
+    handle handler $ forever $ do
         (peersa, bs0, _cmsgs, _) <- recv
         -- macOS overrides the local address of the socket
         -- if in_pktinfo is used.
