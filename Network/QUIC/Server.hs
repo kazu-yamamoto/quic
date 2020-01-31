@@ -85,13 +85,13 @@ writeServerRecvQ (ServerRecvQ q) x = atomically $ writeTQueue q x
 ----------------------------------------------------------------
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
-router conf route (s,mysa) = handle handler $ do
+router conf route (s,mysa) = handle (handler "router1") $ do
     let (opt,_cmsgid) = case mysa of
           SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
           SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
           _               -> error "router"
     setSocketOption s opt 1
-    handle handler $ forever $ do
+    handle (handler "router2") $ forever $ do
         (peersa, bs0, _cmsgs, _) <- recv
         -- macOS overrides the local address of the socket
         -- if in_pktinfo is used.
@@ -201,7 +201,7 @@ dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
 -- readerServer dies when the socket is closed.
 readerServer :: Socket -> ServerRecvQ -> IO ()
-readerServer s q = handle handler $ forever $ do
+readerServer s q = handle (handler "readerServer") $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets
     mapM (\pkt -> writeServerRecvQ q (Through pkt)) pkts
 

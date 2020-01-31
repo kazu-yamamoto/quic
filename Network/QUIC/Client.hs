@@ -34,7 +34,7 @@ writeClientRecvQ (ClientRecvQ q) x = atomically $ writeTQueue q x
 
 -- readerClient dies when the socket is closed.
 readerClient :: ClientConfig -> Socket -> ClientRecvQ -> Connection -> IO ()
-readerClient ClientConfig{..} s q conn = handle handler $ forever $ do
+readerClient ClientConfig{..} s q conn = handle (handler "readerClient") $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
   where

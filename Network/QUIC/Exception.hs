@@ -12,18 +12,18 @@ import qualified System.IO.Error as E
 import Network.QUIC.Connection
 import Network.QUIC.Types
 
-handlerIO :: Connection -> E.SomeException -> IO ()
-handlerIO conn se
+handlerIO :: String -> Connection -> E.SomeException -> IO ()
+handlerIO str conn se
   | Just E.ThreadKilled <- E.fromException se = return ()
   | otherwise = do
         putInput conn $ InpError ConnectionIsClosed
         case E.fromException se of
           Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
-          _ -> print se
+          _ -> putStrLn str >> print se
 
-handler :: E.SomeException -> IO ()
-handler se
+handler :: String -> E.SomeException -> IO ()
+handler str se
   | Just E.ThreadKilled <- E.fromException se = return ()
   | otherwise = case E.fromException se of
           Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
-          _ -> print se
+          _ -> putStrLn str >> print se

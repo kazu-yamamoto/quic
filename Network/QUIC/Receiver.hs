@@ -17,7 +17,7 @@ import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 receiver :: Connection -> IO ()
-receiver conn = E.handle handler $ forever
+receiver conn = E.handle (handler "receiver") $ forever
     (connRecv conn >>= processCryptPacket conn)
 
 processCryptPacket :: Connection -> CryptPacket -> IO ()

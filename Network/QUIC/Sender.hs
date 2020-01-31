@@ -104,7 +104,7 @@ constructRetransmit conn (PlainPacket hdr0 plain0) pns = do
 ----------------------------------------------------------------
 
 sender :: Connection -> IO ()
-sender conn = handle (handlerIO conn) $ forever
+sender conn = handle (handlerIO "sender" conn) $ forever
     (takeOutput conn >>= sendOutput conn)
 
 sendOutput :: Connection -> Output -> IO ()
@@ -181,7 +181,7 @@ sendStreamFragment conn sid dat0 fin0 = loop dat0
 ----------------------------------------------------------------
 
 resender :: Connection -> IO ()
-resender conn = handle (handlerIO conn) $ forever $ do
+resender conn = handle (handlerIO "resender" conn) $ forever $ do
     threadDelay 100000
     ppktpns <- getRetransmissions conn (MilliSeconds 400)
     open <- isConnectionOpen conn
