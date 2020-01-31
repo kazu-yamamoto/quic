@@ -30,7 +30,7 @@ shutdownStream :: Connection -> StreamID -> IO ()
 shutdownStream conn sid = do
     open <- isConnectionOpen conn
     if open then do
-        putOutput conn $ OutStream sid "" True
+        putOutput conn $ OutShutdown sid
       else
         E.throwIO ConnectionIsNotOpen
 

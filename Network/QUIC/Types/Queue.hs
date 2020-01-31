@@ -16,6 +16,7 @@ data Input = InpStream StreamID ByteString
            deriving Show
 
 data Output = OutStream StreamID ByteString Bool
+            | OutShutdown StreamID
             | OutControl EncryptionLevel [Frame]
             | OutHndClientHello  ByteString (Maybe (StreamID,ByteString))
             | OutHndServerHello  ByteString ByteString

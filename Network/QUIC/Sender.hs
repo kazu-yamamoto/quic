@@ -145,6 +145,11 @@ sendOutput conn (OutControl lvl frames) = do
     connSend conn bss
 sendOutput conn (OutStream sid dat fin) = do
     sendStreamFragment conn sid dat fin
+sendOutput conn (OutShutdown sid) = do
+    off <- modifyStreamOffset conn sid 0
+    let frame = Stream sid off "" True
+    bss <- construct conn RTT1Level [frame] False $ Just maximumQUICPacketSize
+    connSend conn bss
 sendOutput conn (OutPlainPacket ppkt pns) = do
     bss <- constructRetransmit conn ppkt pns
     connSend conn bss
