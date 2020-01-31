@@ -16,8 +16,12 @@ data QUICError = PacketCannotBeDecrypted
                | NoVersionIsSpecified
                | VersionNegotiationFailed
                | BadThingHappen E.SomeException
-               | NextVersion Version -- ^ Internal usage only.
-               | MustNotReached -- ^ Internal usage only.
                deriving (Show)
 
 instance E.Exception QUICError
+
+data InternalControl = NextVersion Version
+                     | MustNotReached
+                     deriving (Eq, Show)
+
+instance E.Exception InternalControl
