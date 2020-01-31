@@ -131,7 +131,9 @@ main = do
         putStrLn "0-RTT is not allowed"
         exitFailure
     threadDelay 100000
-    when (optResumption || opt0RTT) $ do
+    if not optResumption && not opt0RTT then
+        exitSuccess
+      else do
         let rtt0 = opt0RTT && is0RTTPossible res
         let conf'
               | rtt0 = conf {
@@ -154,11 +156,13 @@ main = do
                 C8.putStrLn bs
                 putStrLn "------------------------ Response for early data"
                 close conn
+                exitSuccess
               else do
                 let client = case alpn info of
                       Just "hq-24" -> clientHQ cmd
                       _            -> clientH3 addr
                 void $ client conn `E.finally` close conn
+                exitSuccess
 
 clientHQ :: ByteString -> Connection -> IO ResumptionInfo
 clientHQ cmd conn = do
