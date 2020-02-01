@@ -16,6 +16,7 @@ import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit
+import System.IO
 import System.Timeout
 
 import Network.QUIC
@@ -89,6 +90,7 @@ chooseALPN ver protos
 
 main :: IO ()
 main = do
+    hSetBuffering stdout NoBuffering
     args <- getArgs
     (Options{..}, ips) <- compilerOpts args
     when (length ips < 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
