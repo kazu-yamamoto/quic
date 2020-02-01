@@ -21,14 +21,17 @@ module Network.QUIC.Server (
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import Data.Hourglass (Seconds(..), timeDiff)
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
+import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Socket
 import qualified Network.Socket.ByteString as NSB
+import qualified System.IO.Error as E
 import Time.System (timeCurrent)
 
 import Network.QUIC.Config
@@ -104,7 +107,15 @@ router conf route (s,mysa) = handle (handler "router1") $ do
         let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
         dispatch conf route pkt mysa peersa send bs0RTT
   where
-    recv = NSB.recvMsg s 2048 64 0
+    recv = do
+        ex <- E.try $ NSB.recvMsg s 2048 64 0
+        case ex of
+           Right x -> return x
+           Left se
+             | Just E.ThreadKilled <- E.fromException se -> E.throwIO se
+             | otherwise -> case E.fromException se of
+                  Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
+                  _ -> putStrLn "recv again" >> recv
 
 ----------------------------------------------------------------
 
