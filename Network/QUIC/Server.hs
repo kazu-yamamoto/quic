@@ -115,7 +115,10 @@ router conf route (s,mysa) = handle (handler "router1") $ do
              | Just E.ThreadKilled <- E.fromException se -> E.throwIO se
              | otherwise -> case E.fromException se of
                   Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
-                  _ -> putStrLn "recv again" >> recv
+                  _ -> do
+                      print se
+                      putStrLn "recv again"
+                      recv
 
 ----------------------------------------------------------------
 
