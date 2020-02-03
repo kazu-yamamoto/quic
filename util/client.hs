@@ -25,6 +25,7 @@ data Options = Options {
   , optKeyLogging :: Maybe FilePath
   , optGroups     :: Maybe String
   , optValidate   :: Bool
+  , optHQ         :: Bool
   , optVerNego    :: Bool
   , optResumption :: Bool
   , opt0RTT       :: Bool
@@ -36,6 +37,7 @@ defaultOptions = Options {
     optDebug      = False
   , optKeyLogging = Nothing
   , optGroups     = Nothing
+  , optHQ         = False
   , optValidate   = False
   , optVerNego    = False
   , optResumption = False
@@ -60,6 +62,9 @@ options = [
   , Option ['c'] ["validate"]
     (NoArg (\o -> o { optValidate = True }))
     "validate server's certificate"
+  , Option ['q'] ["hq"]
+    (NoArg (\o -> o { optHQ = True }))
+    "prefer hq (HTTP/0.9)"
   , Option ['V'] ["vernego"]
     (NoArg (\o -> o { optVerNego = True }))
     "try version negotiation"
@@ -101,7 +106,10 @@ main = do
             ccServerName = addr
           , ccPortName   = port
           , ccALPN       = \ver -> let (h3X, hqX) = makeProtos ver
-                                   in return $ Just [h3X,hqX]
+                                       protos
+                                         | optHQ     = [hqX,h3X]
+                                         | otherwise = [h3X,hqX]
+                                   in return $ Just protos
           , ccValidate   = optValidate
           , ccConfig     = defaultConfig {
                 confVersions   = if optVerNego then
@@ -159,8 +167,8 @@ main = do
                 exitSuccess
               else do
                 let client = case alpn info of
-                      Just "hq-24" -> clientHQ cmd
-                      _            -> clientH3 addr
+                      Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
+                      _                                       -> clientH3 addr
                 void $ client conn `E.finally` close conn
                 exitSuccess
 
@@ -172,7 +180,7 @@ clientHQ cmd conn = do
     (sid, bs) <- recvStream conn
     when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
     C8.putStr bs
-    putStrLn "------------------------"
+    putStrLn "\n------------------------"
     threadDelay 300000
     getResumptionInfo conn
 

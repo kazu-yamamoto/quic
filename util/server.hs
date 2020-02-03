@@ -12,6 +12,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.List as L
 import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
 import System.Environment (getArgs)
@@ -81,12 +82,17 @@ compilerOpts argv =
       (_,_,errs) -> showUsageAndExit $ concat errs
 
 chooseALPN :: Version -> [ByteString] -> IO ByteString
-chooseALPN ver protos
-  | h3X `elem` protos = return h3X
-  | hqX `elem` protos = return hqX
-  | otherwise         = return "" -- fixme
+chooseALPN ver protos = return $ case mh3idx of
+    Nothing    -> case mhqidx of
+      Nothing    -> ""
+      Just _     -> hqX
+    Just h3idx ->  case mhqidx of
+      Nothing    -> h3X
+      Just hqidx -> if h3idx < hqidx then h3X else hqX
   where
     (h3X, hqX) = makeProtos ver
+    mh3idx = h3X `L.elemIndex` protos
+    mhqidx = hqX `L.elemIndex` protos
 
 main :: IO ()
 main = do
