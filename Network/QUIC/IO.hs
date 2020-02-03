@@ -42,6 +42,7 @@ recv conn = do
     case mi of
       InpStream 0   bs      -> return bs
       InpStream _   _       -> return ""
+      InpFin _              -> return ""
       InpError _            -> return ""
       InpApplicationError{} -> return ""
       InpTransportError{}   -> return ""
@@ -55,6 +56,7 @@ recvStream conn = do
     mi <- takeInput conn
     case mi of
       InpStream sid bs        -> return (sid, bs)
+      InpFin sid              -> return (sid, "")
       InpError e              -> E.throwIO e
       InpApplicationError e r -> E.throwIO $ ApplicationErrorOccurs e r
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r

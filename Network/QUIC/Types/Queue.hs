@@ -8,6 +8,7 @@ import Network.QUIC.Types.Packet
 import Network.QUIC.Types.UserError
 
 data Input = InpStream StreamID ByteString
+           | InpFin StreamID
            | InpHandshake EncryptionLevel ByteString Offset Token
            | InpTransportError TransportError FrameType ReasonPhrase
            | InpApplicationError ApplicationError ReasonPhrase

@@ -32,12 +32,13 @@ processCryptPacket conn (CryptPacket header crypt) = do
           rets <- mapM (processFrame conn level) fs
           when (and rets) $ addPeerPacketNumbers conn level pn
       Nothing -> do
-          putStrLn "Connection is reset statelessly"
           statelessReset <- isStateLessreset conn header crypt
           if statelessReset then do
+              putStrLn "Connection is reset statelessly"
               setCloseReceived conn
               clearThreads conn
-            else
+            else do
+              putStrLn "Cannot decrypt"
               return () -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
@@ -112,13 +113,13 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     return False
 processFrame conn RTT0Level (Stream sid _off dat fin) = do
     -- fixme _off
-    putInput conn $ InpStream sid dat
-    when (fin && dat /= "") $ putInput conn $ InpStream sid ""
+    when (dat /= "") $ putInput conn $ InpStream sid dat
+    when fin         $ putInput conn $ InpFin sid
     return True
 processFrame conn RTT1Level (Stream sid _off dat fin) = do
     -- fixme _off
-    putInput conn $ InpStream sid dat
-    when (fin && dat /= "") $ putInput conn $ InpStream sid ""
+    when (dat /= "") $ putInput conn $ InpStream sid dat
+    when fin         $ putInput conn $ InpFin sid
     return True
 processFrame conn lvl Ping = do
     putOutput conn $ OutControl lvl []
