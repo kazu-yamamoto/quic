@@ -150,7 +150,7 @@ dispatch ServerConfig{..} ServerRoute{..}
         case mroute of
           Nothing
             | scRequireRetry -> sendRetry
-            | otherwise      -> pushToAcceptQ1
+            | otherwise      -> pushToAcceptFirst
           Just q -> writeServerRecvQ q (Through cpkt) -- resend packets
   | otherwise = do
         mct <- decryptToken tokenMgr token
@@ -158,11 +158,11 @@ dispatch ServerConfig{..} ServerRoute{..}
           Just ct
             | isRetryToken ct -> do
                   ok <- isRetryTokenValid ct
-                  if ok then pushToAcceptQ2 ct else sendRetry
+                  if ok then pushToAcceptRetried ct else sendRetry
             | otherwise -> do
                   mroute <- lookupRoute routeTable dCID
                   case mroute of
-                    Nothing -> pushToAcceptQ1
+                    Nothing -> pushToAcceptFirst
                     Just q -> writeServerRecvQ q (Through cpkt) -- resend packets
           _ -> sendRetry
   where
@@ -172,17 +172,15 @@ dispatch ServerConfig{..} ServerRoute{..}
         writeServerRecvQ q (Through cpkt)
         let ent = Accept ver d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable) retried
         writeAcceptQ acceptQueue ent
-        return q
-    pushToAcceptQ1 = do
-        newdCID <- newCID
-        q <- pushToAcceptQ newdCID sCID (OCFirst dCID) False
         when (bs0RTT /= "") $ do
             (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
             writeServerRecvQ q (Through cpktRTT0)
-    pushToAcceptQ2 (CryptoToken _ _ (Just (_,_,o))) = do
-        _ <- pushToAcceptQ dCID sCID (OCRetry o) True
-        return ()
-    pushToAcceptQ2 _ = return ()
+    pushToAcceptFirst = do
+        newdCID <- newCID
+        pushToAcceptQ newdCID sCID (OCFirst dCID) False
+    pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) =
+        pushToAcceptQ dCID sCID (OCRetry o) True
+    pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
         tim0 <- timeCurrent
         let diff = tim `timeDiff` tim0
