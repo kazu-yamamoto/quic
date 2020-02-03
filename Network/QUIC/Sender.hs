@@ -77,8 +77,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
               RTT0Level      -> PlainPacket (RTT0      ver peercid mycid)       (Plain (Flags 0) mypn frames')
               HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames')
               RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames')
-        -- fixme: how to receive ACK for 0-RTT?
-        when (frames /= [] && lvl /= RTT0Level) $
+        when (frames /= []) $
             keepPlainPacket conn [mypn] ppkt lvl ppns
         encodePlainPacket conn ppkt mlen
 
@@ -189,11 +188,13 @@ resender conn = handle (handlerIO "resender" conn) $ forever $ do
     -- correctly. We should consider that the success of handshake
     -- implicitly acknowledge them.
     let ppktpns'
-         | open      = filter isRTT1Level ppktpns
+         | open      = filter isRTTxLevel ppktpns
          | otherwise = ppktpns
     mapM_ put ppktpns'
  where
    put (ppkt,pns) = putOutput conn $ OutPlainPacket ppkt pns
 
-isRTT1Level :: (PlainPacket,[PacketNumber]) -> Bool
-isRTT1Level ((PlainPacket hdr _),_) = packetEncryptionLevel hdr == RTT1Level
+isRTTxLevel :: (PlainPacket,[PacketNumber]) -> Bool
+isRTTxLevel ((PlainPacket hdr _),_) = lvl == RTT1Level || lvl == RTT0Level
+  where
+    lvl = packetEncryptionLevel hdr
