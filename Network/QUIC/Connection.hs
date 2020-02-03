@@ -57,10 +57,8 @@ module Network.QUIC.Connection (
   , isCloseSent
   , waitClosed
   -- * Stream
-  , setStreamOffset
-  , modifyStreamOffset
-  , setCryptoOffset
-  , modifyCryptoOffset
+  , getStreamOffset
+  , getCryptoOffset
   -- * Queue
   , takeInput
   , putInput

@@ -97,10 +97,6 @@ createClientConnection conf@ClientConfig{..} ver = do
 handshakeClientConnection :: ClientConfig -> Connection -> IO ()
 handshakeClientConnection conf@ClientConfig{..} conn = do
     setToken conn $ resumptionToken ccResumption
-    setCryptoOffset conn InitialLevel 0
-    setCryptoOffset conn HandshakeLevel 0
-    setCryptoOffset conn RTT1Level 0
-    setStreamOffset conn 0 0 -- fixme
     tid0 <- forkIO $ sender   conn
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
@@ -141,10 +137,6 @@ accept QUICServer{..} = E.handle tlserr $ do
         setup = do
             conn <- serverConnection serverConfig ver myCID peerCID oCID send recv cls
             setTokenManager conn $ tokenMgr serverRoute
-            setCryptoOffset conn InitialLevel 0
-            setCryptoOffset conn HandshakeLevel 0
-            setCryptoOffset conn RTT1Level 0
-            setStreamOffset conn 0 0 -- fixme
             setRetried conn retried
             tid0 <- forkIO $ sender   conn
             tid1 <- forkIO $ receiver conn

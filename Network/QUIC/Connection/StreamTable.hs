@@ -1,8 +1,6 @@
 module Network.QUIC.Connection.StreamTable (
-    setStreamOffset
-  , modifyStreamOffset
-  , setCryptoOffset
-  , modifyCryptoOffset
+    getStreamOffset
+  , getCryptoOffset
   ) where
 
 import Data.IORef
@@ -12,20 +10,17 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
-setStreamOffset :: Connection -> StreamID -> Offset -> IO ()
-setStreamOffset conn sid off = atomicModifyIORef' (streamTable conn) alter
+getStreamOffset :: Connection -> StreamID -> Int -> IO Offset
+getStreamOffset conn sid len = atomicModifyIORef' (streamTable conn) modify
   where
-    alter (StreamTable tbl) = (StreamTable (Map.alter create sid tbl), ())
-    create _ = Just (StreamState off)
-
-modifyStreamOffset :: Connection -> StreamID -> Int -> IO Offset
-modifyStreamOffset conn sid len = atomicModifyIORef' (streamTable conn) modify
-  where
-    modify (StreamTable tbl) = update tbl
-    update tbl = case Map.updateLookupWithKey add sid tbl of
-      (Nothing,                tbl') -> (StreamTable tbl', 0)
-      (Just (StreamState new), tbl') -> (StreamTable tbl', new - len)
-    add _ (StreamState off) = Just (StreamState (off + len))
+    modify (StreamTable tbl) = case Map.lookup sid tbl of
+      Nothing                -> let s = StreamState len
+                                    tbl' = StreamTable $ Map.insert sid s tbl
+                                in (tbl', 0)
+      Just (StreamState off) -> let s = StreamState (off + len)
+                                    adj _ = s
+                                    tbl' = StreamTable $ Map.adjust adj sid tbl
+                                in (tbl', off)
 
 ----------------------------------------------------------------
 
@@ -42,8 +37,5 @@ toCryptoStreamID RTT1Level      = rtt1CryptoStreamID
 
 ----------------------------------------------------------------
 
-setCryptoOffset :: Connection -> EncryptionLevel -> Offset -> IO ()
-setCryptoOffset conn lvl len = setStreamOffset conn (toCryptoStreamID lvl) len
-
-modifyCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
-modifyCryptoOffset conn lvl len = modifyStreamOffset conn (toCryptoStreamID lvl) len
+getCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
+getCryptoOffset conn lvl len = getStreamOffset conn (toCryptoStreamID lvl) len

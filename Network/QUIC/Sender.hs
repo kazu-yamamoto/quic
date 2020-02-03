@@ -19,7 +19,7 @@ import Network.QUIC.Types
 cryptoFrame :: Connection -> CryptoData -> EncryptionLevel -> IO Frame
 cryptoFrame conn crypto lvl = do
     let len = B.length crypto
-    off <- modifyCryptoOffset conn lvl len
+    off <- getCryptoOffset conn lvl len
     return $ Crypto off crypto
 
 ----------------------------------------------------------------
@@ -112,7 +112,7 @@ sendOutput conn (OutHndClientHello ch mEarlyData) = do
     case mEarlyData of
       Nothing -> return ()
       Just (sid,earlyData) -> do
-          off <- modifyStreamOffset conn sid $ B.length earlyData
+          off <- getStreamOffset conn sid $ B.length earlyData
           bss1 <- construct conn RTT0Level [Stream sid off earlyData True] False $ Just maximumQUICPacketSize
           connSend conn bss1
 sendOutput conn (OutHndServerHello sh sf) = do
@@ -145,7 +145,7 @@ sendOutput conn (OutControl lvl frames) = do
 sendOutput conn (OutStream sid dat fin) = do
     sendStreamFragment conn sid dat fin
 sendOutput conn (OutShutdown sid) = do
-    off <- modifyStreamOffset conn sid 0
+    off <- getStreamOffset conn sid 0
     let frame = Stream sid off "" True
     bss <- construct conn RTT1Level [frame] False $ Just maximumQUICPacketSize
     connSend conn bss
@@ -170,7 +170,7 @@ sendStreamFragment conn sid dat0 fin0 = loop dat0
     loop "" = return ()
     loop dat = do
         let (target,rest) = B.splitAt 1024 dat
-        off <- modifyStreamOffset conn sid $ B.length target
+        off <- getStreamOffset conn sid $ B.length target
         let fin = fin0 && rest == ""
             frame = Stream sid off dat fin
         bss <- construct conn RTT1Level [frame] False $ Just maximumQUICPacketSize
