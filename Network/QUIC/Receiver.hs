@@ -38,7 +38,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
               setCloseReceived conn
               clearThreads conn
             else do
-              putStrLn "Cannot decrypt"
+              putStrLn $ "Cannot decrypt: " ++ show level
               return () -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
