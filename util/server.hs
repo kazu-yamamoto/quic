@@ -13,6 +13,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.List as L
+import Network.TLS.Extra.Cipher
 import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
 import System.Environment (getArgs)
@@ -125,6 +126,10 @@ main = do
                     }
               , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
+              , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384
+                                 , cipher_TLS13_AES128GCM_SHA256
+                                 , cipher_TLS13_AES128CCM_SHA256
+                                 ]
               }
           }
     E.handle (\(E.SomeException e) -> print e) $ withQUICServer conf $ \qs -> forever $ do

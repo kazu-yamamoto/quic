@@ -11,6 +11,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
+import Network.TLS.Extra.Cipher
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
@@ -119,6 +120,10 @@ main = do
               , confParameters = exampleParameters
               , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
+              , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384
+                                 , cipher_TLS13_AES128GCM_SHA256
+                                 , cipher_TLS13_AES128CCM_SHA256
+                                 ]
               }
           }
     putStrLn "------------------------"
