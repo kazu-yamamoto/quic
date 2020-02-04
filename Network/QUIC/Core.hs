@@ -105,7 +105,7 @@ handshakeClientConnection conf@ClientConfig{..} conn = do
     tid1 <- forkIO $ receiver conn
     tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
-    handshakeClient conf conn
+    handshakeClient conf conn `E.onException` clearThreads conn
     setConnectionOpen conn
 
 ----------------------------------------------------------------
@@ -150,7 +150,7 @@ accept QUICServer{..} = E.handle tlserr $ do
             tid1 <- forkIO $ receiver conn
             tid2 <- forkIO $ resender conn
             setThreadIds conn [tid0,tid1,tid2]
-            handshakeServer serverConfig oCID conn
+            handshakeServer serverConfig oCID conn `E.onException` clearThreads conn
             setRegister conn register unregister
             register myCID
             setConnectionOpen conn
