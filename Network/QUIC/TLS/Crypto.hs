@@ -41,8 +41,11 @@ module Network.QUIC.TLS.Crypto (
 
 import qualified Control.Exception as E
 import Crypto.Cipher.AES
+import qualified Crypto.Cipher.ChaCha as ChaCha
+import qualified Crypto.Cipher.ChaChaPoly1305 as ChaChaPoly
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError)
+import qualified Crypto.MAC.Poly1305 as Poly1305
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
@@ -158,7 +161,7 @@ cipherEncrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmEncrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
   | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256gcmEncrypt
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chacha20poly1305Encrypt
   | otherwise                                      = error "cipherEncrypt"
 
 cipherDecrypt :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
@@ -166,7 +169,7 @@ cipherDecrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmDecrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
   | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256gcmDecrypt
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chacha20poly1305Decrypt
   | otherwise                                      = error "cipherDecrypt"
 
 defaultCipherOverhead :: Int
@@ -206,6 +209,26 @@ aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
     authtag = AuthTag $ convert tag
     plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
 
+chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
+chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
+    ciphertext `B.append` convert tag
+  where
+    st1 = throwCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
+    st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st1)
+    (ciphertext, st3) = ChaChaPoly.encrypt plaintext st2
+    Poly1305.Auth tag = ChaChaPoly.finalize st3
+
+chacha20poly1305Decrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
+chacha20poly1305Decrypt (Key key) (Nonce nonce) ciphertag (AddDat ad)
+   | tag == convert tag' = Just plaintext
+   | otherwise           = Nothing
+  where
+    st = throwCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
+    st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st)
+    (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+    (plaintext, st3) = ChaChaPoly.decrypt ciphertext st2
+    Poly1305.Auth tag' = ChaChaPoly.finalize st3
+
 ----------------------------------------------------------------
 
 makeNonce :: IV -> ByteString -> Nonce
@@ -231,7 +254,7 @@ cipherHeaderProtection cipher key
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128ecbEncrypt key
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
   | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256ecbEncrypt key
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = error "cipher_TLS13_CHACHA20POLY1305_SHA256"
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chachaEncrypt key
   | otherwise                                      = error "cipherHeaderProtection"
 
 aes128ecbEncrypt :: Key -> Sample -> Mask
@@ -245,6 +268,14 @@ aes256ecbEncrypt (Key key) (Sample sample) = Mask mask
   where
     encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES256)
     mask = encrypt sample
+
+chachaEncrypt :: Key -> Sample -> Mask
+chachaEncrypt (Key key) (Sample sample0) = Mask mask
+  where
+    -- fixme: cryptonite hard-codes the counter, sigh
+    (_counter,nonce) = B.splitAt 4 sample0
+    st = ChaCha.initialize 20 key nonce
+    (mask,_) = ChaCha.combine st "\x0\x0\x0\x0\x0"
 
 sampleLength :: Cipher -> Int
 sampleLength cipher
