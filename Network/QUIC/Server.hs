@@ -23,16 +23,18 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
-import Data.Hourglass (Seconds(..), timeDiff)
+import Data.Hourglass (Seconds(..), timeDiff, ElapsedP)
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
+import Data.OrdPSQ (OrdPSQ)
+import qualified Data.OrdPSQ as PSQ
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Socket
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
-import Time.System (timeCurrent)
+import Time.System (timeCurrent, timeCurrentP)
 
 import Network.QUIC.Config
 import Network.QUIC.Exception
@@ -47,15 +49,21 @@ import Network.QUIC.Types
 data Accept = Accept Version CID CID OrigCID SockAddr SockAddr ServerRecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
 
 data ServerRoute = ServerRoute {
-    tokenMgr    :: CT.TokenManager
-  , routeTable  :: IORef RouteTable
-  , acceptQueue :: AcceptQ
+    tokenMgr     :: CT.TokenManager
+  , routeTable   :: IORef RouteTable
+  , acceptQueue  :: AcceptQ
+  , quantumTable :: IORef QuantumTable
   }
 
 newServerRoute :: IO ServerRoute
-newServerRoute = ServerRoute <$> CT.spawnTokenManager CT.defaultConfig <*> newIORef M.empty <*> newAcceptQ
+newServerRoute = ServerRoute <$> CT.spawnTokenManager CT.defaultConfig <*> newIORef emptyRouteTable <*> newAcceptQ <*> newIORef emptyQuantumTable
+
+----------------------------------------------------------------
 
 type RouteTable = Map CID ServerRecvQ
+
+emptyRouteTable :: RouteTable
+emptyRouteTable = M.empty
 
 ----------------------------------------------------------------
 
@@ -84,6 +92,32 @@ readServerRecvQ (ServerRecvQ q) = atomically $ readTQueue q
 
 writeServerRecvQ :: ServerRecvQ -> RecvCryptPacket -> IO ()
 writeServerRecvQ (ServerRecvQ q) x = atomically $ writeTQueue q x
+
+----------------------------------------------------------------
+
+newtype QuantumTable = QuantumTable (OrdPSQ CID ElapsedP ServerRecvQ)
+
+quantumTableSize :: Int
+quantumTableSize = 100
+
+emptyQuantumTable :: QuantumTable
+emptyQuantumTable = QuantumTable PSQ.empty
+
+lookupQuantumTable :: IORef QuantumTable -> CID -> IO (Maybe ServerRecvQ)
+lookupQuantumTable ref dcid = do
+    QuantumTable qt <- readIORef ref
+    return $ case PSQ.lookup dcid qt of
+      Nothing     -> Nothing
+      Just (_,q)  -> Just q
+
+insertQuantumTable :: IORef QuantumTable -> CID -> ServerRecvQ -> IO ()
+insertQuantumTable ref dcid q = do
+    QuantumTable qt0 <- readIORef ref
+    let qt1 | PSQ.size qt0 <= quantumTableSize = qt0
+            | otherwise = PSQ.deleteMin qt0
+    p <- timeCurrentP
+    let qt2 = PSQ.insert dcid p q qt1
+    writeIORef ref $ QuantumTable qt2
 
 ----------------------------------------------------------------
 
@@ -151,7 +185,7 @@ dispatch ServerConfig{..} ServerRoute{..}
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst
-          Just q -> writeServerRecvQ q (Through cpkt) -- resend packets
+          Just q -> writeServerRecvQ q $ Through cpkt -- resend packets
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -163,23 +197,31 @@ dispatch ServerConfig{..} ServerRoute{..}
                   mroute <- lookupRoute routeTable dCID
                   case mroute of
                     Nothing -> pushToAcceptFirst
-                    Just q -> writeServerRecvQ q (Through cpkt) -- resend packets
+                    Just q -> writeServerRecvQ q $ Through cpkt -- resend packets
           _ -> sendRetry
   where
-    pushToAcceptQ d s oc retried = do
-        q <- newServerRecvQ
-        -- fixme: check listen length
-        writeServerRecvQ q (Through cpkt)
-        let ent = Accept ver d s oc mysa peersa q (registerRoute routeTable q) (unregisterRoute routeTable) retried
-        writeAcceptQ acceptQueue ent
-        when (bs0RTT /= "") $ do
-            (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
-            writeServerRecvQ q (Through cpktRTT0)
+    pushToAcceptQ d s o wrap retried = do
+        mq <- lookupQuantumTable quantumTable o
+        case mq of
+          Just q -> writeServerRecvQ q $ Through cpkt
+          Nothing -> do
+              q <- newServerRecvQ
+              insertQuantumTable quantumTable o q
+              writeServerRecvQ q (Through cpkt)
+              let oc = wrap o
+                  reg = registerRoute routeTable q
+                  unreg = unregisterRoute routeTable
+                  ent = Accept ver d s oc mysa peersa q reg unreg retried
+              -- fixme: check acceptQ length
+              writeAcceptQ acceptQueue ent
+              when (bs0RTT /= "") $ do
+                  (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
+                  writeServerRecvQ q $ Through cpktRTT0
     pushToAcceptFirst = do
         newdCID <- newCID
-        pushToAcceptQ newdCID sCID (OCFirst dCID) False
+        pushToAcceptQ newdCID sCID dCID OCFirst False
     pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) =
-        pushToAcceptQ dCID sCID (OCRetry o) True
+        pushToAcceptQ dCID sCID  o OCRetry True
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
         tim0 <- timeCurrent
@@ -205,7 +247,7 @@ dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa
           print peersa
       Just q  -> do
           putStrLn $ "NAT rebiding to " ++ show peersa
-          writeServerRecvQ q (NATRebinding cpkt peersa)
+          writeServerRecvQ q $ NATRebinding cpkt peersa
 dispatch _ _ (PacketIB _)  _ _ _ _ = print BrokenPacket
 dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
