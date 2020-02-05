@@ -17,6 +17,7 @@ import System.Timeout
 import Network.QUIC.Client
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Exception
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
 import Network.QUIC.Receiver
@@ -27,30 +28,16 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
--- | Data type to represent a QUIC client.
-newtype QUICClient = QUICClient {
-    clientConfig :: ClientConfig
-  }
-
--- | Data type to represent a QUIC server.
-data QUICServer = QUICServer {
-    serverConfig :: ServerConfig
-  , serverRoute  :: ServerRoute
-  }
-
-----------------------------------------------------------------
-
--- | Creating 'QUICClient' and running an IO action.
-withQUICClient :: ClientConfig -> (QUICClient -> IO a) -> IO a
-withQUICClient conf body = do
+-- | Running a QUIC client.
+runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
+runQUICClient conf client = do
     when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
-    let qc = QUICClient conf
-    body qc
+    E.bracket (connect conf) close client
 
 -- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
-connect :: QUICClient -> IO Connection
-connect QUICClient{..} = do
-    let firstVersion = head $ confVersions $ ccConfig clientConfig
+connect :: ClientConfig -> IO Connection
+connect conf = do
+    let firstVersion = head $ confVersions $ ccConfig conf
     ex0 <- E.try $ connect' firstVersion
     case ex0 of
       Right conn0 -> return conn0
@@ -65,8 +52,8 @@ connect QUICClient{..} = do
                 Right _    -> E.throwIO VersionNegotiationFailed
   where
     connect' ver = do
-        (conn,cls) <- createClientConnection clientConfig ver
-        handshakeClientConnection clientConfig conn `E.onException` cls
+        (conn,cls) <- createClientConnection conf ver
+        handshakeClientConnection conf conn `E.onException` cls
         return conn
     check se
       | Just e@(TLS.Error_Protocol _) <- E.fromException se =
@@ -106,24 +93,31 @@ handshakeClientConnection conf@ClientConfig{..} conn = do
 
 ----------------------------------------------------------------
 
--- | Creating 'QUICServer' and running an IO action.
-withQUICServer :: ServerConfig -> (QUICServer -> IO ()) -> IO ()
-withQUICServer conf body = do
-    route <- newServerRoute
-    ssas <- mapM  udpServerListenSocket $ scAddresses conf
-    tids <- mapM (runRouter route) ssas
-    let qs = QUICServer conf route
-    body qs `E.finally` do
+-- | Running a QUIC server.
+--   The action is executed with a new connection
+--   in a new lightweight thread.
+runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
+runQUICServer conf server = E.handle (handler "main") $ do
+    mainThreadId <- myThreadId
+    E.bracket setup teardown $ \(route,_) -> forever $ do
+        acc <- readAcceptQ $ acceptQueue route
+        let create = createServerConnection conf route acc mainThreadId
+        void $ forkIO $ E.bracket create close server
+  where
+    setup = do
+        route <- newServerRoute
+        -- fixme: the case where sockets cannot be created.
+        ssas <- mapM  udpServerListenSocket $ scAddresses conf
+        tids <- mapM (runRouter route) ssas
+        return (route, tids)
+    teardown (route, tids) = do
         killTokenManager $ tokenMgr route
         mapM_ killThread tids
-  where
     runRouter route ssa@(s,_) = forkFinally (router conf route ssa) (\_ -> NS.close s)
 
--- | Accepting a connection from a client and returning a 'Connection'.
-accept :: QUICServer -> IO Connection
-accept QUICServer{..} = E.handle tlserr $ do
-    Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried
-      <- readAcceptQ $ acceptQueue serverRoute
+createServerConnection :: ServerConfig -> ServerRoute -> Accept -> ThreadId -> IO Connection
+createServerConnection conf route acc mainThreadId = E.handle tlserr $ do
+    let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,peersa0)
     void $ forkIO $ readerServer s0 q -- killed by "close s0"
@@ -135,21 +129,27 @@ accept QUICServer{..} = E.handle tlserr $ do
             NSB.sendMany s bss
         recv = recvServer mysa q sref
         setup = do
-            conn <- serverConnection serverConfig ver myCID peerCID oCID send recv cls
-            setTokenManager conn $ tokenMgr serverRoute
+            conn <- serverConnection conf ver myCID peerCID oCID send recv cls
+            setTokenManager conn $ tokenMgr route
             setRetried conn retried
             tid0 <- forkIO $ sender   conn
             tid1 <- forkIO $ receiver conn
             tid2 <- forkIO $ resender conn
             setThreadIds conn [tid0,tid1,tid2]
-            handshakeServer serverConfig oCID conn `E.onException` clearThreads conn
+            setMainThreadId conn mainThreadId
+            handshakeServer conf oCID conn `E.onException` clearThreads conn
             setRegister conn register unregister
             register myCID
             setConnectionOpen conn
             return conn
     setup `E.onException` cls
   where
+    -- fixme: translate all exceptions to QUICError
     tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
+
+-- | Stopping the main thread of the server.
+stopQUICServer :: Connection -> IO ()
+stopQUICServer conn = getMainThreadId conn >>= killThread
 
 ----------------------------------------------------------------
 

@@ -4,7 +4,6 @@ module HandshakeSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString
 import Data.IORef
@@ -58,13 +57,14 @@ testHandshake cc sc mode = void $ concurrently client server
             scKey  = "test/serverkey.pem"
           , scCert = "test/servercert.pem"
           }
-    client = withQUICClient cc $ \qc -> E.bracket (connect qc) close $ \conn -> do
+    client = runQUICClient cc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         getTLSMode conn `shouldReturn` mode
-    server = withQUICServer sc' $ \qs -> E.bracket (accept qs) close $ \conn -> do
+    server = runQUICServer sc' $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         threadDelay 100000 -- waiting for CF
         getTLSMode conn `shouldReturn` mode
+        stopQUICServer conn
 
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Maybe ByteString -> IO ()
 testHandshake2 cc1 sc (mode1, mode2) mEarlyData = void $ concurrently client server
@@ -73,7 +73,7 @@ testHandshake2 cc1 sc (mode1, mode2) mEarlyData = void $ concurrently client ser
             scKey  = "test/serverkey.pem"
           , scCert = "test/servercert.pem"
           }
-    runClient cc mode = withQUICClient cc $ \qc -> E.bracket (connect qc) close $ \conn -> do
+    runClient cc mode = runQUICClient cc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         getTLSMode conn `shouldReturn` mode
         threadDelay 100000 -- waiting for NST
@@ -86,12 +86,13 @@ testHandshake2 cc1 sc (mode1, mode2) mEarlyData = void $ concurrently client ser
                           Just bs -> Just (0, bs)
                       }
         void $ runClient cc2 mode2
-    runServer qs = E.bracket (accept qs) close $ \conn -> do
-        isConnectionOpen conn `shouldReturn` True
-        threadDelay 100000 -- waiting for CF
-    server = withQUICServer sc' $ \qs -> do
-        runServer qs
-        runServer qs
+    server = do
+        ref <- newIORef (0 :: Int)
+        runQUICServer sc' $ \conn -> do
+            isConnectionOpen conn `shouldReturn` True
+            threadDelay 100000 -- waiting for CF
+            n <- readIORef ref
+            if n >= 1 then stopQUICServer conn else writeIORef ref (n + 1)
 
 newSessionManager :: IO SessionManager
 newSessionManager = sessionManager <$> newIORef Nothing

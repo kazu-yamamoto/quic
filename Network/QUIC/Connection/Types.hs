@@ -81,6 +81,7 @@ data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
                            , routeRegister   :: CID -> IO ()
                            , routeUnregister :: CID -> IO ()
                            , askRetry        :: Bool
+                           , mainThreadId    :: ~ThreadId
                            }
 
 defaultClientRoleInfo :: RoleInfo
@@ -97,6 +98,7 @@ defaultServerRoleInfo = ServerInfo {
   , routeRegister = \_ -> return ()
   , routeUnregister = \_ -> return ()
   , askRetry = False
+  , mainThreadId = undefined
   }
 
 ----------------------------------------------------------------

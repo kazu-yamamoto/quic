@@ -85,6 +85,8 @@ module Network.QUIC.Connection (
   , getUnregister
   , setTokenManager
   , getTokenManager
+  , setMainThreadId
+  , getMainThreadId
   ) where
 
 import Network.QUIC.Connection.Crypto

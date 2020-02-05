@@ -18,8 +18,11 @@ module Network.QUIC.Connection.Role (
   , getUnregister
   , setTokenManager
   , getTokenManager
+  , setMainThreadId
+  , getMainThreadId
   ) where
 
+import Control.Concurrent
 import qualified Crypto.Token as CT
 import Data.IORef
 import Network.TLS.QUIC
@@ -115,3 +118,13 @@ setTokenManager Connection{..} mgr = modifyIORef' roleInfo $ \si -> si {
 
 getTokenManager :: Connection -> IO CT.TokenManager
 getTokenManager Connection{..} = tokenManager <$> readIORef roleInfo
+
+----------------------------------------------------------------
+
+setMainThreadId :: Connection -> ThreadId -> IO ()
+setMainThreadId Connection{..} tid = modifyIORef' roleInfo $ \si -> si {
+    mainThreadId = tid
+  }
+
+getMainThreadId :: Connection -> IO ThreadId
+getMainThreadId Connection{..} = mainThreadId <$> readIORef roleInfo

@@ -6,7 +6,6 @@
 module Main where
 
 import Control.Concurrent
-import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -127,8 +126,7 @@ main = do
               }
           }
     putStrLn "------------------------"
-    res <- withQUICClient conf $ \qc -> do
-        conn <- connect qc
+    res <- runQUICClient conf $ \conn -> do
         info <- getConnectionInfo conn
         when optDebug $ do
             threadDelay 10000
@@ -136,7 +134,7 @@ main = do
         let client = case alpn info of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
               _                                       -> clientH3 addr
-        client conn `E.finally` close conn
+        client conn
     when (optResumption && not (isResumptionPossible res)) $ do
         putStrLn "Resumption is not available"
         exitFailure
@@ -156,8 +154,7 @@ main = do
               | otherwise = conf { ccResumption = res }
         putStrLn "<<<< next connection >>>>"
         putStrLn "------------------------"
-        void $ withQUICClient conf' $ \qc -> do
-            conn <- connect qc
+        void $ runQUICClient conf' $ \conn -> do
             info <- getConnectionInfo conn
             when optDebug $ do
                 threadDelay 10000
@@ -168,13 +165,12 @@ main = do
                 putStrLn $ "SID: " ++ show sid
                 C8.putStrLn bs
                 putStrLn "------------------------ Response for early data"
-                close conn
                 exitSuccess
               else do
                 let client = case alpn info of
                       Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
                       _                                       -> clientH3 addr
-                void $ client conn `E.finally` close conn
+                void $ client conn
                 exitSuccess
 
 clientHQ :: ByteString -> Connection -> IO ResumptionInfo

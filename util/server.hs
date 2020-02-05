@@ -6,7 +6,6 @@
 
 module Main where
 
-import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -132,19 +131,13 @@ main = do
                                  ]
               }
           }
-    E.handle (\(E.SomeException e) -> print e) $ withQUICServer conf $ \qs -> forever $ do
-        econn <- E.try $ accept qs
-        case econn of
-          Left e
-            | Just E.UserInterrupt <- E.fromException e -> E.throwIO e
-            | otherwise -> return ()
-          Right conn -> do
-              info <- getConnectionInfo conn
-              when optDebug $ print info
-              let server = case alpn info of
-                    Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
-                    _                                       -> serverH3
-              void $ forkFinally (server conn) (\_ -> close conn)
+    runQUICServer conf $ \conn -> do
+        info <- getConnectionInfo conn
+        when optDebug $ print info
+        let server = case alpn info of
+              Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
+              _                                       -> serverH3
+        server conn
 
 onE :: IO b -> IO a -> IO a
 h `onE` b = b `E.onException` h

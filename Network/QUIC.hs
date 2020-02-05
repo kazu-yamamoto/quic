@@ -2,23 +2,10 @@
 
 -- | This main module provides APIs for QUIC.
 module Network.QUIC (
-  -- * Creating a connection for client
-    ClientConfig(..)
-  , defaultClientConfig
-  , withQUICClient
-  , QUICClient
-  , connect
-  -- * Running a server and accepting connections
-  , ServerConfig(..)
-  , defaultServerConfig
-  , withQUICServer
-  , QUICServer
-  , accept
-  -- * Common configuration
-  , Config(..)
-  , defaultConfig
-  -- * Closing connection
-  , close
+  -- * Running a QUIC client and server
+    runQUICClient
+  , runQUICServer
+  , stopQUICServer
   -- * Basic IO
   , recv
   , send
@@ -27,11 +14,18 @@ module Network.QUIC (
   , recvStream
   , sendStream
   , shutdownStream
+  -- * Configrations
+  , ClientConfig(..)
+  , defaultClientConfig
+  , ServerConfig(..)
+  , defaultServerConfig
+  , Config(..)
+  , defaultConfig
   -- * Types
   , Connection
+  , StreamID
   , Version(..)
   , fromVersion
-  , StreamID
   -- ** Parameters
   , Parameters(..)
   , defaultParameters
