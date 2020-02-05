@@ -226,4 +226,5 @@ exampleParameters = defaultParameters {
   , maxStreamsUni           =     100
   , idleTimeout             =   30000
   , activeConnectionIdLimit =       7
+  , maxPacketSize           =    1280
   }
