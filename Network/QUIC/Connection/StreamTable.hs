@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Network.QUIC.Connection.StreamTable (
     getStreamOffset
   , getCryptoOffset
@@ -11,16 +13,21 @@ import Network.QUIC.Imports
 import Network.QUIC.Types
 
 getStreamOffset :: Connection -> StreamID -> Int -> IO Offset
-getStreamOffset conn sid len = atomicModifyIORef' (streamTable conn) modify
-  where
-    modify (StreamTable tbl) = case Map.lookup sid tbl of
-      Nothing                -> let s = StreamState len
-                                    tbl' = StreamTable $ Map.insert sid s tbl
-                                in (tbl', 0)
-      Just (StreamState off) -> let s = StreamState (off + len)
-                                    adj _ = s
-                                    tbl' = StreamTable $ Map.adjust adj sid tbl
-                                in (tbl', off)
+getStreamOffset Connection{..} sid len = do
+    -- reader and sender do not insert the same StreamState
+    -- at the same time.
+    StreamTable tbl0 <- readIORef streamTable
+    StreamState{..} <- case Map.lookup sid tbl0 of
+      Nothing -> do
+          ss <- newStreamState
+          atomicModifyIORef streamTable $ \(StreamTable tbl) ->
+            (StreamTable $ Map.insert sid ss tbl, ())
+          return ss
+      Just ss -> return ss
+    -- sstx is modified by only sender
+    StreamInfo off fin <- readIORef sstx
+    writeIORef sstx $ StreamInfo (off + len) fin
+    return off
 
 ----------------------------------------------------------------
 

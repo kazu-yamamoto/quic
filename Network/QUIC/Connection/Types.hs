@@ -37,10 +37,25 @@ data CloseState = CloseState {
 
 ----------------------------------------------------------------
 
-newtype StreamState = StreamState Offset deriving (Eq, Show)
+data StreamInfo = StreamInfo Offset Bool deriving (Eq, Show)
+
+emptyStreamInfo :: StreamInfo
+emptyStreamInfo = StreamInfo 0 False
+
+data Reassemble = Reassemble Offset Offset ByteString deriving (Eq, Show)
+
+data StreamState = StreamState {
+    sstx :: IORef StreamInfo
+  , ssrx :: IORef StreamInfo
+  , ssreass :: IORef [Reassemble]
+  }
+
+newStreamState :: IO StreamState
+newStreamState = StreamState <$> newIORef emptyStreamInfo
+                             <*> newIORef emptyStreamInfo
+                             <*> newIORef []
 
 newtype StreamTable = StreamTable (Map StreamID StreamState)
-                    deriving (Eq, Show)
 
 emptyStreamTable :: StreamTable
 emptyStreamTable = StreamTable Map.empty
