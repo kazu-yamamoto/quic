@@ -37,12 +37,15 @@ data CloseState = CloseState {
 
 ----------------------------------------------------------------
 
-data StreamInfo = StreamInfo Offset Bool deriving (Eq, Show)
+data StreamInfo = StreamInfo {
+    siOff :: Offset
+  , siFin :: Fin
+  } deriving (Eq, Show)
 
 emptyStreamInfo :: StreamInfo
 emptyStreamInfo = StreamInfo 0 False
 
-data Reassemble = Reassemble Offset Offset ByteString deriving (Eq, Show)
+data Reassemble = Reassemble StreamData Offset Int deriving (Eq, Show)
 
 data StreamState = StreamState {
     sstx :: IORef StreamInfo

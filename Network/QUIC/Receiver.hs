@@ -51,12 +51,12 @@ processFrame conn _ (Ack ackInfo _) = do
 processFrame conn lvl (Crypto off cdat) = do
     case lvl of
       InitialLevel   -> do
-          putCrypto conn $ InpHandshake lvl cdat off emptyToken
+          putInputCrypto conn lvl off cdat
       RTT0Level -> do
           putStrLn $ "processFrame: invalid packet type " ++ show lvl
       HandshakeLevel
           | isClient conn -> do
-              putCrypto conn $ InpHandshake lvl cdat off emptyToken
+              putInputCrypto conn lvl off cdat
          | otherwise -> do
               control <- getServerController conn
               res <- control $ PutClientFinished cdat
@@ -102,14 +102,10 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
-processFrame conn RTT0Level (Stream sid _off dat fin) = do
-    -- fixme _off
-    when (dat /= "") $ putInput conn $ InpStream sid dat
-    when fin         $ putInput conn $ InpFin sid
-processFrame conn RTT1Level (Stream sid _off dat fin) = do
-    -- fixme _off
-    when (dat /= "") $ putInput conn $ InpStream sid dat
-    when fin         $ putInput conn $ InpFin sid
+processFrame conn RTT0Level (Stream sid off dat fin) = do
+    putInputStream conn sid off dat fin
+processFrame conn RTT1Level (Stream sid off dat fin) =
+    putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     putOutput conn $ OutControl lvl []
 processFrame conn _ HandshakeDone = do

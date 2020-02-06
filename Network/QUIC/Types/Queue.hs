@@ -9,7 +9,7 @@ import Network.QUIC.Types.UserError
 
 data Input = InpStream StreamID ByteString
            | InpFin StreamID
-           | InpHandshake EncryptionLevel ByteString Offset Token
+           | InpHandshake EncryptionLevel ByteString
            | InpTransportError TransportError FrameType ReasonPhrase
            | InpApplicationError ApplicationError ReasonPhrase
            | InpVersion (Maybe Version)
