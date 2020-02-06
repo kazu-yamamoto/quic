@@ -116,7 +116,12 @@ main = do
                                    GreasingVersion : confVersions defaultConfig
                                  else
                                    confVersions defaultConfig
-              , confParameters = exampleParameters
+              , confParameters = if optQuantum then
+                                   exampleParameters {
+                                       greaseParameter = Just (BS.pack (replicate 1200 0))
+                                     }
+                                 else
+                                   exampleParameters
               , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
               , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384

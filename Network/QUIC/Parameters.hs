@@ -29,6 +29,7 @@ data ParametersKeyId =
   | ParametersDisableMigration
   | ParametersPreferredAddress
   | ParametersActiveConnectionIdLimit
+  | ParametersGrease
   deriving (Eq,Show)
 
 fromParametersKeyId :: ParametersKeyId -> Word16
@@ -47,6 +48,7 @@ fromParametersKeyId ParametersMaxAckDelay             = 11
 fromParametersKeyId ParametersDisableMigration        = 12
 fromParametersKeyId ParametersPreferredAddress        = 13
 fromParametersKeyId ParametersActiveConnectionIdLimit = 14
+fromParametersKeyId ParametersGrease                  = 255
 
 toParametersKeyId :: Word16 -> Maybe ParametersKeyId
 toParametersKeyId  0 = Just ParametersOriginalConnectionId
@@ -64,6 +66,7 @@ toParametersKeyId 11 = Just ParametersMaxAckDelay
 toParametersKeyId 12 = Just ParametersDisableMigration
 toParametersKeyId 13 = Just ParametersPreferredAddress
 toParametersKeyId 14 = Just ParametersActiveConnectionIdLimit
+toParametersKeyId 255 = Just ParametersGrease
 toParametersKeyId _ = Nothing
 
 -- | QUIC transport parameters.
@@ -79,10 +82,11 @@ data Parameters = Parameters {
   , maxStreamsBidi          :: Int
   , maxStreamsUni           :: Int
   , ackDelayExponent        :: Int
-  , maxAckDelay             :: Int -- Milliseconds
+  , maxAckDelay             :: Int -- Millisenconds
   , disableMigration        :: Bool
   , preferredAddress        :: Maybe ByteString -- fixme
   , activeConnectionIdLimit :: Int
+  , greaseParameter         :: Maybe ByteString
   } deriving (Eq,Show)
 
 -- | The default value for QUIC transport parameters.
@@ -103,6 +107,7 @@ defaultParameters = Parameters {
   , disableMigration        = False
   , preferredAddress        = Nothing
   , activeConnectionIdLimit = 0
+  , greaseParameter         = Nothing
   }
 
 decInt :: ByteString -> Int
@@ -144,6 +149,8 @@ updateParameters params kvs = foldl' update params kvs
         = x {preferredAddress = Just v}
     update x (ParametersActiveConnectionIdLimit,v)
         = x {activeConnectionIdLimit = decInt v}
+    update x (ParametersGrease,v)
+        = x {greaseParameter = Just v}
 
 diff :: Eq a => Parameters -> (Parameters -> a) -> ParametersKeyId -> (a -> ParametersValue) -> Maybe (ParametersKeyId,ParametersValue)
 diff params label key enc
@@ -170,6 +177,7 @@ diffParameters p = catMaybes [
   , diff p disableMigration        ParametersDisableMigration        (const "")
   , diff p preferredAddress        ParametersPreferredAddress        fromJust
   , diff p activeConnectionIdLimit ParametersActiveConnectionIdLimit encInt
+  , diff p greaseParameter         ParametersGrease                  fromJust
   ]
 
 encSRT :: Maybe StatelessResetToken -> ByteString
@@ -178,7 +186,7 @@ encSRT _ = error "encSRT"
 
 encodeParametersList :: ParametersList -> ByteString
 encodeParametersList kvs = unsafeDupablePerformIO $
-    withWriteBuffer 1024 $ \wbuf -> do
+    withWriteBuffer 2048 $ \wbuf -> do -- for grease
         write16 wbuf $ fromIntegral $ calc kvs
         mapM_ (put wbuf) kvs
   where
