@@ -29,8 +29,10 @@ processCryptPacket conn (CryptPacket header crypt) = do
     mplain <- decryptCrypt conn crypt level
     case mplain of
       Just (Plain _ pn fs) -> do
-          rets <- mapM (processFrame conn level) fs
-          when (and rets) $ addPeerPacketNumbers conn level pn
+          -- For Ping, record PPN first, then send an ACK.
+          -- fixme: need to check Sec 13.1
+          addPeerPacketNumbers conn level pn
+          mapM_ (processFrame conn level) fs
       Nothing -> do
           statelessReset <- isStateLessreset conn header crypt
           if statelessReset then do
@@ -41,24 +43,20 @@ processCryptPacket conn (CryptPacket header crypt) = do
               putStrLn $ "Cannot decrypt: " ++ show level
               return () -- fixme: sending statelss reset
 
-processFrame :: Connection -> EncryptionLevel -> Frame -> IO Bool
-processFrame _ _ Padding{} = return True
+processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
+processFrame _ _ Padding{} = return ()
 processFrame conn _ (Ack ackInfo _) = do
     let pns = fromAckInfo ackInfo
     mapM_ (releasePlainPacketRemoveAcks conn) pns
-    return True
 processFrame conn lvl (Crypto off cdat) = do
     case lvl of
       InitialLevel   -> do
           putCrypto conn $ InpHandshake lvl cdat off emptyToken
-          return True
       RTT0Level -> do
           putStrLn $ "processFrame: invalid packet type " ++ show lvl
-          return False
       HandshakeLevel
           | isClient conn -> do
               putCrypto conn $ InpHandshake lvl cdat off emptyToken
-              return True
          | otherwise -> do
               control <- getServerController conn
               res <- control $ PutClientFinished cdat
@@ -76,24 +74,19 @@ processFrame conn lvl (Crypto off cdat) = do
                                | otherwise      = [NewToken token]
                     putOutput conn $ OutControl RTT1Level frames
                 _ -> return ()
-              return True
       RTT1Level
         | isClient conn -> do
               control <- getClientController conn
               -- RecvSessionTicket or ClientHandshakeDone
-              _ <- control $ PutSessionTicket cdat
-              return True
+              void $ control $ PutSessionTicket cdat
         | otherwise -> do
               putStrLn "processFrame: Short:Crypto for server"
-              return False
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     putStrLn "processFrame: NewToken"
-    return True
 processFrame _ _ (NewConnectionID _sn _ _cid _token)  = do
     -- fixme: register stateless token
     putStrLn $ "processFrame: NewConnectionID " ++ show _sn
-    return True
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     putInput conn $ InpTransportError err ftyp reason
     -- to cancel handshake
@@ -101,7 +94,6 @@ processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
-    return False
 processFrame conn _ (ConnectionCloseApp err reason) = do
     putStrLn $ "processFrame: ConnectionCloseApp " ++ show err
     putInput conn $ InpApplicationError err reason
@@ -110,30 +102,24 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
-    return False
 processFrame conn RTT0Level (Stream sid _off dat fin) = do
     -- fixme _off
     when (dat /= "") $ putInput conn $ InpStream sid dat
     when fin         $ putInput conn $ InpFin sid
-    return True
 processFrame conn RTT1Level (Stream sid _off dat fin) = do
     -- fixme _off
     when (dat /= "") $ putInput conn $ InpStream sid dat
     when fin         $ putInput conn $ InpFin sid
-    return True
 processFrame conn lvl Ping = do
     putOutput conn $ OutControl lvl []
-    return True
 processFrame conn _ HandshakeDone = do
     control <- getClientController conn
     void $ forkIO $ do
         threadDelay 2000000
         ClientHandshakeDone <- control ExitClient
         clearClientController conn
-    return True
 processFrame _ _ _frame        = do
     putStrLn $ "processFrame: " ++ show _frame
-    return True
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.
