@@ -26,32 +26,34 @@ getStreamOffset conn sid len = do
 
 putInputStream :: Connection -> StreamID -> Offset -> StreamData -> Fin -> IO ()
 putInputStream conn sid off dat fin = do
-    ok <- isFragmentTop conn sid off dat fin
-    when ok $ do
-        putInput conn $ InpStream sid dat
-        when fin $ putInput conn $ InpFin sid
+    (dats,fin1) <- isFragmentTop conn sid off dat fin
+    mapM_ (\d -> putInput conn $ InpStream sid d) dats
+    when fin1 $ putInput conn $ InpFin sid
 
-isFragmentTop :: Connection -> StreamID -> Offset -> ByteString -> Bool -> IO Bool
+isFragmentTop :: Connection -> StreamID -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
 isFragmentTop conn sid off dat fin = do
     StreamState{..} <- checkStreamTable conn sid
     -- ssrx is modified by only sender
     si0@(StreamInfo off0 fin0) <- readIORef ssrx
     if fin && fin0 then do
         putStrLn "Illegal Fin"
-        return False
+        return ([], False)
       else do
-        let si1 | fin       = si0 { siFin = True }
-                | otherwise = si0
+        let fin1 = fin0 || fin
+            si1 = si0 { siFin = fin1 }
             len = BS.length dat
         if off == off0 then do
-            let si2 = si1 { siOff = off0 + len }
-            writeIORef ssrx si2
-            return True
+            let off1 = off0 + len
+            xs0 <- readIORef ssreass
+            let (dats,xs,off2) = split off1 xs0
+            writeIORef ssrx si1 { siOff = off2 }
+            writeIORef ssreass xs
+            return (dat:dats, fin1)
           else do
             writeIORef ssrx si1
             let x = Reassemble dat off len
             modifyIORef' ssreass (push x)
-            return True
+            return ([], False)
 
 push :: Reassemble -> [Reassemble] -> [Reassemble]
 push x0@(Reassemble _ off0 len0) xs0 = loop xs0
@@ -61,6 +63,14 @@ push x0@(Reassemble _ off0 len0) xs0 = loop xs0
       | off0 <  off = if off0 + len0 <= off then x0 : xxs else xxs -- ignoring
       | off0 == off = xxs -- ignoring
       | otherwise   = if off + len <= off0 then x : loop xs else xxs -- ignoring
+
+split :: Offset -> [Reassemble] -> ([StreamData],[Reassemble],Offset)
+split off0 xs0 = loop off0 xs0 id
+  where
+    loop off' [] build = (build [], [], off')
+    loop off' xxs@(Reassemble dat off len : xs) build
+      | off' == off = loop (off + len) xs (build . (dat :))
+      | otherwise   = (build [], xxs, off')
 
 checkStreamTable :: Connection -> StreamID -> IO StreamState
 checkStreamTable Connection{..} sid = do
@@ -95,6 +105,5 @@ getCryptoOffset conn lvl len = getStreamOffset conn (toCryptoStreamID lvl) len
 
 putInputCrypto :: Connection -> EncryptionLevel -> Offset -> StreamData -> IO ()
 putInputCrypto conn lvl off cdat = do
-    ok <- isFragmentTop conn (toCryptoStreamID lvl) off cdat False
-    when ok $ do
-        putCrypto conn $ InpHandshake lvl cdat
+    (dats, _) <- isFragmentTop conn (toCryptoStreamID lvl) off cdat False
+    mapM_ (\d -> putCrypto conn $ InpHandshake lvl d) dats
