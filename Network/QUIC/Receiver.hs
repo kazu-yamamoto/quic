@@ -8,6 +8,7 @@ module Network.QUIC.Receiver (
 import Control.Concurrent
 import qualified Control.Exception as E
 import Network.TLS.QUIC
+import System.Timeout
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
@@ -23,7 +24,11 @@ receiver conn = E.handle (handler "receiver") $ forever
 processCryptPacket :: Connection -> CryptPacket -> IO ()
 processCryptPacket conn (CryptPacket header crypt) = do
     let level = packetEncryptionLevel header
-    checkEncryptionLevel conn level
+    -- If RTT1 comes just after Initial, checkEncryptionLevel
+    -- waits forever. To avoid this, timeout used.
+    -- If timeout happens, the packet cannot be decrypted
+    -- and thrown away.
+    _ <- timeout 100000 $ checkEncryptionLevel conn level
     when (isClient conn && level == HandshakeLevel) $
         setPeerCID conn $ headerPeerCID header
     mplain <- decryptCrypt conn crypt level
