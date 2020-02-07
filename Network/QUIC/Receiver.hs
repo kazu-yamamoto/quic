@@ -28,25 +28,28 @@ processCryptPacket conn (CryptPacket header crypt) = do
     -- waits forever. To avoid this, timeout used.
     -- If timeout happens, the packet cannot be decrypted
     -- and thrown away.
-    _ <- timeout 100000 $ checkEncryptionLevel conn level
-    when (isClient conn && level == HandshakeLevel) $
-        setPeerCID conn $ headerPeerCID header
-    mplain <- decryptCrypt conn crypt level
-    case mplain of
-      Just (Plain _ pn fs) -> do
-          -- For Ping, record PPN first, then send an ACK.
-          -- fixme: need to check Sec 13.1
-          addPeerPacketNumbers conn level pn
-          mapM_ (processFrame conn level) fs
-      Nothing -> do
-          statelessReset <- isStateLessreset conn header crypt
-          if statelessReset then do
-              putStrLn "Connection is reset statelessly"
-              setCloseReceived conn
-              clearThreads conn
-            else do
-              putStrLn $ "Cannot decrypt: " ++ show level
-              return () -- fixme: sending statelss reset
+    mt <- timeout 100000 $ checkEncryptionLevel conn level
+    if isNothing mt then
+        putStrLn "Timeout: ignoring a packet"
+      else do
+        when (isClient conn && level == HandshakeLevel) $
+            setPeerCID conn $ headerPeerCID header
+        mplain <- decryptCrypt conn crypt level
+        case mplain of
+          Just (Plain _ pn fs) -> do
+              -- For Ping, record PPN first, then send an ACK.
+              -- fixme: need to check Sec 13.1
+              addPeerPacketNumbers conn level pn
+              mapM_ (processFrame conn level) fs
+          Nothing -> do
+              statelessReset <- isStateLessreset conn header crypt
+              if statelessReset then do
+                  putStrLn "Connection is reset statelessly"
+                  setCloseReceived conn
+                  clearThreads conn
+                else do
+                  putStrLn $ "Cannot decrypt: " ++ show level
+                  return () -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()

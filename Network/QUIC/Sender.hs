@@ -140,7 +140,7 @@ sendOutput conn (OutHndServerNST nst) = do
     bss <- construct conn RTT1Level [frame] True $ Just maximumQUICPacketSize
     connSend conn bss
 sendOutput conn (OutControl lvl frames) = do
-    bss <- construct conn lvl frames False $ Just maximumQUICPacketSize
+    bss <- construct conn lvl frames True $ Just maximumQUICPacketSize
     connSend conn bss
 sendOutput conn (OutStream sid dat fin) = do
     sendStreamFragment conn sid dat fin
