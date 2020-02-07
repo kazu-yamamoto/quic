@@ -42,7 +42,9 @@ isFragmentTop conn sid off dat fin = do
         let fin1 = fin0 || fin
             si1 = si0 { siFin = fin1 }
             len = BS.length dat
-        if off == off0 then do
+        if off < off0 then -- ignoring
+          return ([], False)
+        else if off == off0 then do
             let off1 = off0 + len
             xs0 <- readIORef ssreass
             let (dats,xs,off2) = split off1 xs0
@@ -60,9 +62,11 @@ push x0@(Reassemble _ off0 len0) xs0 = loop xs0
   where
     loop [] = [x0]
     loop xxs@(x@(Reassemble _ off len):xs)
-      | off0 <  off = if off0 + len0 <= off then x0 : xxs else xxs -- ignoring
-      | off0 == off = xxs -- ignoring
-      | otherwise   = if off + len <= off0 then x : loop xs else xxs -- ignoring
+      | off0 <  off && off0 + len0 <= off = x0 : xxs
+      | off0 <  off                       = xxs -- ignoring
+      | off0 == off                       = xxs -- ignoring
+      |                off + len <= off0  = x : loop xs
+      | otherwise                         = xxs -- ignoring
 
 split :: Offset -> [Reassemble] -> ([StreamData],[Reassemble],Offset)
 split off0 xs0 = loop off0 xs0 id
