@@ -115,14 +115,7 @@ processFrame conn RTT0Level (Stream sid off dat fin) = do
 processFrame conn RTT1Level (Stream sid off dat fin) =
     putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
-    -- Pong to Handshake level causes unnecessary retransmission
-    -- if peer Handshakes are recorded. For instance,
-    --    H 2
-    --    H 3, Ping
-    --    H 0
-    --    H 1
-    -- In this case, ACK 2-3 would cause retransmission of 0-1.
-    when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
+    putOutput conn $ OutControl lvl []
 processFrame conn _ HandshakeDone = do
     control <- getClientController conn
     void $ forkIO $ do
