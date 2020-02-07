@@ -66,7 +66,7 @@ sendClientHelloAndRecvServerHello control conn mEarlyData = do
       _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
 
 recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
-recvServerFinishedSendClientFinished control conn = loop (0 :: Int)
+recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
   where
     loop n = do
         (HandshakeLevel, eesf) <- recvCryptoData conn
@@ -74,7 +74,8 @@ recvServerFinishedSendClientFinished control conn = loop (0 :: Int)
         case state of
           ClientNeedsMore -> do
               -- Sending ACKs for three times rule
-              when (odd n) $ sendCryptoData conn $ OutControl HandshakeLevel []
+              when ((n `mod` 3) == 2) $
+                  sendCryptoData conn $ OutControl HandshakeLevel []
               loop (n + 1)
           SendClientFinished cf exts appSecInf -> do
               setApplicationSecretInfo conn appSecInf
