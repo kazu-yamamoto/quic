@@ -61,6 +61,8 @@ module Network.QUIC.Connection (
   , putInputStream
   , getCryptoOffset
   , putInputCrypto
+  , getStreamFin
+  , setStreamFin
   -- * Queue
   , takeInput
   , putInput

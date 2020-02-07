@@ -5,6 +5,8 @@ module Network.QUIC.Connection.StreamTable (
   , putInputStream
   , getCryptoOffset
   , putInputCrypto
+  , getStreamFin
+  , setStreamFin
   ) where
 
 import qualified Data.ByteString as BS
@@ -15,6 +17,19 @@ import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
+
+getStreamFin :: Connection -> StreamID -> IO Fin
+getStreamFin conn sid = do
+    StreamState{..} <- checkStreamTable conn sid
+    -- sstx is modified by only sender
+    StreamInfo _ fin <- readIORef sstx
+    return fin
+
+setStreamFin :: Connection -> StreamID -> IO ()
+setStreamFin conn sid = do
+    StreamState{..} <- checkStreamTable conn sid
+    StreamInfo off _ <- readIORef sstx
+    writeIORef sstx $ StreamInfo off True
 
 getStreamOffset :: Connection -> StreamID -> Int -> IO Offset
 getStreamOffset conn sid len = do
