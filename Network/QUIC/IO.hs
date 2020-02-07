@@ -8,6 +8,13 @@ import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
+-- | Checking if the stream is open.
+isStreamOpen :: Connection -> StreamID -> IO Bool
+isStreamOpen conn sid = do
+    open <- isConnectionOpen conn
+    fin <- getStreamFin conn sid
+    return (open && not fin)
+
 -- | Sending data in stream 0.
 send :: Connection -> ByteString -> IO ()
 send conn dat = sendStream conn 0 False dat
@@ -16,10 +23,13 @@ send conn dat = sendStream conn 0 False dat
 sendStream :: Connection -> StreamID -> Bool -> ByteString -> IO ()
 sendStream conn sid fin dat = do
     open <- isConnectionOpen conn
-    if open then
-        putOutput conn $ OutStream sid dat fin
+    fin0 <- getStreamFin conn sid
+    if not open then
+        E.throwIO ConnectionIsClosed
+      else if fin0 then
+        E.throwIO StreamIsClosed
       else
-        E.throwIO ConnectionIsNotOpen
+        putOutput conn $ OutStream sid dat fin
 
 -- | Sending a 'FIN' in stream 0.
 shutdown :: Connection -> IO ()
@@ -32,7 +42,7 @@ shutdownStream conn sid = do
     if open then do
         putOutput conn $ OutShutdown sid
       else
-        E.throwIO ConnectionIsNotOpen
+        E.throwIO ConnectionIsClosed
 
 -- | Receiving data in stream 0. In the case where a FIN is received or
 --   an error occurs, an empty bytestring is returned.

@@ -10,7 +10,7 @@ data QUICError = VersionIsUnknown Word32
                | TransportErrorOccurs TransportError ReasonPhrase
                | ApplicationErrorOccurs ApplicationError ReasonPhrase
                | ConnectionIsClosed
-               | ConnectionIsNotOpen
+               | StreamIsClosed
                | HandshakeFailed String
                | NoVersionIsSpecified
                | VersionNegotiationFailed

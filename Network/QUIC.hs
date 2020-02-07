@@ -14,6 +14,7 @@ module Network.QUIC (
   , recvStream
   , sendStream
   , shutdownStream
+  , isStreamOpen
   -- * Configrations
   , ClientConfig(..)
   , defaultClientConfig
