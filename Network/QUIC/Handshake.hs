@@ -70,12 +70,11 @@ recvServerFinishedSendClientFinished control conn = loop (0 :: Int)
   where
     loop n = do
         (HandshakeLevel, eesf) <- recvCryptoData conn
-        when (even n) $ sendCryptoData conn $ OutControl HandshakeLevel []
         state <- control $ PutServerFinished eesf
         case state of
           ClientNeedsMore -> do
               -- Sending ACKs for three times rule
-              -- yield
+              when (odd n) $ sendCryptoData conn $ OutControl HandshakeLevel []
               loop (n + 1)
           SendClientFinished cf exts appSecInf -> do
               setApplicationSecretInfo conn appSecInf
@@ -115,7 +114,6 @@ recvClientHello control conn = loop
               setPeerParams conn exts
               return sh0
           ServerNeedsMore -> do
-              -- yield
               -- To prevent CI0' above.
               sendCryptoData conn $ OutControl InitialLevel []
               loop

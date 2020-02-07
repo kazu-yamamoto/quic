@@ -160,7 +160,7 @@ sendCryptoFragment conn bs0 lvl = loop bs0
     loop bs = do
         let (target,rest) = B.splitAt 1024 bs
         frame <- cryptoFrame conn target lvl
-        bss <- construct conn lvl [frame] False $ Just maximumQUICPacketSize
+        bss <- construct conn lvl [frame] True $ Just maximumQUICPacketSize
         connSend conn bss
         loop rest
 
@@ -173,7 +173,7 @@ sendStreamFragment conn sid dat0 fin0 = loop dat0
         off <- getStreamOffset conn sid $ B.length target
         let fin = fin0 && rest == ""
             frame = Stream sid off dat fin
-        bss <- construct conn RTT1Level [frame] False $ Just maximumQUICPacketSize
+        bss <- construct conn RTT1Level [frame] True $ Just maximumQUICPacketSize
         connSend conn bss
         loop rest
 
