@@ -170,5 +170,7 @@ serverH3 conn = putStrLn "Connection terminated" `onE` do
           Just (sid, bs) -> do
               putStr $ "SID: " ++ show sid ++ " "
               print $ BS.unpack bs
-              when ((sid `mod` 4) == 0) $ sendStream conn sid True hdrbdy
+              when ((sid `mod` 4) == 0) $ do
+                  open <- isStreamOpen conn sid
+                  when open $ sendStream conn sid True hdrbdy
               loop hdrbdy
