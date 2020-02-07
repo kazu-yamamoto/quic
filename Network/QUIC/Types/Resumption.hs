@@ -3,6 +3,7 @@
 module Network.QUIC.Types.Resumption where
 
 import Network.TLS
+import Network.TLS.QUIC
 
 import Network.QUIC.Imports
 import Network.QUIC.Types.Frame
@@ -30,7 +31,7 @@ is0RTTPossible ResumptionInfo{..} =
   where
     rtt0OK = case resumptionSession of
       Nothing      -> False
-      Just (_, sd) -> sessionMaxEarlyDataSize sd == 0xffffffff
+      Just (_, sd) -> sessionMaxEarlyDataSize sd == quicMaxEarlyDataSize
 
 -- | Is resumption possible?
 isResumptionPossible :: ResumptionInfo -> Bool
