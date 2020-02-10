@@ -276,17 +276,25 @@ readerServer s q logAction = handleLog logAction' $ forever $ do
   where
     logAction' msg = logAction $ "readerServer: " ++ msg
 
-recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr) -> LogAction
+recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr) -> Connection
            -> IO CryptPacket
-recvServer mysa q sref logAction = do
+recvServer mysa q sref conn = do
     rp <- readServerRecvQ q
     case rp of
       Through pkt -> return pkt
       Migration pkt peersa1 -> do
           (s,peersa) <- readIORef sref
-          when (peersa /= peersa1) $ do
+          if peersa == peersa1 then
+              return pkt
+            else do
               s1 <- udpServerConnectedSocket mysa peersa1
               writeIORef sref (s1,peersa1)
-              void $ forkIO $ readerServer s1 q logAction
+              void $ forkIO $ readerServer s1 q $ connLog conn
               close s
-          return pkt
+              -- path validation:
+              -- decrypting pkt for valication
+              -- changing myCID
+              -- picking up a new peer CID
+              -- generating PathChallenge
+              -- waiting for PathResponse
+              return pkt

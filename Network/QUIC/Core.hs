@@ -132,12 +132,12 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
         send bss = void $ do
             (s,_) <- readIORef sref
             NSB.sendMany s bss
-        recv = recvServer mysa q sref logAction
         setup = do
             conn <- serverConnection conf ver myCID peerCID oCID logAction send cls
             setTokenManager conn $ tokenMgr dispatch
             setRetried conn retried
             tid0 <- forkIO $ sender   conn
+            let recv = recvServer mysa q sref conn
             tid1 <- forkIO $ receiver conn recv
             tid2 <- forkIO $ resender conn
             setThreadIds conn [tid0,tid1,tid2]
