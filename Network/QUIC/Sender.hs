@@ -205,6 +205,6 @@ resender conn = handleIOLog cleanupAction logAction $ forever $ do
     put (ppkt,pns) = putOutput conn $ OutPlainPacket ppkt pns
 
 isRTTxLevel :: (PlainPacket,[PacketNumber]) -> Bool
-isRTTxLevel ((PlainPacket hdr _),_) = lvl == RTT1Level || lvl == RTT0Level
+isRTTxLevel (PlainPacket hdr _,_) = lvl == RTT1Level || lvl == RTT0Level
   where
     lvl = packetEncryptionLevel hdr

@@ -121,7 +121,7 @@ decodeFrame rbuf = do
       0x1b -> decodePathResponse rbuf
       0x1c -> decodeConnectionCloseFrameQUIC rbuf
       0x1d -> decodeConnectionCloseFrameApp rbuf
-      0x1e -> return $ HandshakeDone
+      0x1e -> return HandshakeDone
       x    -> return $ UnknownFrame x
 
 decodePaddingFrames :: ReadBuffer -> IO Frame
