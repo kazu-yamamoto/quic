@@ -28,18 +28,18 @@ construct :: Connection -> EncryptionLevel -> [Frame] -> Bool -> Maybe Int -> IO
 construct conn lvl frames genLowerAck mTargetSize = do
     ver <- getVersion conn
     token <- getToken conn
+    mycid <- getMyCID conn
     peercid <- getPeerCID conn
     if genLowerAck then do
-        bss0 <- constructAckPacket lvl ver peercid token
+        bss0 <- constructAckPacket lvl ver mycid peercid token
         let total = sum (map B.length bss0)
             mTargetSize' = subtract total <$> mTargetSize
-        bss1 <- constructTargetPacket ver peercid mTargetSize' token
+        bss1 <- constructTargetPacket ver mycid peercid mTargetSize' token
         return (bss0 ++ bss1)
       else
-        constructTargetPacket ver peercid mTargetSize token
+        constructTargetPacket ver mycid peercid mTargetSize token
   where
-    mycid = myCID conn
-    constructAckPacket HandshakeLevel ver peercid token = do
+    constructAckPacket HandshakeLevel ver mycid peercid token = do
         ppns <- getPeerPacketNumbers conn InitialLevel
         if nullPeerPacketNumbers ppns then
             return []
@@ -52,7 +52,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
-    constructAckPacket RTT1Level ver peercid _ = do
+    constructAckPacket RTT1Level ver mycid peercid _ = do
         ppns <- getPeerPacketNumbers conn HandshakeLevel
         if nullPeerPacketNumbers ppns then
             return []
@@ -65,8 +65,8 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
             encodePlainPacket conn ppkt Nothing
-    constructAckPacket _ _ _ _ = return []
-    constructTargetPacket ver peercid mlen token = do
+    constructAckPacket _ _ _ _ _ = return []
+    constructTargetPacket ver mycid peercid mlen token = do
         mypn <- getPacketNumber conn
         ppns <- getPeerPacketNumbers conn lvl
         let frames'
@@ -84,8 +84,8 @@ construct conn lvl frames genLowerAck mTargetSize = do
 constructRetransmit :: Connection -> PlainPacket -> [PacketNumber] -> IO [ByteString]
 constructRetransmit conn (PlainPacket hdr0 plain0) pns = do
     ver <- getVersion conn
+    mycid <- getMyCID conn
     peercid <- getPeerCID conn
-    let mycid = myCID conn
     token <- getToken conn
     mypn <- getPacketNumber conn
     let lvl = packetEncryptionLevel hdr0

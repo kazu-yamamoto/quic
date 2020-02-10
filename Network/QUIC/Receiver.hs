@@ -129,12 +129,14 @@ processFrame conn _ _frame        = do
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.
 isStateLessreset :: Connection -> Header -> Crypt -> IO Bool
-isStateLessreset conn header Crypt{..}
-  | myCID conn /= headerMyCID header = do
+isStateLessreset conn header Crypt{..} = do
+    myCID <- getMyCID conn
+    if myCID == headerMyCID header then
+        return False
+      else do
         params <- getPeerParameters conn
         case statelessResetToken params of
           Nothing -> return False
           mtoken  -> do
               let mtoken' = decodeStatelessResetToken cryptPacket
               return (mtoken == mtoken')
-  | otherwise = return False

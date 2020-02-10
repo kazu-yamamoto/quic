@@ -65,11 +65,11 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
 
 checkCIDs :: Connection -> CID -> Either CID (ByteString,ByteString) -> IO Bool
 checkCIDs conn dCID (Left sCID) = do
-    let localCID = myCID conn
+    localCID <- getMyCID conn
     remoteCID <- getPeerCID conn
     return (dCID == localCID && sCID == remoteCID)
 checkCIDs conn dCID (Right (pseudo0,tag)) = do
-    let localCID = myCID conn
+    localCID <- getMyCID conn
     remoteCID <- getPeerCID conn
     let ok = calculateIntegrityTag remoteCID pseudo0 == tag
     return (dCID == localCID && ok)

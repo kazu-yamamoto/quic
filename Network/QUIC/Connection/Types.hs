@@ -124,11 +124,12 @@ defaultServerRoleInfo = ServerInfo {
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role
-  , myCID             :: CID
   , connSend          :: SendMany
   , connRecv          :: Receive
   , connClose         :: IO ()
   , connLog           :: String -> IO ()
+  -- Mine
+  , myCID             :: IORef CID
   , threadIds         :: IORef [Weak ThreadId]
   -- Peer
   , peerCID           :: IORef CID
@@ -156,8 +157,10 @@ data Connection = Connection {
 
 newConnection :: Role -> Version -> CID -> CID -> (String -> IO ()) -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
 newConnection rl ver myCID peerCID logAction send recv cls isecs =
-    Connection rl myCID send recv cls logAction
-        <$> newIORef []
+    Connection rl send recv cls logAction
+        -- Mine
+        <$> newIORef myCID
+        <*> newIORef []
         -- Peer
         <*> newIORef peerCID
         <*> newIORef defaultParameters

@@ -5,7 +5,6 @@ module Network.QUIC.Connection (
   , SendMany
   , Receive
   , isClient
-  , myCID
   -- * Backend
   , connSend
   , connRecv
@@ -40,6 +39,8 @@ module Network.QUIC.Connection (
   -- * Misc
   , setVersion
   , getVersion
+  , setMyCID
+  , getMyCID
   , setPeerCID
   , getPeerCID
   , setThreadIds

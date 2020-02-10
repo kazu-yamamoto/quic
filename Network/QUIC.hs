@@ -72,7 +72,7 @@ data ConnectionInfo = ConnectionInfo {
 -- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
-    let mycid = myCID conn
+    mycid <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
     ApplicationSecretInfo mode mproto _ <- getApplicationSecretInfo conn
