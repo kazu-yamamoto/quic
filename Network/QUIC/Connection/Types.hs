@@ -126,7 +126,6 @@ defaultServerRoleInfo = ServerInfo {
 data Connection = Connection {
     role              :: Role
   , connSend          :: SendMany
-  , connRecv          :: Receive
   , connClose         :: IO ()
   , connLog           :: LogAction
   -- Mine
@@ -156,9 +155,12 @@ data Connection = Connection {
   , connVersion       :: IORef Version
   }
 
-newConnection :: Role -> Version -> CID -> CID -> LogAction -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
-newConnection rl ver myCID peerCID logAction send recv cls isecs =
-    Connection rl send recv cls logAction
+newConnection :: Role -> Version -> CID -> CID
+              -> LogAction -> SendMany -> IO ()
+              -> TrafficSecrets InitialSecret
+              -> IO Connection
+newConnection rl ver myCID peerCID logAction send cls isecs =
+    Connection rl send cls logAction
         -- Mine
         <$> newIORef myCID
         <*> newIORef []
@@ -194,19 +196,19 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-clientConnection :: ClientConfig -> Version -> CID -> CID -> LogAction
-                 -> SendMany -> Receive -> IO () -> IO Connection
-clientConnection ClientConfig{..} ver myCID peerCID logAction send recv cls = do
+clientConnection :: ClientConfig -> Version -> CID -> CID
+                  -> LogAction -> SendMany -> IO () -> IO Connection
+clientConnection ClientConfig{..} ver myCID peerCID logAction send cls = do
     let isecs = initialSecrets ver peerCID
-    newConnection Client ver myCID peerCID logAction send recv cls isecs
+    newConnection Client ver myCID peerCID logAction send cls isecs
 
-serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID -> LogAction
-                 -> SendMany -> Receive -> IO () -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID origCID logAction send recv cls = do
+serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
+                  -> LogAction -> SendMany -> IO () -> IO Connection
+serverConnection ServerConfig{..} ver myCID peerCID origCID logAction send cls = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    newConnection Server ver myCID peerCID logAction send recv cls isecs
+    newConnection Server ver myCID peerCID logAction send cls isecs
 
 ----------------------------------------------------------------
 

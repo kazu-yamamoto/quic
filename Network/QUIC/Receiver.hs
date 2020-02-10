@@ -16,9 +16,9 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Types
 
-receiver :: Connection -> IO ()
-receiver conn = handleLog logAction $ forever
-    (connRecv conn >>= processCryptPacket conn)
+receiver :: Connection -> Receive -> IO ()
+receiver conn recv = handleLog logAction $ forever
+    (recv >>= processCryptPacket conn)
   where
     logAction msg = connLog conn ("receiver: " ++ msg)
 

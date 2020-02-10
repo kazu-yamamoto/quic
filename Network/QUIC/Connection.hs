@@ -8,7 +8,6 @@ module Network.QUIC.Connection (
   , isClient
   -- * Backend
   , connSend
-  , connRecv
   , connClose
   , connLog
   -- * Packet numbers

@@ -2,12 +2,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Client (
-    ClientRecvQ
-  , newClientRecvQ
-  , readerClient
-  , recvClient
+    recvClient
   ) where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
@@ -73,5 +71,9 @@ checkCIDs conn dCID (Right (pseudo0,tag)) = do
     let ok = calculateIntegrityTag remoteCID pseudo0 == tag
     return (dCID == localCID && ok)
 
-recvClient :: ClientRecvQ -> IO CryptPacket
-recvClient = readClientRecvQ
+recvClient :: ClientConfig -> Socket -> Connection -> IO (IO CryptPacket)
+recvClient conf s0 conn = do
+    q <- newClientRecvQ
+    -- killed by "close s0"
+    void $ forkIO $ readerClient conf s0 q conn
+    return $ readClientRecvQ q
