@@ -4,6 +4,7 @@ module Network.QUIC.Connection (
   , serverConnection
   , SendMany
   , Receive
+  , LogAction
   , isClient
   -- * Backend
   , connSend

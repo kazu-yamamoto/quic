@@ -121,20 +121,20 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,peersa0)
-    void $ forkIO $ readerServer s0 q -- dies when s0 is closed.
     let logAction = confLog (scConfig conf) $ originalCID oCID
     logAction $ "My CID: " ++ show myCID ++ "\n"
     logAction $ "Peer CID: " ++ show peerCID ++ "\n"
     logAction $ "Original CID: " ++ show oCID ++ "\n"
     logAction $ "My socket address: " ++ show mysa ++ "\n"
     logAction $ "Peer socket address: " ++ show peersa0 ++ "\n"
+    void $ forkIO $ readerServer s0 q logAction -- dies when s0 is closed.
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
         send bss = void $ do
             (s,_) <- readIORef sref
             NSB.sendMany s bss
-        recv = recvServer mysa q sref
+        recv = recvServer mysa q sref logAction
         setup = do
             conn <- serverConnection conf ver myCID peerCID oCID logAction send recv cls
             setTokenManager conn $ tokenMgr dispatch

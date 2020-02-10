@@ -35,6 +35,7 @@ import qualified System.IO.Error as E
 import Time.System (timeCurrent, timeCurrentP)
 
 import Network.QUIC.Config
+import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
@@ -268,16 +269,16 @@ dispatch _ _ _ _ _ _ _ = return () -- throwing away
 ----------------------------------------------------------------
 
 -- | readerServer dies when the socket is closed.
-readerServer :: Socket -> ServerRecvQ -> IO ()
-readerServer s q = handleLog logAction $ forever $ do
+readerServer :: Socket -> ServerRecvQ -> LogAction -> IO ()
+readerServer s q logAction = handleLog logAction' $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets
     mapM (writeServerRecvQ q . Through) pkts
   where
-    logAction msg = putStrLn ("readerServer: " ++ msg)
+    logAction' msg = logAction $ "readerServer: " ++ msg
 
-recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr)
+recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr) -> LogAction
            -> IO CryptPacket
-recvServer mysa q sref = do
+recvServer mysa q sref logAction = do
     rp <- readServerRecvQ q
     case rp of
       Through pkt -> return pkt
@@ -286,6 +287,6 @@ recvServer mysa q sref = do
           when (peersa /= peersa1) $ do
               s1 <- udpServerConnectedSocket mysa peersa1
               writeIORef sref (s1,peersa1)
-              void $ forkIO $ readerServer s1 q
+              void $ forkIO $ readerServer s1 q logAction
               close s
           return pkt

@@ -87,6 +87,7 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 type SendMany = [ByteString] -> IO ()
 type Receive  = IO CryptPacket
+type LogAction = String -> IO ()
 
 ----------------------------------------------------------------
 
@@ -127,7 +128,7 @@ data Connection = Connection {
   , connSend          :: SendMany
   , connRecv          :: Receive
   , connClose         :: IO ()
-  , connLog           :: String -> IO ()
+  , connLog           :: LogAction
   -- Mine
   , myCID             :: IORef CID
   , threadIds         :: IORef [Weak ThreadId]
@@ -155,7 +156,7 @@ data Connection = Connection {
   , connVersion       :: IORef Version
   }
 
-newConnection :: Role -> Version -> CID -> CID -> (String -> IO ()) -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
+newConnection :: Role -> Version -> CID -> CID -> LogAction -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
 newConnection rl ver myCID peerCID logAction send recv cls isecs =
     Connection rl send recv cls logAction
         -- Mine
@@ -193,13 +194,13 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-clientConnection :: ClientConfig -> Version -> CID -> CID -> (String -> IO ())
+clientConnection :: ClientConfig -> Version -> CID -> CID -> LogAction
                  -> SendMany -> Receive -> IO () -> IO Connection
 clientConnection ClientConfig{..} ver myCID peerCID logAction send recv cls = do
     let isecs = initialSecrets ver peerCID
     newConnection Client ver myCID peerCID logAction send recv cls isecs
 
-serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID -> (String -> IO ())
+serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID -> LogAction
                  -> SendMany -> Receive -> IO () -> IO Connection
 serverConnection ServerConfig{..} ver myCID peerCID origCID logAction send recv cls = do
     let isecs = case origCID of
