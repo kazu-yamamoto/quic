@@ -85,10 +85,6 @@ data Retrans = Retrans {
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
-type SendMany = [ByteString] -> IO ()
-type Receive  = IO CryptPacket
-type LogAction = String -> IO ()
-
 ----------------------------------------------------------------
 
 data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
@@ -126,7 +122,7 @@ defaultServerRoleInfo = ServerInfo {
 data Connection = Connection {
     role              :: Role
   , connSend          :: SendMany
-  , connClose         :: IO ()
+  , connClose         :: Close
   , connLog           :: LogAction
   -- Mine
   , myCID             :: IORef CID
@@ -156,7 +152,7 @@ data Connection = Connection {
   }
 
 newConnection :: Role -> Version -> CID -> CID
-              -> LogAction -> SendMany -> IO ()
+              -> LogAction -> SendMany -> Close
               -> TrafficSecrets InitialSecret
               -> IO Connection
 newConnection rl ver myCID peerCID logAction send cls isecs =
@@ -197,13 +193,13 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> Version -> CID -> CID
-                  -> LogAction -> SendMany -> IO () -> IO Connection
+                  -> LogAction -> SendMany -> Close -> IO Connection
 clientConnection ClientConfig{..} ver myCID peerCID logAction send cls = do
     let isecs = initialSecrets ver peerCID
     newConnection Client ver myCID peerCID logAction send cls isecs
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
-                  -> LogAction -> SendMany -> IO () -> IO Connection
+                  -> LogAction -> SendMany -> Close -> IO Connection
 serverConnection ServerConfig{..} ver myCID peerCID origCID logAction send cls = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID

@@ -1,5 +1,9 @@
 module Network.QUIC.Types (
     Bytes
+  , SendMany
+  , Receive
+  , LogAction
+  , Close
   , module Network.QUIC.Types.Ack
   , module Network.QUIC.Types.CID
   , module Network.QUIC.Types.Error
@@ -21,3 +25,8 @@ import Network.QUIC.Types.Packet
 import Network.QUIC.Types.Queue
 import Network.QUIC.Types.Resumption
 import Network.QUIC.Types.UserError
+
+type SendMany = [ByteString] -> IO ()
+type Receive  = IO CryptPacket
+type LogAction = String -> IO ()
+type Close = IO ()
