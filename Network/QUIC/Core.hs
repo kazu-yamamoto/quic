@@ -52,8 +52,8 @@ connect conf = do
                 Right _    -> E.throwIO VersionNegotiationFailed
   where
     connect' ver = do
-        (conn,recv,cls) <- createClientConnection conf ver
-        handshakeClientConnection conf conn recv `E.onException` cls
+        (conn,send,recv,cls) <- createClientConnection conf ver
+        handshakeClientConnection conf conn send recv `E.onException` cls
         return conn
     check se
       | Just e@(TLS.Error_Protocol _) <- E.fromException se =
@@ -63,7 +63,7 @@ connect conf = do
       | otherwise = Left $ BadThingHappen se
 
 createClientConnection :: ClientConfig -> Version
-                       -> IO (Connection, Receive, IO ())
+                       -> IO (Connection, SendMany, Receive, Close)
 createClientConnection conf@ClientConfig{..} ver = do
     s0 <- udpClientConnectedSocket ccServerName ccPortName
     sref <- newIORef s0
@@ -76,14 +76,14 @@ createClientConnection conf@ClientConfig{..} ver = do
     myCID   <- newCID
     peerCID <- newCID
     let logAction = confLog ccConfig peerCID
-    conn <- clientConnection conf ver myCID peerCID logAction send cls
+    conn <- clientConnection conf ver myCID peerCID logAction cls
     recv <- recvClient conf s0 conn
-    return (conn,recv,cls)
+    return (conn,send,recv,cls)
 
-handshakeClientConnection :: ClientConfig -> Connection -> Receive -> IO ()
-handshakeClientConnection conf@ClientConfig{..} conn recv = do
+handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO ()
+handshakeClientConnection conf@ClientConfig{..} conn send recv = do
     setToken conn $ resumptionToken ccResumption
-    tid0 <- forkIO $ sender   conn
+    tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
@@ -129,14 +129,14 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
-        send bss = void $ do
-            (s,_) <- readIORef sref
-            NSB.sendMany s bss
         setup = do
-            conn <- serverConnection conf ver myCID peerCID oCID logAction send cls
+            conn <- serverConnection conf ver myCID peerCID oCID logAction cls
             setTokenManager conn $ tokenMgr dispatch
             setRetried conn retried
-            tid0 <- forkIO $ sender   conn
+            let send bss = void $ do
+                    (s,_) <- readIORef sref
+                    NSB.sendMany s bss
+            tid0 <- forkIO $ sender conn send
             let recv = recvServer mysa q sref conn
             tid1 <- forkIO $ receiver conn recv
             tid2 <- forkIO $ resender conn

@@ -121,7 +121,6 @@ defaultServerRoleInfo = ServerInfo {
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role
-  , connSend          :: SendMany
   , connClose         :: Close
   , connLog           :: LogAction
   -- Mine
@@ -152,11 +151,11 @@ data Connection = Connection {
   }
 
 newConnection :: Role -> Version -> CID -> CID
-              -> LogAction -> SendMany -> Close
+              -> LogAction -> Close
               -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myCID peerCID logAction send cls isecs =
-    Connection rl send cls logAction
+newConnection rl ver myCID peerCID logAction cls isecs =
+    Connection rl cls logAction
         -- Mine
         <$> newIORef myCID
         <*> newIORef []
@@ -193,18 +192,18 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> Version -> CID -> CID
-                  -> LogAction -> SendMany -> Close -> IO Connection
-clientConnection ClientConfig{..} ver myCID peerCID logAction send cls = do
+                  -> LogAction -> Close -> IO Connection
+clientConnection ClientConfig{..} ver myCID peerCID logAction cls = do
     let isecs = initialSecrets ver peerCID
-    newConnection Client ver myCID peerCID logAction send cls isecs
+    newConnection Client ver myCID peerCID logAction cls isecs
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
-                  -> LogAction -> SendMany -> Close -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID origCID logAction send cls = do
+                  -> LogAction -> Close -> IO Connection
+serverConnection ServerConfig{..} ver myCID peerCID origCID logAction cls = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    newConnection Server ver myCID peerCID logAction send cls isecs
+    newConnection Server ver myCID peerCID logAction cls isecs
 
 ----------------------------------------------------------------
 

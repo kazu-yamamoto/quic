@@ -20,17 +20,16 @@ spec = do
             let noLog _ = return ()
             let serverCID = makeCID $ dec16s "8394c8f03e515708"
                 clientCID = makeCID ""
-                tx _ = return ()
                 -- dummy
                 cls = return ()
             let clientConf = defaultClientConfig
                 ver = head $ confVersions $ ccConfig clientConf
-            clientConn <- clientConnection clientConf ver clientCID serverCID noLog tx cls
+            clientConn <- clientConnection clientConf ver clientCID serverCID noLog cls
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
                   }
-            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) noLog tx cls
+            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) noLog cls
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain

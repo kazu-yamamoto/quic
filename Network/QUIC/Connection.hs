@@ -4,7 +4,6 @@ module Network.QUIC.Connection (
   , serverConnection
   , isClient
   -- * Backend
-  , connSend
   , connClose
   , connLog
   -- * Packet numbers
