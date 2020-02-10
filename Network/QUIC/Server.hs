@@ -126,7 +126,7 @@ accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
-data RecvCryptPacket = Through CryptPacket | NATRebinding CryptPacket SockAddr
+data RecvCryptPacket = Through CryptPacket | Migration CryptPacket SockAddr
 
 newtype ServerRecvQ = ServerRecvQ (TQueue RecvCryptPacket)
 
@@ -258,12 +258,10 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa _ 
     mq <- lookupDstTable dstTable dCID
     case mq of
       Nothing -> do
-          putStrLn "No routing"
-          print dCID
-          print peersa
+          putStrLn $ "CID no match: " ++ show dCID ++ ", " ++ show peersa
       Just q  -> do
-          putStrLn $ "NAT rebiding to " ++ show peersa
-          writeServerRecvQ q $ NATRebinding cpkt peersa
+          putStrLn $ "Migrating to " ++ show peersa
+          writeServerRecvQ q $ Migration cpkt peersa
 dispatch _ _ (PacketIB _)  _ _ _ _ = print BrokenPacket
 dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
@@ -273,7 +271,7 @@ dispatch _ _ _ _ _ _ _ = return () -- throwing away
 readerServer :: Socket -> ServerRecvQ -> IO ()
 readerServer s q = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets
-    mapM (\pkt -> writeServerRecvQ q (Through pkt)) pkts
+    mapM (writeServerRecvQ q . Through) pkts
   where
     logAction msg = putStrLn ("readerServer: " ++ msg)
 
@@ -283,7 +281,7 @@ recvServer mysa q sref = do
     rp <- readServerRecvQ q
     case rp of
       Through pkt -> return pkt
-      NATRebinding pkt peersa1 -> do
+      Migration pkt peersa1 -> do
           (s,peersa) <- readIORef sref
           when (peersa /= peersa1) $ do
               s1 <- udpServerConnectedSocket mysa peersa1
