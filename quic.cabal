@@ -42,6 +42,7 @@ library
                        Network.QUIC.Utils
   other-modules:
                        Network.QUIC.Connection.Crypto
+                       Network.QUIC.Connection.Migration
                        Network.QUIC.Connection.Misc
                        Network.QUIC.Connection.PacketNumber
                        Network.QUIC.Connection.Queue
@@ -97,6 +98,7 @@ test-suite spec
                       , base16-bytestring
                       , bytestring
                       , hspec
+                      , network
                       , quic
                       , tls
 

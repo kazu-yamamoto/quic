@@ -1,5 +1,7 @@
 module Network.QUIC.Types.Queue where
 
+import Control.Concurrent.STM
+
 import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
 import Network.QUIC.Types.Error
@@ -26,3 +28,14 @@ data Output = OutStream StreamID ByteString Bool
             | OutHndServerNST ByteString
             | OutPlainPacket PlainPacket [PacketNumber]
             deriving Show
+
+newtype RecvQ = RecvQ (TQueue CryptPacket)
+
+newRecvQ :: IO RecvQ
+newRecvQ = RecvQ <$> newTQueueIO
+
+readRecvQ :: RecvQ -> IO CryptPacket
+readRecvQ (RecvQ q) = atomically $ readTQueue q
+
+writeRecvQ :: RecvQ -> CryptPacket -> IO ()
+writeRecvQ (RecvQ q) x = atomically $ writeTQueue q x

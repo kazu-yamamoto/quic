@@ -2,11 +2,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Client (
-    recvClient
+    readerClient
+  , recvClient
   ) where
 
-import Control.Concurrent
-import Control.Concurrent.STM
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
 
@@ -18,19 +17,8 @@ import Network.QUIC.Packet
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
-newtype ClientRecvQ = ClientRecvQ (TQueue CryptPacket)
-
-newClientRecvQ :: IO ClientRecvQ
-newClientRecvQ = ClientRecvQ <$> newTQueueIO
-
-readClientRecvQ :: ClientRecvQ -> IO CryptPacket
-readClientRecvQ (ClientRecvQ q) = atomically $ readTQueue q
-
-writeClientRecvQ :: ClientRecvQ -> CryptPacket -> IO ()
-writeClientRecvQ (ClientRecvQ q) x = atomically $ writeTQueue q x
-
--- readerClient dies when the socket is closed.
-readerClient :: ClientConfig -> Socket -> ClientRecvQ -> Connection -> IO ()
+-- | readerClient dies when the socket is closed.
+readerClient :: ClientConfig -> Socket -> RecvQ -> Connection -> IO ()
 readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
@@ -45,7 +33,7 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
                       ok <- checkCIDs conn dCID (Left sCID)
                       return $ if ok then Just ver else Nothing
         putCrypto conn $ InpVersion mver
-    putQ (PacketIC pkt) = writeClientRecvQ q pkt
+    putQ (PacketIC pkt) = writeRecvQ q pkt
     putQ (PacketIR (RetryPacket ver dCID sCID token ex)) = do
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
@@ -53,7 +41,7 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
         ok <- checkCIDs conn dCID ex
         when ok $ case mppkt of
           Just ppkt -> do
-              setPeerCID conn sCID
+              resetPeerCID conn sCID
               setInitialSecrets conn $ initialSecrets ver sCID
               setToken conn token
               setRetried conn True
@@ -71,9 +59,5 @@ checkCIDs conn dCID (Right (pseudo0,tag)) = do
     let ok = calculateIntegrityTag remoteCID pseudo0 == tag
     return (dCID == localCID && ok)
 
-recvClient :: ClientConfig -> Socket -> Connection -> IO (IO CryptPacket)
-recvClient conf s0 conn = do
-    q <- newClientRecvQ
-    -- killed by "close s0"
-    void $ forkIO $ readerClient conf s0 q conn
-    return $ readClientRecvQ q
+recvClient :: RecvQ -> IO CryptPacket
+recvClient = readRecvQ

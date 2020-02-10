@@ -3,6 +3,7 @@ module Network.QUIC.Connection (
   , clientConnection
   , serverConnection
   , isClient
+  , sockInfo -- fixme
   -- * Backend
   , connClose
   , connLog
@@ -32,13 +33,24 @@ module Network.QUIC.Connection (
   , setEarlySecretInfo
   , setHandshakeSecretInfo
   , setApplicationSecretInfo
+  -- * Migration
+  , getMyCID
+  , getPeerCID
+  , setMyCID
+  , setPeerCID
+  , choosePeerCID
+  , getNewMyCID
+  , addMyCID
+  , addPeerCID
+  , resetPeerCID
+  , setPeerStatelessResetToken
+  , isStatelessRestTokenValid
+  , setChallenges
+  , waitResponse
+  , checkResponse
   -- * Misc
   , setVersion
   , getVersion
-  , setMyCID
-  , getMyCID
-  , setPeerCID
-  , getPeerCID
   , setThreadIds
   , clearThreads
   -- * Transmit
@@ -84,6 +96,7 @@ module Network.QUIC.Connection (
   , setResumptionSession
   , setNewToken
   , setRegister
+  , getRegister
   , getUnregister
   , setTokenManager
   , getTokenManager
@@ -92,6 +105,7 @@ module Network.QUIC.Connection (
   ) where
 
 import Network.QUIC.Connection.Crypto
+import Network.QUIC.Connection.Migration
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Queue

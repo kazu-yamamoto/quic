@@ -4,6 +4,8 @@ module PacketSpec where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import Data.IORef
+import qualified Network.Socket as NS
 import Test.Hspec
 
 import Network.QUIC
@@ -24,12 +26,15 @@ spec = do
                 cls = return ()
             let clientConf = defaultClientConfig
                 ver = head $ confVersions $ ccConfig clientConf
-            clientConn <- clientConnection clientConf ver clientCID serverCID noLog cls
+            s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
+            q <- newRecvQ
+            sref <- newIORef (s,q)
+            clientConn <- clientConnection clientConf ver clientCID serverCID noLog cls sref
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
                   }
-            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) noLog cls
+            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) noLog cls sref
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain

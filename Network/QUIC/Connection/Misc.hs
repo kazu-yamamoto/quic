@@ -3,10 +3,6 @@
 module Network.QUIC.Connection.Misc (
     setVersion
   , getVersion
-  , setMyCID
-  , getMyCID
-  , setPeerCID
-  , getPeerCID
   , setThreadIds
   , clearThreads
   ) where
@@ -21,26 +17,10 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 setVersion :: Connection -> Version -> IO ()
-setVersion Connection{..} ver = writeIORef connVersion ver
+setVersion Connection{..} ver = writeIORef quicVersion ver
 
 getVersion :: Connection -> IO Version
-getVersion Connection{..} = readIORef connVersion
-
-----------------------------------------------------------------
-
-setMyCID :: Connection -> CID -> IO ()
-setMyCID Connection{..} mcid = writeIORef myCID mcid
-
-getMyCID :: Connection -> IO CID
-getMyCID Connection{..} = readIORef myCID
-
-----------------------------------------------------------------
-
-setPeerCID :: Connection -> CID -> IO ()
-setPeerCID Connection{..} pcid = writeIORef peerCID pcid
-
-getPeerCID :: Connection -> IO CID
-getPeerCID Connection{..} = readIORef peerCID
+getVersion Connection{..} = readIORef quicVersion
 
 ----------------------------------------------------------------
 

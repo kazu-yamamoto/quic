@@ -12,7 +12,7 @@ module Network.QUIC.Server (
   , accept
   , Accept(..)
   -- * Receiving and reading
-  , ServerRecvQ
+  , RecvQ
   , recvServer
   , readerServer
   ) where
@@ -33,6 +33,7 @@ import Network.Socket hiding (accept)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import Time.System (timeCurrent, timeCurrentP)
+import System.Timeout
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -63,19 +64,24 @@ clearDispatch d = CT.killTokenManager $ tokenMgr d
 
 ----------------------------------------------------------------
 
-newtype DstTable = DstTable (Map CID ServerRecvQ)
+data Entry = Entry Connection (IORef (Maybe MigrationQ))
+
+newtype DstTable = DstTable (Map CID Entry)
 
 emptyDstTable :: DstTable
 emptyDstTable = DstTable M.empty
 
-lookupDstTable :: IORef DstTable -> CID -> IO (Maybe ServerRecvQ)
+lookupDstTable :: IORef DstTable -> CID -> IO (Maybe Entry)
 lookupDstTable ref cid = do
     DstTable tbl <- readIORef ref
     return $ M.lookup cid tbl
 
-registerDstTable :: IORef DstTable -> ServerRecvQ -> CID -> IO ()
-registerDstTable ref q cid = atomicModifyIORef' ref $ \(DstTable tbl) ->
-  (DstTable $ M.insert cid q tbl, ())
+registerDstTable :: IORef DstTable -> CID -> Connection -> IO ()
+registerDstTable ref cid conn = do
+    mq <- newIORef Nothing :: IO (IORef (Maybe MigrationQ))
+    let ent = Entry conn mq
+    atomicModifyIORef' ref $ \(DstTable tbl) ->
+        (DstTable $ M.insert cid ent tbl, ())
 
 unregisterDstTable :: IORef DstTable -> CID -> IO ()
 unregisterDstTable ref cid = atomicModifyIORef' ref $ \(DstTable tbl) ->
@@ -83,7 +89,7 @@ unregisterDstTable ref cid = atomicModifyIORef' ref $ \(DstTable tbl) ->
 
 ----------------------------------------------------------------
 
-newtype SrcTable = SrcTable (OrdPSQ CID ElapsedP ServerRecvQ)
+newtype SrcTable = SrcTable (OrdPSQ CID ElapsedP RecvQ)
 
 srcTableSize :: Int
 srcTableSize = 100
@@ -91,14 +97,14 @@ srcTableSize = 100
 emptySrcTable :: SrcTable
 emptySrcTable = SrcTable PSQ.empty
 
-lookupSrcTable :: IORef SrcTable -> CID -> IO (Maybe ServerRecvQ)
+lookupSrcTable :: IORef SrcTable -> CID -> IO (Maybe RecvQ)
 lookupSrcTable ref dcid = do
     SrcTable qt <- readIORef ref
     return $ case PSQ.lookup dcid qt of
       Nothing     -> Nothing
       Just (_,q)  -> Just q
 
-insertSrcTable :: IORef SrcTable -> CID -> ServerRecvQ -> IO ()
+insertSrcTable :: IORef SrcTable -> CID -> RecvQ -> IO ()
 insertSrcTable ref dcid q = do
     SrcTable qt0 <- readIORef ref
     let qt1 | PSQ.size qt0 <= srcTableSize = qt0
@@ -109,7 +115,7 @@ insertSrcTable ref dcid q = do
 
 ----------------------------------------------------------------
 
-data Accept = Accept Version CID CID OrigCID SockAddr SockAddr ServerRecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
+data Accept = Accept Version CID CID OrigCID SockAddr SockAddr RecvQ (CID -> Connection -> IO ()) (CID -> IO ()) Bool -- retried
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
 
@@ -127,18 +133,16 @@ accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
-data RecvCryptPacket = Through CryptPacket | Migration CryptPacket SockAddr
+newtype MigrationQ = MigrationQ (TQueue CryptPacket)
 
-newtype ServerRecvQ = ServerRecvQ (TQueue RecvCryptPacket)
+newMigrationQ :: IO MigrationQ
+newMigrationQ = MigrationQ <$> newTQueueIO
 
-newServerRecvQ :: IO ServerRecvQ
-newServerRecvQ = ServerRecvQ <$> newTQueueIO
+readMigrationQ :: MigrationQ -> IO CryptPacket
+readMigrationQ (MigrationQ q) = atomically $ readTQueue q
 
-readServerRecvQ :: ServerRecvQ -> IO RecvCryptPacket
-readServerRecvQ (ServerRecvQ q) = atomically $ readTQueue q
-
-writeServerRecvQ :: ServerRecvQ -> RecvCryptPacket -> IO ()
-writeServerRecvQ (ServerRecvQ q) x = atomically $ writeTQueue q x
+writeMigrationQ :: MigrationQ -> CryptPacket -> IO ()
+writeMigrationQ (MigrationQ q) x = atomically $ writeTQueue q x
 
 ----------------------------------------------------------------
 
@@ -202,7 +206,7 @@ dispatch Dispatch{..} ServerConfig{..}
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst
-          Just q -> writeServerRecvQ q $ Through cpkt -- resend packets
+          _                  -> putStrLn "dispatch: Just (1)"
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -214,26 +218,26 @@ dispatch Dispatch{..} ServerConfig{..}
                   mq <- lookupDstTable dstTable dCID
                   case mq of
                     Nothing -> pushToAcceptFirst
-                    Just q -> writeServerRecvQ q $ Through cpkt -- resend packets
+                    _       -> putStrLn "dispatch: Just (2)"
           _ -> sendRetry
   where
     pushToAcceptQ d s o wrap retried = do
         mq <- lookupSrcTable srcTable o
         case mq of
-          Just q -> writeServerRecvQ q $ Through cpkt
+          Just q -> writeRecvQ q cpkt
           Nothing -> do
-              q <- newServerRecvQ
+              q <- newRecvQ
               insertSrcTable srcTable o q
-              writeServerRecvQ q (Through cpkt)
+              writeRecvQ q cpkt
               let oc = wrap o
-                  reg = registerDstTable dstTable q
+                  reg = registerDstTable dstTable
                   unreg = unregisterDstTable dstTable
                   ent = Accept ver d s oc mysa peersa q reg unreg retried
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
                   (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
-                  writeServerRecvQ q $ Through cpktRTT0
+                  writeRecvQ q cpktRTT0
     pushToAcceptFirst = do
         newdCID <- newCID
         pushToAcceptQ newdCID sCID dCID OCFirst False
@@ -254,47 +258,61 @@ dispatch Dispatch{..} ServerConfig{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa _ _ = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) crypt)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.
-    mq <- lookupDstTable dstTable dCID
-    case mq of
+    mx <- lookupDstTable dstTable dCID
+    case mx of
       Nothing -> do
           putStrLn $ "CID no match: " ++ show dCID ++ ", " ++ show peersa
-      Just q  -> do
-          putStrLn $ "Migrating to " ++ show peersa
-          writeServerRecvQ q $ Migration cpkt peersa
+      Just (Entry conn ref)  -> do
+          mplain <- decryptCrypt conn crypt RTT1Level
+          case mplain of
+            Nothing -> return ()
+            Just _ -> do
+                mmq <- readIORef ref
+                case mmq of
+                  Just mq -> writeMigrationQ mq cpkt
+                  Nothing -> do
+                      mpeercid <- choosePeerCID conn
+                      case (mplain, mpeercid) of
+                        (Just _, Just peercid) -> do
+                            connLog conn $ "Migrating to " ++ show peersa
+                            mq <- newMigrationQ
+                            writeIORef ref $ Just mq
+                            void $ forkIO $ migrator conn peersa mq dCID peercid
+                            writeMigrationQ mq cpkt
+                        _ -> return ()
 dispatch _ _ (PacketIB _)  _ _ _ _ = print BrokenPacket
 dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
 ----------------------------------------------------------------
 
 -- | readerServer dies when the socket is closed.
-readerServer :: Socket -> ServerRecvQ -> LogAction -> IO ()
+readerServer :: Socket -> RecvQ -> LogAction -> IO ()
 readerServer s q logAction = handleLog logAction' $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets
-    mapM (writeServerRecvQ q . Through) pkts
+    mapM (writeRecvQ q) pkts
   where
     logAction' msg = logAction $ "readerServer: " ++ msg
 
-recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr) -> Connection
-           -> IO CryptPacket
-recvServer mysa q sref conn = do
-    rp <- readServerRecvQ q
-    case rp of
-      Through pkt -> return pkt
-      Migration pkt peersa1 -> do
-          (s,peersa) <- readIORef sref
-          if peersa == peersa1 then
-              return pkt
-            else do
-              s1 <- udpServerConnectedSocket mysa peersa1
-              writeIORef sref (s1,peersa1)
-              void $ forkIO $ readerServer s1 q $ connLog conn
-              close s
-              -- path validation:
-              -- decrypting pkt for valication
-              -- changing myCID
-              -- picking up a new peer CID
-              -- generating PathChallenge
-              -- waiting for PathResponse
-              return pkt
+recvServer :: RecvQ -> IO CryptPacket
+recvServer q = readRecvQ q
+
+----------------------------------------------------------------
+
+migrator :: Connection -> SockAddr -> MigrationQ -> CID -> CID -> IO ()
+migrator conn peersa1 mq dcid peercid = do
+    (s0,q) <- readIORef $ sockInfo conn
+    mysa <- getSocketName s0
+    s1 <- udpServerConnectedSocket mysa peersa1
+    writeIORef (sockInfo conn) (s1,q)
+    void $ forkIO $ readerServer s1 q $ connLog conn
+    setMyCID conn dcid
+    -- fixme: send retire cid
+    _fixme <- setPeerCID conn peercid
+    pdat <- newPathData
+    setChallenges conn [pdat]
+    putOutput conn $ OutControl RTT1Level [PathChallenge pdat]
+    waitResponse conn
+    _ <- timeout 2000000 $ forever (readMigrationQ mq >>= writeRecvQ q)
+    close s0

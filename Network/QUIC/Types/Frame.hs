@@ -28,7 +28,7 @@ data Frame = Padding Int
            | StreamDataBlocked -- fixme
            | StreamsBlocked -- fixme
            | NewConnectionID Int Int CID StatelessResetToken
-           | RetireConnectionID -- fixme
+           | RetireConnectionID Int
            | PathChallenge PathData
            | PathResponse PathData
            | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
@@ -45,10 +45,6 @@ type Fin = Bool
 
 type CryptoData = ByteString
 type StreamData = ByteString
-
-type PathData = Bytes -- 8 bytes
--- 16 bytes
-newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq,Show)
 
 type Token = ByteString -- to be decrypted
 emptyToken :: Token

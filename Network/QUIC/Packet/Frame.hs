@@ -62,10 +62,13 @@ encodeFrame wbuf (NewConnectionID seqNum rpt cID (StatelessResetToken token)) = 
     write8 wbuf len
     copyShortByteString wbuf cid
     copyShortByteString wbuf token
-encodeFrame wbuf (PathChallenge pdata) = do
+encodeFrame wbuf (RetireConnectionID seqNum) = do
+    write8 wbuf 0x19
+    encodeInt' wbuf $ fromIntegral seqNum
+encodeFrame wbuf (PathChallenge (PathData pdata)) = do
     write8 wbuf 0x1a
     copyByteString wbuf $ Short.fromShort pdata
-encodeFrame wbuf (PathResponse pdata) = do
+encodeFrame wbuf (PathResponse (PathData pdata)) = do
     write8 wbuf 0x1b
     copyByteString wbuf $ Short.fromShort pdata
 encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
@@ -117,6 +120,7 @@ decodeFrame rbuf = do
       0x12 -> decodeMaxStreams rbuf Bidi
       0x13 -> decodeMaxStreams rbuf Uni
       0x18 -> decodeNewConnectionID rbuf
+      0x19 -> decodeRetireConnectionID rbuf
       0x1a -> decodePathChallenge rbuf
       0x1b -> decodePathResponse rbuf
       0x1c -> decodeConnectionCloseFrameQUIC rbuf
@@ -227,8 +231,15 @@ decodeNewConnectionID rbuf = do
     token <- StatelessResetToken <$> extractShortByteString rbuf 16
     return $ NewConnectionID seqNum rpt cID token
 
+decodeRetireConnectionID :: ReadBuffer -> IO Frame
+decodeRetireConnectionID rbuf = do
+    seqNum <- fromIntegral <$> decodeInt' rbuf
+    return $ RetireConnectionID seqNum
+
 decodePathChallenge :: ReadBuffer -> IO Frame
-decodePathChallenge rbuf = PathChallenge <$> extractShortByteString rbuf 8
+decodePathChallenge rbuf =
+    PathChallenge . PathData <$> extractShortByteString rbuf 8
 
 decodePathResponse :: ReadBuffer -> IO Frame
-decodePathResponse rbuf = PathResponse <$> extractShortByteString rbuf 8
+decodePathResponse rbuf =
+    PathResponse . PathData <$> extractShortByteString rbuf 8

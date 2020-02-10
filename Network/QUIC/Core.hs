@@ -20,6 +20,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Receiver
 import Network.QUIC.Sender
 import Network.QUIC.Server
@@ -66,18 +67,20 @@ createClientConnection :: ClientConfig -> Version
                        -> IO (Connection, SendMany, Receive, Close)
 createClientConnection conf@ClientConfig{..} ver = do
     s0 <- udpClientConnectedSocket ccServerName ccPortName
-    sref <- newIORef s0
+    q <- newRecvQ
+    sref <- newIORef (s0,q)
     let cls = do
-            s <- readIORef sref
+            (s,_) <- readIORef sref
             NS.close s
         send bss = do
-            s <- readIORef sref
+            (s,_) <- readIORef sref
             void $ NSB.sendMany s bss
     myCID   <- newCID
     peerCID <- newCID
     let logAction = confLog ccConfig peerCID
-    conn <- clientConnection conf ver myCID peerCID logAction cls
-    recv <- recvClient conf s0 conn
+    conn <- clientConnection conf ver myCID peerCID logAction cls sref
+    void $ forkIO $ readerClient conf s0 q conn -- dies when s0 is closed.
+    let recv = recvClient q
     return (conn,send,recv,cls)
 
 handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO ()
@@ -88,6 +91,10 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv = do
     tid2 <- forkIO $ resender conn
     setThreadIds conn [tid0,tid1,tid2]
     handshakeClient conf conn `E.onException` clearThreads conn
+    params <- getPeerParameters conn
+    case statelessResetToken params of
+      Nothing  -> return ()
+      Just srt -> setPeerStatelessResetToken conn srt
     setConnectionOpen conn
 
 ----------------------------------------------------------------
@@ -118,7 +125,7 @@ createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId -> IO C
 createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
-    sref <- newIORef (s0,peersa0)
+    sref <- newIORef (s0,q)
     let logAction = confLog (scConfig conf) $ originalCID oCID
     logAction $ "My CID: " ++ show myCID ++ "\n"
     logAction $ "Peer CID: " ++ show peerCID ++ "\n"
@@ -130,21 +137,21 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             (s,_) <- readIORef sref
             NS.close s
         setup = do
-            conn <- serverConnection conf ver myCID peerCID oCID logAction cls
+            conn <- serverConnection conf ver myCID peerCID oCID logAction cls sref
             setTokenManager conn $ tokenMgr dispatch
             setRetried conn retried
             let send bss = void $ do
                     (s,_) <- readIORef sref
                     NSB.sendMany s bss
             tid0 <- forkIO $ sender conn send
-            let recv = recvServer mysa q sref conn
+            let recv = recvServer q
             tid1 <- forkIO $ receiver conn recv
             tid2 <- forkIO $ resender conn
             setThreadIds conn [tid0,tid1,tid2]
             setMainThreadId conn mainThreadId
             handshakeServer conf oCID conn `E.onException` clearThreads conn
             setRegister conn register unregister
-            register myCID
+            register myCID conn
             setConnectionOpen conn
             return conn
     setup `E.onException` cls

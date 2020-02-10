@@ -15,6 +15,7 @@ module Network.QUIC.Connection.Role (
   , setResumptionSession
   , setNewToken
   , setRegister
+  , getRegister
   , getUnregister
   , setTokenManager
   , getTokenManager
@@ -100,11 +101,14 @@ setNewToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci {
 
 ----------------------------------------------------------------
 
-setRegister :: Connection -> (CID -> IO ()) -> (CID -> IO ()) -> IO ()
+setRegister :: Connection -> (CID -> Connection -> IO ()) -> (CID -> IO ()) -> IO ()
 setRegister Connection{..} regisrer unregister = modifyIORef' roleInfo $ \si -> si {
     registerCID = regisrer
   , unregisterCID = unregister
   }
+
+getRegister :: Connection -> IO (CID -> Connection -> IO ())
+getRegister Connection{..} = registerCID <$> readIORef roleInfo
 
 getUnregister :: Connection -> IO (CID -> IO ())
 getUnregister Connection{..} = unregisterCID <$> readIORef roleInfo

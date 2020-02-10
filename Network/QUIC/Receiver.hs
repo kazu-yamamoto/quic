@@ -13,7 +13,6 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
-import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
@@ -34,7 +33,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
         connLog conn "Timeout: ignoring a packet"
       else do
         when (isClient conn && level == HandshakeLevel) $
-            setPeerCID conn $ headerPeerCID header
+            resetPeerCID conn $ headerPeerCID header
         mplain <- decryptCrypt conn crypt level
         case mplain of
           Just (Plain _ pn fs) -> do
@@ -43,7 +42,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
               addPeerPacketNumbers conn level pn
               mapM_ (processFrame conn level) fs
           Nothing -> do
-              statelessReset <- isStateLessreset conn header crypt
+              statelessReset <- isStateessReset conn header crypt
               if statelessReset then do
                   connLog conn "Connection is reset statelessly"
                   setCloseReceived conn
@@ -79,8 +78,12 @@ processFrame conn lvl (Crypto off cdat) = do
                     mgr <- getTokenManager conn
                     token <- encryptToken mgr cryptoToken
                     ver <- getVersion conn
-                    let frames | ver >= Draft25 = [HandshakeDone,NewToken token]
-                               | otherwise      = [NewToken token]
+                    (sn,mycid,srt) <- getNewMyCID conn
+                    register <- getRegister conn
+                    register mycid conn
+                    let ncid = NewConnectionID sn 0 mycid srt
+                    let frames | ver >= Draft25 = [HandshakeDone,NewToken token,ncid]
+                               | otherwise      = [NewToken token,ncid]
                     putOutput conn $ OutControl RTT1Level frames
                 _ -> return ()
       RTT1Level
@@ -93,9 +96,13 @@ processFrame conn lvl (Crypto off cdat) = do
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connLog conn "processFrame: NewToken"
-processFrame conn _ (NewConnectionID _sn _ _cid _token)  = do
-    -- fixme: register stateless token
-    connLog conn $ "processFrame: NewConnectionID " ++ show _sn
+processFrame conn _ (NewConnectionID sn _ peercid srt)  = do
+    -- fixme: retire to
+    addPeerCID conn (sn, peercid, srt)
+processFrame conn RTT1Level (PathChallenge dat) =
+    putOutput conn $ OutControl RTT1Level [PathResponse dat]
+processFrame conn RTT1Level (PathResponse dat) =
+    checkResponse conn dat
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     putInput conn $ InpTransportError err ftyp reason
     -- to cancel handshake
@@ -128,15 +135,11 @@ processFrame conn _ _frame        = do
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.
-isStateLessreset :: Connection -> Header -> Crypt -> IO Bool
-isStateLessreset conn header Crypt{..} = do
+isStateessReset :: Connection -> Header -> Crypt -> IO Bool
+isStateessReset conn header Crypt{..} = do
     myCID <- getMyCID conn
     if myCID == headerMyCID header then
         return False
-      else do
-        params <- getPeerParameters conn
-        case statelessResetToken params of
-          Nothing -> return False
-          mtoken  -> do
-              let mtoken' = decodeStatelessResetToken cryptPacket
-              return (mtoken == mtoken')
+      else case decodeStatelessResetToken cryptPacket of
+             Nothing    -> return False
+             Just token -> isStatelessRestTokenValid conn token

@@ -13,6 +13,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Network.Socket (Socket)
 import Network.TLS.QUIC
 import System.Mem.Weak
 
@@ -93,7 +94,7 @@ data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
                            }
               | ServerInfo { connServerCntrl :: ServerController
                            , tokenManager    :: ~CT.TokenManager
-                           , registerCID     :: CID -> IO ()
+                           , registerCID     :: CID -> Connection -> IO ()
                            , unregisterCID   :: CID -> IO ()
                            , askRetry        :: Bool
                            , mainThreadId    :: ~ThreadId
@@ -110,24 +111,50 @@ defaultServerRoleInfo :: RoleInfo
 defaultServerRoleInfo = ServerInfo {
     connServerCntrl = nullServerController
   , tokenManager = undefined
-  , registerCID = \_ -> return ()
+  , registerCID = \_ _ -> return ()
   , unregisterCID = \_ -> return ()
   , askRetry = False
   , mainThreadId = undefined
   }
+
+data CIDDB = CIDDB {
+    currentCID :: CID
+  , nextSeqNum :: Int
+  , ciddb  :: [(Int,CID,StatelessResetToken)]
+  }
+
+newCIDDB :: CID -> CIDDB
+newCIDDB cid = CIDDB {
+    currentCID = cid
+  , nextSeqNum = 1
+  , ciddb = [(0,cid,StatelessResetToken "")]
+  }
+
+----------------------------------------------------------------
+
+data MigrationStatus = SendChallenge [PathData]
+                     | RecvResponse
+                     | NonMigration
+                     deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role
+  , roleInfo          :: IORef RoleInfo
+  , quicVersion       :: IORef Version
+  -- Actions
   , connClose         :: Close
   , connLog           :: LogAction
-  -- Mine
-  , myCID             :: IORef CID
+  -- Manage
   , threadIds         :: IORef [Weak ThreadId]
+  , sockInfo          :: IORef (Socket,RecvQ)
+  -- Mine
+  , myCIDDB           :: IORef CIDDB
+  , migrationStatus   :: TVar MigrationStatus
   -- Peer
-  , peerCID           :: IORef CID
+  , peerCIDDB         :: IORef CIDDB
   , peerParams        :: IORef Parameters
   -- Queues
   , inputQ            :: InputQ
@@ -145,22 +172,28 @@ data Connection = Connection {
   , elySecInfo        :: IORef EarlySecretInfo
   , hndSecInfo        :: IORef HandshakeSecretInfo
   , appSecInfo        :: IORef ApplicationSecretInfo
-  -- Misc
-  , roleInfo          :: IORef RoleInfo
-  , connVersion       :: IORef Version
   }
 
 newConnection :: Role -> Version -> CID -> CID
               -> LogAction -> Close
+              -> IORef (Socket,RecvQ)
               -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myCID peerCID logAction cls isecs =
-    Connection rl cls logAction
-        -- Mine
-        <$> newIORef myCID
+newConnection rl ver myCID peerCID logAction close sref isecs =
+    Connection rl
+        <$> newIORef initialRoleInfo
+        <*> newIORef ver
+        -- Actions
+        <*> return close
+        <*> return logAction
+        -- Manage
         <*> newIORef []
+        <*> return sref
+        -- Mine
+        <*> newIORef (newCIDDB myCID)
+        <*> newTVarIO NonMigration
         -- Peer
-        <*> newIORef peerCID
+        <*> newIORef (newCIDDB peerCID)
         <*> newIORef defaultParameters
         -- Queues
         <*> newTQueueIO
@@ -178,9 +211,6 @@ newConnection rl ver myCID peerCID logAction cls isecs =
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
         <*> newIORef (ApplicationSecretInfo FullHandshake Nothing defaultTrafficSecrets)
-        -- Misc
-        <*> newIORef initialRoleInfo
-        <*> newIORef ver
   where
     initialRoleInfo
       | rl == Client = defaultClientRoleInfo
@@ -192,18 +222,22 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> Version -> CID -> CID
-                  -> LogAction -> Close -> IO Connection
-clientConnection ClientConfig{..} ver myCID peerCID logAction cls = do
+                 -> LogAction -> Close
+                 -> IORef (Socket,RecvQ)
+                 -> IO Connection
+clientConnection ClientConfig{..} ver myCID peerCID logAction cls sref = do
     let isecs = initialSecrets ver peerCID
-    newConnection Client ver myCID peerCID logAction cls isecs
+    newConnection Client ver myCID peerCID logAction cls sref isecs
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
-                  -> LogAction -> Close -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID origCID logAction cls = do
+                 -> LogAction -> Close
+                 -> IORef (Socket,RecvQ)
+                 -> IO Connection
+serverConnection ServerConfig{..} ver myCID peerCID origCID logAction cls sref = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    newConnection Server ver myCID peerCID logAction cls isecs
+    newConnection Server ver myCID peerCID logAction cls sref isecs
 
 ----------------------------------------------------------------
 
