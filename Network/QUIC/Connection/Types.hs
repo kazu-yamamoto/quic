@@ -96,8 +96,8 @@ data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
                            }
               | ServerInfo { connServerCntrl :: ServerController
                            , tokenManager    :: ~CT.TokenManager
-                           , routeRegister   :: CID -> IO ()
-                           , routeUnregister :: CID -> IO ()
+                           , registerCID     :: CID -> IO ()
+                           , unregisterCID   :: CID -> IO ()
                            , askRetry        :: Bool
                            , mainThreadId    :: ~ThreadId
                            }
@@ -113,8 +113,8 @@ defaultServerRoleInfo :: RoleInfo
 defaultServerRoleInfo = ServerInfo {
     connServerCntrl = nullServerController
   , tokenManager = undefined
-  , routeRegister = \_ -> return ()
-  , routeUnregister = \_ -> return ()
+  , registerCID = \_ -> return ()
+  , unregisterCID = \_ -> return ()
   , askRetry = False
   , mainThreadId = undefined
   }

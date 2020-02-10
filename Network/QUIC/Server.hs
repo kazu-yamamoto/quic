@@ -3,20 +3,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Server (
-    ServerRoute(..)
-  , newServerRoute
-  , router
-  , RouteTable
-  , AcceptQ
+    Dispatch
+  , newDispatch
+  , clearDispatch
+  , runDispatcher
+  , tokenMgr
+  -- * Accepting
+  , accept
   , Accept(..)
-  , readAcceptQ
+  -- * Receiving and reading
   , ServerRecvQ
-  , RecvCryptPacket(..)
-  , readServerRecvQ
-  , writeServerRecvQ
   , recvServer
   , readerServer
-  , CT.killTokenManager
   ) where
 
 import Control.Concurrent
@@ -31,7 +29,7 @@ import Data.OrdPSQ (OrdPSQ)
 import qualified Data.OrdPSQ as PSQ
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
-import Network.Socket
+import Network.Socket hiding (accept)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import Time.System (timeCurrent, timeCurrentP)
@@ -46,26 +44,71 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data Accept = Accept Version CID CID OrigCID SockAddr SockAddr ServerRecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
-
-data ServerRoute = ServerRoute {
-    tokenMgr     :: CT.TokenManager
-  , routeTable   :: IORef RouteTable
-  , acceptQueue  :: AcceptQ
-  , quantumTable :: IORef QuantumTable
+data Dispatch = Dispatch {
+    tokenMgr :: CT.TokenManager
+  , dstTable :: IORef DstTable
+  , srcTable :: IORef SrcTable
+  , acceptQ  :: AcceptQ
   }
 
-newServerRoute :: IO ServerRoute
-newServerRoute = ServerRoute <$> CT.spawnTokenManager CT.defaultConfig <*> newIORef emptyRouteTable <*> newAcceptQ <*> newIORef emptyQuantumTable
+newDispatch :: IO Dispatch
+newDispatch = Dispatch <$> CT.spawnTokenManager CT.defaultConfig
+                       <*> newIORef emptyDstTable
+                       <*> newIORef emptySrcTable
+                       <*> newAcceptQ
+
+clearDispatch :: Dispatch -> IO ()
+clearDispatch d = CT.killTokenManager $ tokenMgr d
 
 ----------------------------------------------------------------
 
-type RouteTable = Map CID ServerRecvQ
+newtype DstTable = DstTable (Map CID ServerRecvQ)
 
-emptyRouteTable :: RouteTable
-emptyRouteTable = M.empty
+emptyDstTable :: DstTable
+emptyDstTable = DstTable M.empty
+
+lookupDstTable :: IORef DstTable -> CID -> IO (Maybe ServerRecvQ)
+lookupDstTable ref cid = do
+    DstTable tbl <- readIORef ref
+    return $ M.lookup cid tbl
+
+registerDstTable :: IORef DstTable -> ServerRecvQ -> CID -> IO ()
+registerDstTable ref q cid = atomicModifyIORef' ref $ \(DstTable tbl) ->
+  (DstTable $ M.insert cid q tbl, ())
+
+unregisterDstTable :: IORef DstTable -> CID -> IO ()
+unregisterDstTable ref cid = atomicModifyIORef' ref $ \(DstTable tbl) ->
+  (DstTable $ M.delete cid tbl, ())
 
 ----------------------------------------------------------------
+
+newtype SrcTable = SrcTable (OrdPSQ CID ElapsedP ServerRecvQ)
+
+srcTableSize :: Int
+srcTableSize = 100
+
+emptySrcTable :: SrcTable
+emptySrcTable = SrcTable PSQ.empty
+
+lookupSrcTable :: IORef SrcTable -> CID -> IO (Maybe ServerRecvQ)
+lookupSrcTable ref dcid = do
+    SrcTable qt <- readIORef ref
+    return $ case PSQ.lookup dcid qt of
+      Nothing     -> Nothing
+      Just (_,q)  -> Just q
+
+insertSrcTable :: IORef SrcTable -> CID -> ServerRecvQ -> IO ()
+insertSrcTable ref dcid q = do
+    SrcTable qt0 <- readIORef ref
+    let qt1 | PSQ.size qt0 <= srcTableSize = qt0
+            | otherwise = PSQ.deleteMin qt0
+    p <- timeCurrentP
+    let qt2 = PSQ.insert dcid p q qt1
+    writeIORef ref $ SrcTable qt2
+
+----------------------------------------------------------------
+
+data Accept = Accept Version CID CID OrigCID SockAddr SockAddr ServerRecvQ (CID -> IO ()) (CID -> IO ()) Bool -- retried
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
 
@@ -77,6 +120,9 @@ readAcceptQ (AcceptQ q) = atomically $ readTQueue q
 
 writeAcceptQ :: AcceptQ -> Accept -> IO ()
 writeAcceptQ (AcceptQ q) x = atomically $ writeTQueue q x
+
+accept :: Dispatch -> IO Accept
+accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
@@ -95,38 +141,16 @@ writeServerRecvQ (ServerRecvQ q) x = atomically $ writeTQueue q x
 
 ----------------------------------------------------------------
 
-newtype QuantumTable = QuantumTable (OrdPSQ CID ElapsedP ServerRecvQ)
+runDispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ThreadId
+runDispatcher d conf ssa@(s,_) =
+    forkFinally (dispatcher d conf ssa) (\_ -> close s)
 
-quantumTableSize :: Int
-quantumTableSize = 100
-
-emptyQuantumTable :: QuantumTable
-emptyQuantumTable = QuantumTable PSQ.empty
-
-lookupQuantumTable :: IORef QuantumTable -> CID -> IO (Maybe ServerRecvQ)
-lookupQuantumTable ref dcid = do
-    QuantumTable qt <- readIORef ref
-    return $ case PSQ.lookup dcid qt of
-      Nothing     -> Nothing
-      Just (_,q)  -> Just q
-
-insertQuantumTable :: IORef QuantumTable -> CID -> ServerRecvQ -> IO ()
-insertQuantumTable ref dcid q = do
-    QuantumTable qt0 <- readIORef ref
-    let qt1 | PSQ.size qt0 <= quantumTableSize = qt0
-            | otherwise = PSQ.deleteMin qt0
-    p <- timeCurrentP
-    let qt2 = PSQ.insert dcid p q qt1
-    writeIORef ref $ QuantumTable qt2
-
-----------------------------------------------------------------
-
-router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
-router conf route (s,mysa) = handleLog logAction $ do
+dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
+dispatcher d conf (s,mysa) = handleLog logAction $ do
     let (opt,_cmsgid) = case mysa of
           SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
           SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
-          _               -> error "router"
+          _               -> error "dispatcher"
     setSocketOption s opt 1
     forever $ do
         (peersa, bs0, _cmsgs, _) <- recv
@@ -139,9 +163,9 @@ router conf route (s,mysa) = handleLog logAction $ do
 #endif
         (pkt, bs0RTT) <- decodePacket bs0
         let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
-        dispatch conf route pkt mysa peersa send bs0RTT
+        dispatch d conf pkt mysa peersa send bs0RTT
   where
-    logAction msg = putStrLn ("router: " ++ msg)
+    logAction msg = putStrLn ("dispatcher: " ++ msg)
     recv = do
         ex <- E.try $ NSB.recvMsg s 2048 64 0
         case ex of
@@ -157,15 +181,6 @@ router conf route (s,mysa) = handleLog logAction $ do
 
 ----------------------------------------------------------------
 
-lookupRoute :: IORef RouteTable -> CID -> IO (Maybe ServerRecvQ)
-lookupRoute tbl cid = M.lookup cid <$> readIORef tbl
-
-registerRoute :: IORef RouteTable -> ServerRecvQ -> CID -> IO ()
-registerRoute tbl q cid = atomicModifyIORef' tbl $ \rt' -> (M.insert cid q rt', ())
-
-unregisterRoute :: IORef RouteTable -> CID -> IO ()
-unregisterRoute tbl cid = atomicModifyIORef' tbl $ \rt' -> (M.delete cid rt', ())
-
 -- If client initial is fragmented into multiple packets,
 -- there is no way to put the all packets into a single queue.
 -- Rather, each fragment packet is put into its own queue.
@@ -173,16 +188,16 @@ unregisterRoute tbl cid = atomicModifyIORef' tbl $ \rt' -> (M.delete cid rt', ()
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: ServerConfig -> ServerRoute -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> IO ()
-dispatch ServerConfig{..} ServerRoute{..}
+dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> IO ()
+dispatch Dispatch{..} ServerConfig{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
          mysa peersa send bs0RTT
   | ver `notElem` confVersions scConfig = do
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (confVersions scConfig)
         send bss
   | token == "" = do
-        mroute <- lookupRoute routeTable dCID
-        case mroute of
+        mq <- lookupDstTable dstTable dCID
+        case mq of
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst
@@ -195,26 +210,26 @@ dispatch ServerConfig{..} ServerRoute{..}
                   ok <- isRetryTokenValid ct
                   if ok then pushToAcceptRetried ct else sendRetry
             | otherwise -> do
-                  mroute <- lookupRoute routeTable dCID
-                  case mroute of
+                  mq <- lookupDstTable dstTable dCID
+                  case mq of
                     Nothing -> pushToAcceptFirst
                     Just q -> writeServerRecvQ q $ Through cpkt -- resend packets
           _ -> sendRetry
   where
     pushToAcceptQ d s o wrap retried = do
-        mq <- lookupQuantumTable quantumTable o
+        mq <- lookupSrcTable srcTable o
         case mq of
           Just q -> writeServerRecvQ q $ Through cpkt
           Nothing -> do
               q <- newServerRecvQ
-              insertQuantumTable quantumTable o q
+              insertSrcTable srcTable o q
               writeServerRecvQ q (Through cpkt)
               let oc = wrap o
-                  reg = registerRoute routeTable q
-                  unreg = unregisterRoute routeTable
+                  reg = registerDstTable dstTable q
+                  unreg = unregisterDstTable dstTable
                   ent = Accept ver d s oc mysa peersa q reg unreg retried
               -- fixme: check acceptQ length
-              writeAcceptQ acceptQueue ent
+              writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
                   (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
                   writeServerRecvQ q $ Through cpktRTT0
@@ -238,10 +253,10 @@ dispatch ServerConfig{..} ServerRoute{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
-dispatch _ ServerRoute{..} (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa _ _ = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) _)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.
-    mroute <- lookupRoute routeTable dCID
-    case mroute of
+    mq <- lookupDstTable dstTable dCID
+    case mq of
       Nothing -> do
           putStrLn "No routing"
           print dCID
@@ -254,7 +269,7 @@ dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
 ----------------------------------------------------------------
 
--- readerServer dies when the socket is closed.
+-- | readerServer dies when the socket is closed.
 readerServer :: Socket -> ServerRecvQ -> IO ()
 readerServer s q = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets

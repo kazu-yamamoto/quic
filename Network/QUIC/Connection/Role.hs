@@ -102,12 +102,12 @@ setNewToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci {
 
 setRegister :: Connection -> (CID -> IO ()) -> (CID -> IO ()) -> IO ()
 setRegister Connection{..} regisrer unregister = modifyIORef' roleInfo $ \si -> si {
-    routeRegister = regisrer
-  , routeUnregister = unregister
+    registerCID = regisrer
+  , unregisterCID = unregister
   }
 
 getUnregister :: Connection -> IO (CID -> IO ())
-getUnregister Connection{..} = routeUnregister <$> readIORef roleInfo
+getUnregister Connection{..} = unregisterCID <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 

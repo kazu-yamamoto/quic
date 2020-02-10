@@ -100,29 +100,28 @@ handshakeClientConnection conf@ClientConfig{..} conn = do
 runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
 runQUICServer conf server = handleLog logAction $ do
     mainThreadId <- myThreadId
-    E.bracket setup teardown $ \(route,_) -> forever $ do
-        acc <- readAcceptQ $ acceptQueue route
-        let create = createServerConnection conf route acc mainThreadId
+    E.bracket setup teardown $ \(dispatch,_) -> forever $ do
+        acc <- accept dispatch
+        let create = createServerConnection conf dispatch acc mainThreadId
         void $ forkIO $ E.bracket create close server
   where
     logAction msg = putStrLn ("runQUICServer: " ++ msg)
     setup = do
-        route <- newServerRoute
+        dispatch <- newDispatch
         -- fixme: the case where sockets cannot be created.
         ssas <- mapM  udpServerListenSocket $ scAddresses conf
-        tids <- mapM (runRouter route) ssas
-        return (route, tids)
-    teardown (route, tids) = do
-        killTokenManager $ tokenMgr route
+        tids <- mapM (runDispatcher dispatch conf) ssas
+        return (dispatch, tids)
+    teardown (dispatch, tids) = do
+        clearDispatch dispatch
         mapM_ killThread tids
-    runRouter route ssa@(s,_) = forkFinally (router conf route ssa) (\_ -> NS.close s)
 
-createServerConnection :: ServerConfig -> ServerRoute -> Accept -> ThreadId -> IO Connection
-createServerConnection conf route acc mainThreadId = E.handle tlserr $ do
+createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId -> IO Connection
+createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,peersa0)
-    void $ forkIO $ readerServer s0 q -- killed by "close s0"
+    void $ forkIO $ readerServer s0 q -- dies when s0 is closed.
     let logAction = confLog (scConfig conf) $ originalCID oCID
     logAction $ "My CID: " ++ show myCID ++ "\n"
     logAction $ "Peer CID: " ++ show peerCID ++ "\n"
@@ -138,7 +137,7 @@ createServerConnection conf route acc mainThreadId = E.handle tlserr $ do
         recv = recvServer mysa q sref
         setup = do
             conn <- serverConnection conf ver myCID peerCID oCID logAction send recv cls
-            setTokenManager conn $ tokenMgr route
+            setTokenManager conn $ tokenMgr dispatch
             setRetried conn retried
             tid0 <- forkIO $ sender   conn
             tid1 <- forkIO $ receiver conn
