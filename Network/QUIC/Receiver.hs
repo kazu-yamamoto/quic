@@ -64,9 +64,9 @@ processFrame conn lvl (Crypto off cdat) = do
       RTT0Level -> do
           connLog conn $ "processFrame: invalid packet type " ++ show lvl
       HandshakeLevel
-          | isClient conn -> do
+        | isClient conn -> do
               putInputCrypto conn lvl off cdat
-         | otherwise -> do
+        | otherwise -> do
               control <- getServerController conn
               res <- control $ PutClientFinished cdat
               case res of
