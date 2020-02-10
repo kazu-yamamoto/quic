@@ -123,6 +123,12 @@ createServerConnection conf route acc mainThreadId = E.handle tlserr $ do
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,peersa0)
     void $ forkIO $ readerServer s0 q -- killed by "close s0"
+    let logAction = confLog (scConfig conf) $ originalCID oCID
+    logAction $ "My CID: " ++ show myCID ++ "\n"
+    logAction $ "Peer CID: " ++ show peerCID ++ "\n"
+    logAction $ "Original CID: " ++ show oCID ++ "\n"
+    logAction $ "My socket address: " ++ show mysa ++ "\n"
+    logAction $ "Peer socket address: " ++ show peersa0 ++ "\n"
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
@@ -131,7 +137,6 @@ createServerConnection conf route acc mainThreadId = E.handle tlserr $ do
             NSB.sendMany s bss
         recv = recvServer mysa q sref
         setup = do
-            let logAction = confLog (scConfig conf) $ originalCID oCID
             conn <- serverConnection conf ver myCID peerCID oCID logAction send recv cls
             setTokenManager conn $ tokenMgr route
             setRetried conn retried
