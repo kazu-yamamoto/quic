@@ -103,8 +103,10 @@ constructRetransmit conn (PlainPacket hdr0 plain0) pns = do
 ----------------------------------------------------------------
 
 sender :: Connection -> IO ()
-sender conn = handle (handlerIO "sender" conn) $ forever
+sender conn = handleLog logAction $ forever
     (takeOutput conn >>= sendOutput conn)
+  where
+    logAction msg = connLog conn ("sender: " ++ msg)
 
 sendOutput :: Connection -> Output -> IO ()
 sendOutput conn (OutHndClientHello ch mEarlyData) = do
@@ -168,7 +170,7 @@ sendStreamFragment :: Connection -> StreamID -> ByteString -> Bool -> IO ()
 sendStreamFragment conn sid dat0 fin0 = do
     closed <- getStreamFin conn sid
     if closed then
-        putStrLn $ "Stream " ++ show sid ++ " is already closed."
+        connLog conn $ "Stream " ++ show sid ++ " is already closed."
       else do
         loop dat0
         when fin0 $ setStreamFin conn sid
@@ -186,7 +188,7 @@ sendStreamFragment conn sid dat0 fin0 = do
 ----------------------------------------------------------------
 
 resender :: Connection -> IO ()
-resender conn = handle (handlerIO "resender" conn) $ forever $ do
+resender conn = handleIOLog cleanupAction logAction $ forever $ do
     threadDelay 100000
     ppktpns <- getRetransmissions conn (MilliSeconds 400)
     open <- isConnectionOpen conn
@@ -197,8 +199,10 @@ resender conn = handle (handlerIO "resender" conn) $ forever $ do
          | open      = filter isRTTxLevel ppktpns
          | otherwise = ppktpns
     mapM_ put ppktpns'
- where
-   put (ppkt,pns) = putOutput conn $ OutPlainPacket ppkt pns
+  where
+    cleanupAction = putInput conn $ InpError ConnectionIsClosed
+    logAction msg = connLog conn ("resender: " ++ msg)
+    put (ppkt,pns) = putOutput conn $ OutPlainPacket ppkt pns
 
 isRTTxLevel :: (PlainPacket,[PacketNumber]) -> Bool
 isRTTxLevel ((PlainPacket hdr _),_) = lvl == RTT1Level || lvl == RTT0Level

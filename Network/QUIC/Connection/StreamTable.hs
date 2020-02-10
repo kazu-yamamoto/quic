@@ -51,7 +51,7 @@ isFragmentTop conn sid off dat fin = do
     -- ssrx is modified by only sender
     si0@(StreamInfo off0 fin0) <- readIORef ssrx
     if fin && fin0 then do
-        putStrLn "Illegal Fin"
+        putStrLn "Illegal Fin" -- fixme
         return ([], False)
       else do
         let fin1 = fin0 || fin

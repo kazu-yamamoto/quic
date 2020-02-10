@@ -3,7 +3,7 @@
 module Network.QUIC.Handshake where
 
 import qualified Control.Exception as E
-import Data.ByteString hiding (putStrLn)
+import Data.ByteString
 import Network.TLS.QUIC
 
 import Network.QUIC.Config

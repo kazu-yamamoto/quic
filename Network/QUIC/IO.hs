@@ -69,5 +69,6 @@ recvStream conn = do
       InpFin sid              -> return (sid, "")
       InpError e              -> E.throwIO e
       InpApplicationError e r -> E.throwIO $ ApplicationErrorOccurs e r
+      InpTransportError NoError _ _ -> return (0, "") -- fixme: 0
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached

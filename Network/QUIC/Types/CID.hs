@@ -7,6 +7,7 @@ module Network.QUIC.Types.CID (
   , makeCID
   , unpackCID
   , OrigCID(..)
+  , originalCID
   ) where
 
 import Crypto.Random (getRandomBytes)
@@ -17,6 +18,7 @@ import Network.QUIC.Imports
 myCIDLength :: Int
 myCIDLength = 8
 
+-- A type for conneciton ID.
 newtype CID = CID Bytes deriving (Eq, Ord)
 
 instance Show CID where
@@ -28,6 +30,7 @@ newCID = toCID <$> getRandomBytes myCIDLength
 toCID :: ByteString -> CID
 toCID = CID . Short.toShort
 
+-- | Converting a connection ID.
 fromCID :: CID -> ByteString
 fromCID (CID sbs) = Short.fromShort sbs
 
@@ -40,3 +43,8 @@ unpackCID (CID sbs) = (sbs, len)
     len = fromIntegral $ Short.length sbs
 
 data OrigCID = OCFirst CID | OCRetry CID deriving (Eq, Show)
+
+originalCID :: OrigCID -> CID
+originalCID (OCFirst cid) = cid
+originalCID (OCRetry cid) = cid
+

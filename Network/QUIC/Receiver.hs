@@ -6,7 +6,6 @@ module Network.QUIC.Receiver (
   ) where
 
 import Control.Concurrent
-import qualified Control.Exception as E
 import Network.TLS.QUIC
 import System.Timeout
 
@@ -18,8 +17,10 @@ import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 receiver :: Connection -> IO ()
-receiver conn = E.handle (handler "receiver") $ forever
+receiver conn = handleLog logAction $ forever
     (connRecv conn >>= processCryptPacket conn)
+  where
+    logAction msg = connLog conn ("receiver: " ++ msg)
 
 processCryptPacket :: Connection -> CryptPacket -> IO ()
 processCryptPacket conn (CryptPacket header crypt) = do
@@ -30,7 +31,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
     -- and thrown away.
     mt <- timeout 100000 $ checkEncryptionLevel conn level
     if isNothing mt then
-        putStrLn "Timeout: ignoring a packet"
+        connLog conn "Timeout: ignoring a packet"
       else do
         when (isClient conn && level == HandshakeLevel) $
             setPeerCID conn $ headerPeerCID header
@@ -44,11 +45,11 @@ processCryptPacket conn (CryptPacket header crypt) = do
           Nothing -> do
               statelessReset <- isStateLessreset conn header crypt
               if statelessReset then do
-                  putStrLn "Connection is reset statelessly"
+                  connLog conn "Connection is reset statelessly"
                   setCloseReceived conn
                   clearThreads conn
                 else do
-                  putStrLn $ "Cannot decrypt: " ++ show level
+                  connLog conn $ "Cannot decrypt: " ++ show level
                   return () -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
@@ -61,7 +62,7 @@ processFrame conn lvl (Crypto off cdat) = do
       InitialLevel   -> do
           putInputCrypto conn lvl off cdat
       RTT0Level -> do
-          putStrLn $ "processFrame: invalid packet type " ++ show lvl
+          connLog conn $ "processFrame: invalid packet type " ++ show lvl
       HandshakeLevel
           | isClient conn -> do
               putInputCrypto conn lvl off cdat
@@ -88,13 +89,13 @@ processFrame conn lvl (Crypto off cdat) = do
               -- RecvSessionTicket or ClientHandshakeDone
               void $ control $ PutSessionTicket cdat
         | otherwise -> do
-              putStrLn "processFrame: Short:Crypto for server"
+              connLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
-    putStrLn "processFrame: NewToken"
-processFrame _ _ (NewConnectionID _sn _ _cid _token)  = do
+    connLog conn "processFrame: NewToken"
+processFrame conn _ (NewConnectionID _sn _ _cid _token)  = do
     -- fixme: register stateless token
-    putStrLn $ "processFrame: NewConnectionID " ++ show _sn
+    connLog conn $ "processFrame: NewConnectionID " ++ show _sn
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     putInput conn $ InpTransportError err ftyp reason
     -- to cancel handshake
@@ -103,7 +104,7 @@ processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     setCloseReceived conn
     clearThreads conn
 processFrame conn _ (ConnectionCloseApp err reason) = do
-    putStrLn $ "processFrame: ConnectionCloseApp " ++ show err
+    connLog conn $ "processFrame: ConnectionCloseApp " ++ show err
     putInput conn $ InpApplicationError err reason
     -- to cancel handshake
     putCrypto conn $ InpApplicationError err reason
@@ -122,8 +123,8 @@ processFrame conn _ HandshakeDone = do
         threadDelay 2000000
         ClientHandshakeDone <- control ExitClient
         clearClientController conn
-processFrame _ _ _frame        = do
-    putStrLn $ "processFrame: " ++ show _frame
+processFrame conn _ _frame        = do
+    connLog conn $ "processFrame: " ++ show _frame
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.

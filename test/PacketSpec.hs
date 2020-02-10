@@ -17,6 +17,7 @@ spec = do
     -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
     describe "test vector" $ do
         it "describes example of Client Initial draft 24" $ do
+            let noLog _ = return ()
             let serverCID = makeCID $ dec16s "8394c8f03e515708"
                 clientCID = makeCID ""
                 tx _ = return ()
@@ -25,12 +26,12 @@ spec = do
                 cls = return ()
             let clientConf = defaultClientConfig
                 ver = head $ confVersions $ ccConfig clientConf
-            clientConn <- clientConnection clientConf ver clientCID serverCID tx rx cls
+            clientConn <- clientConnection clientConf ver clientCID serverCID noLog tx rx cls
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
                   }
-            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) tx rx cls
+            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) noLog tx rx cls
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain

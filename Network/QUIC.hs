@@ -24,9 +24,12 @@ module Network.QUIC (
   , defaultConfig
   -- * Types
   , Connection
+  , connLog
   , StreamID
   , Version(..)
   , fromVersion
+  , CID
+  , fromCID
   -- ** Parameters
   , Parameters(..)
   , defaultParameters

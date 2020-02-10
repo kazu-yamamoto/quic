@@ -76,7 +76,8 @@ createClientConnection conf@ClientConfig{..} ver = do
         recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
-    conn <- clientConnection conf ver myCID peerCID send recv cls
+    let logAction = confLog ccConfig peerCID
+    conn <- clientConnection conf ver myCID peerCID logAction send recv cls
     -- killed by "close s0"
     void $ forkIO $ readerClient conf s0 q conn
     return (conn,cls)
@@ -97,13 +98,14 @@ handshakeClientConnection conf@ClientConfig{..} conn = do
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
-runQUICServer conf server = E.handle (handler "main") $ do
+runQUICServer conf server = handleLog logAction $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(route,_) -> forever $ do
         acc <- readAcceptQ $ acceptQueue route
         let create = createServerConnection conf route acc mainThreadId
         void $ forkIO $ E.bracket create close server
   where
+    logAction msg = putStrLn ("runQUICServer: " ++ msg)
     setup = do
         route <- newServerRoute
         -- fixme: the case where sockets cannot be created.
@@ -129,7 +131,8 @@ createServerConnection conf route acc mainThreadId = E.handle tlserr $ do
             NSB.sendMany s bss
         recv = recvServer mysa q sref
         setup = do
-            conn <- serverConnection conf ver myCID peerCID oCID send recv cls
+            let logAction = confLog (scConfig conf) $ originalCID oCID
+            conn <- serverConnection conf ver myCID peerCID oCID logAction send recv cls
             setTokenManager conn $ tokenMgr route
             setRetried conn retried
             tid0 <- forkIO $ sender   conn

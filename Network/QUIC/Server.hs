@@ -122,13 +122,13 @@ insertQuantumTable ref dcid q = do
 ----------------------------------------------------------------
 
 router :: ServerConfig -> ServerRoute -> (Socket, SockAddr) -> IO ()
-router conf route (s,mysa) = handle (handler "router1") $ do
+router conf route (s,mysa) = handleLog logAction $ do
     let (opt,_cmsgid) = case mysa of
           SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
           SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
           _               -> error "router"
     setSocketOption s opt 1
-    handle (handler "router2") $ forever $ do
+    forever $ do
         (peersa, bs0, _cmsgs, _) <- recv
         -- macOS overrides the local address of the socket
         -- if in_pktinfo is used.
@@ -141,6 +141,7 @@ router conf route (s,mysa) = handle (handler "router1") $ do
         let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
         dispatch conf route pkt mysa peersa send bs0RTT
   where
+    logAction msg = putStrLn ("router: " ++ msg)
     recv = do
         ex <- E.try $ NSB.recvMsg s 2048 64 0
         case ex of
@@ -255,9 +256,11 @@ dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
 -- readerServer dies when the socket is closed.
 readerServer :: Socket -> ServerRecvQ -> IO ()
-readerServer s q = handle (handler "readerServer") $ forever $ do
+readerServer s q = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodeCryptPackets
     mapM (\pkt -> writeServerRecvQ q (Through pkt)) pkts
+  where
+    logAction msg = putStrLn ("readerServer: " ++ msg)
 
 recvServer :: SockAddr -> ServerRecvQ -> IORef (Socket, SockAddr)
            -> IO CryptPacket

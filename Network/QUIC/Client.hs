@@ -34,10 +34,11 @@ writeClientRecvQ (ClientRecvQ q) x = atomically $ writeTQueue q x
 
 -- readerClient dies when the socket is closed.
 readerClient :: ClientConfig -> Socket -> ClientRecvQ -> Connection -> IO ()
-readerClient ClientConfig{..} s q conn = handle (handler "readerClient") $ forever $ do
+readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
   where
+    logAction msg = connLog conn ("readerClient: " ++ msg)
     putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV (VersionNegotiationPacket dCID sCID peerVers)) = do
         let myVers = confVersions ccConfig

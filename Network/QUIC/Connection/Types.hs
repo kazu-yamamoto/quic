@@ -128,6 +128,7 @@ data Connection = Connection {
   , connSend          :: SendMany
   , connRecv          :: Receive
   , connClose         :: IO ()
+  , connLog           :: String -> IO ()
   , threadIds         :: IORef [Weak ThreadId]
   -- Peer
   , peerCID           :: IORef CID
@@ -153,9 +154,9 @@ data Connection = Connection {
   , connVersion       :: IORef Version
   }
 
-newConnection :: Role -> Version -> CID -> CID -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
-newConnection rl ver myCID peerCID send recv cls isecs =
-    Connection rl myCID send recv cls
+newConnection :: Role -> Version -> CID -> CID -> (String -> IO ()) -> SendMany -> Receive -> IO () -> TrafficSecrets InitialSecret -> IO Connection
+newConnection rl ver myCID peerCID logAction send recv cls isecs =
+    Connection rl myCID send recv cls logAction
         <$> newIORef []
         -- Peer
         <*> newIORef peerCID
@@ -189,19 +190,19 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-clientConnection :: ClientConfig -> Version -> CID -> CID
+clientConnection :: ClientConfig -> Version -> CID -> CID -> (String -> IO ())
                  -> SendMany -> Receive -> IO () -> IO Connection
-clientConnection ClientConfig{..} ver myCID peerCID send recv cls = do
+clientConnection ClientConfig{..} ver myCID peerCID logAction send recv cls = do
     let isecs = initialSecrets ver peerCID
-    newConnection Client ver myCID peerCID send recv cls isecs
+    newConnection Client ver myCID peerCID logAction send recv cls isecs
 
-serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
+serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID -> (String -> IO ())
                  -> SendMany -> Receive -> IO () -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID origCID send recv cls = do
+serverConnection ServerConfig{..} ver myCID peerCID origCID logAction send recv cls = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    newConnection Server ver myCID peerCID send recv cls isecs
+    newConnection Server ver myCID peerCID logAction send recv cls isecs
 
 ----------------------------------------------------------------
 

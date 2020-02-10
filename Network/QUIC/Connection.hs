@@ -10,6 +10,7 @@ module Network.QUIC.Connection (
   , connSend
   , connRecv
   , connClose
+  , connLog
   -- * Packet numbers
   , setPacketNumber
   , getPacketNumber

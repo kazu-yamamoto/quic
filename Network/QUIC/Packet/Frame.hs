@@ -81,7 +81,7 @@ encodeFrame wbuf (ConnectionCloseApp (ApplicationError err) reason) = do
     copyShortByteString wbuf reason
 encodeFrame wbuf HandshakeDone =
     write8 wbuf 0x1e
-encodeFrame _ _ = putStrLn "encodeFrame: not supported yet"
+encodeFrame _ _ = putStrLn "encodeFrame: not supported yet" -- fixme
 
 ----------------------------------------------------------------
 

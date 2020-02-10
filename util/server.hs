@@ -10,6 +10,7 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.ByteString.Base16 (encode)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.List as L
 import Network.TLS.Extra.Cipher
@@ -104,6 +105,10 @@ main = do
         addrs = read <$> init ips
         aps = (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
+    let logAction cid msg = appendFile logfile msg
+          where
+            logfile' = C8.unpack $ encode $ fromCID cid
+            logfile = logfile' ++ ".txt"
     let conf = defaultServerConfig {
             scAddresses    = aps
           , scKey          = optKeyFile
@@ -129,11 +134,12 @@ main = do
                                  , cipher_TLS13_AES128GCM_SHA256
                                  , cipher_TLS13_AES128CCM_SHA256
                                  ]
+              , confLog        = logAction
               }
           }
     runQUICServer conf $ \conn -> do
         info <- getConnectionInfo conn
-        when optDebug $ print info
+        when optDebug $ connLog conn (show info ++ "\n")
         let server = case alpn info of
               Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
               _                                       -> serverH3
@@ -143,18 +149,18 @@ onE :: IO b -> IO a -> IO a
 h `onE` b = b `E.onException` h
 
 serverHQ :: Connection -> IO ()
-serverHQ conn = putStrLn "Connection terminated" `onE` do
+serverHQ conn = connLog conn "Connection terminated" `onE` do
     mbs <- timeout 5000000 $ recv conn
     case mbs of
-      Nothing -> putStrLn "Connection timeout"
+      Nothing -> connLog conn "Connection timeout"
       Just bs -> do
           C8.putStr bs
           send conn html
           shutdown conn
-          putStrLn "Connection finished"
+          connLog conn "Connection finished"
 
 serverH3 :: Connection -> IO ()
-serverH3 conn = putStrLn "Connection terminated" `onE` do
+serverH3 conn = connLog conn "Connection terminated" `onE` do
     sendStream conn  3 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
     sendStream conn  7 False $ BS.pack [2]
     sendStream conn 11 False $ BS.pack [3]
@@ -166,10 +172,9 @@ serverH3 conn = putStrLn "Connection terminated" `onE` do
     loop hdrbdy = do
         mx <- timeout 5000000 $ recvStream conn
         case mx of
-          Nothing -> putStrLn "Connection timeout"
+          Nothing -> connLog conn "Connection timeout"
           Just (sid, bs) -> do
-              putStr $ "SID: " ++ show sid ++ " "
-              print $ BS.unpack bs
+              connLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ "\n")
               when ((sid `mod` 4) == 0) $ do
                   open <- isStreamOpen conn sid
                   when open $ sendStream conn sid True hdrbdy

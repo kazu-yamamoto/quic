@@ -21,6 +21,7 @@ executable server
   ghc-options:          -Wall -threaded -rtsopts
   build-depends:        base >= 4.0 && < 5
                       , bytestring
+                      , base16-bytestring
                       , data-default-class
                       , http2
                       , quic

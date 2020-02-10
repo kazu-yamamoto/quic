@@ -128,6 +128,7 @@ main = do
                                  , cipher_TLS13_AES128GCM_SHA256
                                  , cipher_TLS13_AES128CCM_SHA256
                                  ]
+              , confLog        = \_ msg -> putStrLn msg
               }
           }
     putStrLn "------------------------"
