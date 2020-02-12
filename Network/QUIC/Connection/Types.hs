@@ -6,6 +6,7 @@ module Network.QUIC.Connection.Types where
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
@@ -185,7 +186,7 @@ newConnection rl ver myCID peerCID logAction close sref isecs =
         <*> newIORef ver
         -- Actions
         <*> return close
-        <*> return logAction
+        <*> return logAction'
         -- Manage
         <*> newIORef []
         <*> return sref
@@ -215,6 +216,7 @@ newConnection rl ver myCID peerCID logAction close sref isecs =
     initialRoleInfo
       | rl == Client = defaultClientRoleInfo
       | otherwise    = defaultServerRoleInfo
+    logAction' msg = logAction msg `E.catch` \(E.SomeException _) -> return ()
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
