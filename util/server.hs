@@ -154,7 +154,7 @@ serverHQ conn = connLog conn "Connection terminated" `onE` do
     case mbs of
       Nothing -> connLog conn "Connection timeout"
       Just bs -> do
-          C8.putStr bs
+          connLog conn $ C8.unpack bs
           send conn html
           shutdown conn
           connLog conn "Connection finished"
