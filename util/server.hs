@@ -139,7 +139,7 @@ main = do
           }
     runQUICServer conf $ \conn -> do
         info <- getConnectionInfo conn
-        when optDebug $ connLog conn (show info ++ "\n")
+        when optDebug $ connLog conn $ show info
         let server = case alpn info of
               Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
               _                                       -> serverH3
@@ -174,7 +174,7 @@ serverH3 conn = connLog conn "Connection terminated" `onE` do
         case mx of
           Nothing -> connLog conn "Connection timeout"
           Just (sid, bs) -> do
-              connLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ "\n")
+              connLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs))
               when ((sid `mod` 4) == 0) $ do
                   open <- isStreamOpen conn sid
                   when open $ sendStream conn sid True hdrbdy
