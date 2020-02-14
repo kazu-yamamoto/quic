@@ -121,7 +121,8 @@ recvClientHello control conn = loop
           _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
-setPeerParams conn [ExtensionRaw 0xffa5 params] = do
-    let Just plist = decodeParametersList params
-    setPeerParameters conn plist
+setPeerParams conn [ExtensionRaw extid params]
+  | extid == extensionID_QuicTransportParameters = do
+        let Just plist = decodeParametersList params
+        setPeerParameters conn plist
 setPeerParams _ _ = return ()
