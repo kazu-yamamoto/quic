@@ -308,11 +308,10 @@ migrator conn peersa1 mq dcid peercid = do
     writeIORef (sockInfo conn) (s1,q)
     void $ forkIO $ readerServer s1 q $ connLog conn
     setMyCID conn dcid
-    -- fixme: send retire cid
-    _fixme <- setPeerCID conn peercid
+    retiredSeqNum <- setPeerCID conn peercid
     pdat <- newPathData
     setChallenges conn [pdat]
-    putOutput conn $ OutControl RTT1Level [PathChallenge pdat]
+    putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]
     waitResponse conn
     _ <- timeout 2000000 $ forever (readMigrationQ mq >>= writeRecvQ q)
     close s0

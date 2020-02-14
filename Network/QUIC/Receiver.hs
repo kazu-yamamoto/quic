@@ -96,9 +96,11 @@ processFrame conn lvl (Crypto off cdat) = do
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connLog conn "processFrame: NewToken"
-processFrame conn _ (NewConnectionID sn _ peercid srt)  = do
+processFrame conn _ (NewConnectionID sn _ peercid srt) = do
     -- fixme: retire to
     addPeerCID conn (sn, peercid, srt)
+processFrame conn _ (RetireConnectionID sn) =
+    retireMyCID conn sn
 processFrame conn RTT1Level (PathChallenge dat) =
     putOutput conn $ OutControl RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =

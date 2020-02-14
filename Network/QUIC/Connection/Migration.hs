@@ -10,6 +10,7 @@ module Network.QUIC.Connection.Migration (
   , addMyCID
   , addPeerCID
   , resetPeerCID
+  , retireMyCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
   , setChallenges
@@ -105,6 +106,24 @@ addPeerCID Connection{..} = addCID peerCIDDB
 resetPeerCID :: Connection -> CID -> IO ()
 resetPeerCID Connection{..} cid = writeIORef peerCIDDB $ newCIDDB cid
 
+retireMyCID :: Connection -> Int -> IO ()
+retireMyCID Connection{..} n = atomicModifyIORef myCIDDB retire
+  where
+    retire db = (db', ())
+      where
+        db' = db {
+            ciddb = go $ ciddb db
+          }
+    go [] = []
+    go (x@(sn,_,_):xs)
+      | sn == n   = xs
+      | otherwise = x : go xs
+
+{-
+retireToCID :: Connection -> Int -> IO ()
+retireToCID = undefined
+-}
+
 setPeerStatelessResetToken :: Connection -> StatelessResetToken -> IO ()
 setPeerStatelessResetToken Connection{..} srt = do
     db <- readIORef peerCIDDB
@@ -122,13 +141,6 @@ isStatelessRestTokenValid Connection{..} srt =
       | token == srt = True
       | otherwise    = go xs
 
-{-
-retireCID :: Connection -> Int -> IO ()
-retireCID = undefined
-
-retireToCID :: Connection -> Int -> IO ()
-retireToCID = undefined
--}
 
 setChallenges :: Connection -> [PathData] -> IO ()
 setChallenges Connection{..} pdats =

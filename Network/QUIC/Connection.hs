@@ -43,6 +43,7 @@ module Network.QUIC.Connection (
   , addMyCID
   , addPeerCID
   , resetPeerCID
+  , retireMyCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
   , setChallenges
