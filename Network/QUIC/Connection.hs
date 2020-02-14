@@ -36,14 +36,12 @@ module Network.QUIC.Connection (
   -- * Migration
   , getMyCID
   , getPeerCID
-  , setMyCID
-  , setPeerCID
-  , choosePeerCID
-  , getNewMyCID
-  , addMyCID
-  , addPeerCID
   , resetPeerCID
+  , getNewMyCID
+  , setMyCID
   , retireMyCID
+  , addPeerCID
+  , choosePeerCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
   , setChallenges

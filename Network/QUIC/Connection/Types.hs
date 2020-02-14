@@ -12,6 +12,8 @@ import Data.Hourglass
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Network.Socket (Socket)
@@ -119,16 +121,22 @@ defaultServerRoleInfo = ServerInfo {
   }
 
 data CIDDB = CIDDB {
-    currentCID :: CID
+    usedCID    :: CID
+  , usedSeqNum :: Int
   , nextSeqNum :: Int
-  , ciddb  :: [(Int,CID,StatelessResetToken)]
+  , dblimit    :: Int
+  , dbsize     :: Int
+  , cids       :: IntMap (CID,StatelessResetToken)
   }
 
 newCIDDB :: CID -> CIDDB
 newCIDDB cid = CIDDB {
-    currentCID = cid
+    usedCID    = cid
+  , usedSeqNum = 0
   , nextSeqNum = 1
-  , ciddb = [(0,cid,StatelessResetToken "")]
+  , dblimit    = 2 -- see active_connection_id_limit
+  , dbsize     = 1
+  , cids       = IntMap.singleton 0 (cid, StatelessResetToken "")
   }
 
 ----------------------------------------------------------------

@@ -267,21 +267,12 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) crypt)) _ peers
       Just (Entry conn ref)  -> do
           mplain <- decryptCrypt conn crypt RTT1Level
           case mplain of
-            Nothing -> return ()
+            Nothing -> connLog conn $ "Cannot decrypt in dispatch"
             Just _ -> do
                 mmq <- readIORef ref
                 case mmq of
                   Just mq -> writeMigrationQ mq cpkt
-                  Nothing -> do
-                      mpeercid <- choosePeerCID conn
-                      case (mplain, mpeercid) of
-                        (Just _, Just peercid) -> do
-                            connLog conn $ "Migrating to " ++ show peersa
-                            mq <- newMigrationQ
-                            writeIORef ref $ Just mq
-                            void $ forkIO $ migrator conn peersa mq dCID peercid
-                            writeMigrationQ mq cpkt
-                        _ -> return ()
+                  Nothing -> migration conn peersa dCID ref cpkt
 dispatch _ _ (PacketIB _)  _ _ _ _ = print BrokenPacket
 dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
@@ -300,15 +291,26 @@ recvServer q = readRecvQ q
 
 ----------------------------------------------------------------
 
-migrator :: Connection -> SockAddr -> MigrationQ -> CID -> CID -> IO ()
-migrator conn peersa1 mq dcid peercid = do
+migration :: Connection -> SockAddr -> CID -> IORef (Maybe MigrationQ) -> CryptPacket -> IO ()
+migration conn peersa dCID ref cpkt = do
+    mRetiredSeqNum <- choosePeerCID conn
+    case mRetiredSeqNum of
+      Nothing -> connLog conn "No new peer CID"
+      Just retiredSeqNum -> do
+          connLog conn $ "Migrating to " ++ show peersa
+          mq <- newMigrationQ
+          writeIORef ref $ Just mq
+          void $ forkIO $ migrator conn peersa mq dCID retiredSeqNum
+          writeMigrationQ mq cpkt
+
+migrator :: Connection -> SockAddr -> MigrationQ -> CID -> Int -> IO ()
+migrator conn peersa1 mq dcid retiredSeqNum = do
     (s0,q) <- readIORef $ sockInfo conn
     mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
     writeIORef (sockInfo conn) (s1,q)
     void $ forkIO $ readerServer s1 q $ connLog conn
-    setMyCID conn dcid
-    retiredSeqNum <- setPeerCID conn peercid
+    _ <- setMyCID conn dcid -- fixme: sending error if False
     pdat <- newPathData
     setChallenges conn [pdat]
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]
