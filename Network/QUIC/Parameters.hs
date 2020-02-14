@@ -106,7 +106,7 @@ defaultParameters = Parameters {
   , maxAckDelay             = 25
   , disableMigration        = False
   , preferredAddress        = Nothing
-  , activeConnectionIdLimit = 0
+  , activeConnectionIdLimit = 2
   , greaseParameter         = Nothing
   }
 
@@ -233,6 +233,5 @@ exampleParameters = defaultParameters {
   , maxStreamsBidi          =       1
   , maxStreamsUni           =     100
   , idleTimeout             =   30000
-  , activeConnectionIdLimit =       7
   , maxPacketSize           =    1280
   }

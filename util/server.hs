@@ -126,7 +126,6 @@ main = do
                     , maxStreamsBidi          =     100
                     , maxStreamsUni           =       3
                     , idleTimeout             =   30000
-                    , activeConnectionIdLimit =       7
                     }
               , confKeyLogging = getLogger optKeyLogging
               , confGroups     = getGroups optGroups
