@@ -119,11 +119,6 @@ retireMyCID Connection{..} n = atomicModifyIORef myCIDDB retire
       | sn == n   = xs
       | otherwise = x : go xs
 
-{-
-retireToCID :: Connection -> Int -> IO ()
-retireToCID = undefined
--}
-
 setPeerStatelessResetToken :: Connection -> StatelessResetToken -> IO ()
 setPeerStatelessResetToken Connection{..} srt = do
     db <- readIORef peerCIDDB
