@@ -19,8 +19,8 @@ isStreamOpen conn sid = do
 send :: Connection -> ByteString -> IO ()
 send conn dat = sendStream conn 0 False dat
 
--- | Sending data in the stream. 'FIN' is sent if 3rd argument is 'True'.
-sendStream :: Connection -> StreamID -> Bool -> ByteString -> IO ()
+-- | Sending data in the stream. FIN is sent if 3rd argument is 'True'.
+sendStream :: Connection -> StreamID -> Fin -> ByteString -> IO ()
 sendStream conn sid fin dat = do
     open <- isConnectionOpen conn
     fin0 <- getStreamFin conn sid
@@ -31,11 +31,11 @@ sendStream conn sid fin dat = do
       else
         putOutput conn $ OutStream sid dat fin
 
--- | Sending a 'FIN' in stream 0.
+-- | Sending a FIN in stream 0.
 shutdown :: Connection -> IO ()
 shutdown conn = shutdownStream conn 0
 
--- | Sending a 'FIN' in the stream.
+-- | Sending a FIN in the stream.
 shutdownStream :: Connection -> StreamID -> IO ()
 shutdownStream conn sid = do
     open <- isConnectionOpen conn

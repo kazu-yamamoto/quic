@@ -26,6 +26,7 @@ module Network.QUIC (
   , Connection
   , connLog
   , StreamID
+  , Fin
   , Version(..)
   , fromVersion
   , CID
