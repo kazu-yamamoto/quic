@@ -48,15 +48,15 @@ import Network.QUIC.Types
 
 data Dispatch = Dispatch {
     tokenMgr :: CT.TokenManager
-  , dstTable :: IORef DstTable
-  , srcTable :: IORef SrcTable
+  , dstTable :: IORef ConnectionDict
+  , srcTable :: IORef RecvQDict
   , acceptQ  :: AcceptQ
   }
 
 newDispatch :: IO Dispatch
 newDispatch = Dispatch <$> CT.spawnTokenManager CT.defaultConfig
-                       <*> newIORef emptyDstTable
-                       <*> newIORef emptySrcTable
+                       <*> newIORef emptyConnectionDict
+                       <*> newIORef emptyRecvQDict
                        <*> newAcceptQ
 
 clearDispatch :: Dispatch -> IO ()
@@ -66,52 +66,54 @@ clearDispatch d = CT.killTokenManager $ tokenMgr d
 
 data Entry = Entry Connection (IORef (Maybe MigrationQ))
 
-newtype DstTable = DstTable (Map CID Entry)
+-- Destination CID -> Entry
+newtype ConnectionDict = ConnectionDict (Map CID Entry)
 
-emptyDstTable :: DstTable
-emptyDstTable = DstTable M.empty
+emptyConnectionDict :: ConnectionDict
+emptyConnectionDict = ConnectionDict M.empty
 
-lookupDstTable :: IORef DstTable -> CID -> IO (Maybe Entry)
-lookupDstTable ref cid = do
-    DstTable tbl <- readIORef ref
+lookupConnectionDict :: IORef ConnectionDict -> CID -> IO (Maybe Entry)
+lookupConnectionDict ref cid = do
+    ConnectionDict tbl <- readIORef ref
     return $ M.lookup cid tbl
 
-registerDstTable :: IORef DstTable -> CID -> Connection -> IO ()
-registerDstTable ref cid conn = do
+registerConnectionDict :: IORef ConnectionDict -> CID -> Connection -> IO ()
+registerConnectionDict ref cid conn = do
     mq <- newIORef Nothing :: IO (IORef (Maybe MigrationQ))
     let ent = Entry conn mq
-    atomicModifyIORef' ref $ \(DstTable tbl) ->
-        (DstTable $ M.insert cid ent tbl, ())
+    atomicModifyIORef' ref $ \(ConnectionDict tbl) ->
+        (ConnectionDict $ M.insert cid ent tbl, ())
 
-unregisterDstTable :: IORef DstTable -> CID -> IO ()
-unregisterDstTable ref cid = atomicModifyIORef' ref $ \(DstTable tbl) ->
-  (DstTable $ M.delete cid tbl, ())
+unregisterConnectionDict :: IORef ConnectionDict -> CID -> IO ()
+unregisterConnectionDict ref cid = atomicModifyIORef' ref $ \(ConnectionDict tbl) ->
+  (ConnectionDict $ M.delete cid tbl, ())
 
 ----------------------------------------------------------------
 
-newtype SrcTable = SrcTable (OrdPSQ CID ElapsedP RecvQ)
+-- Original destination CID -> RecvQ
+newtype RecvQDict = RecvQDict (OrdPSQ CID ElapsedP RecvQ)
 
-srcTableSize :: Int
-srcTableSize = 100
+recvQDictSize :: Int
+recvQDictSize = 100
 
-emptySrcTable :: SrcTable
-emptySrcTable = SrcTable PSQ.empty
+emptyRecvQDict :: RecvQDict
+emptyRecvQDict = RecvQDict PSQ.empty
 
-lookupSrcTable :: IORef SrcTable -> CID -> IO (Maybe RecvQ)
-lookupSrcTable ref dcid = do
-    SrcTable qt <- readIORef ref
+lookupRecvQDict :: IORef RecvQDict -> CID -> IO (Maybe RecvQ)
+lookupRecvQDict ref dcid = do
+    RecvQDict qt <- readIORef ref
     return $ case PSQ.lookup dcid qt of
       Nothing     -> Nothing
       Just (_,q)  -> Just q
 
-insertSrcTable :: IORef SrcTable -> CID -> RecvQ -> IO ()
-insertSrcTable ref dcid q = do
-    SrcTable qt0 <- readIORef ref
-    let qt1 | PSQ.size qt0 <= srcTableSize = qt0
+insertRecvQDict :: IORef RecvQDict -> CID -> RecvQ -> IO ()
+insertRecvQDict ref dcid q = do
+    RecvQDict qt0 <- readIORef ref
+    let qt1 | PSQ.size qt0 <= recvQDictSize = qt0
             | otherwise = PSQ.deleteMin qt0
     p <- timeCurrentP
     let qt2 = PSQ.insert dcid p q qt1
-    writeIORef ref $ SrcTable qt2
+    writeIORef ref $ RecvQDict qt2
 
 ----------------------------------------------------------------
 
@@ -201,7 +203,7 @@ dispatch Dispatch{..} ServerConfig{..}
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (confVersions scConfig)
         send bss
   | token == "" = do
-        mq <- lookupDstTable dstTable dCID
+        mq <- lookupConnectionDict dstTable dCID
         case mq of
           Nothing
             | scRequireRetry -> sendRetry
@@ -215,23 +217,23 @@ dispatch Dispatch{..} ServerConfig{..}
                   ok <- isRetryTokenValid ct
                   if ok then pushToAcceptRetried ct else sendRetry
             | otherwise -> do
-                  mq <- lookupDstTable dstTable dCID
+                  mq <- lookupConnectionDict dstTable dCID
                   case mq of
                     Nothing -> pushToAcceptFirst
                     _       -> putStrLn "dispatch: Just (2)"
           _ -> sendRetry
   where
     pushToAcceptQ d s o wrap retried = do
-        mq <- lookupSrcTable srcTable o
+        mq <- lookupRecvQDict srcTable o
         case mq of
           Just q -> writeRecvQ q cpkt
           Nothing -> do
               q <- newRecvQ
-              insertSrcTable srcTable o q
+              insertRecvQDict srcTable o q
               writeRecvQ q cpkt
               let oc = wrap o
-                  reg = registerDstTable dstTable
-                  unreg = unregisterDstTable dstTable
+                  reg = registerConnectionDict dstTable
+                  unreg = unregisterConnectionDict dstTable
                   ent = Accept ver d s oc mysa peersa q reg unreg retried
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
@@ -260,7 +262,7 @@ dispatch Dispatch{..} ServerConfig{..}
         send bss
 dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) crypt)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.
-    mx <- lookupDstTable dstTable dCID
+    mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
           putStrLn $ "CID no match: " ++ show dCID ++ ", " ++ show peersa
