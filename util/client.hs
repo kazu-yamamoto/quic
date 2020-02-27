@@ -85,8 +85,8 @@ showUsageAndExit msg = do
     putStrLn $ usageInfo usage options
     exitFailure
 
-compilerOpts :: [String] -> IO (Options, [String])
-compilerOpts argv =
+clientOpts :: [String] -> IO (Options, [String])
+clientOpts argv =
     case getOpt Permute options argv of
       (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
       (_,_,errs) -> showUsageAndExit $ concat errs
@@ -94,7 +94,7 @@ compilerOpts argv =
 main :: IO ()
 main = do
     args <- getArgs
-    (Options{..}, ips) <- compilerOpts args
+    (Options{..}, ips) <- clientOpts args
     let ipslen = length ips
     when (ipslen /= 2 && ipslen /= 3) $
         showUsageAndExit "cannot recognize <addr> and <port>\n"
