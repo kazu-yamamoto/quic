@@ -22,7 +22,7 @@ import H3
 
 data Options = Options {
     optDebug      :: Bool
-  , optKeyLogging :: Maybe FilePath
+  , optKeyLogFile :: Maybe FilePath
   , optGroups     :: Maybe String
   , optValidate   :: Bool
   , optHQ         :: Bool
@@ -35,7 +35,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optDebug      = False
-  , optKeyLogging = Nothing
+  , optKeyLogFile = Nothing
   , optGroups     = Nothing
   , optHQ         = False
   , optValidate   = False
@@ -53,11 +53,11 @@ options = [
     Option ['d'] ["debug"]
     (NoArg (\o -> o { optDebug = True }))
     "print debug info"
-  , Option ['l'] ["key-logging"]
-    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
+  , Option ['l'] ["key-log-file"]
+    (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
     "log negotiated secrets"
   , Option ['g'] ["groups"]
-    (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
+    (ReqArg (\gs o -> o { optGroups = Just gs }) "<groups>")
     "specify groups"
   , Option ['c'] ["validate"]
     (NoArg (\o -> o { optValidate = True }))
@@ -122,7 +122,7 @@ main = do
                                      }
                                  else
                                    exampleParameters
-              , confKeyLogging = getLogger optKeyLogging
+              , confKeyLogging = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
               , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384
                                  , cipher_TLS13_AES128GCM_SHA256

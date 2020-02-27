@@ -138,7 +138,7 @@ main = do
           }
     runQUICServer conf $ \conn -> do
         info <- getConnectionInfo conn
-        when optDebug $ connLog conn $ show info
+--        when optDebug $ connLog conn $ show info
         let server = case alpn info of
               Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
               _                                       -> serverH3
