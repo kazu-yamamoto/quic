@@ -10,7 +10,6 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.ByteString.Base16 (encode)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.List as L
 import Network.TLS.Extra.Cipher
@@ -27,28 +26,28 @@ import Common
 import H3
 
 data Options = Options {
-    optDebug      :: Bool
-  , optKeyLogFile :: Maybe FilePath
-  , optGroups     :: Maybe String
-  , optCertFile   :: FilePath
-  , optKeyFile    :: FilePath
-  , optRetry      :: Bool
+    optDebugLogDir :: Maybe FilePath
+  , optKeyLogFile  :: Maybe FilePath
+  , optGroups      :: Maybe String
+  , optCertFile    :: FilePath
+  , optKeyFile     :: FilePath
+  , optRetry       :: Bool
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optDebug      = False
-  , optKeyLogFile = Nothing
-  , optGroups     = Nothing
-  , optCertFile   = "servercert.pem"
-  , optKeyFile    = "serverkey.pem"
-  , optRetry      = False
+    optDebugLogDir = Nothing
+  , optKeyLogFile  = Nothing
+  , optGroups      = Nothing
+  , optCertFile    = "servercert.pem"
+  , optKeyFile     = "serverkey.pem"
+  , optRetry       = False
   }
 
 options :: [OptDescr (Options -> Options)]
 options = [
-    Option ['d'] ["debug"]
-    (NoArg (\o -> o { optDebug = True }))
+    Option ['d'] ["debug-log-dir"]
+    (ReqArg (\dir o -> o { optDebugLogDir = Just dir }) "<dir>")
     "print debug info"
   , Option ['l'] ["key-log-file"]
     (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
@@ -105,10 +104,6 @@ main = do
         addrs = read <$> init ips
         aps = (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
-    let logAction cid msg = appendFile logfile msg
-          where
-            logfile' = C8.unpack $ encode $ fromCID cid
-            logfile = logfile' ++ ".txt"
     let conf = defaultServerConfig {
             scAddresses    = aps
           , scKey          = optKeyFile
@@ -133,12 +128,11 @@ main = do
                                  , cipher_TLS13_AES128GCM_SHA256
                                  , cipher_TLS13_AES128CCM_SHA256
                                  ]
-              , confLog        = logAction
+              , confDebugLog   = getDirLogger optDebugLogDir ".txt"
               }
           }
     runQUICServer conf $ \conn -> do
         info <- getConnectionInfo conn
---        when optDebug $ connLog conn $ show info
         let server = case alpn info of
               Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
               _                                       -> serverH3

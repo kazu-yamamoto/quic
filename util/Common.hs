@@ -1,11 +1,17 @@
 module Common (
     getGroups
   , getLogger
+  , getDirLogger
   ) where
 
+import Data.ByteString.Base16 (encode)
+import qualified Data.ByteString.Char8 as C8
 import Data.Default.Class
 import Data.Maybe
 import Network.TLS
+import System.FilePath
+
+import Network.QUIC
 
 namedGroups :: [(String, Group)]
 namedGroups =
@@ -35,3 +41,10 @@ split c s = case break (c==) s of
 getLogger :: Maybe FilePath -> (String -> IO ())
 getLogger Nothing     = \_ -> return ()
 getLogger (Just file) = \str -> appendFile file (str ++ "\n")
+
+getDirLogger :: Maybe FilePath -> String -> (CID -> String -> IO ())
+getDirLogger Nothing    _      = \_ _ -> return ()
+getDirLogger (Just dir) suffix = \cid msg -> do
+    let filename = C8.unpack (encode (fromCID cid)) ++ suffix
+        logfile = dir </> filename
+    appendFile logfile msg
