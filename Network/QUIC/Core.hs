@@ -77,7 +77,7 @@ createClientConnection conf@ClientConfig{..} ver = do
             void $ NSB.sendMany s bss
     myCID   <- newCID
     peerCID <- newCID
-    let logAction = confLog ccConfig peerCID
+    let logAction = confDebugLog ccConfig peerCID
     conn <- clientConnection conf ver myCID peerCID logAction cls sref
     void $ forkIO $ readerClient conf s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
@@ -126,7 +126,7 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
-    let logAction msg = confLog (scConfig conf) (originalCID oCID) (msg ++ "\n")
+    let logAction msg = confDebugLog (scConfig conf) (originalCID oCID) (msg ++ "\n")
     logAction $ "My CID: " ++ show myCID
     logAction $ "Peer CID: " ++ show peerCID
     logAction $ "Original CID: " ++ show oCID

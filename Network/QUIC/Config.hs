@@ -20,7 +20,7 @@ data Config = Config {
   , confGroups         :: [Group]
   , confParameters     :: Parameters
   , confKeyLogging     :: String -> IO ()
-  , confLog            :: CID -> String -> IO ()
+  , confDebugLog       :: CID -> String -> IO ()
   }
 
 -- | The default value for common configuration.
@@ -31,7 +31,7 @@ defaultConfig = Config {
   , confGroups         = [X25519,P256,P384,P521]
   , confParameters     = defaultParameters
   , confKeyLogging     = \_ -> return ()
-  , confLog            = \_ _ -> return ()
+  , confDebugLog       = \_ _ -> return ()
   }
 
 ----------------------------------------------------------------
