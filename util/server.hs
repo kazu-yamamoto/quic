@@ -28,7 +28,7 @@ import H3
 
 data Options = Options {
     optDebug      :: Bool
-  , optKeyLogging :: Maybe FilePath
+  , optKeyLogFile :: Maybe FilePath
   , optGroups     :: Maybe String
   , optCertFile   :: FilePath
   , optKeyFile    :: FilePath
@@ -38,7 +38,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optDebug      = False
-  , optKeyLogging = Nothing
+  , optKeyLogFile = Nothing
   , optGroups     = Nothing
   , optCertFile   = "servercert.pem"
   , optKeyFile    = "serverkey.pem"
@@ -50,21 +50,21 @@ options = [
     Option ['d'] ["debug"]
     (NoArg (\o -> o { optDebug = True }))
     "print debug info"
-  , Option ['l'] ["key-logging"]
-    (ReqArg (\file o -> o { optKeyLogging = Just file }) "Log file")
+  , Option ['l'] ["key-log-file"]
+    (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
     "log negotiated secrets"
   , Option ['g'] ["groups"]
-    (ReqArg (\gs o -> o { optGroups = Just gs }) "Groups")
+    (ReqArg (\gs o -> o { optGroups = Just gs }) "<groups>")
     "specify groups"
   , Option ['c'] ["cert"]
-    (ReqArg (\fl o -> o { optCertFile = fl }) "FILE")
+    (ReqArg (\fl o -> o { optCertFile = fl }) "<file>")
     "certificate file"
   , Option ['k'] ["key"]
-    (ReqArg (\fl o -> o { optKeyFile = fl }) "FILE")
+    (ReqArg (\fl o -> o { optKeyFile = fl }) "<file>")
     "key file"
   , Option ['S'] ["retry"]
     (NoArg (\o -> o { optRetry = True }))
-    "requre statelsss retry"
+    "require stateless retry"
   ]
 
 usage :: String
@@ -127,7 +127,7 @@ main = do
                     , maxStreamsUni           =       3
                     , idleTimeout             =   30000
                     }
-              , confKeyLogging = getLogger optKeyLogging
+              , confKeyLogging = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
               , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384
                                  , cipher_TLS13_AES128GCM_SHA256
