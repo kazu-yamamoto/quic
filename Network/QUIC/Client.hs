@@ -14,6 +14,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Qlog
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
@@ -34,7 +35,8 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
                       return $ if ok then Just ver else Nothing
         putCrypto conn $ InpVersion mver
     putQ (PacketIC pkt) = writeRecvQ q pkt
-    putQ (PacketIR (RetryPacket ver dCID sCID token ex)) = do
+    putQ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
+        connQLog conn $ "[0,\"transport\",\"packet_received\"," ++ qlog pkt ++ "],"
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
         mppkt <- releasePlainPacket conn 0

@@ -144,6 +144,7 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
         qLog     msg = confQLog     sconf ocid (msg ++ "\n") `E.catch` ignore
     debugLog $ "My socket address: " ++ show mysa
     debugLog $ "Peer socket address: " ++ show peersa0
+    qLog $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"server\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ show ocid ++ "\",\"ODCID\":\"" ++ show ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":["
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
     let cls = do
             (s,_) <- readIORef sref

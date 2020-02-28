@@ -2,6 +2,7 @@
 
 module Network.QUIC.Qlog where
 
+import qualified Data.ByteString as BS
 import Data.List
 import Network.QUIC.Types
 
@@ -18,7 +19,7 @@ packetType Handshake{} = "handshake"
 packetType Short{}     = "1RTT"
 
 instance Qlog Frame where
-    qlog frame = "{\"frame_type\":\"" ++ frameType frame ++ "\"}"
+    qlog frame = "{\"frame_type\":\"" ++ frameType frame ++ "\"" ++ frameExtra frame ++ "}"
 
 frameType :: Frame -> String
 frameType (Padding _) = "padding"
@@ -43,3 +44,45 @@ frameType (ConnectionCloseQUIC _TransportError _FrameType _ReasonPhrase) = "conn
 frameType (ConnectionCloseApp _ApplicationError _ReasonPhrase) = "connection_close"
 frameType (HandshakeDone) = "handshake_done"
 frameType (UnknownFrame _Int) = "unknown"
+
+frameExtra :: Frame -> String
+frameExtra (Padding _) = ""
+frameExtra  Ping = ""
+frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" ++ ack (fromAckInfo ai)
+frameExtra (ResetStream) = ""
+frameExtra (StopSending _StreamID _ApplicationError) = ""
+frameExtra (Crypto off dat) =  ",\"offset\":\"" ++ show off ++ "\",\"length\":" ++ show (BS.length dat)
+frameExtra (NewToken _Token) = ""
+frameExtra (Stream sid off dat fin) = ",\"stream_id\":\"" ++ show sid ++ "\",\"offset\":\"" ++ show off ++ "\",\"length\":" ++ show (BS.length dat) ++ ",\"fin\":" ++ if fin then "true" else "false"
+frameExtra (MaxData _Int) = ""
+frameExtra (MaxStreamData _StreamID _Int) = ""
+frameExtra (MaxStreams _Direction _Int) = ""
+frameExtra (DataBlocked) = ""
+frameExtra (StreamDataBlocked) = ""
+frameExtra (StreamsBlocked) = ""
+frameExtra (NewConnectionID _Int _Int' _CID _StatelessResetToken) = ""
+frameExtra (RetireConnectionID _Int) = ""
+frameExtra (PathChallenge _PathData) = ""
+frameExtra (PathResponse _PathData) = ""
+frameExtra (ConnectionCloseQUIC _TransportError _FrameType _ReasonPhrase) = ""
+frameExtra (ConnectionCloseApp _ApplicationError _ReasonPhrase) = ""
+frameExtra (HandshakeDone) = ""
+frameExtra (UnknownFrame _Int) = ""
+
+ack :: [PacketNumber] -> String
+ack ps = "[" ++ intercalate "," (map shw (chop ps)) ++ "]"
+  where
+    shw [] = ""
+    shw [n] = "[\"" ++ show n ++ "\"]"
+    shw ns  = "[\"" ++ show (head ns) ++ "\",\"" ++ show (last ns) ++ "\"]"
+
+chop :: [PacketNumber] -> [[PacketNumber]]
+chop [] = []
+chop xxs@(x:xs) = frst : rest
+  where
+    (ys,zs) = span (\(a,b) -> a - b == 1) $ zip xs xxs
+    frst = x : map fst ys
+    rest = chop $ map fst zs
+
+instance Qlog RetryPacket where
+    qlog RetryPacket{} = "{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}"

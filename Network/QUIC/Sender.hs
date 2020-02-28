@@ -102,6 +102,7 @@ constructRetransmit conn (PlainPacket hdr0 plain0) pns = do
         plain = plain0 { plainPacketNumber = mypn }
         ppkt = PlainPacket hdr plain
     keepPlainPacket conn (mypn:pns) ppkt lvl emptyPeerPacketNumbers
+    connQLog conn $ "[0,\"transport\",\"packet_sent\"," ++ qlog ppkt ++ "],"
     encodePlainPacket conn ppkt $ Just maximumQUICPacketSize
 
 ----------------------------------------------------------------
