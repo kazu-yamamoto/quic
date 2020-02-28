@@ -26,7 +26,7 @@ myCIDLength = 8
 newtype CID = CID Bytes deriving (Eq, Ord)
 
 instance Show CID where
-    show (CID cid) = "CID=" ++ shortToString (enc16s cid)
+    show (CID cid) = shortToString (enc16s cid)
 
 newCID :: IO CID
 newCID = toCID <$> getRandomBytes myCIDLength

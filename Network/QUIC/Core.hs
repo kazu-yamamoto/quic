@@ -233,6 +233,6 @@ instance Show ConnectionInfo where
                            ++ "Cipher: " ++ show cipher ++ "\n"
                            ++ "ALPN: " ++ maybe "none" C8.unpack alpn ++ "\n"
                            ++ "Mode: " ++ show handshakeMode ++ "\n"
-                           ++ "Local " ++ show localCID ++ "\n"
-                           ++ "Remote " ++ show remoteCID ++
+                           ++ "Local CID: " ++ show localCID ++ "\n"
+                           ++ "Remote CID: " ++ show remoteCID ++
                            if retry then "\nQUIC retry" else ""
