@@ -23,6 +23,7 @@ library
                        Network.QUIC.Packet
                        Network.QUIC.Parameters
                        Network.QUIC.Receiver
+                       Network.QUIC.Qlog
                        Network.QUIC.Sender
                        Network.QUIC.Server
                        Network.QUIC.Socket

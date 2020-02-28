@@ -12,6 +12,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Qlog
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -51,6 +52,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
+            connQLog conn $ "[0,\"transport\",\"packet_sent\"," ++ qlog ppkt ++ "],"
             encodePlainPacket conn ppkt Nothing
     constructAckPacket RTT1Level ver mycid peercid _ = do
         ppns <- getPeerPacketNumbers conn HandshakeLevel
@@ -64,6 +66,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
+            connQLog conn $ "[0,\"transport\",\"packet_sent\"," ++ qlog ppkt ++ "],"
             encodePlainPacket conn ppkt Nothing
     constructAckPacket _ _ _ _ _ = return []
     constructTargetPacket ver mycid peercid mlen token = do
@@ -79,6 +82,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
               RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames')
         when (frames /= []) $
             keepPlainPacket conn [mypn] ppkt lvl ppns
+        connQLog conn $ "[0,\"transport\",\"packet_sent\"," ++ qlog ppkt ++ "],"
         encodePlainPacket conn ppkt mlen
 
 constructRetransmit :: Connection -> PlainPacket -> [PacketNumber] -> IO [ByteString]

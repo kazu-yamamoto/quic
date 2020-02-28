@@ -86,6 +86,8 @@ createClientConnection conf@ClientConfig{..} ver = do
     peersa <- NS.getPeerName s0
     debugLog $ "My socket address: " ++ show mysa
     debugLog $ "Peer socket address: " ++ show peersa
+    let pcid = show peerCID
+    qLog $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"client\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ pcid ++ "\",\"ODCID\":\"" ++ pcid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":["
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
     void $ forkIO $ readerClient conf s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
@@ -190,6 +192,7 @@ close conn = do
     clearThreads conn
     -- close the socket after threads reading/writing the socket die.
     connClose conn
+    connQLog conn "[]]}]}"
 
 ----------------------------------------------------------------
 

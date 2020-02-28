@@ -13,6 +13,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Qlog
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
@@ -36,11 +37,12 @@ processCryptPacket conn (CryptPacket header crypt) = do
             resetPeerCID conn $ headerPeerCID header
         mplain <- decryptCrypt conn crypt level
         case mplain of
-          Just (Plain _ pn fs) -> do
+          Just plain@(Plain _ pn fs) -> do
               -- For Ping, record PPN first, then send an ACK.
               -- fixme: need to check Sec 13.1
               addPeerPacketNumbers conn level pn
               mapM_ (processFrame conn level) fs
+              connQLog conn $ "[0,\"transport\",\"packet_received\"," ++ qlog (PlainPacket header plain) ++ "],"
           Nothing -> do
               statelessReset <- isStateessReset conn header crypt
               if statelessReset then do
