@@ -193,6 +193,11 @@ close conn = do
 
 ----------------------------------------------------------------
 
+ignore :: E.SomeException -> IO ()
+ignore _ = return ()
+
+----------------------------------------------------------------
+
 -- | Information about a connection.
 data ConnectionInfo = ConnectionInfo {
     version :: Version
@@ -231,6 +236,3 @@ instance Show ConnectionInfo where
                            ++ "Local " ++ show localCID ++ "\n"
                            ++ "Remote " ++ show remoteCID ++
                            if retry then "\nQUIC retry" else ""
-
-ignore :: E.SomeException -> IO ()
-ignore _ = return ()

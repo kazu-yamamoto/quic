@@ -45,7 +45,7 @@ getLogger (Just file) = \msg -> appendFile file msg
 
 getStdoutLogger :: Bool -> (CID -> String -> IO ())
 getStdoutLogger False = \_ _ -> return ()
-getStdoutLogger True  = \_ msg -> putStrLn msg
+getStdoutLogger True  = \_ msg -> putStr msg
 
 getDirLogger :: Maybe FilePath -> String -> (CID -> String -> IO ())
 getDirLogger Nothing    _      = \_ _ -> return ()
