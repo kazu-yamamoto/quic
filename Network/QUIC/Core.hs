@@ -7,10 +7,12 @@ module Network.QUIC.Core where
 
 import Control.Concurrent
 import qualified Control.Exception as E
+import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import qualified Network.TLS as TLS
+import Network.TLS hiding (Version, HandshakeFailed)
 import Network.TLS.QUIC
 import System.Timeout
 
@@ -78,6 +80,10 @@ createClientConnection conf@ClientConfig{..} ver = do
     myCID   <- newCID
     peerCID <- newCID
     let logAction = confDebugLog ccConfig peerCID
+    mysa <- NS.getSocketName s0
+    peersa <- NS.getPeerName s0
+    logAction $ "My socket address: " ++ show mysa
+    logAction $ "Peer socket address: " ++ show peersa
     conn <- clientConnection conf ver myCID peerCID logAction cls sref
     void $ forkIO $ readerClient conf s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
@@ -96,6 +102,8 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv = do
       Nothing  -> return ()
       Just srt -> setPeerStatelessResetToken conn srt
     setConnectionOpen conn
+    info <- getConnectionInfo conn
+    connLog conn $ show info
 
 ----------------------------------------------------------------
 
@@ -127,9 +135,6 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
     let logAction msg = confDebugLog (scConfig conf) (originalCID oCID) (msg ++ "\n")
-    logAction $ "My CID: " ++ show myCID
-    logAction $ "Peer CID: " ++ show peerCID
-    logAction $ "Original CID: " ++ show oCID
     logAction $ "My socket address: " ++ show mysa
     logAction $ "Peer socket address: " ++ show peersa0
     void $ forkIO $ readerServer s0 q logAction -- dies when s0 is closed.
@@ -153,6 +158,8 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             setRegister conn register unregister
             register myCID conn
             setConnectionOpen conn
+            info <- getConnectionInfo conn
+            logAction $ show info
             return conn
     setup `E.onException` cls
   where
@@ -178,3 +185,44 @@ close conn = do
     clearThreads conn
     -- close the socket after threads reading/writing the socket die.
     connClose conn
+
+----------------------------------------------------------------
+
+-- | Information about a connection.
+data ConnectionInfo = ConnectionInfo {
+    version :: Version
+  , cipher :: Cipher
+  , alpn :: Maybe ByteString
+  , handshakeMode :: HandshakeMode13
+  , retry :: Bool
+  , localCID :: CID
+  , remoteCID :: CID
+  }
+
+-- | Getting information about a connection.
+getConnectionInfo :: Connection -> IO ConnectionInfo
+getConnectionInfo conn = do
+    mycid <- getMyCID conn
+    peercid <- getPeerCID conn
+    c <- getCipher conn RTT1Level
+    ApplicationSecretInfo mode mproto _ <- getApplicationSecretInfo conn
+    r <- getRetried conn
+    v <- getVersion conn
+    return ConnectionInfo {
+        version = v
+      , cipher = c
+      , alpn = mproto
+      , handshakeMode = mode
+      , retry = r
+      , localCID = mycid
+      , remoteCID = peercid
+      }
+
+instance Show ConnectionInfo where
+    show ConnectionInfo{..} = "Version: " ++ show version ++ "\n"
+                           ++ "Cipher: " ++ show cipher ++ "\n"
+                           ++ "ALPN: " ++ maybe "none" C8.unpack alpn ++ "\n"
+                           ++ "Mode: " ++ show handshakeMode ++ "\n"
+                           ++ "Local " ++ show localCID ++ "\n"
+                           ++ "Remote " ++ show remoteCID ++
+                           if retry then "\nQUIC retry" else ""
