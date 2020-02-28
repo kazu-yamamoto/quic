@@ -24,7 +24,7 @@ module Network.QUIC (
   , defaultConfig
   -- * Types
   , Connection
-  , connLog
+  , connDebugLog
   , StreamID
   , Fin
   , Version(..)

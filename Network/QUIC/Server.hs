@@ -269,7 +269,7 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) crypt)) _ peers
       Just (Entry conn ref)  -> do
           mplain <- decryptCrypt conn crypt RTT1Level
           case mplain of
-            Nothing -> connLog conn $ "Cannot decrypt in dispatch"
+            Nothing -> connDebugLog conn $ "Cannot decrypt in dispatch"
             Just _ -> do
                 mmq <- readIORef ref
                 case mmq of
@@ -297,9 +297,9 @@ migration :: Connection -> SockAddr -> CID -> IORef (Maybe MigrationQ) -> CryptP
 migration conn peersa dCID ref cpkt = do
     mRetiredSeqNum <- choosePeerCID conn
     case mRetiredSeqNum of
-      Nothing -> connLog conn "No new peer CID"
+      Nothing -> connDebugLog conn "No new peer CID"
       Just retiredSeqNum -> do
-          connLog conn $ "Migrating to " ++ show peersa
+          connDebugLog conn $ "Migrating to " ++ show peersa
           mq <- newMigrationQ
           writeIORef ref $ Just mq
           void $ forkIO $ migrator conn peersa mq dCID retiredSeqNum
@@ -311,7 +311,7 @@ migrator conn peersa1 mq dcid retiredSeqNum = do
     mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
     writeIORef (sockInfo conn) (s1,q)
-    void $ forkIO $ readerServer s1 q $ connLog conn
+    void $ forkIO $ readerServer s1 q $ connDebugLog conn
     _ <- setMyCID conn dcid -- fixme: sending error if False
     pdat <- newPathData
     setChallenges conn [pdat]

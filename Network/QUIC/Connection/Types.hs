@@ -6,7 +6,6 @@ module Network.QUIC.Connection.Types where
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
@@ -155,7 +154,8 @@ data Connection = Connection {
   , quicVersion       :: IORef Version
   -- Actions
   , connClose         :: Close
-  , connLog           :: LogAction
+  , connDebugLog      :: LogAction
+  , connQLog          :: LogAction
   -- Manage
   , threadIds         :: IORef [Weak ThreadId]
   , sockInfo          :: IORef (Socket,RecvQ)
@@ -184,17 +184,18 @@ data Connection = Connection {
   }
 
 newConnection :: Role -> Version -> CID -> CID
-              -> LogAction -> Close
+              -> LogAction -> LogAction -> Close
               -> IORef (Socket,RecvQ)
               -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myCID peerCID logAction close sref isecs =
+newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
     Connection rl
         <$> newIORef initialRoleInfo
         <*> newIORef ver
         -- Actions
         <*> return close
-        <*> return logAction'
+        <*> return debugLog
+        <*> return qLog
         -- Manage
         <*> newIORef []
         <*> return sref
@@ -224,7 +225,6 @@ newConnection rl ver myCID peerCID logAction close sref isecs =
     initialRoleInfo
       | rl == Client = defaultClientRoleInfo
       | otherwise    = defaultServerRoleInfo
-    logAction' msg = logAction msg `E.catch` \(E.SomeException _) -> return ()
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
@@ -232,22 +232,22 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> Version -> CID -> CID
-                 -> LogAction -> Close
+                 -> LogAction -> LogAction -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-clientConnection ClientConfig{..} ver myCID peerCID logAction cls sref = do
+clientConnection ClientConfig{..} ver myCID peerCID debugLog qLog cls sref = do
     let isecs = initialSecrets ver peerCID
-    newConnection Client ver myCID peerCID logAction cls sref isecs
+    newConnection Client ver myCID peerCID debugLog qLog cls sref isecs
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
-                 -> LogAction -> Close
+                 -> LogAction -> LogAction -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID origCID logAction cls sref = do
+serverConnection ServerConfig{..} ver myCID peerCID origCID debugLog qLog cls sref = do
     let isecs = case origCID of
           OCFirst oCID -> initialSecrets ver oCID
           OCRetry _    -> initialSecrets ver myCID
-    newConnection Server ver myCID peerCID logAction cls sref isecs
+    newConnection Server ver myCID peerCID debugLog qLog cls sref isecs
 
 ----------------------------------------------------------------
 

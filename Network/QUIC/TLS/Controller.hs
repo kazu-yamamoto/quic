@@ -56,7 +56,7 @@ clientController ClientConfig{..} ver establish sendEarlyData = newQUICClient cp
       , supportedGroups   = confGroups  ccConfig
       }
     debug = def {
-        debugKeyLogger = confKeyLogging ccConfig
+        debugKeyLogger = confKeyLog ccConfig
       }
 
 nullServerController :: ServerController
@@ -97,5 +97,5 @@ serverController ServerConfig{..} ver origCID = do
       , supportedGroups   = confGroups  scConfig
       }
     debug = def {
-        debugKeyLogger = confKeyLogging scConfig
+        debugKeyLogger = confKeyLog scConfig
       }

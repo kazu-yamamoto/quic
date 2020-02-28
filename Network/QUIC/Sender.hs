@@ -106,7 +106,7 @@ sender :: Connection -> SendMany -> IO ()
 sender conn send = handleLog logAction $ forever
     (takeOutput conn >>= sendOutput conn send)
   where
-    logAction msg = connLog conn ("sender: " ++ msg)
+    logAction msg = connDebugLog conn ("sender: " ++ msg)
 
 sendOutput :: Connection -> SendMany -> Output ->IO ()
 sendOutput conn send (OutHndClientHello ch mEarlyData) = do
@@ -170,7 +170,7 @@ sendStreamFragment :: Connection -> SendMany -> StreamID -> ByteString -> Bool -
 sendStreamFragment conn send sid dat0 fin0 = do
     closed <- getStreamFin conn sid
     if closed then
-        connLog conn $ "Stream " ++ show sid ++ " is already closed."
+        connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
       else do
         loop dat0
         when fin0 $ setStreamFin conn sid
@@ -201,7 +201,7 @@ resender conn = handleIOLog cleanupAction logAction $ forever $ do
     mapM_ put ppktpns'
   where
     cleanupAction = putInput conn $ InpError ConnectionIsClosed
-    logAction msg = connLog conn ("resender: " ++ msg)
+    logAction msg = connDebugLog conn ("resender: " ++ msg)
     put (ppkt,pns) = putOutput conn $ OutPlainPacket ppkt pns
 
 isRTTxLevel :: (PlainPacket,[PacketNumber]) -> Bool

@@ -19,8 +19,9 @@ data Config = Config {
   , confCiphers        :: [Cipher]
   , confGroups         :: [Group]
   , confParameters     :: Parameters
-  , confKeyLogging     :: String -> IO ()
+  , confKeyLog         :: String -> IO ()
   , confDebugLog       :: CID -> String -> IO ()
+  , confQLog           :: CID -> String -> IO ()
   }
 
 -- | The default value for common configuration.
@@ -30,8 +31,9 @@ defaultConfig = Config {
   , confCiphers        = ciphersuite_strong
   , confGroups         = [X25519,P256,P384,P521]
   , confParameters     = defaultParameters
-  , confKeyLogging     = \_ -> return ()
+  , confKeyLog         = \_ -> return ()
   , confDebugLog       = \_ _ -> return ()
+  , confQLog           = \_ _ -> return ()
   }
 
 ----------------------------------------------------------------

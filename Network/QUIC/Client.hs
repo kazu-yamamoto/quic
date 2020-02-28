@@ -23,7 +23,7 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
   where
-    logAction msg = connLog conn ("readerClient: " ++ msg)
+    logAction msg = connDebugLog conn ("readerClient: " ++ msg)
     putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV (VersionNegotiationPacket dCID sCID peerVers)) = do
         let myVers = confVersions ccConfig

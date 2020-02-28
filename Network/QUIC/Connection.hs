@@ -6,7 +6,7 @@ module Network.QUIC.Connection (
   , sockInfo -- fixme
   -- * Backend
   , connClose
-  , connLog
+  , connDebugLog
   -- * Packet numbers
   , setPacketNumber
   , getPacketNumber

@@ -79,12 +79,14 @@ createClientConnection conf@ClientConfig{..} ver = do
             void $ NSB.sendMany s bss
     myCID   <- newCID
     peerCID <- newCID
-    let logAction = confDebugLog ccConfig peerCID
+    let debugLog msg = confDebugLog ccConfig peerCID (msg ++ "\n") `E.catch` ignore
+
+        qLog     msg = confQLog     ccConfig peerCID (msg ++ "\n") `E.catch`  ignore
     mysa <- NS.getSocketName s0
     peersa <- NS.getPeerName s0
-    logAction $ "My socket address: " ++ show mysa
-    logAction $ "Peer socket address: " ++ show peersa
-    conn <- clientConnection conf ver myCID peerCID logAction cls sref
+    debugLog $ "My socket address: " ++ show mysa
+    debugLog $ "Peer socket address: " ++ show peersa
+    conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
     void $ forkIO $ readerClient conf s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
     return (conn,send,recv,cls)
@@ -103,7 +105,7 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv = do
       Just srt -> setPeerStatelessResetToken conn srt
     setConnectionOpen conn
     info <- getConnectionInfo conn
-    connLog conn $ show info
+    connDebugLog conn $ show info
 
 ----------------------------------------------------------------
 
@@ -111,14 +113,14 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv = do
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
-runQUICServer conf server = handleLog logAction $ do
+runQUICServer conf server = handleLog debugLog $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
         let create = createServerConnection conf dispatch acc mainThreadId
         void $ forkIO $ E.bracket create close server
   where
-    logAction msg = putStrLn ("runQUICServer: " ++ msg)
+    debugLog msg = putStrLn ("runQUICServer: " ++ msg)
     setup = do
         dispatch <- newDispatch
         -- fixme: the case where sockets cannot be created.
@@ -134,15 +136,18 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
-    let logAction msg = confDebugLog (scConfig conf) (originalCID oCID) (msg ++ "\n")
-    logAction $ "My socket address: " ++ show mysa
-    logAction $ "Peer socket address: " ++ show peersa0
-    void $ forkIO $ readerServer s0 q logAction -- dies when s0 is closed.
+    let ocid = originalCID oCID
+        sconf = scConfig conf
+        debugLog msg = confDebugLog sconf ocid (msg ++ "\n") `E.catch` ignore
+        qLog     msg = confQLog     sconf ocid (msg ++ "\n") `E.catch` ignore
+    debugLog $ "My socket address: " ++ show mysa
+    debugLog $ "Peer socket address: " ++ show peersa0
+    void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
         setup = do
-            conn <- serverConnection conf ver myCID peerCID oCID logAction cls sref
+            conn <- serverConnection conf ver myCID peerCID oCID debugLog qLog cls sref
             setTokenManager conn $ tokenMgr dispatch
             setRetried conn retried
             let send bss = void $ do
@@ -159,7 +164,7 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             register myCID conn
             setConnectionOpen conn
             info <- getConnectionInfo conn
-            logAction $ show info
+            debugLog $ show info
             return conn
     setup `E.onException` cls
   where
@@ -226,3 +231,6 @@ instance Show ConnectionInfo where
                            ++ "Local " ++ show localCID ++ "\n"
                            ++ "Remote " ++ show remoteCID ++
                            if retry then "\nQUIC retry" else ""
+
+ignore :: E.SomeException -> IO ()
+ignore _ = return ()
