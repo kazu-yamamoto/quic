@@ -22,6 +22,7 @@ import H3
 
 data Options = Options {
     optDebugLog   :: Bool
+  , optQLogDir    :: Maybe FilePath
   , optKeyLogFile :: Maybe FilePath
   , optGroups     :: Maybe String
   , optValidate   :: Bool
@@ -35,6 +36,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optDebugLog   = False
+  , optQLogDir    = Nothing
   , optKeyLogFile = Nothing
   , optGroups     = Nothing
   , optHQ         = False
@@ -53,16 +55,19 @@ options = [
     Option ['d'] ["debug"]
     (NoArg (\o -> o { optDebugLog = True }))
     "print debug info"
+  , Option ['q'] ["qlog-dir"]
+    (ReqArg (\dir o -> o { optQLogDir = Just dir }) "<dir>")
+    "directory to store qlog"
   , Option ['l'] ["key-log-file"]
     (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
-    "log negotiated secrets"
+    "a file to store negotiated secrets"
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "<groups>")
     "specify groups"
   , Option ['c'] ["validate"]
     (NoArg (\o -> o { optValidate = True }))
     "validate server's certificate"
-  , Option ['q'] ["hq"]
+  , Option ['r'] ["hq"]
     (NoArg (\o -> o { optHQ = True }))
     "prefer hq (HTTP/0.9)"
   , Option ['V'] ["vernego"]
@@ -122,13 +127,14 @@ main = do
                                      }
                                  else
                                    exampleParameters
-              , confKeyLogging = getLogger optKeyLogFile
+              , confKeyLog     = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
               , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384
                                  , cipher_TLS13_AES128GCM_SHA256
                                  , cipher_TLS13_AES128CCM_SHA256
                                  ]
               , confDebugLog   = getStdoutLogger optDebugLog
+              , confQLog       = getDirLogger optQLogDir ".qlog"
               }
           }
     putStrLn "------------------------"

@@ -27,6 +27,7 @@ import H3
 
 data Options = Options {
     optDebugLogDir :: Maybe FilePath
+  , optQLogDir     :: Maybe FilePath
   , optKeyLogFile  :: Maybe FilePath
   , optGroups      :: Maybe String
   , optCertFile    :: FilePath
@@ -37,6 +38,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optDebugLogDir = Nothing
+  , optQLogDir     = Nothing
   , optKeyLogFile  = Nothing
   , optGroups      = Nothing
   , optCertFile    = "servercert.pem"
@@ -48,13 +50,16 @@ options :: [OptDescr (Options -> Options)]
 options = [
     Option ['d'] ["debug-log-dir"]
     (ReqArg (\dir o -> o { optDebugLogDir = Just dir }) "<dir>")
-    "print debug info"
+    "directory to store a debug file"
+  , Option ['q'] ["qlog-dir"]
+    (ReqArg (\dir o -> o { optQLogDir = Just dir }) "<dir>")
+    "directory to store qlog"
   , Option ['l'] ["key-log-file"]
     (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
-    "log negotiated secrets"
+    "a file to store negotiated secrets"
   , Option ['g'] ["groups"]
     (ReqArg (\gs o -> o { optGroups = Just gs }) "<groups>")
-    "specify groups"
+    "groups for key exchange"
   , Option ['c'] ["cert"]
     (ReqArg (\fl o -> o { optCertFile = fl }) "<file>")
     "certificate file"
@@ -122,13 +127,14 @@ main = do
                     , maxStreamsUni           =       3
                     , idleTimeout             =   30000
                     }
-              , confKeyLogging = getLogger optKeyLogFile
+              , confKeyLog     = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
               , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384
                                  , cipher_TLS13_AES128GCM_SHA256
                                  , cipher_TLS13_AES128CCM_SHA256
                                  ]
               , confDebugLog   = getDirLogger optDebugLogDir ".txt"
+              , confQLog       = getDirLogger optQLogDir ".qlog"
               }
           }
     runQUICServer conf $ \conn -> do
@@ -142,18 +148,18 @@ onE :: IO b -> IO a -> IO a
 h `onE` b = b `E.onException` h
 
 serverHQ :: Connection -> IO ()
-serverHQ conn = connLog conn "Connection terminated" `onE` do
+serverHQ conn = connDebugLog conn "Connection terminated" `onE` do
     mbs <- timeout 5000000 $ recv conn
     case mbs of
-      Nothing -> connLog conn "Connection timeout"
+      Nothing -> connDebugLog conn "Connection timeout"
       Just bs -> do
-          connLog conn $ C8.unpack bs
+          connDebugLog conn $ C8.unpack bs
           send conn html
           shutdown conn
-          connLog conn "Connection finished"
+          connDebugLog conn "Connection finished"
 
 serverH3 :: Connection -> IO ()
-serverH3 conn = connLog conn "Connection terminated" `onE` do
+serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     sendStream conn  3 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
     sendStream conn  7 False $ BS.pack [2]
     sendStream conn 11 False $ BS.pack [3]
@@ -165,9 +171,9 @@ serverH3 conn = connLog conn "Connection terminated" `onE` do
     loop hdrbdy = do
         mx <- timeout 5000000 $ recvStream conn
         case mx of
-          Nothing -> connLog conn "Connection timeout"
+          Nothing -> connDebugLog conn "Connection timeout"
           Just (sid, bs) -> do
-              connLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs))
+              connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs))
               when ((sid `mod` 4) == 0) $ do
                   open <- isStreamOpen conn sid
                   when open $ sendStream conn sid True hdrbdy
