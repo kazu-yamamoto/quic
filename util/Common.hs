@@ -2,6 +2,7 @@ module Common (
     getGroups
   , getLogger
   , getDirLogger
+  , getStdoutLogger
   ) where
 
 import Data.ByteString.Base16 (encode)
@@ -40,7 +41,11 @@ split c s = case break (c==) s of
 
 getLogger :: Maybe FilePath -> (String -> IO ())
 getLogger Nothing     = \_ -> return ()
-getLogger (Just file) = \str -> appendFile file (str ++ "\n")
+getLogger (Just file) = \msg -> appendFile file msg
+
+getStdoutLogger :: Bool -> (CID -> String -> IO ())
+getStdoutLogger False = \_ _ -> return ()
+getStdoutLogger True  = \_ msg -> putStrLn msg
 
 getDirLogger :: Maybe FilePath -> String -> (CID -> String -> IO ())
 getDirLogger Nothing    _      = \_ _ -> return ()

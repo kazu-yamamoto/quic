@@ -21,7 +21,7 @@ import Common
 import H3
 
 data Options = Options {
-    optDebug      :: Bool
+    optDebugLog   :: Bool
   , optKeyLogFile :: Maybe FilePath
   , optGroups     :: Maybe String
   , optValidate   :: Bool
@@ -34,7 +34,7 @@ data Options = Options {
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optDebug      = False
+    optDebugLog   = False
   , optKeyLogFile = Nothing
   , optGroups     = Nothing
   , optHQ         = False
@@ -51,7 +51,7 @@ usage = "Usage: client [OPTION] addr port"
 options :: [OptDescr (Options -> Options)]
 options = [
     Option ['d'] ["debug"]
-    (NoArg (\o -> o { optDebug = True }))
+    (NoArg (\o -> o { optDebugLog = True }))
     "print debug info"
   , Option ['l'] ["key-log-file"]
     (ReqArg (\file o -> o { optKeyLogFile = Just file }) "<file>")
@@ -128,15 +128,12 @@ main = do
                                  , cipher_TLS13_AES128GCM_SHA256
                                  , cipher_TLS13_AES128CCM_SHA256
                                  ]
-              , confDebugLog   = \_ msg -> putStrLn msg
+              , confDebugLog   = getStdoutLogger optDebugLog
               }
           }
     putStrLn "------------------------"
     res <- runQUICClient conf $ \conn -> do
         info <- getConnectionInfo conn
-        when optDebug $ do
-            threadDelay 10000
-            print info
         let client = case alpn info of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
               _                                       -> clientH3 addr
@@ -162,9 +159,6 @@ main = do
         putStrLn "------------------------"
         void $ runQUICClient conf' $ \conn -> do
             info <- getConnectionInfo conn
-            when optDebug $ do
-                threadDelay 10000
-                print info
             if rtt0 then do
                 putStrLn "------------------------ Response for early data"
                 (sid, bs) <- recvStream conn
