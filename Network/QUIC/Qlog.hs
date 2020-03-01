@@ -86,3 +86,17 @@ chop xxs@(x:xs) = frst : rest
 
 instance Qlog RetryPacket where
     qlog RetryPacket{} = "{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}"
+
+qlogPrologue :: String -> CID -> String
+qlogPrologue role oCID = "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ role ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":["
+  where
+    ocid = show oCID
+
+qlogEpilogue :: String
+qlogEpilogue = "[]]}]}"
+
+qlogReceived :: Qlog a => a -> String
+qlogReceived pkt = "[0,\"transport\",\"packet_received\"," ++ qlog pkt ++ "],"
+
+qlogSent :: Qlog a => a -> String
+qlogSent pkt = "[0,\"transport\",\"packet_sent\"," ++ qlog pkt ++ "],"

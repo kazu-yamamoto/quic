@@ -42,7 +42,7 @@ processCryptPacket conn (CryptPacket header crypt) = do
               -- fixme: need to check Sec 13.1
               addPeerPacketNumbers conn level pn
               mapM_ (processFrame conn level) fs
-              connQLog conn $ "[0,\"transport\",\"packet_received\"," ++ qlog (PlainPacket header plain) ++ "],"
+              connQLog conn $ qlogReceived $ PlainPacket header plain
           Nothing -> do
               statelessReset <- isStateessReset conn header crypt
               if statelessReset then do

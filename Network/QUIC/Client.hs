@@ -36,7 +36,7 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
         putCrypto conn $ InpVersion mver
     putQ (PacketIC pkt) = writeRecvQ q pkt
     putQ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
-        connQLog conn $ "[0,\"transport\",\"packet_received\"," ++ qlog pkt ++ "],"
+        connQLog conn $ qlogReceived pkt
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
         mppkt <- releasePlainPacket conn 0
