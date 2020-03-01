@@ -9,6 +9,12 @@ import Network.QUIC.Types
 class Qlog a where
     qlog :: a -> String
 
+instance Qlog RetryPacket where
+    qlog RetryPacket{} = "{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}"
+
+instance Qlog VersionNegotiationPacket where
+    qlog VersionNegotiationPacket{} = "{\"packet_type\":\"version_negotiation\",\"header\":{\"packet_number\":\"\"}}"
+
 instance Qlog PlainPacket where
     qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" ++ packetType hdr ++ "\",\"frames\":" ++ "[" ++ intercalate "," (map qlog plainFrames) ++ "]" ++ ",\"header\":{\"packet_number\":\"" ++ show plainPacketNumber ++ "\"}}"
 
@@ -83,9 +89,6 @@ chop xxs@(x:xs) = frst : rest
     (ys,zs) = span (\(a,b) -> a - b == 1) $ zip xs xxs
     frst = x : map fst ys
     rest = chop $ map fst zs
-
-instance Qlog RetryPacket where
-    qlog RetryPacket{} = "{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}"
 
 qlogPrologue :: String -> CID -> String
 qlogPrologue role oCID = "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ role ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":["

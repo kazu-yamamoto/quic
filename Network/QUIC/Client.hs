@@ -26,7 +26,8 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
   where
     logAction msg = connDebugLog conn ("readerClient: " ++ msg)
     putQ (PacketIB BrokenPacket) = return ()
-    putQ (PacketIV (VersionNegotiationPacket dCID sCID peerVers)) = do
+    putQ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
+        connQLog conn $ qlogReceived pkt
         let myVers = confVersions ccConfig
         mver <- case myVers `intersect` peerVers of
                   []    -> return Nothing
