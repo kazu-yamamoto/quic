@@ -29,12 +29,12 @@ spec = do
             s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
             q <- newRecvQ
             sref <- newIORef (s,q)
-            clientConn <- clientConnection clientConf ver clientCID serverCID noLog cls sref
+            clientConn <- clientConnection clientConf ver clientCID serverCID noLog noLog cls sref
             let serverConf = defaultServerConfig {
                     scKey   = "test/serverkey.pem"
                   , scCert  = "test/servercert.pem"
                   }
-            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) noLog cls sref
+            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (OCFirst serverCID) noLog noLog cls sref
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain
