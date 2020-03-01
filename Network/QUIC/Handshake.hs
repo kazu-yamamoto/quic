@@ -123,6 +123,8 @@ recvClientHello control conn = loop
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]
   | extid == extensionID_QuicTransportParameters = do
-        let Just plist = decodeParametersList params
-        setPeerParameters conn plist
+        let mplist = decodeParametersList params
+        case mplist of
+          Nothing    -> connDebugLog conn "cannot decode parameters"
+          Just plist -> setPeerParameters conn plist
 setPeerParams _ _ = return ()
