@@ -8,6 +8,7 @@ module Network.QUIC.Connection (
   , connClose
   , connDebugLog
   , connQLog
+  , elapsedTime
   -- * Packet numbers
   , setPacketNumber
   , getPacketNumber

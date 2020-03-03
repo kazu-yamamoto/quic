@@ -27,7 +27,7 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
     logAction msg = connDebugLog conn ("readerClient: " ++ msg)
     putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
-        connQLog conn $ qlogReceived pkt
+        qlogReceived conn pkt
         let myVers = confVersions ccConfig
         mver <- case myVers `intersect` peerVers of
                   []    -> return Nothing
@@ -37,7 +37,7 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
         putCrypto conn $ InpVersion mver
     putQ (PacketIC pkt) = writeRecvQ q pkt
     putQ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
-        connQLog conn $ qlogReceived pkt
+        qlogReceived conn pkt
         -- The packet number of first crypto frame is 0.
         -- This ensures that retry can be accepted only once.
         mppkt <- releasePlainPacket conn 0

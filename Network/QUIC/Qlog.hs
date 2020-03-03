@@ -6,7 +6,9 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
 import Data.List
+
 import Network.QUIC.Types
+import Network.QUIC.Connection
 
 class Qlog a where
     qlog :: a -> String
@@ -116,8 +118,12 @@ qlogPrologue role oCID = "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"va
 qlogEpilogue :: String
 qlogEpilogue = "[]]}]}"
 
-qlogReceived :: Qlog a => a -> String
-qlogReceived pkt = "[0,\"transport\",\"packet_received\"," ++ qlog pkt ++ "],"
+qlogReceived :: Qlog a => Connection -> a -> IO ()
+qlogReceived conn pkt = do
+    tim <- elapsedTime conn
+    connQLog conn ("[" ++ show tim ++ ",\"transport\",\"packet_received\"," ++ qlog pkt ++ "],")
 
-qlogSent :: Qlog a => a -> String
-qlogSent pkt = "[0,\"transport\",\"packet_sent\"," ++ qlog pkt ++ "],"
+qlogSent :: Qlog a => Connection -> a -> IO ()
+qlogSent conn pkt = do
+    tim <- elapsedTime conn
+    connQLog conn ("[" ++ show tim ++ ",\"transport\",\"packet_sent\"," ++ qlog pkt ++ "],")

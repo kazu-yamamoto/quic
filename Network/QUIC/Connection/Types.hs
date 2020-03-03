@@ -9,15 +9,16 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 import System.Mem.Weak
+import Time.System
 
 import Network.QUIC.Config
 import Network.QUIC.Imports
@@ -159,6 +160,7 @@ data Connection = Connection {
   -- Manage
   , threadIds         :: IORef [Weak ThreadId]
   , sockInfo          :: IORef (Socket,RecvQ)
+  , elapsedTime       :: IO Int
   -- Mine
   , myCIDDB           :: IORef CIDDB
   , migrationStatus   :: TVar MigrationStatus
@@ -199,6 +201,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         -- Manage
         <*> newIORef []
         <*> return sref
+        <*> (getElapsedTime <$> timeCurrentP)
         -- Mine
         <*> newIORef (newCIDDB myCID)
         <*> newTVarIO NonMigration
@@ -253,3 +256,15 @@ serverConnection ServerConfig{..} ver myCID peerCID origCID debugLog qLog cls sr
 
 isClient :: Connection -> Bool
 isClient Connection{..} = role == Client
+
+----------------------------------------------------------------
+
+getElapsedTime :: ElapsedP -> IO Int
+getElapsedTime base = do
+    curr <- timeCurrentP
+    return $ relativeTime base curr
+
+relativeTime :: ElapsedP -> ElapsedP -> Int
+relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
+  where
+   (Seconds s, NanoSeconds n) = t2 `timeDiffP` t1

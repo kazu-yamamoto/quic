@@ -52,7 +52,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
-            connQLog conn $ qlogSent ppkt
+            qlogSent conn ppkt
             encodePlainPacket conn ppkt Nothing
     constructAckPacket RTT1Level ver mycid peercid _ = do
         ppns <- getPeerPacketNumbers conn HandshakeLevel
@@ -66,7 +66,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
-            connQLog conn $ qlogSent ppkt
+            qlogSent conn ppkt
             encodePlainPacket conn ppkt Nothing
     constructAckPacket _ _ _ _ _ = return []
     constructTargetPacket ver mycid peercid mlen token = do
@@ -82,7 +82,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
               RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames')
         when (frames /= []) $
             keepPlainPacket conn [mypn] ppkt lvl ppns
-        connQLog conn $ qlogSent ppkt
+        qlogSent conn ppkt
         encodePlainPacket conn ppkt mlen
 
 constructRetransmit :: Connection -> PlainPacket -> [PacketNumber] -> IO [ByteString]
@@ -102,7 +102,7 @@ constructRetransmit conn (PlainPacket hdr0 plain0) pns = do
         plain = plain0 { plainPacketNumber = mypn }
         ppkt = PlainPacket hdr plain
     keepPlainPacket conn (mypn:pns) ppkt lvl emptyPeerPacketNumbers
-    connQLog conn $ qlogSent ppkt
+    qlogSent conn ppkt
     encodePlainPacket conn ppkt $ Just maximumQUICPacketSize
 
 ----------------------------------------------------------------
