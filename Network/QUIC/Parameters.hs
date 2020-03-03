@@ -2,9 +2,10 @@
 
 module Network.QUIC.Parameters where
 
-import System.IO.Unsafe (unsafeDupablePerformIO)
+import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
+import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -187,40 +188,30 @@ encSRT _ = error "encSRT"
 encodeParametersList :: ParametersList -> ByteString
 encodeParametersList kvs = unsafeDupablePerformIO $
     withWriteBuffer 2048 $ \wbuf -> do -- for grease
-        write16 wbuf $ fromIntegral $ calc kvs
         mapM_ (put wbuf) kvs
   where
-    calc = foldl' (\acc (_,v) -> acc + BS.length v + 4) 0
     put wbuf (k,v) = do
-        write16 wbuf $ fromParametersKeyId k
-        write16 wbuf $ fromIntegral $ BS.length v
+        encodeInt' wbuf $ fromIntegral $ fromParametersKeyId k
+        encodeInt' wbuf $ fromIntegral $ BS.length v
         copyByteString wbuf v
 
 decodeParametersList :: ByteString -> Maybe ParametersList
 decodeParametersList bs = unsafeDupablePerformIO $
-    withReadBuffer bs $ \rbuf -> do
-        len <- read16 rbuf
-        if len /= (len0 - 2) then
-            return Nothing
-          else
-            go rbuf id
+    (withReadBuffer bs (\rbuf -> go rbuf id) `E.catch` \BufferOverrun -> return Nothing)
   where
-    len0 = fromIntegral $ BS.length bs
     go rbuf build = do
        rest1 <- remainingSize rbuf
        if rest1 == 0 then
           return $ Just (build [])
-       else if rest1 < 4 then
-          return Nothing
-        else do
-          key <- read16 rbuf
-          len <- read16 rbuf
+       else do
+          key <- fromIntegral <$> decodeInt' rbuf
+          len <- fromIntegral <$> decodeInt' rbuf
           case toParametersKeyId key of
              Nothing -> do
-               ff rbuf $ fromIntegral len
+               ff rbuf len
                go rbuf build
              Just keyid -> do
-               val <- extractByteString rbuf $ fromIntegral len
+               val <- extractByteString rbuf len
                go rbuf (build . ((keyid,val):))
 
 -- | An example parameters obsoleted in the near future.
