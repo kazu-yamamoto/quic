@@ -32,7 +32,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
     mycid <- getMyCID conn
     peercid <- getPeerCID conn
     if genLowerAck then do
-        bss0 <- constructAckPacket lvl ver mycid peercid token
+        bss0 <- constructLowerAckPacket lvl ver mycid peercid token
         let total = sum (map B.length bss0)
             mTargetSize' = subtract total <$> mTargetSize
         bss1 <- constructTargetPacket ver mycid peercid mTargetSize' token
@@ -40,7 +40,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
       else
         constructTargetPacket ver mycid peercid mTargetSize token
   where
-    constructAckPacket HandshakeLevel ver mycid peercid token = do
+    constructLowerAckPacket HandshakeLevel ver mycid peercid token = do
         ppns <- getPeerPacketNumbers conn InitialLevel
         if nullPeerPacketNumbers ppns then
             return []
@@ -54,7 +54,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 ppkt     = PlainPacket header plain
             qlogSent conn ppkt
             encodePlainPacket conn ppkt Nothing
-    constructAckPacket RTT1Level ver mycid peercid _ = do
+    constructLowerAckPacket RTT1Level ver mycid peercid _ = do
         ppns <- getPeerPacketNumbers conn HandshakeLevel
         if nullPeerPacketNumbers ppns then
             return []
@@ -68,7 +68,7 @@ construct conn lvl frames genLowerAck mTargetSize = do
                 ppkt     = PlainPacket header plain
             qlogSent conn ppkt
             encodePlainPacket conn ppkt Nothing
-    constructAckPacket _ _ _ _ _ = return []
+    constructLowerAckPacket _ _ _ _ _ = return []
     constructTargetPacket ver mycid peercid mlen token = do
         mypn <- getPacketNumber conn
         ppns <- getPeerPacketNumbers conn lvl
@@ -186,7 +186,7 @@ sendStreamFragment conn send sid dat0 fin0 = do
         off <- getStreamOffset conn sid $ B.length target
         let fin = fin0 && rest == ""
             frame = Stream sid off dat fin
-        bss <- construct conn RTT1Level [frame] True $ Just maximumQUICPacketSize
+        bss <- construct conn RTT1Level [frame] False $ Just maximumQUICPacketSize
         send bss
         loop rest
 
