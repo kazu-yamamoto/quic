@@ -3,6 +3,8 @@
 module Network.QUIC.Qlog where
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Short as Short
 import Data.List
 import Network.QUIC.Types
 
@@ -70,10 +72,26 @@ frameExtra (NewConnectionID _Int _Int' _CID _StatelessResetToken) = ""
 frameExtra (RetireConnectionID _Int) = ""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
-frameExtra (ConnectionCloseQUIC _TransportError _FrameType _ReasonPhrase) = ""
-frameExtra (ConnectionCloseApp _ApplicationError _ReasonPhrase) = ""
+frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" ++ transportError err ++ "\",\"raw_error_code\":" ++ show (fromTransportError err) ++ ",\"reason\":\"" ++ C8.unpack (Short.fromShort reason) ++ "\""
+frameExtra (ConnectionCloseApp _err reason) =  ",\"error_space\":\"transport\",\"error_code\":\"" ++ "\",\"raw_error_code\":" ++ show (0 :: Int) ++ ",\"reason\":\"" ++ C8.unpack (Short.fromShort reason) ++ "\"" -- fixme
 frameExtra (HandshakeDone) = ""
 frameExtra (UnknownFrame _Int) = ""
+
+transportError :: TransportError -> String
+transportError NoError                 = "no_error"
+transportError InternalError           = "internal_error"
+transportError ServerBusy              = "server_busy"
+transportError FlowControlError        = "flow_control_error"
+transportError StreamLimitError        = "stream_limit_error"
+transportError StreamStateError        = "stream_state_error"
+transportError FinalSizeError          = "final_size_error"
+transportError FrameEncodingError      = "frame_encoding_error"
+transportError TransportParameterError = "transport_parameter_err"
+transportError ConnectionIdLimitError  = "connection_id_limit_error"
+transportError ProtocolViolation       = "protocol_violation"
+transportError InvalidToken            = "invalid_migration"
+transportError CryptoBufferExceeded    = "crypto_buffer_exceeded"
+transportError _                       = ""
 
 ack :: [PacketNumber] -> String
 ack ps = "[" ++ intercalate "," (map shw (chop ps)) ++ "]"
