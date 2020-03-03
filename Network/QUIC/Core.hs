@@ -145,6 +145,9 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     debugLog $ "My socket address: " ++ show mysa
     debugLog $ "Peer socket address: " ++ show peersa0
     qLog $ qlogPrologue "server" ocid
+    when retried $ do
+        qLog qlogRecvInitial
+        qLog qlogSentRetry
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
     let cls = do
             (s,_) <- readIORef sref

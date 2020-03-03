@@ -127,3 +127,9 @@ qlogSent :: Qlog a => Connection -> a -> IO ()
 qlogSent conn pkt = do
     tim <- elapsedTime conn
     connQLog conn ("[" ++ show tim ++ ",\"transport\",\"packet_sent\"," ++ qlog pkt ++ "],")
+
+qlogRecvInitial :: String
+qlogRecvInitial = "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],"
+
+qlogSentRetry :: String
+qlogSentRetry = "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],"
