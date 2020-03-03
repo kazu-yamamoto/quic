@@ -27,7 +27,7 @@ data Config = Config {
 -- | The default value for common configuration.
 defaultConfig :: Config
 defaultConfig = Config {
-    confVersions       = [Draft25,Draft24]
+    confVersions       = [Draft27]
   , confCiphers        = ciphersuite_strong
   , confGroups         = [X25519,P256,P384,P521]
   , confParameters     = defaultParameters

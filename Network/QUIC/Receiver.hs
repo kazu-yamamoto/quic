@@ -79,13 +79,11 @@ processFrame conn lvl (Crypto off cdat) = do
                     cryptoToken <- generateToken =<< getVersion conn
                     mgr <- getTokenManager conn
                     token <- encryptToken mgr cryptoToken
-                    ver <- getVersion conn
                     (sn,mycid,srt) <- getNewMyCID conn
                     register <- getRegister conn
                     register mycid conn
                     let ncid = NewConnectionID sn 0 mycid srt
-                    let frames | ver >= Draft25 = [HandshakeDone,NewToken token,ncid]
-                               | otherwise      = [NewToken token,ncid]
+                    let frames = [HandshakeDone,NewToken token,ncid]
                     putOutput conn $ OutControl RTT1Level frames
                 _ -> return ()
       RTT1Level

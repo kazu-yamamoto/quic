@@ -63,17 +63,11 @@ encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuff
     let Flags flags = retryPacketType
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
-    let (odcid, odcidlen) = unpackCID odCID
-    if ver >= Draft25 then do
-        copyByteString wbuf token
-        siz <- savingSize wbuf
-        pseudo0 <- extractByteString wbuf $ negate siz
-        let tag = calculateIntegrityTag odCID pseudo0
-        copyByteString wbuf tag
-      else do
-        write8 wbuf odcidlen
-        copyShortByteString wbuf odcid
-        copyByteString wbuf token
+    copyByteString wbuf token
+    siz <- savingSize wbuf
+    pseudo0 <- extractByteString wbuf $ negate siz
+    let tag = calculateIntegrityTag odCID pseudo0
+    copyByteString wbuf tag
     -- no header protection
 encodeRetryPacket _ = error "encodeRetryPacket"
 

@@ -111,20 +111,13 @@ decodeVersionNegotiationPacket rbuf dCID sCID = do
       | otherwise = return $ vers []
 
 decodeRetryPacket :: ReadBuffer -> Flags Protected -> Version -> CID -> CID -> IO PacketI
-decodeRetryPacket rbuf _proFlags version dCID sCID
-  | version >= Draft25 = do
+decodeRetryPacket rbuf _proFlags version dCID sCID = do
     rsiz <- remainingSize rbuf
     token <- extractByteString rbuf (rsiz - 16)
     siz <- savingSize rbuf
     pseudo <- extractByteString rbuf $ negate siz
     tag <- extractByteString rbuf 16
     return $ PacketIR $ RetryPacket version dCID sCID token (Right (pseudo,tag))
-  | otherwise = do
-    odcidlen <- fromIntegral <$> read8 rbuf
-    odCID <- makeCID <$> extractShortByteString rbuf odcidlen
-    siz <- remainingSize rbuf
-    token <- extractByteString rbuf siz
-    return $ PacketIR $ RetryPacket version dCID sCID token (Left odCID)
 
 ----------------------------------------------------------------
 
