@@ -195,7 +195,7 @@ sendStreamFragment conn send sid dat0 fin0 = do
 resender :: Connection -> IO ()
 resender conn = handleIOLog cleanupAction logAction $ forever $ do
     threadDelay 100000
-    ppktpns <- getRetransmissions conn (MilliSeconds 400)
+    ppktpns <- getRetransmissions conn (MilliSeconds 600)
     open <- isConnectionOpen conn
     -- Some implementations do not return Ack for Initial and Handshake
     -- correctly. We should consider that the success of handshake
