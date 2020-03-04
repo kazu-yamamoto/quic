@@ -77,6 +77,7 @@ data Plain  = Plain  {
 data Crypt = Crypt {
     cryptPktNumOffset :: Int
   , cryptPacket       :: ByteString
+  , cryptLogged       :: Bool
   } deriving (Eq, Show)
 
 ----------------------------------------------------------------

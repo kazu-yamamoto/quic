@@ -40,6 +40,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Qlog
 import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Types
@@ -260,7 +261,7 @@ dispatch Dispatch{..} ServerConfig{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) crypt)) _ peersa _ _ = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
@@ -270,11 +271,14 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (Short dCID) crypt)) _ peers
           mplain <- decryptCrypt conn crypt RTT1Level
           case mplain of
             Nothing -> connDebugLog conn $ "Cannot decrypt in dispatch"
-            Just _ -> do
+            Just plain -> do
                 mmq <- readIORef ref
                 case mmq of
                   Just mq -> writeMigrationQ mq cpkt
-                  Nothing -> migration conn peersa dCID ref cpkt
+                  Nothing -> do
+                      qlogReceived conn $ PlainPacket hdr plain
+                      let cpkt' = CryptPacket hdr crypt { cryptLogged = True }
+                      migration conn peersa dCID ref cpkt'
 dispatch _ _ (PacketIB _)  _ _ _ _ = print BrokenPacket
 dispatch _ _ _ _ _ _ _ = return () -- throwing away
 
