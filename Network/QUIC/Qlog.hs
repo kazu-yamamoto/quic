@@ -19,6 +19,9 @@ instance Qlog RetryPacket where
 instance Qlog VersionNegotiationPacket where
     qlog VersionNegotiationPacket{} = "{\"packet_type\":\"version_negotiation\",\"header\":{\"packet_number\":\"\"}}"
 
+instance Qlog CryptPacket where
+    qlog (CryptPacket hdr _) = "{\"packet_type\":\"" ++ packetType hdr ++ "\"}"
+
 instance Qlog PlainPacket where
     qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" ++ packetType hdr ++ "\",\"frames\":" ++ "[" ++ intercalate "," (map qlog plainFrames) ++ "]" ++ ",\"header\":{\"packet_number\":\"" ++ show plainPacketNumber ++ "\"}}"
 
@@ -133,3 +136,8 @@ qlogRecvInitial = "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initi
 
 qlogSentRetry :: String
 qlogSentRetry = "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],"
+
+qlogDropped :: Qlog a => Connection -> a -> IO ()
+qlogDropped conn pkt = do
+    tim <- elapsedTime conn
+    connQLog conn ("[" ++ show tim ++ ",\"transport\",\"packet_dropped\"," ++ qlog pkt ++ "],")

@@ -23,14 +23,15 @@ receiver conn recv = handleLog logAction $ forever
     logAction msg = connDebugLog conn ("receiver: " ++ msg)
 
 processCryptPacket :: Connection -> CryptPacket -> IO ()
-processCryptPacket conn (CryptPacket header crypt) = do
+processCryptPacket conn cpkt@(CryptPacket header crypt) = do
     let level = packetEncryptionLevel header
     -- If RTT1 comes just after Initial, checkEncryptionLevel
     -- waits forever. To avoid this, timeout used.
     -- If timeout happens, the packet cannot be decrypted
     -- and thrown away.
     mt <- timeout 100000 $ checkEncryptionLevel conn level
-    if isNothing mt then
+    if isNothing mt then do
+        qlogDropped conn cpkt
         connDebugLog conn "Timeout: ignoring a packet"
       else do
         when (isClient conn && level == HandshakeLevel) $
