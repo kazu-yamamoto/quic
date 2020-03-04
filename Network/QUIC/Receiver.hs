@@ -41,9 +41,9 @@ processCryptPacket conn (CryptPacket header crypt) = do
               -- For Ping, record PPN first, then send an ACK.
               -- fixme: need to check Sec 13.1
               addPeerPacketNumbers conn level pn
-              mapM_ (processFrame conn level) fs
               unless (cryptLogged crypt) $
                   qlogReceived conn $ PlainPacket header plain
+              mapM_ (processFrame conn level) fs
           Nothing -> do
               statelessReset <- isStateessReset conn header crypt
               if statelessReset then do
