@@ -126,7 +126,14 @@ processFrame conn RTT0Level (Stream sid off dat fin) = do
 processFrame conn RTT1Level (Stream sid off dat fin) =
     putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
-    putOutput conn $ OutControl lvl []
+    -- An implementation sends:
+    --   Handshake PN=2
+    --   Handshake PN=3 Ping
+    --   Handshake PN=0
+    --   Handshake PN=1
+    -- If ACK 2-3 sends immediately, the peer misunderstand that
+    -- 0 and 1 are dropped.
+    when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
 processFrame conn _ HandshakeDone = do
     control <- getClientController conn
     void $ forkIO $ do
