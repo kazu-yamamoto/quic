@@ -7,6 +7,7 @@ module Network.QUIC.Connection.Migration (
   , getNewMyCID
   , setMyCID
   , retireMyCID
+  , retirePeerCID
   , addPeerCID
   , choosePeerCID
   , setPeerStatelessResetToken
@@ -79,7 +80,14 @@ setMyCID Connection{..} ncid = do
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO ()
-retireMyCID Connection{..} n = atomicModifyIORef myCIDDB retire
+retireMyCID Connection{..} n = retireCID myCIDDB n
+
+-- | Sending RetireConnectionID
+retirePeerCID :: Connection -> Int -> IO ()
+retirePeerCID Connection{..} n = retireCID peerCIDDB n
+
+retireCID :: IORef CIDDB -> Int -> IO ()
+retireCID ref n = atomicModifyIORef ref retire
   where
     retire db = (db', ())
       where

@@ -322,4 +322,5 @@ migrator conn peersa1 mq dcid retiredSeqNum = do
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]
     waitResponse conn
     _ <- timeout 2000000 $ forever (readMigrationQ mq >>= writeRecvQ q)
+    retirePeerCID conn retiredSeqNum
     close s0
