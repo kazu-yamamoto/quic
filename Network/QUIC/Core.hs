@@ -106,6 +106,9 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv = do
       Nothing  -> return ()
       Just srt -> setPeerStatelessResetToken conn srt
     setConnectionOpen conn
+    (sn,mycid,srt) <- getNewMyCID conn
+    let ncid = NewConnectionID sn 0 mycid srt
+    putOutput conn $ OutControl RTT1Level [ncid]
     info <- getConnectionInfo conn
     connDebugLog conn $ show info
 
