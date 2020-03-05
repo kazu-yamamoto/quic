@@ -38,6 +38,7 @@ module Network.QUIC.Connection (
   -- * Migration
   , getMyCID
   , getPeerCID
+  , isMyCID
   , resetPeerCID
   , getNewMyCID
   , setMyCID

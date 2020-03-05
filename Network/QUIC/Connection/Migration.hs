@@ -3,6 +3,7 @@
 module Network.QUIC.Connection.Migration (
     getMyCID
   , getPeerCID
+  , isMyCID
   , resetPeerCID
   , getNewMyCID
   , setMyCID
@@ -28,6 +29,10 @@ import Network.QUIC.Types
 
 getMyCID :: Connection -> IO CID
 getMyCID Connection{..} = usedCID <$> readIORef myCIDDB
+
+isMyCID :: Connection -> CID -> IO Bool
+isMyCID Connection{..} cid =
+    isJust . findByCID cid . cidInfos <$> readIORef myCIDDB
 
 getPeerCID :: Connection -> IO CID
 getPeerCID Connection{..} = usedCID <$> readIORef peerCIDDB

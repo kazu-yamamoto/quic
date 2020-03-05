@@ -6,7 +6,7 @@ module Network.QUIC.Receiver (
   ) where
 
 import Control.Concurrent
-import Network.TLS.QUIC
+import Network.TLS.QUIC hiding (RTT0)
 import System.Timeout
 
 import Network.QUIC.Connection
@@ -24,36 +24,46 @@ receiver conn recv = handleLog logAction $ forever
 
 processCryptPacket :: Connection -> CryptPacket -> IO ()
 processCryptPacket conn cpkt@(CryptPacket header crypt) = do
-    let level = packetEncryptionLevel header
-    -- If RTT1 comes just after Initial, checkEncryptionLevel
-    -- waits forever. To avoid this, timeout used.
-    -- If timeout happens, the packet cannot be decrypted
-    -- and thrown away.
-    mt <- timeout 100000 $ checkEncryptionLevel conn level
-    if isNothing mt then do
+    ok <- checkCID header
+    if not ok then do
         qlogDropped conn cpkt
-        connDebugLog conn "Timeout: ignoring a packet"
+        connDebugLog conn "CID is unknown"
       else do
-        when (isClient conn && level == HandshakeLevel) $
-            resetPeerCID conn $ headerPeerCID header
-        mplain <- decryptCrypt conn crypt level
-        case mplain of
-          Just plain@(Plain _ pn fs) -> do
-              -- For Ping, record PPN first, then send an ACK.
-              -- fixme: need to check Sec 13.1
-              addPeerPacketNumbers conn level pn
-              unless (cryptLogged crypt) $
-                  qlogReceived conn $ PlainPacket header plain
-              mapM_ (processFrame conn level) fs
-          Nothing -> do
-              statelessReset <- isStateessReset conn header crypt
-              if statelessReset then do
-                  connDebugLog conn "Connection is reset statelessly"
-                  setCloseReceived conn
-                  clearThreads conn
-                else do
-                  connDebugLog conn $ "Cannot decrypt: " ++ show level
-                  return () -- fixme: sending statelss reset
+        let level = packetEncryptionLevel header
+        -- If RTT1 comes just after Initial, checkEncryptionLevel
+        -- waits forever. To avoid this, timeout used.
+        -- If timeout happens, the packet cannot be decrypted
+        -- and thrown away.
+        mt <- timeout 100000 $ checkEncryptionLevel conn level
+        if isNothing mt then do
+            qlogDropped conn cpkt
+            connDebugLog conn "Timeout: ignoring a packet"
+          else do
+            when (isClient conn && level == HandshakeLevel) $
+                resetPeerCID conn $ headerPeerCID header
+            mplain <- decryptCrypt conn crypt level
+            case mplain of
+              Just plain@(Plain _ pn fs) -> do
+                  -- For Ping, record PPN first, then send an ACK.
+                  -- fixme: need to check Sec 13.1
+                  addPeerPacketNumbers conn level pn
+                  unless (cryptLogged crypt) $
+                      qlogReceived conn $ PlainPacket header plain
+                  mapM_ (processFrame conn level) fs
+              Nothing -> do
+                  statelessReset <- isStateessReset conn header crypt
+                  if statelessReset then do
+                      connDebugLog conn "Connection is reset statelessly"
+                      setCloseReceived conn
+                      clearThreads conn
+                    else do
+                      connDebugLog conn $ "Cannot decrypt: " ++ show level
+                      return () -- fixme: sending statelss reset
+  where
+    checkCID Initial{}           = return True
+    checkCID RTT0{}              = return True
+    checkCID (Handshake _ cid _) = isMyCID conn cid
+    checkCID (Short       cid)   = isMyCID conn cid
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -148,8 +158,8 @@ processFrame conn _ _frame        = do
 -- But we should check other packets, too.
 isStateessReset :: Connection -> Header -> Crypt -> IO Bool
 isStateessReset conn header Crypt{..} = do
-    myCID <- getMyCID conn
-    if myCID == headerMyCID header then
+    ok <- isMyCID conn $ headerMyCID header
+    if ok then
         return False
       else case decodeStatelessResetToken cryptPacket of
              Nothing    -> return False
