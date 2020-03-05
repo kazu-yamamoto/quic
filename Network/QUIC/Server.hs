@@ -302,7 +302,7 @@ migration conn peersa dCID ref cpkt = do
     mRetiredSeqNum <- choosePeerCID conn
     case mRetiredSeqNum of
       Nothing -> connDebugLog conn "No new peer CID"
-      Just retiredSeqNum -> do
+      Just (CIDInfo retiredSeqNum _ _) -> do
           connDebugLog conn $ "Migrating to " ++ show peersa
           mq <- newMigrationQ
           writeIORef ref $ Just mq

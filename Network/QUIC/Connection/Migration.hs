@@ -29,14 +29,14 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 getMyCID :: Connection -> IO CID
-getMyCID Connection{..} = usedCID <$> readIORef myCIDDB
+getMyCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
 
 isMyCID :: Connection -> CID -> IO Bool
 isMyCID Connection{..} cid =
     isJust . findByCID cid . cidInfos <$> readIORef myCIDDB
 
 getPeerCID :: Connection -> IO CID
-getPeerCID Connection{..} = usedCID <$> readIORef peerCIDDB
+getPeerCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef peerCIDDB
 
 ----------------------------------------------------------------
 
@@ -81,26 +81,23 @@ addPeerCID :: Connection -> CIDInfo -> IO ()
 addPeerCID Connection{..} cidInfo = atomicModifyIORef peerCIDDB $ add cidInfo
 
 -- | Using a new CID and sending RetireConnectionID
-chooseMyCID :: Connection -> IO (Maybe Int)
+chooseMyCID :: Connection -> IO (Maybe CIDInfo)
 chooseMyCID Connection{..} = chooseCID myCIDDB
 
 -- | Using a new CID and sending RetireConnectionID
-choosePeerCID :: Connection -> IO (Maybe Int)
+choosePeerCID :: Connection -> IO (Maybe CIDInfo)
 choosePeerCID Connection{..} = chooseCID peerCIDDB
 
-chooseCID :: IORef CIDDB -> IO (Maybe Int)
+chooseCID :: IORef CIDDB -> IO (Maybe CIDInfo)
 chooseCID ref = do
     db <- readIORef ref
-    case filterBySeq (usedSeqNum db) (cidInfos db) of
+    case filter (/= usedCIDInfo db) (cidInfos db) of
       [] -> return Nothing
       cidInfo:_ -> do
           u <- atomicModifyIORef' ref $ set cidInfo
           return $ Just u
 
 ----------------------------------------------------------------
-
-filterBySeq :: Int -> [CIDInfo] -> [CIDInfo]
-filterBySeq num = filter (\x -> cidInfoSeq x /= num)
 
 findByCID :: CID -> [CIDInfo] -> Maybe CIDInfo
 findByCID cid = find (\x -> cidInfoCID x == cid)
@@ -111,13 +108,12 @@ findBySeq num = find (\x -> cidInfoSeq x == num)
 findBySRT :: StatelessResetToken -> [CIDInfo] -> Maybe CIDInfo
 findBySRT srt = find (\x -> cidInfoSRT x == srt)
 
-set :: CIDInfo -> CIDDB -> (CIDDB, Int)
-set (CIDInfo n cid _) db = (db', u)
+set :: CIDInfo -> CIDDB -> (CIDDB, CIDInfo)
+set cidInfo db = (db', u)
   where
-    u = usedSeqNum db
+    u = usedCIDInfo db
     db' = db {
-        usedCID = cid
-      , usedSeqNum = n
+        usedCIDInfo = cidInfo
       }
 
 add :: CIDInfo -> CIDDB -> (CIDDB, ())
@@ -152,11 +148,17 @@ setPeerStatelessResetToken :: Connection -> StatelessResetToken -> IO ()
 setPeerStatelessResetToken Connection{..} srt =
     atomicModifyIORef' peerCIDDB adjust
   where
-    adjust db = case cidInfos db of
-      CIDInfo 0 cid _:xs -> (db {
-            cidInfos = CIDInfo 0 cid srt:xs
-          }, ())
-      _ -> (db, ())
+    adjust db = (db', ())
+      where
+        db' = case cidInfos db of
+          CIDInfo 0 cid _:xs -> adj xs $ CIDInfo 0 cid srt
+          _ -> db
+        adj xs cidInfo = case usedCIDInfo db of
+                        CIDInfo 0 _ _ -> db { usedCIDInfo = cidInfo
+                                            , cidInfos = cidInfo:xs
+                                            }
+                        _             -> db { cidInfos = cidInfo:xs}
+
 
 isStatelessRestTokenValid :: Connection -> StatelessResetToken -> IO Bool
 isStatelessRestTokenValid Connection{..} srt =
