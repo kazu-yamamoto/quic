@@ -41,7 +41,7 @@ split c s = case break (c==) s of
 
 getLogger :: Maybe FilePath -> (String -> IO ())
 getLogger Nothing     = \_ -> return ()
-getLogger (Just file) = \msg -> appendFile file msg
+getLogger (Just file) = \msg -> appendFile file (msg ++ "\n")
 
 getStdoutLogger :: Bool -> (CID -> String -> IO ())
 getStdoutLogger False = \_ _ -> return ()
