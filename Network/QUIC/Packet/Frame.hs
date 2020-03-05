@@ -54,13 +54,14 @@ encodeFrame wbuf (MaxStreams dir ms) = do
       Bidi -> write8 wbuf 0x12
       Uni  -> write8 wbuf 0x13
     encodeInt' wbuf $ fromIntegral ms
-encodeFrame wbuf (NewConnectionID seqNum rpt cID (StatelessResetToken token)) = do
+encodeFrame wbuf (NewConnectionID cidInfo rpt) = do
     write8 wbuf 0x18
-    encodeInt' wbuf $ fromIntegral seqNum
+    encodeInt' wbuf $ fromIntegral $ cidInfoSeq cidInfo
     encodeInt' wbuf $ fromIntegral rpt
-    let (cid, len) = unpackCID cID
+    let (cid, len) = unpackCID $ cidInfoCID cidInfo
     write8 wbuf len
     copyShortByteString wbuf cid
+    let StatelessResetToken token = cidInfoSRT cidInfo
     copyShortByteString wbuf token
 encodeFrame wbuf (RetireConnectionID seqNum) = do
     write8 wbuf 0x19
@@ -229,7 +230,7 @@ decodeNewConnectionID rbuf = do
     cidLen <- fromIntegral <$> read8 rbuf
     cID <- makeCID <$> extractShortByteString rbuf cidLen
     token <- StatelessResetToken <$> extractShortByteString rbuf 16
-    return $ NewConnectionID seqNum rpt cID token
+    return $ NewConnectionID (CIDInfo seqNum cID token) rpt
 
 decodeRetireConnectionID :: ReadBuffer -> IO Frame
 decodeRetireConnectionID rbuf = do

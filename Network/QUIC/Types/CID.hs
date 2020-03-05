@@ -12,6 +12,7 @@ module Network.QUIC.Types.CID (
   , newStatelessResetToken
   , PathData(..)
   , newPathData
+  , CIDInfo(..)
   ) where
 
 import Crypto.Random (getRandomBytes)
@@ -53,7 +54,7 @@ originalCID (OCFirst cid) = cid
 originalCID (OCRetry cid) = cid
 
 -- 16 bytes
-newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq,Show)
+newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq,Ord,Show)
 
 newStatelessResetToken :: IO StatelessResetToken
 newStatelessResetToken = StatelessResetToken . Short.toShort <$> getRandomBytes 16
@@ -63,3 +64,9 @@ newtype PathData = PathData Bytes deriving (Eq,Show)
 
 newPathData :: IO PathData
 newPathData = PathData . Short.toShort <$> getRandomBytes 8
+
+data CIDInfo = CIDInfo {
+    cidInfoSeq :: Int
+  , cidInfoCID :: CID
+  , cidInfoSRT :: StatelessResetToken
+  } deriving (Eq, Ord, Show)

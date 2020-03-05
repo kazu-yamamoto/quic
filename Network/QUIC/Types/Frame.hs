@@ -27,7 +27,7 @@ data Frame = Padding Int
            | DataBlocked -- fixme
            | StreamDataBlocked -- fixme
            | StreamsBlocked -- fixme
-           | NewConnectionID Int Int CID StatelessResetToken
+           | NewConnectionID CIDInfo Int
            | RetireConnectionID Int
            | PathChallenge PathData
            | PathResponse PathData

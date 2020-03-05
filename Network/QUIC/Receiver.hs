@@ -81,10 +81,10 @@ processFrame conn lvl (Crypto off cdat) = do
                     cryptoToken <- generateToken =<< getVersion conn
                     mgr <- getTokenManager conn
                     token <- encryptToken mgr cryptoToken
-                    (sn,mycid,srt) <- getNewMyCID conn
+                    cidInfo <- getNewMyCID conn
                     register <- getRegister conn
-                    register mycid conn
-                    let ncid = NewConnectionID sn 0 mycid srt
+                    register (cidInfoCID cidInfo) conn
+                    let ncid = NewConnectionID cidInfo 0
                     let frames = [HandshakeDone,NewToken token,ncid]
                     putOutput conn $ OutControl RTT1Level frames
                 _ -> return ()
@@ -98,9 +98,9 @@ processFrame conn lvl (Crypto off cdat) = do
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connDebugLog conn "processFrame: NewToken"
-processFrame conn _ (NewConnectionID sn _ peercid srt) = do
+processFrame conn _ (NewConnectionID cidInfo _retrire) = do
     -- fixme: retire to
-    addPeerCID conn (sn, peercid, srt)
+    addPeerCID conn cidInfo
 processFrame conn _ (RetireConnectionID sn) =
     retireMyCID conn sn
 processFrame conn RTT1Level (PathChallenge dat) =

@@ -41,12 +41,12 @@ resetPeerCID Connection{..} cid = writeIORef peerCIDDB $ newCIDDB cid
 ----------------------------------------------------------------
 
 -- | Sending NewConnectionID
-getNewMyCID :: Connection -> IO (Int,CID,StatelessResetToken)
+getNewMyCID :: Connection -> IO CIDInfo
 getNewMyCID Connection{..} = do
     cid <- newCID
     srt <- newStatelessResetToken
     n <- atomicModifyIORef' myCIDDB $ new cid srt
-    return (n, cid, srt)
+    return $ CIDInfo n cid srt
   where
     new cid srt db = (db', n)
      where
@@ -98,8 +98,8 @@ retireCID ref n = atomicModifyIORef ref retire
 ----------------------------------------------------------------
 
 -- | Receiving NewConnectionID
-addPeerCID :: Connection -> (Int,CID,StatelessResetToken) -> IO ()
-addPeerCID Connection{..} (n,cid,srt) = atomicModifyIORef peerCIDDB $ \db ->
+addPeerCID :: Connection -> CIDInfo -> IO ()
+addPeerCID Connection{..} (CIDInfo n cid srt) = atomicModifyIORef peerCIDDB $ \db ->
   (db { cids = IntMap.insert n (cid,srt) (cids db) }, ())
 
 -- | Using a new CID and sending RetireConnectionID
