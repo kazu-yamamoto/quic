@@ -75,11 +75,14 @@ construct conn lvl frames genLowerAck mTargetSize = do
         let frames'
               | nullPeerPacketNumbers ppns = frames
               | otherwise   = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0 : frames
+        let frames'' = case mlen of
+              Nothing -> frames'
+              Just _  -> frames' ++ [Padding 0] -- for qlog
         let ppkt = case lvl of
-              InitialLevel   -> PlainPacket (Initial   ver peercid mycid token) (Plain (Flags 0) mypn frames')
-              RTT0Level      -> PlainPacket (RTT0      ver peercid mycid)       (Plain (Flags 0) mypn frames')
-              HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames')
-              RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames')
+              InitialLevel   -> PlainPacket (Initial   ver peercid mycid token) (Plain (Flags 0) mypn frames'')
+              RTT0Level      -> PlainPacket (RTT0      ver peercid mycid)       (Plain (Flags 0) mypn frames'')
+              HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames'')
+              RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames'')
         when (frames /= []) $
             keepPlainPacket conn [mypn] ppkt lvl ppns
         qlogSent conn ppkt
