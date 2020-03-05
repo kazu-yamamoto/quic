@@ -10,6 +10,7 @@ module Network.QUIC.Connection.Migration (
   , retireMyCID
   , retirePeerCID
   , addPeerCID
+  , chooseMyCID
   , choosePeerCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
@@ -71,15 +72,7 @@ retirePeerCID :: Connection -> Int -> IO ()
 retirePeerCID Connection{..} n = retireCID peerCIDDB n
 
 retireCID :: IORef CIDDB -> Int -> IO ()
-retireCID ref n = atomicModifyIORef ref retire
-  where
-    retire db = (db', ())
-      where
-        db' = case findBySeq n (cidInfos db) of
-          Nothing -> db
-          Just cidInfo -> db {
-              cidInfos = delete cidInfo $ cidInfos db
-            }
+retireCID ref n = atomicModifyIORef ref $ del n
 
 ----------------------------------------------------------------
 
@@ -88,13 +81,20 @@ addPeerCID :: Connection -> CIDInfo -> IO ()
 addPeerCID Connection{..} cidInfo = atomicModifyIORef peerCIDDB $ add cidInfo
 
 -- | Using a new CID and sending RetireConnectionID
+chooseMyCID :: Connection -> IO (Maybe Int)
+chooseMyCID Connection{..} = chooseCID myCIDDB
+
+-- | Using a new CID and sending RetireConnectionID
 choosePeerCID :: Connection -> IO (Maybe Int)
-choosePeerCID Connection{..} = do
-    db <- readIORef peerCIDDB
+choosePeerCID Connection{..} = chooseCID peerCIDDB
+
+chooseCID :: IORef CIDDB -> IO (Maybe Int)
+chooseCID ref = do
+    db <- readIORef ref
     case filterBySeq (usedSeqNum db) (cidInfos db) of
       [] -> return Nothing
       cidInfo:_ -> do
-          u <- atomicModifyIORef' peerCIDDB $ set cidInfo
+          u <- atomicModifyIORef' ref $ set cidInfo
           return $ Just u
 
 ----------------------------------------------------------------
@@ -136,6 +136,15 @@ new cid srt db = (db', cidInfo)
        nextSeqNum = nextSeqNum db + 1
      , cidInfos = insert cidInfo $ cidInfos db
      }
+
+del :: Int -> CIDDB -> (CIDDB, ())
+del num db = (db', ())
+  where
+    db' = case findBySeq num (cidInfos db) of
+      Nothing -> db
+      Just cidInfo -> db {
+          cidInfos = delete cidInfo $ cidInfos db
+        }
 
 ----------------------------------------------------------------
 

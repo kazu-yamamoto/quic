@@ -118,12 +118,11 @@ defaultServerRoleInfo = ServerInfo {
   , mainThreadId = undefined
   }
 
+-- fixme: limitation
 data CIDDB = CIDDB {
     usedCID    :: CID
   , usedSeqNum :: Int
-  , nextSeqNum :: Int
-  , dblimit    :: Int
-  , dbsize     :: Int
+  , nextSeqNum :: Int  -- only for mine
   , cidInfos   :: [CIDInfo]
   }
 
@@ -132,8 +131,6 @@ newCIDDB cid = CIDDB {
     usedCID    = cid
   , usedSeqNum = 0
   , nextSeqNum = 1
-  , dblimit    = 2 -- see active_connection_id_limit
-  , dbsize     = 1
   , cidInfos   = [CIDInfo 0 cid (StatelessResetToken "")]
   }
 
