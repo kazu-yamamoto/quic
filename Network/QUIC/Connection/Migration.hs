@@ -19,9 +19,9 @@ module Network.QUIC.Connection.Migration (
 
 import Control.Concurrent.STM
 import Data.IORef
-import qualified Data.IntMap as IntMap
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -45,38 +45,17 @@ getNewMyCID :: Connection -> IO CIDInfo
 getNewMyCID Connection{..} = do
     cid <- newCID
     srt <- newStatelessResetToken
-    n <- atomicModifyIORef' myCIDDB $ new cid srt
-    return $ CIDInfo n cid srt
-  where
-    new cid srt db = (db', n)
-     where
-       n = nextSeqNum db
-       db' = db {
-           usedSeqNum = n + 1
-         , cids = IntMap.insert n (cid,srt) $ cids db
-         }
+    atomicModifyIORef' myCIDDB $ new cid srt
 
 -- | Peer starts using a new CID
 setMyCID :: Connection -> CID -> IO Bool
 setMyCID Connection{..} ncid = do
     db <- readIORef myCIDDB
-    case findSeqNum $ cids db of
-      Nothing -> return False
-      Just n  -> do
-          atomicModifyIORef' myCIDDB $ set n
+    case findByCID ncid (cidInfos db) of
+      Nothing      -> return False
+      Just cidInfo -> do
+          _ <- atomicModifyIORef' myCIDDB $ set cidInfo
           return True
-  where
-    set n db = (db', ())
-      where
-        db' = db {
-            usedCID = ncid
-          , usedSeqNum = n
-          }
-    findSeqNum cids = IntMap.foldlWithKey match Nothing cids
-      where
-        match r n (cid,_)
-          | cid == ncid = Just n
-          | otherwise   = r
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO ()
@@ -91,64 +70,83 @@ retireCID ref n = atomicModifyIORef ref retire
   where
     retire db = (db', ())
       where
-        db' = db {
-            cids = IntMap.delete n $ cids db
-          }
+        db' = case findBySeq n (cidInfos db) of
+          Nothing -> db
+          Just cidInfo -> db {
+              cidInfos = delete cidInfo $ cidInfos db
+            }
 
 ----------------------------------------------------------------
 
 -- | Receiving NewConnectionID
 addPeerCID :: Connection -> CIDInfo -> IO ()
-addPeerCID Connection{..} (CIDInfo n cid srt) = atomicModifyIORef peerCIDDB $ \db ->
-  (db { cids = IntMap.insert n (cid,srt) (cids db) }, ())
+addPeerCID Connection{..} cidInfo = atomicModifyIORef peerCIDDB $ add cidInfo
 
 -- | Using a new CID and sending RetireConnectionID
 choosePeerCID :: Connection -> IO (Maybe Int)
 choosePeerCID Connection{..} = do
     db <- readIORef peerCIDDB
-    case findFresh (usedCID db) (cids db) of
-      Nothing -> return Nothing
-      Just (n,ncid) -> do
-          u <- atomicModifyIORef' peerCIDDB $ set ncid n
+    case filterBySeq (usedSeqNum db) (cidInfos db) of
+      [] -> return Nothing
+      cidInfo:_ -> do
+          u <- atomicModifyIORef' peerCIDDB $ set cidInfo
           return $ Just u
+
+----------------------------------------------------------------
+
+filterBySeq :: Int -> [CIDInfo] -> [CIDInfo]
+filterBySeq num = filter (\x -> cidInfoSeq x /= num)
+
+findByCID :: CID -> [CIDInfo] -> Maybe CIDInfo
+findByCID cid = find (\x -> cidInfoCID x == cid)
+
+findBySeq :: Int -> [CIDInfo] -> Maybe CIDInfo
+findBySeq num = find (\x -> cidInfoSeq x == num)
+
+findBySRT :: StatelessResetToken -> [CIDInfo] -> Maybe CIDInfo
+findBySRT srt = find (\x -> cidInfoSRT x == srt)
+
+set :: CIDInfo -> CIDDB -> (CIDDB, Int)
+set (CIDInfo n cid _) db = (db', u)
   where
-    set ncid n db = (db', u)
-      where
-        u = usedSeqNum db
-        db' = db {
-            usedCID = ncid
-          , usedSeqNum = n
-          , cids = IntMap.delete u $ cids db
-          }
-    findFresh ucid cids = IntMap.foldlWithKey match Nothing cids
-      where
-        match r n (cid,_)
-          | cid == ucid = r
-          | otherwise   = case r of
-              Nothing -> Just (n,cid)
-              Just (n0,_)
-                | n < n0    -> Just (n,cid)
-                | otherwise -> r
+    u = usedSeqNum db
+    db' = db {
+        usedCID = cid
+      , usedSeqNum = n
+      }
+
+add :: CIDInfo -> CIDDB -> (CIDDB, ())
+add cidInfo db = (db', ())
+  where
+    db' = db {
+        cidInfos = insert cidInfo (cidInfos db)
+      }
+
+new :: CID -> StatelessResetToken -> CIDDB -> (CIDDB, CIDInfo)
+new cid srt db = (db', cidInfo)
+  where
+   n = nextSeqNum db
+   cidInfo = CIDInfo n cid srt
+   db' = db {
+       nextSeqNum = nextSeqNum db + 1
+     , cidInfos = insert cidInfo $ cidInfos db
+     }
 
 ----------------------------------------------------------------
 
 setPeerStatelessResetToken :: Connection -> StatelessResetToken -> IO ()
-setPeerStatelessResetToken Connection{..} srt = do
-    db <- readIORef peerCIDDB
-    let db' = db {
-            cids = IntMap.adjust (\(cid,_) -> (cid,srt)) 0 $ cids db
-          }
-    writeIORef peerCIDDB db'
+setPeerStatelessResetToken Connection{..} srt =
+    atomicModifyIORef' peerCIDDB adjust
+  where
+    adjust db = case cidInfos db of
+      CIDInfo 0 cid _:xs -> (db {
+            cidInfos = CIDInfo 0 cid srt:xs
+          }, ())
+      _ -> (db, ())
 
 isStatelessRestTokenValid :: Connection -> StatelessResetToken -> IO Bool
-isStatelessRestTokenValid Connection{..} srt0 = do
-    m <- cids <$> readIORef peerCIDDB
-    return $ IntMap.foldl f False m
-  where
-    f True _ = True
-    f _ (_,srt)
-      | srt == srt0 = True
-      | otherwise   = False
+isStatelessRestTokenValid Connection{..} srt =
+    isJust . findBySRT srt . cidInfos <$> readIORef peerCIDDB
 
 ----------------------------------------------------------------
 

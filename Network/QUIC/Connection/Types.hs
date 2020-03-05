@@ -9,8 +9,6 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -126,7 +124,7 @@ data CIDDB = CIDDB {
   , nextSeqNum :: Int
   , dblimit    :: Int
   , dbsize     :: Int
-  , cids       :: IntMap (CID,StatelessResetToken)
+  , cidInfos   :: [CIDInfo]
   }
 
 newCIDDB :: CID -> CIDDB
@@ -136,7 +134,7 @@ newCIDDB cid = CIDDB {
   , nextSeqNum = 1
   , dblimit    = 2 -- see active_connection_id_limit
   , dbsize     = 1
-  , cids       = IntMap.singleton 0 (cid, StatelessResetToken "")
+  , cidInfos   = [CIDInfo 0 cid (StatelessResetToken "")]
   }
 
 ----------------------------------------------------------------
