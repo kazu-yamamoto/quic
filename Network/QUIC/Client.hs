@@ -9,7 +9,6 @@ module Network.QUIC.Client (
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
 
-import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
