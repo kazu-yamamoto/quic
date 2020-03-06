@@ -311,10 +311,10 @@ migration conn peersa dCID ref cpkt = do
 
 migrator :: Connection -> SockAddr -> MigrationQ -> CID -> Int -> IO ()
 migrator conn peersa1 mq dcid retiredSeqNum = do
-    (s0,q) <- readIORef $ sockInfo conn
+    (s0,q) <- getSockInfo conn
     mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
-    writeIORef (sockInfo conn) (s1,q)
+    setSockInfo conn (s1,q)
     void $ forkIO $ readerServer s1 q $ connDebugLog conn
     -- fixme: if cannot set
     setMyCID conn dcid

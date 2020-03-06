@@ -5,10 +5,13 @@ module Network.QUIC.Connection.Misc (
   , getVersion
   , setThreadIds
   , clearThreads
+  , getSockInfo
+  , setSockInfo
   ) where
 
 import Control.Concurrent
 import Data.IORef
+import Network.Socket
 import System.Mem.Weak
 
 import Network.QUIC.Connection.Types
@@ -40,3 +43,11 @@ clearThreads Connection{..} = do
         case mtid of
           Nothing  -> return ()
           Just tid -> killThread tid
+
+----------------------------------------------------------------
+
+getSockInfo :: Connection -> IO (Socket, RecvQ)
+getSockInfo Connection{..} = readIORef sockInfo
+
+setSockInfo :: Connection -> (Socket, RecvQ) -> IO ()
+setSockInfo Connection{..} si = writeIORef sockInfo si

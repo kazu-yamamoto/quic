@@ -4,7 +4,6 @@ module Network.QUIC.IO where
 
 import Control.Concurrent
 import qualified Control.Exception as E
-import Data.IORef
 import Network.Socket
 
 import Network.QUIC.Client
@@ -99,9 +98,9 @@ migrationClient conn SwitchCID = do
           putOutput conn $ OutControl RTT1Level [RetireConnectionID n, NewConnectionID cidInfo x]
           return True
 migrationClient conn NATRebiding = do
-    (s0,q) <- readIORef $ sockInfo conn
+    (s0,q) <- getSockInfo conn
     s1 <- getPeerName s0 >>= udpNATRebindingSocket
-    writeIORef (sockInfo conn) (s1,q)
+    setSockInfo conn (s1,q)
     v <- getVersion conn
     void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
     void $ forkIO $ do
@@ -116,9 +115,9 @@ migrationClient conn MigrateTo = do
       Just (CIDInfo n _ _) -> do
           cidInfo <- getNewMyCID conn
           x <- (+1) <$> getMyCIDSeqNum conn
-          (s0,q) <- readIORef $ sockInfo conn
+          (s0,q) <- getSockInfo conn
           s1 <- getPeerName s0 >>= udpNATRebindingSocket -- fixme
-          writeIORef (sockInfo conn) (s1,q)
+          setSockInfo conn (s1,q)
           v <- getVersion conn
           void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
           void $ forkIO $ do

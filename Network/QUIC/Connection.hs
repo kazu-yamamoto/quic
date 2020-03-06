@@ -3,7 +3,6 @@ module Network.QUIC.Connection (
   , clientConnection
   , serverConnection
   , isClient
-  , sockInfo -- fixme
   -- * Backend
   , connClose
   , connDebugLog
@@ -59,6 +58,8 @@ module Network.QUIC.Connection (
   , getVersion
   , setThreadIds
   , clearThreads
+  , getSockInfo
+  , setSockInfo
   -- * Transmit
   , keepPlainPacket
   , releasePlainPacket

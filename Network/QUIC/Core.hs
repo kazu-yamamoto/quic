@@ -218,7 +218,7 @@ data ConnectionInfo = ConnectionInfo {
 -- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
-    (s,_) <- readIORef (sockInfo conn)
+    (s,_) <- getSockInfo conn
     mysa   <- NS.getSocketName s
     peersa <- NS.getPeerName s
     mycid   <- getMyCID conn
