@@ -5,6 +5,8 @@ module Common (
   , getStdoutLogger
   ) where
 
+import Control.Concurrent
+import qualified Control.Exception as E
 import Data.ByteString.Base16 (encode)
 import qualified Data.ByteString.Char8 as C8
 import Data.Default.Class
@@ -52,4 +54,6 @@ getDirLogger Nothing    _      = \_ _ -> return ()
 getDirLogger (Just dir) suffix = \cid msg -> do
     let filename = C8.unpack (encode (fromCID cid)) ++ suffix
         logfile = dir </> filename
-    appendFile logfile msg
+    appendFile logfile msg `E.catch` \(E.SomeException _) -> do
+        threadDelay 1000
+        appendFile logfile msg
