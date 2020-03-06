@@ -199,13 +199,13 @@ resender :: Connection -> IO ()
 resender conn = handleIOLog cleanupAction logAction $ forever $ do
     threadDelay 100000
     ppktpns <- getRetransmissions conn (MilliSeconds 600)
-    open <- isConnectionOpen conn
+    established <- isConnectionEstablished conn
     -- Some implementations do not return Ack for Initial and Handshake
     -- correctly. We should consider that the success of handshake
     -- implicitly acknowledge them.
     let ppktpns'
-         | open      = filter isRTTxLevel ppktpns
-         | otherwise = ppktpns
+         | established = filter isRTTxLevel ppktpns
+         | otherwise   = ppktpns
     mapM_ put ppktpns'
   where
     cleanupAction = putInput conn $ InpError ConnectionIsClosed

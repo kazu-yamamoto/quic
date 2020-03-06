@@ -30,7 +30,7 @@ data Role = Client | Server deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
-data ConnectionState = NotOpen | Open | Closing CloseState deriving (Eq, Show)
+data ConnectionState = Handshaking | Established | Closing CloseState deriving (Eq, Show)
 
 data CloseState = CloseState {
     closeSent     :: Bool
@@ -209,7 +209,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newTQueueIO
         <*> newIORef []
         -- State
-        <*> newTVarIO NotOpen
+        <*> newTVarIO Handshaking
         <*> newIORef 0
         <*> newIORef (PeerPacketNumbers Set.empty)
         <*> newIORef emptyStreamTable

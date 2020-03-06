@@ -157,7 +157,6 @@ main = do
         case optMigration of
           Nothing -> return ()
           Just mtyp -> do
-              threadDelay 600000 -- fixme
               res <- migration conn mtyp
               putStrLn $ "Migration by " ++ show mtyp ++ ": " ++ show res
         client conn

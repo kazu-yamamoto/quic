@@ -84,7 +84,9 @@ data Migration = SwitchCID
 
 migration :: Connection -> Migration -> IO Bool
 migration conn typ
-  | isClient conn = migrationClient conn typ
+  | isClient conn = do
+        waitEstablished conn
+        migrationClient conn typ
   | otherwise     = return False
 
 migrationClient :: Connection -> Migration -> IO Bool

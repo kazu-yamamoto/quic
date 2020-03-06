@@ -67,11 +67,13 @@ module Network.QUIC.Connection (
   , getRetransmissions
   , MilliSeconds(..)
   -- * State
-  , setConnectionOpen
   , isConnectionOpen
+  , isConnectionEstablished
+  , setConnectionEstablished
   , setCloseSent
   , setCloseReceived
   , isCloseSent
+  , waitEstablished
   , waitClosed
   -- * StreamTable
   , getStreamOffset

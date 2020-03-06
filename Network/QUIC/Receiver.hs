@@ -95,6 +95,9 @@ processFrame conn lvl (Crypto off cdat) = do
                     putOutput conn $ OutHndServerNST nst
                     ServerHandshakeDone <- control ExitServer
                     clearServerController conn
+                    --
+                    setConnectionEstablished conn
+                    --
                     cryptoToken <- generateToken =<< getVersion conn
                     mgr <- getTokenManager conn
                     token <- encryptToken mgr cryptoToken
@@ -156,6 +159,7 @@ processFrame conn lvl Ping = do
     -- 0 and 1 are dropped.
     when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
 processFrame conn _ HandshakeDone = do
+    setConnectionEstablished conn
     control <- getClientController conn
     void $ forkIO $ do
         threadDelay 2000000

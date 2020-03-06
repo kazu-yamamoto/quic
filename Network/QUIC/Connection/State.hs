@@ -1,11 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.State (
-    setConnectionOpen
-  , isConnectionOpen
+    isConnectionOpen
+  , isConnectionEstablished
+  , setConnectionEstablished
   , setCloseSent
   , setCloseReceived
   , isCloseSent
+  , waitEstablished
   , waitClosed
   ) where
 
@@ -19,15 +21,22 @@ setConnectionState :: Connection -> ConnectionState -> IO ()
 setConnectionState Connection{..} st =
     atomically $ writeTVar connectionState st
 
+setConnectionEstablished :: Connection -> IO ()
+setConnectionEstablished conn = setConnectionState conn Established
+
 ----------------------------------------------------------------
 
-setConnectionOpen :: Connection -> IO ()
-setConnectionOpen conn = setConnectionState conn Open
+isConnectionEstablished :: Connection -> IO Bool
+isConnectionEstablished Connection{..} = atomically $ do
+    st <- readTVar connectionState
+    return $ st == Established
 
 isConnectionOpen :: Connection -> IO Bool
 isConnectionOpen Connection{..} = atomically $ do
     st <- readTVar connectionState
-    return $ st == Open
+    case st of
+      Closing _ -> return False
+      _         -> return True
 
 ----------------------------------------------------------------
 
@@ -50,6 +59,11 @@ isCloseSent Connection{..} = atomically (chk <$> readTVar connectionState)
   where
     chk (Closing cs) = closeSent cs
     chk _            = False
+
+waitEstablished :: Connection -> IO ()
+waitEstablished Connection{..} = atomically $ do
+    cs <- readTVar connectionState
+    check (cs == Established)
 
 waitClosed :: Connection -> IO ()
 waitClosed Connection{..} = atomically $ do

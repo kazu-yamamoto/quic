@@ -101,7 +101,6 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv = do
     case statelessResetToken params of
       Nothing  -> return ()
       Just srt -> setPeerStatelessResetToken conn srt
-    setConnectionOpen conn
     cidInfo <- getNewMyCID conn
     let ncid = NewConnectionID cidInfo 0
     putOutput conn $ OutControl RTT1Level [ncid]
@@ -165,7 +164,6 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             handshakeServer conf oCID conn `E.onException` clearThreads conn
             setRegister conn register unregister
             register myCID conn
-            setConnectionOpen conn
             info <- getConnectionInfo conn
             debugLog $ show info
             return conn
