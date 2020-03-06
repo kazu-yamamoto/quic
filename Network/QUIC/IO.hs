@@ -92,13 +92,14 @@ migration conn typ
 migrationClient :: Connection -> Migration -> IO Bool
 migrationClient conn SwitchCID = do
     mn <- choosePeerCID conn
-    case mn of
-      Nothing -> return False
-      Just (CIDInfo n _ _) -> do
-          cidInfo <- getNewMyCID conn
-          x <- (+1) <$> getMyCIDSeqNum conn
-          putOutput conn $ OutControl RTT1Level [RetireConnectionID n, NewConnectionID cidInfo x]
-          return True
+    let frames = case mn of
+          Nothing              -> []
+          Just (CIDInfo n _ _) -> [RetireConnectionID n]
+    cidInfo <- getNewMyCID conn
+    x <- (+1) <$> getMyCIDSeqNum conn
+    let frames' = NewConnectionID cidInfo x : frames
+    putOutput conn $ OutControl RTT1Level frames'
+    return True
 migrationClient conn NATRebiding = do
     (s0,q) <- getSockInfo conn
     s1 <- getPeerName s0 >>= udpNATRebindingSocket
