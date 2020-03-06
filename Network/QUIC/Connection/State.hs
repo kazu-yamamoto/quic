@@ -29,7 +29,9 @@ setConnectionEstablished conn = setConnectionState conn Established
 isConnectionEstablished :: Connection -> IO Bool
 isConnectionEstablished Connection{..} = atomically $ do
     st <- readTVar connectionState
-    return $ st == Established
+    case st of
+      Handshaking -> return False
+      _           -> return True
 
 isConnectionOpen :: Connection -> IO Bool
 isConnectionOpen Connection{..} = atomically $ do
