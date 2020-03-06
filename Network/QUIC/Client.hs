@@ -19,8 +19,8 @@ import Network.QUIC.TLS
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
-readerClient :: ClientConfig -> Socket -> RecvQ -> Connection -> IO ()
-readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
+readerClient :: [Version] -> Socket -> RecvQ -> Connection -> IO ()
+readerClient myVers s q conn = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
   where
@@ -28,7 +28,6 @@ readerClient ClientConfig{..} s q conn = handleLog logAction $ forever $ do
     putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt
-        let myVers = confVersions ccConfig
         mver <- case myVers `intersect` peerVers of
                   []    -> return Nothing
                   ver:_ -> do

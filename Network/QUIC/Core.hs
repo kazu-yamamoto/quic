@@ -85,7 +85,7 @@ createClientConnection conf@ClientConfig{..} ver = do
         qLog     msg = confQLog     ccConfig peerCID (msg ++ "\n") `E.catch`  ignore
     qLog $ qlogPrologue "client" peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
-    void $ forkIO $ readerClient conf s0 q conn -- dies when s0 is closed.
+    void $ forkIO $ readerClient (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
     return (conn,send,recv,cls)
 

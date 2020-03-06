@@ -16,6 +16,7 @@ module Network.QUIC (
   , shutdownStream
   , isStreamOpen
   , migration
+  , Migration(..)
   -- * Configrations
   , ClientConfig(..)
   , defaultClientConfig

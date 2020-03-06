@@ -47,3 +47,10 @@ udpClientConnectedSocket host port = do
     s <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
     connect s (addrAddress addr) `E.onException` close s
     return s
+
+udpNATRebindingSocket :: SockAddr -> IO Socket
+udpNATRebindingSocket peersa = do
+    let family = sockAddrFamily peersa
+    s <- socket family Datagram defaultProtocol
+    connect s peersa `E.onException` close s
+    return s
