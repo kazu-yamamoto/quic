@@ -83,10 +83,6 @@ createClientConnection conf@ClientConfig{..} ver = do
     let debugLog msg = confDebugLog ccConfig peerCID (msg ++ "\n") `E.catch` ignore
 
         qLog     msg = confQLog     ccConfig peerCID (msg ++ "\n") `E.catch`  ignore
-    mysa <- NS.getSocketName s0
-    peersa <- NS.getPeerName s0
-    debugLog $ "My socket address: " ++ show mysa
-    debugLog $ "Peer socket address: " ++ show peersa
     qLog $ qlogPrologue "client" peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
     void $ forkIO $ readerClient conf s0 q conn -- dies when s0 is closed.
@@ -145,8 +141,6 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
         sconf = scConfig conf
         debugLog msg = confDebugLog sconf ocid (msg ++ "\n") `E.catch` ignore
         qLog     msg = confQLog     sconf ocid (msg ++ "\n") `E.catch` ignore
-    debugLog $ "My socket address: " ++ show mysa
-    debugLog $ "Peer socket address: " ++ show peersa0
     qLog $ qlogPrologue "server" ocid
     when retried $ do
         qLog qlogRecvInitial
@@ -215,6 +209,8 @@ data ConnectionInfo = ConnectionInfo {
   , alpn :: Maybe ByteString
   , handshakeMode :: HandshakeMode13
   , retry :: Bool
+  , localSockAddr :: NS.SockAddr
+  , remoteSockAddr :: NS.SockAddr
   , localCID :: CID
   , remoteCID :: CID
   }
@@ -222,7 +218,10 @@ data ConnectionInfo = ConnectionInfo {
 -- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
-    mycid <- getMyCID conn
+    (s,_) <- readIORef (sockInfo conn)
+    mysa   <- NS.getSocketName s
+    peersa <- NS.getPeerName s
+    mycid   <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
     ApplicationSecretInfo mode mproto _ <- getApplicationSecretInfo conn
@@ -234,7 +233,9 @@ getConnectionInfo conn = do
       , alpn = mproto
       , handshakeMode = mode
       , retry = r
-      , localCID = mycid
+      , localSockAddr  = mysa
+      , remoteSockAddr = peersa
+      , localCID  = mycid
       , remoteCID = peercid
       }
 
@@ -244,5 +245,7 @@ instance Show ConnectionInfo where
                            ++ "ALPN: " ++ maybe "none" C8.unpack alpn ++ "\n"
                            ++ "Mode: " ++ show handshakeMode ++ "\n"
                            ++ "Local CID: " ++ show localCID ++ "\n"
-                           ++ "Remote CID: " ++ show remoteCID ++
+                           ++ "Remote CID: " ++ show remoteCID ++ "\n"
+                           ++ "Local SockAddr: " ++ show localSockAddr ++ "\n"
+                           ++ "Remote SockAddr: " ++ show remoteSockAddr ++
                            if retry then "\nQUIC retry" else ""
