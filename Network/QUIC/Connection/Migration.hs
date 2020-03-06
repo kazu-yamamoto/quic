@@ -4,13 +4,15 @@ module Network.QUIC.Connection.Migration (
     getMyCID
   , getPeerCID
   , isMyCID
+  , myCIDsInclude
   , resetPeerCID
   , getNewMyCID
+  , getMyCIDSeqNum
   , setMyCID
-  , retireMyCID
+  , setPeerCIDAndRetireCIDs
   , retirePeerCID
+  , retireMyCID
   , addPeerCID
-  , chooseMyCID
   , choosePeerCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
@@ -31,12 +33,19 @@ import Network.QUIC.Types
 getMyCID :: Connection -> IO CID
 getMyCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
 
-isMyCID :: Connection -> CID -> IO Bool
-isMyCID Connection{..} cid =
-    isJust . findByCID cid . cidInfos <$> readIORef myCIDDB
+getMyCIDSeqNum :: Connection -> IO Int
+getMyCIDSeqNum Connection{..} = cidInfoSeq . usedCIDInfo <$> readIORef myCIDDB
 
 getPeerCID :: Connection -> IO CID
 getPeerCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef peerCIDDB
+
+isMyCID :: Connection -> CID -> IO Bool
+isMyCID Connection{..} cid =
+    (== cid) . cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
+
+myCIDsInclude :: Connection -> CID -> IO Bool
+myCIDsInclude Connection{..} cid =
+    isJust . findByCID cid . cidInfos <$> readIORef myCIDDB
 
 ----------------------------------------------------------------
 
@@ -53,49 +62,62 @@ getNewMyCID Connection{..} = do
     srt <- newStatelessResetToken
     atomicModifyIORef' myCIDDB $ new cid srt
 
--- | Peer starts using a new CID
-setMyCID :: Connection -> CID -> IO Bool
-setMyCID Connection{..} ncid = do
-    db <- readIORef myCIDDB
-    case findByCID ncid (cidInfos db) of
-      Nothing      -> return False
-      Just cidInfo -> do
-          _ <- atomicModifyIORef' myCIDDB $ set cidInfo
-          return True
-
--- | Receiving RetireConnectionID
-retireMyCID :: Connection -> Int -> IO ()
-retireMyCID Connection{..} n = retireCID myCIDDB n
-
--- | Sending RetireConnectionID
-retirePeerCID :: Connection -> Int -> IO ()
-retirePeerCID Connection{..} n = retireCID peerCIDDB n
-
-retireCID :: IORef CIDDB -> Int -> IO ()
-retireCID ref n = atomicModifyIORef ref $ del n
-
 ----------------------------------------------------------------
 
 -- | Receiving NewConnectionID
 addPeerCID :: Connection -> CIDInfo -> IO ()
-addPeerCID Connection{..} cidInfo = atomicModifyIORef peerCIDDB $ add cidInfo
-
--- | Using a new CID and sending RetireConnectionID
-chooseMyCID :: Connection -> IO (Maybe CIDInfo)
-chooseMyCID Connection{..} = chooseCID myCIDDB
+addPeerCID Connection{..} cidInfo = do
+    db <- readIORef peerCIDDB
+    case findBySeq (cidInfoSeq cidInfo) (cidInfos db) of
+      Nothing -> atomicModifyIORef peerCIDDB $ add cidInfo
+      Just _  -> return ()
 
 -- | Using a new CID and sending RetireConnectionID
 choosePeerCID :: Connection -> IO (Maybe CIDInfo)
-choosePeerCID Connection{..} = chooseCID peerCIDDB
-
-chooseCID :: IORef CIDDB -> IO (Maybe CIDInfo)
-chooseCID ref = do
+choosePeerCID Connection{..} = do
+    let ref = peerCIDDB
     db <- readIORef ref
     case filter (/= usedCIDInfo db) (cidInfos db) of
       [] -> return Nothing
-      cidInfo:_ -> do
-          u <- atomicModifyIORef' ref $ set cidInfo
-          return $ Just u
+      cidInfo:_ -> Just <$> atomicModifyIORef' ref (set cidInfo)
+
+-- | After sending RetireConnectionID
+retirePeerCID :: Connection -> Int -> IO ()
+retirePeerCID Connection{..} n = atomicModifyIORef peerCIDDB $ del n
+
+----------------------------------------------------------------
+
+-- | Receiving NewConnectionID
+setPeerCIDAndRetireCIDs :: Connection -> Int -> IO [Int]
+setPeerCIDAndRetireCIDs Connection{..} n =
+    atomicModifyIORef peerCIDDB $ arrange n
+
+arrange :: Int -> CIDDB -> (CIDDB, [Int])
+arrange n db = (db', map cidInfoSeq toDrops)
+  where
+    (toDrops, cidInfos') = break (\cidInfo -> cidInfoSeq cidInfo >= n) $ cidInfos db
+    used = usedCIDInfo db
+    used' | cidInfoSeq used >= n = used
+          | otherwise            = head cidInfos' -- fixme
+    db' = db {
+        usedCIDInfo = used'
+      , cidInfos    = cidInfos'
+      }
+
+----------------------------------------------------------------
+
+-- | Peer starts using a new CID.
+--   Old 'usedCIDInfo' is returned to send 'RetireConnectionID'.
+setMyCID :: Connection -> CID -> IO ()
+setMyCID Connection{..} ncid = do
+    db <- readIORef myCIDDB
+    case findByCID ncid (cidInfos db) of
+      Nothing      -> return ()
+      Just cidInfo -> void $ atomicModifyIORef' myCIDDB $ set cidInfo
+
+-- | Receiving RetireConnectionID
+retireMyCID :: Connection -> Int -> IO ()
+retireMyCID Connection{..} n = atomicModifyIORef myCIDDB $ del n
 
 ----------------------------------------------------------------
 

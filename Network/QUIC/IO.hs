@@ -72,3 +72,16 @@ recvStream conn = do
       InpTransportError NoError _ _ -> return (0, "") -- fixme: 0
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached
+
+migration :: Connection -> IO Bool
+migration conn
+  | isClient conn = do
+        mn <- choosePeerCID conn
+        case mn of
+          Nothing -> return False
+          Just (CIDInfo n _ _) -> do
+              cidInfo <- getNewMyCID conn
+              x <- (+1) <$> getMyCIDSeqNum conn
+              putOutput conn $ OutControl RTT1Level [RetireConnectionID n, NewConnectionID cidInfo x]
+              return True
+  | otherwise     = return False

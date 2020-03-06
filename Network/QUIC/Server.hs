@@ -316,7 +316,8 @@ migrator conn peersa1 mq dcid retiredSeqNum = do
     s1 <- udpServerConnectedSocket mysa peersa1
     writeIORef (sockInfo conn) (s1,q)
     void $ forkIO $ readerServer s1 q $ connDebugLog conn
-    _ <- setMyCID conn dcid -- fixme: sending error if False
+    -- fixme: if cannot set
+    setMyCID conn dcid
     pdat <- newPathData
     setChallenges conn [pdat]
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]

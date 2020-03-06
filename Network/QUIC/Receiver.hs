@@ -62,8 +62,15 @@ processCryptPacket conn cpkt@(CryptPacket header crypt) = do
   where
     checkCID Initial{}           = return True
     checkCID RTT0{}              = return True
-    checkCID (Handshake _ cid _) = isMyCID conn cid
-    checkCID (Short       cid)   = isMyCID conn cid
+    checkCID (Handshake _ cid _) = myCIDsInclude conn cid
+    checkCID (Short       cid)   = do
+        ok <- myCIDsInclude conn cid
+        if ok then do
+            used <- isMyCID conn cid
+            unless used $ setMyCID conn cid
+            return ok
+          else
+            return False
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -108,9 +115,12 @@ processFrame conn lvl (Crypto off cdat) = do
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connDebugLog conn "processFrame: NewToken"
-processFrame conn _ (NewConnectionID cidInfo _retrire) = do
-    -- fixme: retire to
+processFrame conn _ (NewConnectionID cidInfo rpt) = do
     addPeerCID conn cidInfo
+    when (rpt >= 1) $ do
+        seqNums <- setPeerCIDAndRetireCIDs conn rpt
+        let frames = map RetireConnectionID seqNums
+        putOutput conn $ OutControl RTT1Level frames
 processFrame conn _ (RetireConnectionID sn) =
     retireMyCID conn sn
 processFrame conn RTT1Level (PathChallenge dat) =
@@ -158,7 +168,7 @@ processFrame conn _ _frame        = do
 -- But we should check other packets, too.
 isStateessReset :: Connection -> Header -> Crypt -> IO Bool
 isStateessReset conn header Crypt{..} = do
-    ok <- isMyCID conn $ headerMyCID header
+    ok <- myCIDsInclude conn $ headerMyCID header
     if ok then
         return False
       else case decodeStatelessResetToken cryptPacket of

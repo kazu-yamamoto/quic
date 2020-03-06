@@ -37,13 +37,16 @@ module Network.QUIC.Connection (
   , setApplicationSecretInfo
   -- * Migration
   , getMyCID
+  , getMyCIDSeqNum
   , getPeerCID
   , isMyCID
+  , myCIDsInclude
   , resetPeerCID
   , getNewMyCID
   , setMyCID
-  , retireMyCID
   , retirePeerCID
+  , setPeerCIDAndRetireCIDs
+  , retireMyCID
   , addPeerCID
   , choosePeerCID
   , setPeerStatelessResetToken
