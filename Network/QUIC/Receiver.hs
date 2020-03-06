@@ -43,13 +43,14 @@ processCryptPacket conn cpkt@(CryptPacket header crypt) = do
                 resetPeerCID conn $ headerPeerCID header
             mplain <- decryptCrypt conn crypt level
             case mplain of
-              Just plain@(Plain _ pn fs) -> do
+              Just plain@(Plain _ pn frames) -> do
                   -- For Ping, record PPN first, then send an ACK.
                   -- fixme: need to check Sec 13.1
-                  addPeerPacketNumbers conn level pn
+                  when (any ackEliciting frames) $
+                      addPeerPacketNumbers conn level pn
                   unless (cryptLogged crypt) $
                       qlogReceived conn $ PlainPacket header plain
-                  mapM_ (processFrame conn level) fs
+                  mapM_ (processFrame conn level) frames
               Nothing -> do
                   statelessReset <- isStateessReset conn header crypt
                   if statelessReset then do

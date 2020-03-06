@@ -49,3 +49,10 @@ type StreamData = ByteString
 type Token = ByteString -- to be decrypted
 emptyToken :: Token
 emptyToken = ""
+
+ackEliciting :: Frame -> Bool
+ackEliciting Padding{}             = False
+ackEliciting ConnectionCloseQUIC{} = False
+ackEliciting ConnectionCloseApp{}  = False
+ackEliciting Ack{}                 = False
+ackEliciting _                     = True

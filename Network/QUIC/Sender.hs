@@ -32,7 +32,7 @@ construct conn lvl frames mTargetSize = do
     mycid <- getMyCID conn
     peercid <- getPeerCID conn
     established <- isConnectionEstablished conn
-    if established then
+    if established || (not (isClient conn) && lvl == HandshakeLevel) then
         constructTargetPacket ver mycid peercid mTargetSize token
       else do
         bss0 <- constructLowerAckPacket lvl ver mycid peercid token
@@ -84,7 +84,7 @@ construct conn lvl frames mTargetSize = do
               RTT0Level      -> PlainPacket (RTT0      ver peercid mycid)       (Plain (Flags 0) mypn frames'')
               HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames'')
               RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames'')
-        when (frames /= []) $
+        when (any ackEliciting frames) $
             keepPlainPacket conn [mypn] ppkt lvl ppns
         qlogSent conn ppkt
         encodePlainPacket conn ppkt mlen
