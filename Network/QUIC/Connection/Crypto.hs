@@ -175,4 +175,5 @@ dropSecrets :: Connection -> IO ()
 dropSecrets Connection{..} = do
     writeIORef iniSecrets defaultTrafficSecrets
     writeIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
-    writeIORef hndSecInfo (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
+    HandshakeSecretInfo cipher _ <- readIORef hndSecInfo
+    writeIORef hndSecInfo (HandshakeSecretInfo cipher defaultTrafficSecrets)
