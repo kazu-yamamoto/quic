@@ -31,6 +31,7 @@ data Options = Options {
   , optResumption :: Bool
   , opt0RTT       :: Bool
   , optQuantum    :: Bool
+  , optMigration  :: Maybe Migration
   } deriving Show
 
 defaultOptions :: Options
@@ -45,6 +46,7 @@ defaultOptions = Options {
   , optResumption = False
   , opt0RTT       = False
   , optQuantum    = False
+  , optMigration  = Nothing
   }
 
 usage :: String
@@ -82,6 +84,15 @@ options = [
   , Option ['Q'] ["resumption"]
     (NoArg (\o -> o { optQuantum = True }))
     "try sending large Initials"
+  , Option ['M'] ["migration"]
+    (NoArg (\o -> o { optMigration = Just SwitchCID }))
+    "use a new CID"
+  , Option ['B'] ["nat-rebinding"]
+    (NoArg (\o -> o { optMigration = Just NATRebiding }))
+    "use a new local port"
+  , Option ['A'] ["address-mobility"]
+    (NoArg (\o -> o { optMigration = Just MigrateTo }))
+    "use a new address and a new CID"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -143,6 +154,12 @@ main = do
         let client = case alpn info of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
               _                                       -> clientH3 addr
+        case optMigration of
+          Nothing -> return ()
+          Just mtyp -> do
+              threadDelay 600000 -- fixme
+              res <- migration conn mtyp
+              putStrLn $ "Migration by " ++ show mtyp ++ ": " ++ show res
         client conn
     when (optResumption && not (isResumptionPossible res)) $ do
         putStrLn "Resumption is not available"
