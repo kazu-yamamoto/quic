@@ -200,12 +200,18 @@ clientHQ cmd conn = do
     putStrLn "------------------------"
     send conn cmd
     shutdown conn
-    (sid, bs) <- recvStream conn
-    when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
-    C8.putStr bs
+    loop
     putStrLn "\n------------------------"
-    threadDelay 300000
     getResumptionInfo conn
+  where
+    loop = do
+        (sid, bs) <- recvStream conn
+        when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
+        if bs == "" then
+            putStrLn "Connection finished"
+          else do
+            C8.putStr bs
+            loop
 
 clientH3 :: String -> Connection -> IO ResumptionInfo
 clientH3 authority conn = do
