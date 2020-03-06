@@ -97,6 +97,7 @@ processFrame conn lvl (Crypto off cdat) = do
                     clearServerController conn
                     --
                     setConnectionEstablished conn
+                    -- dropSecrets conn
                     --
                     cryptoToken <- generateToken =<< getVersion conn
                     mgr <- getTokenManager conn
@@ -160,6 +161,7 @@ processFrame conn lvl Ping = do
     when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
 processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
+    -- dropSecrets conn
     control <- getClientController conn
     void $ forkIO $ do
         threadDelay 2000000

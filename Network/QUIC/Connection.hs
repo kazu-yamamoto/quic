@@ -34,6 +34,7 @@ module Network.QUIC.Connection (
   , setEarlySecretInfo
   , setHandshakeSecretInfo
   , setApplicationSecretInfo
+  , dropSecrets
   -- * Migration
   , getMyCID
   , getMyCIDSeqNum

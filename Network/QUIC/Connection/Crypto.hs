@@ -21,6 +21,8 @@ module Network.QUIC.Connection.Crypto (
   , setEarlySecretInfo
   , setHandshakeSecretInfo
   , setApplicationSecretInfo
+  --
+  , dropSecrets
   ) where
 
 import Control.Concurrent.STM
@@ -166,3 +168,11 @@ xApplicationSecret :: Connection -> IO (Secret, Secret)
 xApplicationSecret Connection{..} = do
     ApplicationSecretInfo _ _ (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef appSecInfo
     return (Secret c, Secret s)
+
+----------------------------------------------------------------
+
+dropSecrets :: Connection -> IO ()
+dropSecrets Connection{..} = do
+    writeIORef iniSecrets defaultTrafficSecrets
+    writeIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
+    writeIORef hndSecInfo (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
