@@ -84,6 +84,7 @@ createClientConnection conf@ClientConfig{..} ver = do
 
         qLog     msg = confQLog     ccConfig peerCID (msg ++ "\n") `E.catch`  ignore
     qLog $ qlogPrologue "client" peerCID
+    debugLog $ "Original CID: " ++ show peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
     void $ forkIO $ readerClient (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
@@ -141,6 +142,7 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
         debugLog msg = confDebugLog sconf ocid (msg ++ "\n") `E.catch` ignore
         qLog     msg = confQLog     sconf ocid (msg ++ "\n") `E.catch` ignore
     qLog $ qlogPrologue "server" ocid
+    debugLog $ "Original CID: " ++ show ocid
     when retried $ do
         qLog qlogRecvInitial
         qLog qlogSentRetry
