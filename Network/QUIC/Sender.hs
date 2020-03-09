@@ -210,9 +210,8 @@ resender conn = handleIOLog cleanupAction logAction $ forever $ do
     mapM_ put ppktpns'
     ppns <- getPeerPacketNumbers conn RTT1Level
     when (ppns /= emptyPeerPacketNumbers) $ do
-        let frames = [Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0]
-        putOutput conn $ OutControl RTT1Level frames
-
+        -- generating ACK
+        putOutput conn $ OutControl RTT1Level []
   where
     cleanupAction = putInput conn $ InpError ConnectionIsClosed
     logAction msg = connDebugLog conn ("resender: " ++ msg)
