@@ -148,15 +148,19 @@ onE :: IO b -> IO a -> IO a
 h `onE` b = b `E.onException` h
 
 serverHQ :: Connection -> IO ()
-serverHQ conn = connDebugLog conn "Connection terminated" `onE` do
-    mbs <- timeout 5000000 $ recv conn
-    case mbs of
-      Nothing -> connDebugLog conn "Connection timeout"
-      Just bs -> do
-          connDebugLog conn $ C8.unpack bs
-          send conn html
-          shutdown conn
-          connDebugLog conn "Connection finished"
+serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
+  where
+    loop = do
+        mbs <- timeout 5000000 $ recv conn
+        case mbs of
+          Nothing -> connDebugLog conn "Connection timeout"
+          Just "" -> do
+              send conn html
+              shutdown conn
+              connDebugLog conn "Connection finished"
+          Just bs -> do
+              connDebugLog conn $ C8.unpack bs
+              loop
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
