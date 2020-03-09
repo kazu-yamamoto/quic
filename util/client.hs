@@ -161,14 +161,16 @@ main = do
 runClient :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> IO ()
 runClient conf opts@Options{..} cmd addr debug = do
     debug "------------------------"
-    (info1,_info2,res) <- runQUICClient conf $ \conn -> do
+    (info1,info2,res) <- runQUICClient conf $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
               _                                       -> clientH3 addr
         case optMigration of
           Nothing   -> return ()
-          Just mtyp -> debug $ "Migration by " ++ show mtyp
+          Just mtyp -> do
+              void $ migration conn mtyp
+              debug $ "Migration by " ++ show mtyp
         debug "------------------------"
         client conn debug
         debug "\n------------------------"
@@ -212,10 +214,24 @@ runClient conf opts@Options{..} cmd addr debug = do
           else do
             putStrLn "Result: (S) retry ... NG"
             exitFailure
-      else do
-        putStrLn "Result: (H) handshake ... OK"
-        putStrLn "Result: (D) stream data ... OK"
-        exitSuccess
+      else case optMigration of
+             Just SwitchCID -> do
+                 if localCID info1 /= localCID info2 then do
+                     putStrLn "Result: (M) CID change ... OK"
+                     exitSuccess
+                   else do
+                     putStrLn "Result: (M) CID change ... NG"
+                     exitFailure
+             Just NATRebiding -> do
+                 putStrLn "Result: (B) NAT rebinding ... OK"
+                 exitSuccess
+             Just MigrateTo -> do
+                 putStrLn "Result: (A) network migration ... NG (not yet)"
+                 exitFailure
+             Nothing -> do
+                 putStrLn "Result: (H) handshake ... OK"
+                 putStrLn "Result: (D) stream data ... OK"
+                 exitSuccess
 
 runClient2 :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> ResumptionInfo -> IO ConnectionInfo
 runClient2 conf Options{..} cmd addr debug res = do
