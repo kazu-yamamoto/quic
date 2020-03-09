@@ -44,7 +44,7 @@ import Crypto.Cipher.AES
 import qualified Crypto.Cipher.ChaCha as ChaCha
 import qualified Crypto.Cipher.ChaChaPoly1305 as ChaChaPoly
 import Crypto.Cipher.Types hiding (Cipher, IV)
-import Crypto.Error (throwCryptoError)
+import Crypto.Error (throwCryptoError, maybeCryptoError)
 import qualified Crypto.MAC.Poly1305 as Poly1305
 import Data.ByteArray (convert)
 import qualified Data.ByteString as B
@@ -181,35 +181,33 @@ aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 aes128gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
     ciphertext `B.append` convert tag
   where
-    conn = throwCryptoError (cipherInit key) :: AES128
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
-    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext defaultCipherOverhead
+    aes = throwCryptoError (cipherInit key) :: AES128
+    aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
+    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aead ad plaintext defaultCipherOverhead
 
 aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
-aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
-  where
-    conn = throwCryptoError $ cipherInit key :: AES128
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
-    (ciphertext, tag) = B.splitAt (B.length ciphertag - defaultCipherOverhead) ciphertag
-    authtag = AuthTag $ convert tag
-    plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
+aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
+    aes  <- maybeCryptoError $ cipherInit key :: Maybe AES128
+    aead <- maybeCryptoError $ aeadInit AEAD_GCM aes nonce
+    let (ciphertext, tag) = B.splitAt (B.length ciphertag - defaultCipherOverhead) ciphertag
+        authtag = AuthTag $ convert tag
+    aeadSimpleDecrypt aead ad ciphertext authtag
 
 aes256gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 aes256gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
     ciphertext `B.append` convert tag
   where
-    conn = throwCryptoError (cipherInit key) :: AES256
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
-    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aeadIni ad plaintext 16
+    aes = throwCryptoError (cipherInit key) :: AES256
+    aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
+    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
 
 aes256gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
-aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = plaintext
-  where
-    conn = throwCryptoError $ cipherInit key :: AES256
-    aeadIni = throwCryptoError $ aeadInit AEAD_GCM conn nonce
-    (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
-    authtag = AuthTag $ convert tag
-    plaintext = aeadSimpleDecrypt aeadIni ad ciphertext authtag
+aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
+    aes  <- maybeCryptoError $ cipherInit key :: Maybe AES256
+    aead <- maybeCryptoError $ aeadInit AEAD_GCM aes nonce
+    let (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+        authtag = AuthTag $ convert tag
+    aeadSimpleDecrypt aead ad ciphertext authtag
 
 chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
 chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
@@ -221,15 +219,13 @@ chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
     Poly1305.Auth tag = ChaChaPoly.finalize st3
 
 chacha20poly1305Decrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
-chacha20poly1305Decrypt (Key key) (Nonce nonce) ciphertag (AddDat ad)
-   | tag == convert tag' = Just plaintext
-   | otherwise           = Nothing
-  where
-    st = throwCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
-    st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st)
-    (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
-    (plaintext, st3) = ChaChaPoly.decrypt ciphertext st2
-    Poly1305.Auth tag' = ChaChaPoly.finalize st3
+chacha20poly1305Decrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
+    st <- maybeCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
+    let st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st)
+        (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+        (plaintext, st3) = ChaChaPoly.decrypt ciphertext st2
+        Poly1305.Auth tag' = ChaChaPoly.finalize st3
+    if tag == convert tag' then Just plaintext else Nothing
 
 ----------------------------------------------------------------
 
