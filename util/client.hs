@@ -244,7 +244,7 @@ runClient2 conf Options{..} cmd addr debug res = do
             debug "------------------------ Response for early data"
             (sid, bs) <- recvStream conn
             debug $ "SID: " ++ show sid
-            debug $ C8.unpack bs
+            debug $ show $ BS.unpack bs
             debug "------------------------ Response for early data"
           else do
             let client = case alpn info of
