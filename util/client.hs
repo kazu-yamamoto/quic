@@ -16,6 +16,7 @@ import System.Environment
 import System.Exit
 
 import Network.QUIC
+import Network.TLS.QUIC
 
 import Common
 import H3
@@ -30,6 +31,7 @@ data Options = Options {
   , optVerNego    :: Bool
   , optResumption :: Bool
   , opt0RTT       :: Bool
+  , optRetry      :: Bool
   , optQuantum    :: Bool
   , optMigration  :: Maybe Migration
   } deriving Show
@@ -45,6 +47,7 @@ defaultOptions = Options {
   , optVerNego    = False
   , optResumption = False
   , opt0RTT       = False
+  , optRetry      = False
   , optQuantum    = False
   , optMigration  = Nothing
   }
@@ -81,7 +84,10 @@ options = [
   , Option ['Z'] ["0rtt"]
     (NoArg (\o -> o { opt0RTT = True }))
     "try sending early data"
-  , Option ['Q'] ["resumption"]
+  , Option ['S'] ["stateless-retry"]
+    (NoArg (\o -> o { optRetry = True }))
+    "check stateless retry"
+  , Option ['Q'] ["quantum"]
     (NoArg (\o -> o { optQuantum = True }))
     "try sending large Initials"
   , Option ['M'] ["migration"]
@@ -110,7 +116,7 @@ clientOpts argv =
 main :: IO ()
 main = do
     args <- getArgs
-    (Options{..}, ips) <- clientOpts args
+    (opts@Options{..}, ips) <- clientOpts args
     let ipslen = length ips
     when (ipslen /= 2 && ipslen /= 3) $
         showUsageAndExit "cannot recognize <addr> and <port>\n"
@@ -148,88 +154,125 @@ main = do
               , confQLog       = getDirLogger optQLogDir ".qlog"
               }
           }
-    putStrLn "------------------------"
-    res <- runQUICClient conf $ \conn -> do
-        info <- getConnectionInfo conn
-        let client = case alpn info of
+        debug | optDebugLog = putStrLn
+              | otherwise   = \_ -> return ()
+    runClient conf opts cmd addr debug
+
+runClient :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> IO ()
+runClient conf opts@Options{..} cmd addr debug = do
+    debug "------------------------"
+    (info1,_info2,res) <- runQUICClient conf $ \conn -> do
+        i1 <- getConnectionInfo conn
+        let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
               _                                       -> clientH3 addr
         case optMigration of
-          Nothing -> return ()
-          Just mtyp -> do
-              res <- migration conn mtyp
-              putStrLn $ "Migration by " ++ show mtyp ++ ": " ++ show res
-        client conn
-    when (optResumption && not (isResumptionPossible res)) $ do
-        putStrLn "Resumption is not available"
-        exitFailure
-    when (opt0RTT && not (is0RTTPossible res)) $ do
-        putStrLn "0-RTT is not allowed"
-        exitFailure
-    threadDelay 100000
-    if not optResumption && not opt0RTT then
+          Nothing   -> return ()
+          Just mtyp -> debug $ "Migration by " ++ show mtyp
+        debug "------------------------"
+        client conn debug
+        debug "\n------------------------"
+        i2 <- getConnectionInfo conn
+        r <- getResumptionInfo conn
+        return (i1, i2, r)
+    if optVerNego then do
+        putStrLn "Result: (V) version negotiation  ... OK"
         exitSuccess
-      else do
-        let rtt0 = opt0RTT && is0RTTPossible res
-        let conf'
-              | rtt0 = conf {
-                    ccResumption = res
-                  , ccEarlyData  = Just (0, cmd) -- fixme
-                  }
-              | otherwise = conf { ccResumption = res }
-        putStrLn "<<<< next connection >>>>"
-        putStrLn "------------------------"
-        void $ runQUICClient conf' $ \conn -> do
-            info <- getConnectionInfo conn
-            if rtt0 then do
-                putStrLn "------------------------ Response for early data"
-                (sid, bs) <- recvStream conn
-                putStrLn $ "SID: " ++ show sid
-                C8.putStrLn bs
-                putStrLn "------------------------ Response for early data"
+      else if optQuantum then do
+        putStrLn "Result: (Q) quantum ... OK"
+        exitSuccess
+      else if optResumption then do
+        if isResumptionPossible res then do
+            info3 <- runClient2 conf opts cmd addr debug res
+            if handshakeMode info3 == PreSharedKey then do
+                putStrLn "Result: (R) TLS resumption ... OK"
                 exitSuccess
               else do
-                let client = case alpn info of
-                      Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
-                      _                                       -> clientH3 addr
-                void $ client conn
+                putStrLn "Result: (R) TLS resumption ... NG"
+                exitFailure
+          else do
+            putStrLn "Result: (R) TLS resumption ... NG"
+            exitFailure
+      else if opt0RTT then do
+        if is0RTTPossible res then do
+            info3 <- runClient2 conf opts cmd addr debug res
+            if handshakeMode info3 == RTT0 then do
+                putStrLn "Result: (Z) 0-RTT ... OK"
                 exitSuccess
+              else do
+                putStrLn "Result: (Z) 0-RTT ... NG"
+                exitFailure
+          else do
+            putStrLn "Result: (Z) 0-RTT ... NG"
+            exitFailure
+      else if optRetry then do
+        if retry info1 then do
+            putStrLn "Result: (S) retry ... OK"
+            exitSuccess
+          else do
+            putStrLn "Result: (S) retry ... NG"
+            exitFailure
+      else do
+        putStrLn "Result: (H) handshake ... OK"
+        putStrLn "Result: (D) stream data ... OK"
+        exitSuccess
 
-clientHQ :: ByteString -> Connection -> IO ResumptionInfo
-clientHQ cmd conn = do
-    putStrLn "------------------------"
+runClient2 :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> ResumptionInfo -> IO ConnectionInfo
+runClient2 conf Options{..} cmd addr debug res = do
+    threadDelay 100000
+    debug "<<<< next connection >>>>"
+    debug "------------------------"
+    runQUICClient conf' $ \conn -> do
+        info <- getConnectionInfo conn
+        if rtt0 then do
+            debug "------------------------ Response for early data"
+            (sid, bs) <- recvStream conn
+            debug $ "SID: " ++ show sid
+            debug $ C8.unpack bs
+            debug "------------------------ Response for early data"
+          else do
+            let client = case alpn info of
+                  Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
+                  _                                       -> clientH3 addr
+            void $ client conn debug
+        return info
+  where
+    rtt0 = opt0RTT && is0RTTPossible res
+    conf' | rtt0 = conf {
+                ccResumption = res
+              , ccEarlyData  = Just (0, cmd) -- fixme
+              }
+          | otherwise = conf { ccResumption = res }
+
+clientHQ :: ByteString -> Connection -> (String -> IO ()) -> IO ()
+clientHQ cmd conn debug = do
     send conn cmd
     shutdown conn
     loop
-    putStrLn "\n------------------------"
-    getResumptionInfo conn
   where
     loop = do
         (sid, bs) <- recvStream conn
-        when (sid /= 0) $ putStrLn $ "SID: " ++ show sid
+        when (sid /= 0) $ debug $ "SID: " ++ show sid
         if bs == "" then
-            putStrLn "Connection finished"
+            debug "Connection finished"
           else do
-            C8.putStr bs
+            debug $ C8.unpack bs
             loop
 
-clientH3 :: String -> Connection -> IO ResumptionInfo
-clientH3 authority conn = do
-    putStrLn "------------------------"
+clientH3 :: String -> Connection -> (String -> IO ()) -> IO ()
+clientH3 authority conn debug = do
     hdrblk <- taglen 1 <$> qpackClient authority
     sendStream conn  2 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
     sendStream conn  6 False $ BS.pack [2]
     sendStream conn 10 False $ BS.pack [3]
     sendStream conn  0 True hdrblk
     loop
-    putStrLn "------------------------"
-    getResumptionInfo conn
   where
     loop = do
         (sid, bs) <- recvStream conn
-        putStrLn $ "SID: " ++ show sid
+        debug $ "SID: " ++ show sid
         if bs == "" then
-            putStrLn "Connection finished"
+            debug "Connection finished"
           else do
-            print $ BS.unpack bs
+            debug $ show $ BS.unpack bs
             loop
