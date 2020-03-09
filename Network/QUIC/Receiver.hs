@@ -58,6 +58,7 @@ processCryptPacket conn cpkt@(CryptPacket header crypt) = do
                       setCloseReceived conn
                       clearThreads conn
                     else do
+                      qlogDropped conn cpkt
                       connDebugLog conn $ "Cannot decrypt: " ++ show level
                       return () -- fixme: sending statelss reset
   where
