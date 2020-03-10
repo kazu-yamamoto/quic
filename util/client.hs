@@ -164,22 +164,22 @@ main = do
 runClient :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> IO ()
 runClient conf opts@Options{..} cmd addr debug = do
     debug "------------------------"
-    (info1,info2,res) <- runQUICClient conf $ \conn -> do
+    (info1,info2,res,mig) <- runQUICClient conf $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
               _                                       -> clientH3 addr
-        case optMigration of
-          Nothing   -> return ()
+        m <- case optMigration of
+          Nothing   -> return False
           Just mtyp -> do
-              void $ migration conn mtyp
               debug $ "Migration by " ++ show mtyp
+              migration conn mtyp
         debug "------------------------"
         client conn debug
         debug "\n------------------------"
         i2 <- getConnectionInfo conn
         r <- getResumptionInfo conn
-        return (i1, i2, r)
+        return (i1, i2, r, m)
     if optVerNego then do
         putStrLn "Result: (V) version negotiation  ... OK"
         exitSuccess
@@ -219,14 +219,14 @@ runClient conf opts@Options{..} cmd addr debug = do
             exitFailure
       else case optMigration of
              Just ChangeServerCID -> do
-                 if remoteCID info1 /= remoteCID info2 then do
+                 if mig && remoteCID info1 /= remoteCID info2 then do
                      putStrLn "Result: (M) change server CID ... OK"
                      exitSuccess
                    else do
                      putStrLn "Result: (M) change server CID ... NG"
                      exitFailure
              Just ChangeClientCID -> do
-                 if localCID info1 /= localCID info2 then do
+                 if mig && localCID info1 /= localCID info2 then do
                      putStrLn "Result: (N) change client CID ... OK"
                      exitSuccess
                    else do
@@ -236,8 +236,12 @@ runClient conf opts@Options{..} cmd addr debug = do
                  putStrLn "Result: (B) NAT rebinding ... OK"
                  exitSuccess
              Just MigrateTo -> do
-                 putStrLn "Result: (A) address mobility ... NG (not yet)"
-                 exitFailure
+                 if mig && remoteCID info1 /= remoteCID info2 then do
+                     putStrLn "Result: (A) address mobility ... OK"
+                     exitSuccess
+                   else do
+                     putStrLn "Result: (A) address mobility ... NG"
+                     exitFailure
              Nothing -> do
                  putStrLn "Result: (H) handshake ... OK"
                  putStrLn "Result: (D) stream data ... OK"
