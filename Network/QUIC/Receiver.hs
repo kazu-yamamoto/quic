@@ -38,7 +38,10 @@ processCryptPacket conn cpkt@(CryptPacket header crypt) = do
             qlogDropped conn cpkt
             connDebugLog conn "Timeout: ignoring a packet"
           else do
-            when (isClient conn && level == HandshakeLevel) $
+            peercid <- getPeerCID conn
+            when (isClient conn
+               && level == HandshakeLevel
+               && peercid /= headerPeerCID header) $ do
                 resetPeerCID conn $ headerPeerCID header
             mplain <- decryptCrypt conn crypt level
             case mplain of
