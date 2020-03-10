@@ -219,28 +219,31 @@ runClient conf opts@Options{..} cmd addr debug = do
             exitFailure
       else case optMigration of
              Just ChangeServerCID -> do
+                 let changed = remoteCID info1 /= remoteCID info2
                  if mig && remoteCID info1 /= remoteCID info2 then do
                      putStrLn "Result: (M) change server CID ... OK"
                      exitSuccess
                    else do
-                     putStrLn "Result: (M) change server CID ... NG"
+                     putStrLn $ "Result: (M) change server CID ... NG " ++ show (mig,changed)
                      exitFailure
              Just ChangeClientCID -> do
-                 if mig && localCID info1 /= localCID info2 then do
+                 let changed = localCID info1 /= localCID info2
+                 if mig && changed then do
                      putStrLn "Result: (N) change client CID ... OK"
                      exitSuccess
                    else do
-                     putStrLn "Result: (N) change client CID ... NG"
+                     putStrLn $ "Result: (N) change client CID ... NG " ++ show (mig,changed)
                      exitFailure
              Just NATRebiding -> do
                  putStrLn "Result: (B) NAT rebinding ... OK"
                  exitSuccess
              Just MigrateTo -> do
-                 if mig && remoteCID info1 /= remoteCID info2 then do
+                 let changed = remoteCID info1 /= remoteCID info2
+                 if mig && changed then do
                      putStrLn "Result: (A) address mobility ... OK"
                      exitSuccess
                    else do
-                     putStrLn "Result: (A) address mobility ... NG"
+                     putStrLn $ "Result: (A) address mobility ... NG " ++ show (mig,changed)
                      exitFailure
              Nothing -> do
                  putStrLn "Result: (H) handshake ... OK"
