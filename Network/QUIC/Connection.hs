@@ -7,7 +7,6 @@ module Network.QUIC.Connection (
   , connClose
   , connDebugLog
   , connQLog
-  , elapsedTime
   -- * Packet numbers
   , setPacketNumber
   , getPacketNumber
@@ -111,6 +110,14 @@ module Network.QUIC.Connection (
   , getTokenManager
   , setMainThreadId
   , getMainThreadId
+  -- Qlog
+  , qlogReceived
+  , qlogSent
+  , qlogDropped
+  , qlogEpilogue
+  , qlogPrologue
+  , qlogRecvInitial
+  , qlogSentRetry
   ) where
 
 import Network.QUIC.Connection.Crypto
@@ -123,3 +130,4 @@ import Network.QUIC.Connection.State
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Transmit
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connection.Qlog

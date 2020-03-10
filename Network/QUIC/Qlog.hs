@@ -2,13 +2,17 @@
 
 module Network.QUIC.Qlog where
 
+import qualified Control.Exception as E
+import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
+import Data.Hourglass
 import Data.List
+import Time.System
 
+import Network.QUIC.Imports
 import Network.QUIC.Types
-import Network.QUIC.Connection
 
 class Qlog a where
     qlog :: a -> String
@@ -113,31 +117,65 @@ chop xxs@(x:xs) = frst : rest
     frst = x : map fst ys
     rest = chop $ map fst zs
 
-qlogPrologue :: String -> CID -> String
-qlogPrologue role oCID = "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ role ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":["
+----------------------------------------------------------------
+
+data QlogMsg = QProlog String CID
+             | QEpilogue
+             | QRecvInitial
+             | QSentRetry
+             | QSent String
+             | QReceived String
+             | QDropped String
+
+toString :: QlogMsg -> Int -> String
+toString (QProlog role oCID) _ = "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ role ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
   where
     ocid = show oCID
+toString QEpilogue _ = "[]]}]}\n"
+toString QRecvInitial _ =
+    "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
+toString QSentRetry _ =
+    "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],\n"
+toString (QReceived msg) tim =
+    "[" ++ show tim ++ ",\"transport\",\"packet_received\"," ++ msg ++ "],\n"
+toString (QSent msg) tim =
+    "[" ++ show tim ++ ",\"transport\",\"packet_sent\","     ++ msg ++ "],\n"
+toString (QDropped msg) tim =
+    "[" ++ show tim ++ ",\"transport\",\"packet_dropped\","  ++ msg ++ "],\n"
 
-qlogEpilogue :: String
-qlogEpilogue = "[]]}]}"
+----------------------------------------------------------------
 
-qlogReceived :: Qlog a => Connection -> a -> IO ()
-qlogReceived conn pkt = do
-    tim <- elapsedTime conn
-    connQLog conn ("[" ++ show tim ++ ",\"transport\",\"packet_received\"," ++ qlog pkt ++ "],")
+newtype QlogQ = QlogQ (TQueue QlogMsg)
 
-qlogSent :: Qlog a => Connection -> a -> IO ()
-qlogSent conn pkt = do
-    tim <- elapsedTime conn
-    connQLog conn ("[" ++ show tim ++ ",\"transport\",\"packet_sent\"," ++ qlog pkt ++ "],")
+newQlogQ :: IO QlogQ
+newQlogQ = QlogQ <$> newTQueueIO
 
-qlogRecvInitial :: String
-qlogRecvInitial = "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],"
+readQlogQ :: QlogQ -> IO QlogMsg
+readQlogQ (QlogQ q) = atomically $ readTQueue q
 
-qlogSentRetry :: String
-qlogSentRetry = "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],"
+writeQlogQ :: QlogQ -> QlogMsg -> IO ()
+writeQlogQ (QlogQ q) msg = atomically $ writeTQueue q msg
 
-qlogDropped :: Qlog a => Connection -> a -> IO ()
-qlogDropped conn pkt = do
-    tim <- elapsedTime conn
-    connQLog conn ("[" ++ show tim ++ ",\"transport\",\"packet_dropped\"," ++ qlog pkt ++ "],")
+newQlogger :: QlogQ -> (String -> IO ()) -> IO ()
+newQlogger q logAction = do
+    getTime <- getElapsedTime <$> timeCurrentP
+    forever $ E.handle ignore $ do
+        qmsg <- readQlogQ q
+        tim <- getTime
+        let msg = toString qmsg tim
+        logAction msg
+  where
+    ignore :: E.SomeException -> IO ()
+    ignore _ = return ()
+
+----------------------------------------------------------------
+
+getElapsedTime :: ElapsedP -> IO Int
+getElapsedTime base = do
+    curr <- timeCurrentP
+    return $ relativeTime base curr
+
+relativeTime :: ElapsedP -> ElapsedP -> Int
+relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
+  where
+   (Seconds s, NanoSeconds n) = t2 `timeDiffP` t1

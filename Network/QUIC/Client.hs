@@ -17,7 +17,6 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
-import Network.QUIC.Qlog
 import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Types

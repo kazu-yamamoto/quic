@@ -56,8 +56,8 @@ connect conf = do
                 Right _    -> E.throwIO VersionNegotiationFailed
   where
     connect' ver = do
-        (conn,send,recv,cls) <- createClientConnection conf ver
-        handshakeClientConnection conf conn send recv `E.onException` cls
+        (conn,send,recv,cls,qlogger) <- createClientConnection conf ver
+        handshakeClientConnection conf conn send recv qlogger `E.onException` cls
         return conn
     check se
       | Just e@(TLS.Error_Protocol _) <- E.fromException se =
@@ -67,7 +67,7 @@ connect conf = do
       | otherwise = Left $ BadThingHappen se
 
 createClientConnection :: ClientConfig -> Version
-                       -> IO (Connection, SendMany, Receive, Close)
+                       -> IO (Connection, SendMany, Receive, Close, IO ())
 createClientConnection conf@ClientConfig{..} ver = do
     s0 <- udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
@@ -80,23 +80,26 @@ createClientConnection conf@ClientConfig{..} ver = do
             void $ NSB.sendMany s bss
     myCID   <- newCID
     peerCID <- newCID
+    qq <- newQlogQ
     let debugLog msg = confDebugLog ccConfig peerCID (msg ++ "\n") `E.catch` ignore
 
-        qLog     msg = confQLog     ccConfig peerCID (msg ++ "\n") `E.catch`  ignore
-    qLog $ qlogPrologue "client" peerCID
+        qLog msg = writeQlogQ qq msg
+        qlogger = newQlogger qq $ confQLog ccConfig peerCID
     debugLog $ "Original CID: " ++ show peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
+    qlogPrologue conn "client" peerCID
     void $ forkIO $ readerClient (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
-    return (conn,send,recv,cls)
+    return (conn,send,recv,cls,qlogger)
 
-handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO ()
-handshakeClientConnection conf@ClientConfig{..} conn send recv = do
+handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> IO ()
+handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger = do
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender conn
-    setThreadIds conn [tid0,tid1,tid2]
+    tid3 <- forkIO qlogger
+    setThreadIds conn [tid0,tid1,tid2,tid3]
     handshakeClient conf conn `E.onException` clearThreads conn
     params <- getPeerParameters conn
     case statelessResetToken params of
@@ -137,21 +140,23 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
     let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
+    qq <- newQlogQ
     let ocid = originalCID oCID
         sconf = scConfig conf
         debugLog msg = confDebugLog sconf ocid (msg ++ "\n") `E.catch` ignore
-        qLog     msg = confQLog     sconf ocid (msg ++ "\n") `E.catch` ignore
-    qLog $ qlogPrologue "server" ocid
+        qLog msg = writeQlogQ qq msg
+        qlogger = newQlogger qq $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
-    when retried $ do
-        qLog qlogRecvInitial
-        qLog qlogSentRetry
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
         setup = do
             conn <- serverConnection conf ver myCID peerCID oCID debugLog qLog cls sref
+            qlogPrologue conn "server" ocid
+            when retried $ do
+                qlogRecvInitial conn
+                qlogSentRetry conn
             setTokenManager conn $ tokenMgr dispatch
             setRetried conn retried
             let send bss = void $ do
@@ -161,7 +166,8 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             let recv = recvServer q
             tid1 <- forkIO $ receiver conn recv
             tid2 <- forkIO $ resender conn
-            setThreadIds conn [tid0,tid1,tid2]
+            tid3 <- forkIO qlogger
+            setThreadIds conn [tid0,tid1,tid2,tid3]
             setMainThreadId conn mainThreadId
             handshakeServer conf oCID conn `E.onException` clearThreads conn
             setRegister conn register unregister
@@ -193,7 +199,7 @@ close conn = do
     clearThreads conn
     -- close the socket after threads reading/writing the socket die.
     connClose conn
-    connQLog conn qlogEpilogue
+    qlogEpilogue conn
 
 ----------------------------------------------------------------
 

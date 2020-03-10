@@ -16,11 +16,11 @@ import qualified Data.Set as Set
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 import System.Mem.Weak
-import Time.System
 
 import Network.QUIC.Config
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
+import Network.QUIC.Qlog
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
@@ -151,11 +151,10 @@ data Connection = Connection {
   -- Actions
   , connClose         :: Close
   , connDebugLog      :: LogAction
-  , connQLog          :: LogAction
+  , connQLog          :: QlogMsg -> IO ()
   -- Manage
   , threadIds         :: IORef [Weak ThreadId]
   , sockInfo          :: IORef (Socket,RecvQ)
-  , elapsedTime       :: IO Int
   -- Mine
   , myCIDDB           :: IORef CIDDB
   , migrationStatus   :: TVar MigrationStatus
@@ -181,7 +180,7 @@ data Connection = Connection {
   }
 
 newConnection :: Role -> Version -> CID -> CID
-              -> LogAction -> LogAction -> Close
+              -> LogAction -> (QlogMsg -> IO ()) -> Close
               -> IORef (Socket,RecvQ)
               -> TrafficSecrets InitialSecret
               -> IO Connection
@@ -196,7 +195,6 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         -- Manage
         <*> newIORef []
         <*> return sref
-        <*> (getElapsedTime <$> timeCurrentP)
         -- Mine
         <*> newIORef (newCIDDB myCID)
         <*> newTVarIO NonMigration
@@ -230,7 +228,7 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> Version -> CID -> CID
-                 -> LogAction -> LogAction -> Close
+                 -> LogAction -> (QlogMsg -> IO ()) -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
 clientConnection ClientConfig{..} ver myCID peerCID debugLog qLog cls sref = do
@@ -238,7 +236,7 @@ clientConnection ClientConfig{..} ver myCID peerCID debugLog qLog cls sref = do
     newConnection Client ver myCID peerCID debugLog qLog cls sref isecs
 
 serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
-                 -> LogAction -> LogAction -> Close
+                 -> LogAction -> (QlogMsg -> IO ()) -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
 serverConnection ServerConfig{..} ver myCID peerCID origCID debugLog qLog cls sref = do
@@ -251,15 +249,3 @@ serverConnection ServerConfig{..} ver myCID peerCID origCID debugLog qLog cls sr
 
 isClient :: Connection -> Bool
 isClient Connection{..} = role == Client
-
-----------------------------------------------------------------
-
-getElapsedTime :: ElapsedP -> IO Int
-getElapsedTime base = do
-    curr <- timeCurrentP
-    return $ relativeTime base curr
-
-relativeTime :: ElapsedP -> ElapsedP -> Int
-relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
-  where
-   (Seconds s, NanoSeconds n) = t2 `timeDiffP` t1
