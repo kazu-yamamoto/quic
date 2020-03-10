@@ -114,8 +114,6 @@ module Network.QUIC.Connection (
   , qlogReceived
   , qlogSent
   , qlogDropped
-  , qlogEpilogue
-  , qlogPrologue
   , qlogRecvInitial
   , qlogSentRetry
   ) where

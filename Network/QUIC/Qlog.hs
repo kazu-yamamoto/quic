@@ -119,19 +119,13 @@ chop xxs@(x:xs) = frst : rest
 
 ----------------------------------------------------------------
 
-data QlogMsg = QProlog String CID
-             | QEpilogue
-             | QRecvInitial
+data QlogMsg = QRecvInitial
              | QSentRetry
              | QSent String
              | QReceived String
              | QDropped String
 
 toString :: QlogMsg -> Int -> String
-toString (QProlog role oCID) _ = "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ role ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
-  where
-    ocid = show oCID
-toString QEpilogue _ = "[]]}]}\n"
 toString QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
 toString QSentRetry _ =
@@ -156,14 +150,16 @@ readQlogQ (QlogQ q) = atomically $ readTQueue q
 writeQlogQ :: QlogQ -> QlogMsg -> IO ()
 writeQlogQ (QlogQ q) msg = atomically $ writeTQueue q msg
 
-newQlogger :: QlogQ -> (String -> IO ()) -> IO ()
-newQlogger q logAction = do
+newQlogger :: QlogQ -> String -> String -> (String -> IO ()) -> IO ()
+newQlogger q rl ocid logAction = do
     getTime <- getElapsedTime <$> timeCurrentP
-    forever $ E.handle ignore $ do
-        qmsg <- readQlogQ q
-        tim <- getTime
-        let msg = toString qmsg tim
-        logAction msg
+    logAction $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ rl ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
+    let body = do
+            qmsg <- readQlogQ q
+            tim <- getTime
+            let msg = toString qmsg tim
+            logAction msg `E.catch` ignore
+    forever body `E.finally` logAction "[]]}]}\n"
   where
     ignore :: E.SomeException -> IO ()
     ignore _ = return ()

@@ -84,10 +84,9 @@ createClientConnection conf@ClientConfig{..} ver = do
     let debugLog msg = confDebugLog ccConfig peerCID (msg ++ "\n") `E.catch` ignore
 
         qLog msg = writeQlogQ qq msg
-        qlogger = newQlogger qq $ confQLog ccConfig peerCID
+        qlogger = newQlogger qq "client" (show peerCID) $ confQLog ccConfig peerCID
     debugLog $ "Original CID: " ++ show peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
-    qlogPrologue conn "client" peerCID
     void $ forkIO $ readerClient (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
     return (conn,send,recv,cls,qlogger)
@@ -145,7 +144,7 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
         sconf = scConfig conf
         debugLog msg = confDebugLog sconf ocid (msg ++ "\n") `E.catch` ignore
         qLog msg = writeQlogQ qq msg
-        qlogger = newQlogger qq $ confQLog sconf ocid
+        qlogger = newQlogger qq "server" (show ocid) $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
     let cls = do
@@ -153,7 +152,6 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             NS.close s
         setup = do
             conn <- serverConnection conf ver myCID peerCID oCID debugLog qLog cls sref
-            qlogPrologue conn "server" ocid
             when retried $ do
                 qlogRecvInitial conn
                 qlogSentRetry conn
@@ -199,7 +197,6 @@ close conn = do
     clearThreads conn
     -- close the socket after threads reading/writing the socket die.
     connClose conn
-    qlogEpilogue conn
 
 ----------------------------------------------------------------
 
