@@ -90,15 +90,18 @@ options = [
   , Option ['Q'] ["quantum"]
     (NoArg (\o -> o { optQuantum = True }))
     "try sending large Initials"
-  , Option ['M'] ["migration"]
-    (NoArg (\o -> o { optMigration = Just SwitchCID }))
-    "use a new CID"
+  , Option ['M'] ["change-server-cid"]
+    (NoArg (\o -> o { optMigration = Just ChangeServerCID }))
+    "use a new server CID"
+  , Option ['N'] ["change-client-cid"]
+    (NoArg (\o -> o { optMigration = Just ChangeClientCID }))
+    "use a new client CID"
   , Option ['B'] ["nat-rebinding"]
     (NoArg (\o -> o { optMigration = Just NATRebiding }))
     "use a new local port"
   , Option ['A'] ["address-mobility"]
     (NoArg (\o -> o { optMigration = Just MigrateTo }))
-    "use a new address and a new CID"
+    "use a new address and a new server CID"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -215,18 +218,25 @@ runClient conf opts@Options{..} cmd addr debug = do
             putStrLn "Result: (S) retry ... NG"
             exitFailure
       else case optMigration of
-             Just SwitchCID -> do
-                 if localCID info1 /= localCID info2 then do
-                     putStrLn "Result: (M) CID change ... OK"
+             Just ChangeServerCID -> do
+                 if remoteCID info1 /= remoteCID info2 then do
+                     putStrLn "Result: (M) change server CID ... OK"
                      exitSuccess
                    else do
-                     putStrLn "Result: (M) CID change ... NG"
+                     putStrLn "Result: (M) change server CID ... NG"
+                     exitFailure
+             Just ChangeClientCID -> do
+                 if localCID info1 /= localCID info2 then do
+                     putStrLn "Result: (N) change client CID ... OK"
+                     exitSuccess
+                   else do
+                     putStrLn "Result: (N) change client CID ... NG"
                      exitFailure
              Just NATRebiding -> do
                  putStrLn "Result: (B) NAT rebinding ... OK"
                  exitSuccess
              Just MigrateTo -> do
-                 putStrLn "Result: (A) network migration ... NG (not yet)"
+                 putStrLn "Result: (A) address mobility ... NG (not yet)"
                  exitFailure
              Nothing -> do
                  putStrLn "Result: (H) handshake ... OK"
