@@ -4,9 +4,13 @@
 module Network.QUIC.Client (
     readerClient
   , recvClient
+  , Migration(..)
+  , migration
   ) where
 
-import Network.Socket (Socket)
+import System.Timeout
+import Control.Concurrent
+import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Connection
@@ -14,6 +18,7 @@ import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Qlog
+import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
@@ -62,3 +67,60 @@ checkCIDs conn dCID (Right (pseudo0,tag)) = do
 
 recvClient :: RecvQ -> IO CryptPacket
 recvClient = readRecvQ
+
+----------------------------------------------------------------
+
+data Migration = ChangeServerCID
+               | ChangeClientCID
+               | NATRebiding
+               | MigrateTo -- SockAddr
+               deriving (Eq, Show)
+
+migration :: Connection -> Migration -> IO Bool
+migration conn typ
+  | isClient conn = do
+        waitEstablished conn
+        migrationClient conn typ
+  | otherwise     = return False
+
+migrationClient :: Connection -> Migration -> IO Bool
+migrationClient conn ChangeServerCID = do
+    mn <- timeout 1000000 $ choosePeerCID conn -- fixme
+    case mn of
+      Nothing              -> return False
+      Just (CIDInfo n _ _) -> do
+          let frames = [RetireConnectionID n]
+          putOutput conn $ OutControl RTT1Level frames
+          return True
+migrationClient conn ChangeClientCID = do
+    cidInfo <- getNewMyCID conn
+    x <- (+1) <$> getMyCIDSeqNum conn
+    let frames = [NewConnectionID cidInfo x]
+    putOutput conn $ OutControl RTT1Level frames
+    return True
+migrationClient conn NATRebiding = do
+    (s0,q) <- getSockInfo conn
+    s1 <- getPeerName s0 >>= udpNATRebindingSocket
+    setSockInfo conn (s1,q)
+    v <- getVersion conn
+    void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
+    void $ forkIO $ do
+        threadDelay 5000000
+        close s0
+    return True
+migrationClient conn MigrateTo = do
+    mn <- timeout 1000000 $ choosePeerCID conn -- fixme
+    case mn of
+      Nothing -> return False
+      Just (CIDInfo retiredSeqNum _ _) -> do
+          (s0,q) <- getSockInfo conn
+          -- fixme: SockAddr is specified in the future.
+          s1 <- getPeerName s0 >>= udpNATRebindingSocket
+          setSockInfo conn (s1,q)
+          v <- getVersion conn
+          void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
+          void $ forkIO $ do
+              threadDelay 5000000
+              close s0
+          validatePath conn retiredSeqNum
+          return True

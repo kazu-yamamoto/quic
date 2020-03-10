@@ -16,14 +16,14 @@ module Network.QUIC.Connection.Migration (
   , choosePeerCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
-  , setChallenges
-  , waitResponse
   , checkResponse
+  , validatePath
   ) where
 
 import Control.Concurrent.STM
 import Data.IORef
 
+import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -37,7 +37,7 @@ getMyCIDSeqNum :: Connection -> IO Int
 getMyCIDSeqNum Connection{..} = cidInfoSeq . usedCIDInfo <$> readIORef myCIDDB
 
 getPeerCID :: Connection -> IO CID
-getPeerCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef peerCIDDB
+getPeerCID Connection{..} = cidInfoCID . usedCIDInfo <$> readTVarIO peerCIDDB
 
 isMyCID :: Connection -> CID -> IO Bool
 isMyCID Connection{..} cid =
@@ -51,7 +51,7 @@ myCIDsInclude Connection{..} cid =
 
 -- | Reseting to Initial CID in the client side.
 resetPeerCID :: Connection -> CID -> IO ()
-resetPeerCID Connection{..} cid = writeIORef peerCIDDB $ newCIDDB cid
+resetPeerCID Connection{..} cid = atomically $ writeTVar peerCIDDB $ newCIDDB cid
 
 ----------------------------------------------------------------
 
@@ -67,44 +67,47 @@ getNewMyCID Connection{..} = do
 -- | Receiving NewConnectionID
 addPeerCID :: Connection -> CIDInfo -> IO ()
 addPeerCID Connection{..} cidInfo = do
-    db <- readIORef peerCIDDB
+    db <- readTVarIO peerCIDDB
     case findBySeq (cidInfoSeq cidInfo) (cidInfos db) of
-      Nothing -> atomicModifyIORef peerCIDDB $ add cidInfo
+      Nothing -> atomically $ modifyTVar' peerCIDDB $ add cidInfo
       Just _  -> return ()
 
 -- | Using a new CID and sending RetireConnectionID
-choosePeerCID :: Connection -> IO (Maybe CIDInfo)
-choosePeerCID conn@Connection{..} = do
+choosePeerCID :: Connection -> IO CIDInfo
+choosePeerCID conn@Connection{..} = atomically $ do
     let ref = peerCIDDB
-    db <- readIORef ref
+    db <- readTVar ref
     mncid <- pickPeerCID conn
-    case mncid of
-      Nothing -> return Nothing
-      Just cidInfo -> do
-          let u = usedCIDInfo db
-          setPeerCID conn cidInfo
-          return $ Just u
+    check $ isJust mncid
+    let u = usedCIDInfo db
+    setPeerCID conn $ fromJust mncid
+    return u
 
-pickPeerCID :: Connection -> IO (Maybe CIDInfo)
+pickPeerCID :: Connection -> STM (Maybe CIDInfo)
 pickPeerCID Connection{..} = do
-    db <- readIORef peerCIDDB
+    db <- readTVar peerCIDDB
     case filter (/= usedCIDInfo db) (cidInfos db) of
       []        -> return Nothing
       cidInfo:_ -> return $ Just cidInfo
 
-setPeerCID :: Connection -> CIDInfo -> IO ()
-setPeerCID Connection{..} cidInfo = atomicModifyIORef' peerCIDDB $ set cidInfo
+setPeerCID :: Connection -> CIDInfo -> STM ()
+setPeerCID Connection{..} cidInfo =
+    modifyTVar' peerCIDDB $ set cidInfo
 
 -- | After sending RetireConnectionID
 retirePeerCID :: Connection -> Int -> IO ()
-retirePeerCID Connection{..} n = atomicModifyIORef peerCIDDB $ del n
+retirePeerCID Connection{..} n =
+    atomically $ modifyTVar' peerCIDDB $ del n
 
 ----------------------------------------------------------------
 
 -- | Receiving NewConnectionID
 setPeerCIDAndRetireCIDs :: Connection -> Int -> IO [Int]
-setPeerCIDAndRetireCIDs Connection{..} n =
-    atomicModifyIORef peerCIDDB $ arrange n
+setPeerCIDAndRetireCIDs Connection{..} n = atomically $ do
+    db <- readTVar peerCIDDB
+    let (db', ns) = arrange n db
+    writeTVar peerCIDDB db'
+    return $ ns
 
 arrange :: Int -> CIDDB -> (CIDDB, [Int])
 arrange n db = (db', map cidInfoSeq toDrops)
@@ -127,11 +130,11 @@ setMyCID Connection{..} ncid = do
     db <- readIORef myCIDDB
     case findByCID ncid (cidInfos db) of
       Nothing      -> return ()
-      Just cidInfo -> atomicModifyIORef' myCIDDB $ set cidInfo
+      Just cidInfo -> atomicModifyIORef' myCIDDB $ set' cidInfo
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO ()
-retireMyCID Connection{..} n = atomicModifyIORef myCIDDB $ del n
+retireMyCID Connection{..} n = atomicModifyIORef' myCIDDB $ del' n
 
 ----------------------------------------------------------------
 
@@ -144,15 +147,18 @@ findBySeq num = find (\x -> cidInfoSeq x == num)
 findBySRT :: StatelessResetToken -> [CIDInfo] -> Maybe CIDInfo
 findBySRT srt = find (\x -> cidInfoSRT x == srt)
 
-set :: CIDInfo -> CIDDB -> (CIDDB, ())
-set cidInfo db = (db', ())
+set :: CIDInfo -> CIDDB -> CIDDB
+set cidInfo db = db'
   where
     db' = db {
         usedCIDInfo = cidInfo
       }
 
-add :: CIDInfo -> CIDDB -> (CIDDB, ())
-add cidInfo db = (db', ())
+set' :: CIDInfo -> CIDDB -> (CIDDB, ())
+set' cidInfo db = (set cidInfo db, ())
+
+add :: CIDInfo -> CIDDB -> CIDDB
+add cidInfo db = db'
   where
     db' = db {
         cidInfos = insert cidInfo (cidInfos db)
@@ -168,8 +174,8 @@ new cid srt db = (db', cidInfo)
      , cidInfos = insert cidInfo $ cidInfos db
      }
 
-del :: Int -> CIDDB -> (CIDDB, ())
-del num db = (db', ())
+del :: Int -> CIDDB -> CIDDB
+del num db = db'
   where
     db' = case findBySeq num (cidInfos db) of
       Nothing -> db
@@ -177,13 +183,16 @@ del num db = (db', ())
           cidInfos = delete cidInfo $ cidInfos db
         }
 
+del' :: Int -> CIDDB -> (CIDDB, ())
+del' num db = (del num db, ())
+
 ----------------------------------------------------------------
 
 setPeerStatelessResetToken :: Connection -> StatelessResetToken -> IO ()
 setPeerStatelessResetToken Connection{..} srt =
-    atomicModifyIORef' peerCIDDB adjust
+    atomically $ modifyTVar' peerCIDDB adjust
   where
-    adjust db = (db', ())
+    adjust db = db'
       where
         db' = case cidInfos db of
           CIDInfo 0 cid _:xs -> adj xs $ CIDInfo 0 cid srt
@@ -197,9 +206,16 @@ setPeerStatelessResetToken Connection{..} srt =
 
 isStatelessRestTokenValid :: Connection -> StatelessResetToken -> IO Bool
 isStatelessRestTokenValid Connection{..} srt =
-    isJust . findBySRT srt . cidInfos <$> readIORef peerCIDDB
+    isJust . findBySRT srt . cidInfos <$> readTVarIO peerCIDDB
 
 ----------------------------------------------------------------
+
+validatePath :: Connection -> Int -> IO ()
+validatePath conn retiredSeqNum = do
+    pdat <- newPathData
+    setChallenges conn [pdat]
+    putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]
+    waitResponse conn
 
 setChallenges :: Connection -> [PathData] -> IO ()
 setChallenges Connection{..} pdats =

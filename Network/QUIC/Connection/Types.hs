@@ -160,7 +160,7 @@ data Connection = Connection {
   , myCIDDB           :: IORef CIDDB
   , migrationStatus   :: TVar MigrationStatus
   -- Peer
-  , peerCIDDB         :: IORef CIDDB
+  , peerCIDDB         :: TVar CIDDB
   , peerParams        :: IORef Parameters
   -- Queues
   , inputQ            :: InputQ
@@ -201,7 +201,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef (newCIDDB myCID)
         <*> newTVarIO NonMigration
         -- Peer
-        <*> newIORef (newCIDDB peerCID)
+        <*> newTVarIO (newCIDDB peerCID)
         <*> newIORef defaultParameters
         -- Queues
         <*> newTQueueIO

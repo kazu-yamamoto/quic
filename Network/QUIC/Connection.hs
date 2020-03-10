@@ -51,9 +51,8 @@ module Network.QUIC.Connection (
   , choosePeerCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
-  , setChallenges
-  , waitResponse
   , checkResponse
+  , validatePath
   -- * Misc
   , setVersion
   , getVersion

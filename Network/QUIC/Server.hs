@@ -299,7 +299,7 @@ recvServer q = readRecvQ q
 
 migration :: Connection -> SockAddr -> CID -> IORef (Maybe MigrationQ) -> CryptPacket -> IO ()
 migration conn peersa dCID ref cpkt = do
-    mRetiredSeqNum <- choosePeerCID conn
+    mRetiredSeqNum <- timeout 100000 $ choosePeerCID conn -- fixme: 100000
     case mRetiredSeqNum of
       Nothing -> connDebugLog conn "No new peer CID"
       Just (CIDInfo retiredSeqNum _ _) -> do
@@ -318,10 +318,7 @@ migrator conn peersa1 mq dcid retiredSeqNum = do
     void $ forkIO $ readerServer s1 q $ connDebugLog conn
     -- fixme: if cannot set
     setMyCID conn dcid
-    pdat <- newPathData
-    setChallenges conn [pdat]
-    putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]
-    waitResponse conn
+    validatePath conn retiredSeqNum
     _ <- timeout 2000000 $ forever (readMigrationQ mq >>= writeRecvQ q)
     retirePeerCID conn retiredSeqNum
     close s0

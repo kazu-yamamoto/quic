@@ -2,14 +2,10 @@
 
 module Network.QUIC.IO where
 
-import Control.Concurrent
 import qualified Control.Exception as E
-import Network.Socket
 
-import Network.QUIC.Client
 import Network.QUIC.Connection
 import Network.QUIC.Imports
-import Network.QUIC.Socket
 import Network.QUIC.Types
 
 -- | Checking if the stream is open.
@@ -76,60 +72,3 @@ recvStream conn = do
       InpTransportError NoError _ _ -> return (0, "") -- fixme: 0
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached
-
-data Migration = ChangeServerCID
-               | ChangeClientCID
-               | NATRebiding
-               | MigrateTo -- SockAddr
-               deriving (Eq, Show)
-
-migration :: Connection -> Migration -> IO Bool
-migration conn typ
-  | isClient conn = do
-        waitEstablished conn
-        migrationClient conn typ
-  | otherwise     = return False
-
-migrationClient :: Connection -> Migration -> IO Bool
-migrationClient conn ChangeServerCID = do
-    mn <- choosePeerCID conn
-    case mn of
-      Nothing              -> return False
-      Just (CIDInfo n _ _) -> do
-          let frames = [RetireConnectionID n]
-          putOutput conn $ OutControl RTT1Level frames
-          return True
-migrationClient conn ChangeClientCID = do
-    cidInfo <- getNewMyCID conn
-    x <- (+1) <$> getMyCIDSeqNum conn
-    let frames = [NewConnectionID cidInfo x]
-    putOutput conn $ OutControl RTT1Level frames
-    return True
-migrationClient conn NATRebiding = do
-    (s0,q) <- getSockInfo conn
-    s1 <- getPeerName s0 >>= udpNATRebindingSocket
-    setSockInfo conn (s1,q)
-    v <- getVersion conn
-    void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
-    void $ forkIO $ do
-        threadDelay 5000000
-        close s0
-    return True
-migrationClient conn MigrateTo = do
-    mn <- choosePeerCID conn
-    case mn of
-      Nothing              -> return False
-      Just (CIDInfo n _ _) -> do
-          let frames = [RetireConnectionID n]
-          (s0,q) <- getSockInfo conn
-          -- fixme: SockAddr is specified in the future.
-          s1 <- getPeerName s0 >>= udpNATRebindingSocket
-          setSockInfo conn (s1,q)
-          v <- getVersion conn
-          void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
-          void $ forkIO $ do
-              threadDelay 5000000
-              close s0
-          -- path validation
-          putOutput conn $ OutControl RTT1Level frames
-          return True

@@ -48,6 +48,7 @@ module Network.QUIC (
   , QUICError(..)
   ) where
 
+import Network.QUIC.Client
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Core
