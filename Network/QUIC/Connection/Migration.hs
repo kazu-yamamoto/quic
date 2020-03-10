@@ -74,12 +74,26 @@ addPeerCID Connection{..} cidInfo = do
 
 -- | Using a new CID and sending RetireConnectionID
 choosePeerCID :: Connection -> IO (Maybe CIDInfo)
-choosePeerCID Connection{..} = do
+choosePeerCID conn@Connection{..} = do
     let ref = peerCIDDB
     db <- readIORef ref
+    mncid <- pickPeerCID conn
+    case mncid of
+      Nothing -> return Nothing
+      Just cidInfo -> do
+          let u = usedCIDInfo db
+          setPeerCID conn cidInfo
+          return $ Just u
+
+pickPeerCID :: Connection -> IO (Maybe CIDInfo)
+pickPeerCID Connection{..} = do
+    db <- readIORef peerCIDDB
     case filter (/= usedCIDInfo db) (cidInfos db) of
-      [] -> return Nothing
-      cidInfo:_ -> Just <$> atomicModifyIORef' ref (set cidInfo)
+      []        -> return Nothing
+      cidInfo:_ -> return $ Just cidInfo
+
+setPeerCID :: Connection -> CIDInfo -> IO ()
+setPeerCID Connection{..} cidInfo = atomicModifyIORef' peerCIDDB $ set cidInfo
 
 -- | After sending RetireConnectionID
 retirePeerCID :: Connection -> Int -> IO ()
@@ -113,7 +127,7 @@ setMyCID Connection{..} ncid = do
     db <- readIORef myCIDDB
     case findByCID ncid (cidInfos db) of
       Nothing      -> return ()
-      Just cidInfo -> void $ atomicModifyIORef' myCIDDB $ set cidInfo
+      Just cidInfo -> atomicModifyIORef' myCIDDB $ set cidInfo
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO ()
@@ -130,10 +144,9 @@ findBySeq num = find (\x -> cidInfoSeq x == num)
 findBySRT :: StatelessResetToken -> [CIDInfo] -> Maybe CIDInfo
 findBySRT srt = find (\x -> cidInfoSRT x == srt)
 
-set :: CIDInfo -> CIDDB -> (CIDDB, CIDInfo)
-set cidInfo db = (db', u)
+set :: CIDInfo -> CIDDB -> (CIDDB, ())
+set cidInfo db = (db', ())
   where
-    u = usedCIDInfo db
     db' = db {
         usedCIDInfo = cidInfo
       }
