@@ -77,7 +77,8 @@ recvStream conn = do
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached
 
-data Migration = SwitchCID
+data Migration = ChangeServerCID
+               | ChangeClientCID
                | NATRebiding
                | MigrateTo -- SockAddr
                deriving (Eq, Show)
@@ -90,15 +91,19 @@ migration conn typ
   | otherwise     = return False
 
 migrationClient :: Connection -> Migration -> IO Bool
-migrationClient conn SwitchCID = do
+migrationClient conn ChangeServerCID = do
     mn <- choosePeerCID conn
-    let frames = case mn of
-          Nothing              -> []
-          Just (CIDInfo n _ _) -> [RetireConnectionID n]
+    case mn of
+      Nothing              -> return False
+      Just (CIDInfo n _ _) -> do
+          let frames = [RetireConnectionID n]
+          putOutput conn $ OutControl RTT1Level frames
+          return True
+migrationClient conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
     x <- (+1) <$> getMyCIDSeqNum conn
-    let frames' = NewConnectionID cidInfo x : frames
-    putOutput conn $ OutControl RTT1Level frames'
+    let frames = [NewConnectionID cidInfo x]
+    putOutput conn $ OutControl RTT1Level frames
     return True
 migrationClient conn NATRebiding = do
     (s0,q) <- getSockInfo conn
@@ -111,20 +116,20 @@ migrationClient conn NATRebiding = do
         close s0
     return True
 migrationClient conn MigrateTo = do
-    -- path validation
     mn <- choosePeerCID conn
     case mn of
-      Nothing -> return False
+      Nothing              -> return False
       Just (CIDInfo n _ _) -> do
-          cidInfo <- getNewMyCID conn
-          x <- (+1) <$> getMyCIDSeqNum conn
+          let frames = [RetireConnectionID n]
           (s0,q) <- getSockInfo conn
-          s1 <- getPeerName s0 >>= udpNATRebindingSocket -- fixme
+          -- fixme: SockAddr is specified in the future.
+          s1 <- getPeerName s0 >>= udpNATRebindingSocket
           setSockInfo conn (s1,q)
           v <- getVersion conn
           void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
           void $ forkIO $ do
               threadDelay 5000000
               close s0
-          putOutput conn $ OutControl RTT1Level [RetireConnectionID n, NewConnectionID cidInfo x]
+          -- path validation
+          putOutput conn $ OutControl RTT1Level frames
           return True
