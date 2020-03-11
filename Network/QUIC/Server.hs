@@ -200,7 +200,7 @@ dispatch Dispatch{..} ServerConfig{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
          mysa peersa send bs0RTT
   | ver `notElem` confVersions scConfig = do
-        bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (confVersions scConfig)
+        bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID (GreasingVersion : confVersions scConfig)
         send bss
   | token == "" = do
         mq <- lookupConnectionDict dstTable dCID
