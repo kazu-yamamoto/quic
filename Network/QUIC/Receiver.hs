@@ -68,12 +68,10 @@ processCryptPacket conn cpkt@(CryptPacket header crypt) = do
     checkCID (Handshake _ cid _) = myCIDsInclude conn cid
     checkCID (Short       cid)   = do
         ok <- myCIDsInclude conn cid
-        if ok then do
+        when ok $ do
             used <- isMyCID conn cid
             unless used $ setMyCID conn cid
-            return ok
-          else
-            return False
+        return ok
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -128,8 +126,13 @@ processFrame conn _ (NewConnectionID cidInfo rpt) = do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         let frames = map RetireConnectionID seqNums
         putOutput conn $ OutControl RTT1Level frames
-processFrame conn _ (RetireConnectionID sn) =
-    retireMyCID conn sn
+processFrame conn _ (RetireConnectionID sn) = do
+    mcidInfo <- retireMyCID conn sn
+    case mcidInfo of
+      Nothing -> return ()
+      Just (CIDInfo _ cid _) -> do
+          unregister <- getUnregister conn
+          unregister cid
 processFrame conn RTT1Level (PathChallenge dat) =
     putOutput conn $ OutControl RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
