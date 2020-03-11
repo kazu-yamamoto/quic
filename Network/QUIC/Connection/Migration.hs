@@ -210,12 +210,18 @@ isStatelessRestTokenValid Connection{..} srt =
 
 ----------------------------------------------------------------
 
-validatePath :: Connection -> Int -> IO ()
-validatePath conn retiredSeqNum = do
+validatePath :: Connection -> Maybe CIDInfo -> IO ()
+validatePath conn Nothing = do
+    pdat <- newPathData
+    setChallenges conn [pdat]
+    putOutput conn $ OutControl RTT1Level [PathChallenge pdat]
+    waitResponse conn
+validatePath conn (Just (CIDInfo retiredSeqNum _ _)) = do
     pdat <- newPathData
     setChallenges conn [pdat]
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]
     waitResponse conn
+    retirePeerCID conn retiredSeqNum
 
 setChallenges :: Connection -> [PathData] -> IO ()
 setChallenges Connection{..} pdats =

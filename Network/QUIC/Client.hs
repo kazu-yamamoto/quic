@@ -103,23 +103,19 @@ migrationClient conn NATRebiding = do
     setSockInfo conn (s1,q)
     v <- getVersion conn
     void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
-    void $ forkIO $ do
-        threadDelay 5000000
-        close s0
+    fire 5000 $ close s0
     return True
 migrationClient conn MigrateTo = do
     mn <- timeout 1000000 $ choosePeerCID conn -- fixme
     case mn of
-      Nothing -> return False
-      Just (CIDInfo retiredSeqNum _ _) -> do
+      Nothing  -> return False
+      mcidinfo -> do
           (s0,q) <- getSockInfo conn
           -- fixme: SockAddr is specified in the future.
           s1 <- getPeerName s0 >>= udpNATRebindingSocket
           setSockInfo conn (s1,q)
           v <- getVersion conn
           void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
-          void $ forkIO $ do
-              threadDelay 5000000
-              close s0
-          validatePath conn retiredSeqNum
+          fire 5000 $ close s0
+          validatePath conn mcidinfo
           return True

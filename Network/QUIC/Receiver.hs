@@ -5,7 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Control.Concurrent
 import Network.TLS.QUIC hiding (RTT0)
 import System.Timeout
 
@@ -101,7 +100,7 @@ processFrame conn lvl (Crypto off cdat) = do
                     clearServerController conn
                     --
                     setConnectionEstablished conn
-                    dropSecrets conn
+                    fire 2000 $ dropSecrets conn
                     --
                     cryptoToken <- generateToken =<< getVersion conn
                     mgr <- getTokenManager conn
@@ -165,12 +164,11 @@ processFrame conn lvl Ping = do
     when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
 processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
-    dropSecrets conn
-    control <- getClientController conn
-    void $ forkIO $ do
-        threadDelay 2000000
+    fire 2000 $ do
+        control <- getClientController conn
         ClientHandshakeDone <- control ExitClient
         clearClientController conn
+        dropSecrets conn
 processFrame conn _ _frame        = do
     connDebugLog conn $ "processFrame: " ++ show _frame
 

@@ -298,18 +298,15 @@ recvServer q = readRecvQ q
 
 migration :: Connection -> SockAddr -> CID -> IORef (Maybe MigrationQ) -> CryptPacket -> IO ()
 migration conn peersa dCID ref cpkt = do
-    mRetiredSeqNum <- timeout 100000 $ choosePeerCID conn -- fixme: 100000
-    case mRetiredSeqNum of
-      Nothing -> connDebugLog conn "No new peer CID"
-      Just (CIDInfo retiredSeqNum _ _) -> do
-          connDebugLog conn $ "Migrating to " ++ show peersa
-          mq <- newMigrationQ
-          writeIORef ref $ Just mq
-          void $ forkIO $ migrator conn peersa mq dCID retiredSeqNum
-          writeMigrationQ mq cpkt
+    mcidinfo <- timeout 100000 $ choosePeerCID conn -- fixme: 100000
+    connDebugLog conn $ "Migrating to " ++ show peersa
+    mq <- newMigrationQ
+    writeIORef ref $ Just mq
+    void $ forkIO $ migrator conn peersa mq dCID mcidinfo
+    writeMigrationQ mq cpkt
 
-migrator :: Connection -> SockAddr -> MigrationQ -> CID -> Int -> IO ()
-migrator conn peersa1 mq dcid retiredSeqNum = do
+migrator :: Connection -> SockAddr -> MigrationQ -> CID -> Maybe CIDInfo -> IO ()
+migrator conn peersa1 mq dcid mcidinfo = do
     (s0,q) <- getSockInfo conn
     mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
@@ -317,7 +314,6 @@ migrator conn peersa1 mq dcid retiredSeqNum = do
     void $ forkIO $ readerServer s1 q $ connDebugLog conn
     -- fixme: if cannot set
     setMyCID conn dcid
-    validatePath conn retiredSeqNum
+    validatePath conn mcidinfo
     _ <- timeout 2000000 $ forever (readMigrationQ mq >>= writeRecvQ q)
-    retirePeerCID conn retiredSeqNum
     close s0
