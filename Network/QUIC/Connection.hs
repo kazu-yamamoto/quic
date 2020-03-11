@@ -36,6 +36,7 @@ module Network.QUIC.Connection (
   , dropSecrets
   -- * Migration
   , getMyCID
+  , getMyCIDs
   , getMyCIDSeqNum
   , getPeerCID
   , isMyCID

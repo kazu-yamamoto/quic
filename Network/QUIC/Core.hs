@@ -188,8 +188,8 @@ close :: Connection -> IO ()
 close conn = do
     unless (isClient conn) $ do
         unregister <- getUnregister conn
-        myCID <- getMyCID conn
-        unregister myCID
+        myCIDs <- getMyCIDs conn
+        mapM_ unregister myCIDs
     let frames = [ConnectionCloseQUIC NoError 0 ""]
     putOutput conn $ OutControl RTT1Level frames
     setCloseSent conn

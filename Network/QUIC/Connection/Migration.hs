@@ -2,6 +2,7 @@
 
 module Network.QUIC.Connection.Migration (
     getMyCID
+  , getMyCIDs
   , getPeerCID
   , isMyCID
   , myCIDsInclude
@@ -32,6 +33,9 @@ import Network.QUIC.Types
 
 getMyCID :: Connection -> IO CID
 getMyCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
+
+getMyCIDs :: Connection -> IO [CID]
+getMyCIDs Connection{..} = map cidInfoCID . cidInfos <$> readIORef myCIDDB
 
 getMyCIDSeqNum :: Connection -> IO Int
 getMyCIDSeqNum Connection{..} = cidInfoSeq . usedCIDInfo <$> readIORef myCIDDB
@@ -133,7 +137,7 @@ setMyCID Connection{..} ncid = do
       Just cidInfo -> atomicModifyIORef' myCIDDB $ set' cidInfo
 
 -- | Receiving RetireConnectionID
-retireMyCID :: Connection -> Int -> IO ()
+retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
 retireMyCID Connection{..} n = atomicModifyIORef' myCIDDB $ del' n
 
 ----------------------------------------------------------------
@@ -183,8 +187,15 @@ del num db = db'
           cidInfos = delete cidInfo $ cidInfos db
         }
 
-del' :: Int -> CIDDB -> (CIDDB, ())
-del' num db = (del num db, ())
+del' :: Int -> CIDDB -> (CIDDB, Maybe CIDInfo)
+del' num db = (db', mcidInfo)
+  where
+    mcidInfo = findBySeq num (cidInfos db)
+    db' = case mcidInfo of
+      Nothing -> db
+      Just cidInfo -> db {
+          cidInfos = delete cidInfo $ cidInfos db
+        }
 
 ----------------------------------------------------------------
 

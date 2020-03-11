@@ -128,7 +128,7 @@ processFrame conn _ (NewConnectionID cidInfo rpt) = do
         putOutput conn $ OutControl RTT1Level frames
 processFrame conn _ (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
-    case mcidInfo of
+    unless (isClient conn) $ case mcidInfo of
       Nothing -> return ()
       Just (CIDInfo _ cid _) -> do
           unregister <- getUnregister conn
