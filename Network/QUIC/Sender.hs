@@ -31,7 +31,7 @@ construct conn lvl frames mTargetSize = do
     mycid <- getMyCID conn
     peercid <- getPeerCID conn
     established <- isConnectionEstablished conn
-    if established || (not (isClient conn) && lvl == HandshakeLevel) then
+    if established || (isServer conn && lvl == HandshakeLevel) then
         constructTargetPacket ver mycid peercid mTargetSize token
       else do
         bss0 <- constructLowerAckPacket lvl ver mycid peercid token

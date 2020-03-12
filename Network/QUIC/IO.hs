@@ -48,7 +48,7 @@ shutdownStream conn sid = do
 --   an error occurs, an empty bytestring is returned.
 recv :: Connection -> IO ByteString
 recv conn = do
-    waitEstablished conn
+    when (isServer conn) $ waitEstablished conn
     mi <- takeInput conn
     case mi of
       InpStream 0   bs      -> return bs
@@ -64,7 +64,7 @@ recv conn = do
 --   an empty bytestring is returned. This throws 'QUICError'.
 recvStream :: Connection -> IO (StreamID, ByteString)
 recvStream conn = do
-    waitEstablished conn
+    when (isServer conn) $ waitEstablished conn
     mi <- takeInput conn
     case mi of
       InpStream sid bs        -> return (sid, bs)

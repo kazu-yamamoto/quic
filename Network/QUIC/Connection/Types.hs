@@ -249,3 +249,6 @@ serverConnection ServerConfig{..} ver myCID peerCID origCID debugLog qLog cls sr
 
 isClient :: Connection -> Bool
 isClient Connection{..} = role == Client
+
+isServer :: Connection -> Bool
+isServer Connection{..} = role == Server

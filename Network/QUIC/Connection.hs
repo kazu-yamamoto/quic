@@ -3,6 +3,7 @@ module Network.QUIC.Connection (
   , clientConnection
   , serverConnection
   , isClient
+  , isServer
   -- * Backend
   , connClose
   , connDebugLog

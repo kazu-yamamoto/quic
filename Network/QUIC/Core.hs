@@ -186,7 +186,7 @@ stopQUICServer conn = getMainThreadId conn >>= killThread
 
 close :: Connection -> IO ()
 close conn = do
-    unless (isClient conn) $ do
+    when (isServer conn) $ do
         unregister <- getUnregister conn
         myCIDs <- getMyCIDs conn
         mapM_ unregister myCIDs
