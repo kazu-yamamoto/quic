@@ -24,6 +24,6 @@ shortToString :: ShortByteString -> String
 shortToString = map (chr . fromIntegral) . Short.unpack
 
 fire :: Int -> TimeoutCallback -> IO ()
-fire tm action = do
+fire microseconds action = do
     timmgr <- getSystemTimerManager
-    void $ registerTimeout timmgr tm action
+    void $ registerTimeout timmgr microseconds action

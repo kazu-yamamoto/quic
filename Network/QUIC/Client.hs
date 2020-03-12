@@ -94,18 +94,22 @@ migrationClient conn ChangeClientCID = do
     putOutput conn $ OutControl RTT1Level frames
     return True
 migrationClient conn NATRebiding = do
-    (s0,q) <- getSockInfo conn
-    s1 <- getPeerName s0 >>= udpNATRebindingSocket
-    setSockInfo conn (s1,q)
-    v <- getVersion conn
-    void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
-    fire 5000 $ close s0
+    rebind conn 5000 -- nearly 0
     return True
 migrationClient conn MigrateTo = do
     mn <- timeout 1000000 $ choosePeerCID conn -- fixme
     case mn of
       Nothing  -> return False
       mcidinfo -> do
-          void $ migrationClient conn NATRebiding
+          rebind conn 5000000
           validatePath conn mcidinfo
           return True
+
+rebind :: Connection -> Int -> IO ()
+rebind conn microseconds = do
+    (s0,q) <- getSockInfo conn
+    s1 <- getPeerName s0 >>= udpNATRebindingSocket
+    setSockInfo conn (s1,q)
+    v <- getVersion conn
+    void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
+    fire microseconds $ close s0
