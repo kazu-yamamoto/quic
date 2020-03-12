@@ -111,7 +111,7 @@ setPeerCIDAndRetireCIDs Connection{..} n = atomically $ do
     db <- readTVar peerCIDDB
     let (db', ns) = arrange n db
     writeTVar peerCIDDB db'
-    return $ ns
+    return ns
 
 arrange :: Int -> CIDDB -> (CIDDB, [Int])
 arrange n db = (db', map cidInfoSeq toDrops)
@@ -246,7 +246,7 @@ waitResponse Connection{..} = atomically $ do
 
 checkResponse :: Connection -> PathData -> IO ()
 checkResponse Connection{..} pdat = do
-    state <- atomically $ readTVar migrationStatus
+    state <- readTVarIO migrationStatus
     case state of
       SendChallenge pdats
         | pdat `elem` pdats -> atomically $ writeTVar migrationStatus RecvResponse

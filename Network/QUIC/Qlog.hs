@@ -66,7 +66,7 @@ frameExtra :: Frame -> String
 frameExtra (Padding _) = ""
 frameExtra  Ping = ""
 frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" ++ ack (fromAckInfo ai)
-frameExtra (ResetStream) = ""
+frameExtra ResetStream{} = ""
 frameExtra (StopSending _StreamID _ApplicationError) = ""
 frameExtra (Crypto off dat) =  ",\"offset\":\"" ++ show off ++ "\",\"length\":" ++ show (BS.length dat)
 frameExtra (NewToken _Token) = ""
@@ -74,16 +74,16 @@ frameExtra (Stream sid off dat fin) = ",\"stream_id\":\"" ++ show sid ++ "\",\"o
 frameExtra (MaxData _Int) = ""
 frameExtra (MaxStreamData _StreamID _Int) = ""
 frameExtra (MaxStreams _Direction _Int) = ""
-frameExtra (DataBlocked) = ""
-frameExtra (StreamDataBlocked) = ""
-frameExtra (StreamsBlocked) = ""
+frameExtra DataBlocked{} = ""
+frameExtra StreamDataBlocked{} = ""
+frameExtra StreamsBlocked{} = ""
 frameExtra NewConnectionID{} = ""
 frameExtra (RetireConnectionID _Int) = ""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
 frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" ++ transportError err ++ "\",\"raw_error_code\":" ++ show (fromTransportError err) ++ ",\"reason\":\"" ++ C8.unpack (Short.fromShort reason) ++ "\""
 frameExtra (ConnectionCloseApp _err reason) =  ",\"error_space\":\"transport\",\"error_code\":\"" ++ "\",\"raw_error_code\":" ++ show (0 :: Int) ++ ",\"reason\":\"" ++ C8.unpack (Short.fromShort reason) ++ "\"" -- fixme
-frameExtra (HandshakeDone) = ""
+frameExtra HandshakeDone{} = ""
 frameExtra (UnknownFrame _Int) = ""
 
 transportError :: TransportError -> String
@@ -167,9 +167,7 @@ newQlogger q rl ocid logAction = do
 ----------------------------------------------------------------
 
 getElapsedTime :: ElapsedP -> IO Int
-getElapsedTime base = do
-    curr <- timeCurrentP
-    return $ relativeTime base curr
+getElapsedTime base = relativeTime base <$> timeCurrentP
 
 relativeTime :: ElapsedP -> ElapsedP -> Int
 relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))

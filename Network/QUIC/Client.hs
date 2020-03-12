@@ -1,4 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Client (
@@ -110,12 +109,6 @@ migrationClient conn MigrateTo = do
     case mn of
       Nothing  -> return False
       mcidinfo -> do
-          (s0,q) <- getSockInfo conn
-          -- fixme: SockAddr is specified in the future.
-          s1 <- getPeerName s0 >>= udpNATRebindingSocket
-          setSockInfo conn (s1,q)
-          v <- getVersion conn
-          void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
-          fire 5000 $ close s0
+          void $ migrationClient conn NATRebiding
           validatePath conn mcidinfo
           return True

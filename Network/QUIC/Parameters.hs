@@ -196,8 +196,8 @@ encodeParametersList kvs = unsafeDupablePerformIO $
         copyByteString wbuf v
 
 decodeParametersList :: ByteString -> Maybe ParametersList
-decodeParametersList bs = unsafeDupablePerformIO $
-    (withReadBuffer bs (\rbuf -> go rbuf id) `E.catch` \BufferOverrun -> return Nothing)
+decodeParametersList bs = unsafeDupablePerformIO
+    (withReadBuffer bs (`go` id) `E.catch` \BufferOverrun -> return Nothing)
   where
     go rbuf build = do
        rest1 <- remainingSize rbuf

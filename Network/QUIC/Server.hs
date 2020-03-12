@@ -269,7 +269,7 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ p
       Just (Entry conn ref)  -> do
           mplain <- decryptCrypt conn crypt RTT1Level
           case mplain of
-            Nothing -> connDebugLog conn $ "Cannot decrypt in dispatch"
+            Nothing -> connDebugLog conn "Cannot decrypt in dispatch"
             Just plain -> do
                 mmq <- readIORef ref
                 case mmq of
