@@ -5,6 +5,7 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import Control.Concurrent
 import Network.TLS.QUIC hiding (RTT0)
 import System.Timeout
 
@@ -154,8 +155,17 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     clearThreads conn
 processFrame conn RTT0Level (Stream sid off dat fin) = do
     putInputStream conn sid off dat fin
-processFrame conn RTT1Level (Stream sid off dat fin) =
-    putInputStream conn sid off dat fin
+processFrame conn RTT1Level (Stream sid off dat fin)
+  | isClient conn = putInputStream conn sid off dat fin
+  | otherwise     = do
+        established <- isConnectionEstablished conn
+        if established then
+            putInputStream conn sid off dat fin
+          else void . forkIO $ do
+            -- Client Finish and Stream are somtime out-ordered.
+            -- This causes a race condition between transport and app.
+            waitEstablished conn
+            putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     -- An implementation sends:
     --   Handshake PN=2
