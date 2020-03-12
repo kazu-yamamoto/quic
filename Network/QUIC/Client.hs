@@ -39,18 +39,15 @@ readerClient myVers s q conn = handleLog logAction $ forever $ do
     putQ (PacketIC pkt) = writeRecvQ q pkt
     putQ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt
-        -- The packet number of first crypto frame is 0.
-        -- This ensures that retry can be accepted only once.
-        mppkt <- releasePlainPacket conn 0
         ok <- checkCIDs conn dCID ex
-        when ok $ case mppkt of
-          Just ppkt -> do
-              resetPeerCID conn sCID
-              setInitialSecrets conn $ initialSecrets ver sCID
-              setToken conn token
-              setRetried conn True
-              putOutput conn $ OutPlainPacket ppkt []
-          _ -> return ()
+        when ok $ do
+            resetPeerCID conn sCID
+            setInitialSecrets conn $ initialSecrets ver sCID
+            setToken conn token
+            setRetried conn True
+            releaseAllPlainPackets conn >>= mapM_ put
+      where
+        put ppkt = putOutput conn $ OutPlainPacket ppkt []
 
 checkCIDs :: Connection -> CID -> Either CID (ByteString,ByteString) -> IO Bool
 checkCIDs conn dCID (Left sCID) = do

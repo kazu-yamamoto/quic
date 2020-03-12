@@ -3,6 +3,7 @@
 module Network.QUIC.Connection.Transmit (
     keepPlainPacket
   , releasePlainPacket
+  , releaseAllPlainPackets
   , releasePlainPacketRemoveAcks
   , getRetransmissions
   , MilliSeconds(..)
@@ -24,6 +25,11 @@ keepPlainPacket Connection{..} pns out lvl ppns = do
     tm <- timeCurrentP
     let ent = Retrans tm lvl pns out ppns
     atomicModifyIORef' retransDB (\lst -> (ent:lst, ()))
+
+releaseAllPlainPackets :: Connection -> IO [PlainPacket]
+releaseAllPlainPackets Connection{..} = atomicModifyIORef' retransDB rm
+  where
+    rm db = ([], reverse $ map retransPlainPacket db)
 
 releasePlainPacket :: Connection -> PacketNumber -> IO (Maybe PlainPacket)
 releasePlainPacket conn pn = do

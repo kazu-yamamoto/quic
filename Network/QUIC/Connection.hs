@@ -64,6 +64,7 @@ module Network.QUIC.Connection (
   -- * Transmit
   , keepPlainPacket
   , releasePlainPacket
+  , releaseAllPlainPackets
   , releasePlainPacketRemoveAcks
   , getRetransmissions
   , MilliSeconds(..)
