@@ -260,6 +260,11 @@ dispatch Dispatch{..} ServerConfig{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ _ _ _ = do
+    mq <- lookupRecvQDict srcTable o
+    case mq of
+      Just q -> writeRecvQ q cpkt
+      Nothing -> putStrLn "dispatch: orphan 0RTT"
 dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
@@ -278,8 +283,8 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ p
                       qlogReceived conn $ PlainPacket hdr plain
                       let cpkt' = CryptPacket hdr crypt { cryptLogged = True }
                       migration conn peersa dCID ref cpkt'
-dispatch _ _ (PacketIB _)  _ _ _ _ = print BrokenPacket
-dispatch _ _ _ _ _ _ _ = return () -- throwing away
+dispatch _ _ (PacketIB _)  _ _ _ _ = putStrLn "dispatch: BrokenPacket"
+dispatch _ _ _ _ _ _ _ = putStrLn "dispatch: orphan"
 
 ----------------------------------------------------------------
 
