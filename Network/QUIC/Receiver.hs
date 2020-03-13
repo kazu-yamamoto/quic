@@ -176,7 +176,7 @@ processFrame conn RTT1Level (Stream sid off dat fin)
           else void . forkIO $ do
             -- Client Finish and Stream are somtime out-ordered.
             -- This causes a race condition between transport and app.
-            waitEstablished conn
+            waitEstablished conn -- fixme: timeout
             putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     -- An implementation sends:
