@@ -77,7 +77,7 @@ makeShortCrypt bs rbuf = do
     len <- remainingSize rbuf
     here <- savingSize rbuf
     ff rbuf len
-    return $ Crypt here bs False
+    return $ Crypt here bs 0
 
 makeLongCrypt :: ByteString -> ReadBuffer -> IO Crypt
 makeLongCrypt bs rbuf = do
@@ -85,7 +85,7 @@ makeLongCrypt bs rbuf = do
     here <- savingSize rbuf
     ff rbuf len
     let pkt = B.take (here + len) bs
-    return $ Crypt here pkt False
+    return $ Crypt here pkt 0
 
 ----------------------------------------------------------------
 

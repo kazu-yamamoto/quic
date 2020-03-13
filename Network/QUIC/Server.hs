@@ -281,7 +281,7 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ p
                   Just mq -> writeMigrationQ mq cpkt
                   Nothing -> do
                       qlogReceived conn $ PlainPacket hdr plain
-                      let cpkt' = CryptPacket hdr crypt { cryptLogged = True }
+                      let cpkt' = CryptPacket hdr $ setCryptLogged crypt
                       migration conn peersa dCID ref cpkt'
 dispatch _ _ ipkt  _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 

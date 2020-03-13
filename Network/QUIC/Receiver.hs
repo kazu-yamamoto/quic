@@ -22,27 +22,21 @@ receiver conn recv = handleLog logAction $ do
   where
     loopHandshake = do
         CryptPacket hdr crypt <- recv
-        whenCIDisOK hdr $ processCryptPacketHandshake conn hdr crypt
+        processCryptPacketHandshake conn hdr crypt
         established <- isConnectionEstablished conn
         unless established loopHandshake
     loopEstablished = forever $ do
         CryptPacket hdr crypt <- recv
-        whenCIDisOK hdr $ processCryptPacket conn hdr crypt
-    logAction msg = connDebugLog conn ("receiver: " ++ msg)
-    whenCIDisOK hdr action = do
-        ok <- checkCID hdr
-        if ok then action else do
-            qlogDropped conn hdr
-            connDebugLog conn "CID is unknown"
-    checkCID Initial{}           = return True
-    checkCID RTT0{}              = return True
-    checkCID (Handshake _ cid _) = myCIDsInclude conn cid
-    checkCID (Short       cid  ) = do
+        let cid = headerMyCID hdr
         included <- myCIDsInclude conn cid
-        when included $ do
+        if included then do
             used <- isMyCID conn cid
             unless used $ setMyCID conn cid
-        return included
+            processCryptPacket conn hdr crypt
+          else do
+            qlogDropped conn hdr
+            connDebugLog conn "CID is unknown"
+    logAction msg = connDebugLog conn ("receiver: " ++ msg)
 
 processCryptPacketHandshake :: Connection -> Header -> Crypt -> IO ()
 processCryptPacketHandshake conn hdr crypt = do
@@ -53,8 +47,12 @@ processCryptPacketHandshake conn hdr crypt = do
     -- thrown away.
     mt <- timeout 100000 $ checkEncryptionLevel conn level
     if isNothing mt then do
-        qlogDropped conn hdr
-        connDebugLog conn "Timeout: ignoring a packet"
+        if isCryptDelayed crypt then do
+            qlogDropped conn hdr
+            connDebugLog conn "Timeout: ignoring a packet"
+          else do
+            (_, q) <- getSockInfo conn
+            writeRecvQ q $ CryptPacket hdr $ setCryptDelayed crypt
       else do
         peercid <- getPeerCID conn
         when (isClient conn
@@ -73,7 +71,7 @@ processCryptPacket conn hdr crypt = do
           -- fixme: need to check Sec 13.1
           when (any ackEliciting frames) $
               addPeerPacketNumbers conn level pn
-          unless (cryptLogged crypt) $
+          unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain
           mapM_ (processFrame conn level) frames
       Nothing -> do
@@ -86,7 +84,7 @@ processCryptPacket conn hdr crypt = do
             else do
               qlogDropped conn hdr
               connDebugLog conn $ "Cannot decrypt: " ++ show level
-              return () -- fixme: sending statelss reset
+              -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()

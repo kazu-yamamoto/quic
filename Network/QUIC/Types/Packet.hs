@@ -77,8 +77,20 @@ data Plain  = Plain  {
 data Crypt = Crypt {
     cryptPktNumOffset :: Int
   , cryptPacket       :: ByteString
-  , cryptLogged       :: Bool
+  , cryptFlags        :: Int
   } deriving (Eq, Show)
+
+isCryptLogged :: Crypt -> Bool
+isCryptLogged  crypt = cryptFlags crypt `testBit` 0
+
+isCryptDelayed :: Crypt -> Bool
+isCryptDelayed crypt = cryptFlags crypt `testBit` 1
+
+setCryptLogged :: Crypt -> Crypt
+setCryptLogged  crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 0 }
+
+setCryptDelayed :: Crypt -> Crypt
+setCryptDelayed crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 1 }
 
 ----------------------------------------------------------------
 
