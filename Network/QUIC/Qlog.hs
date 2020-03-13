@@ -23,8 +23,11 @@ instance Qlog RetryPacket where
 instance Qlog VersionNegotiationPacket where
     qlog VersionNegotiationPacket{} = "{\"packet_type\":\"version_negotiation\",\"header\":{\"packet_number\":\"\"}}"
 
+instance Qlog Header where
+    qlog hdr = "{\"packet_type\":\"" ++ packetType hdr ++ "\"}"
+
 instance Qlog CryptPacket where
-    qlog (CryptPacket hdr _) = "{\"packet_type\":\"" ++ packetType hdr ++ "\"}"
+    qlog (CryptPacket hdr _) = qlog hdr
 
 instance Qlog PlainPacket where
     qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" ++ packetType hdr ++ "\",\"frames\":" ++ "[" ++ intercalate "," (map qlog plainFrames) ++ "]" ++ ",\"header\":{\"packet_number\":\"" ++ show plainPacketNumber ++ "\"}}"

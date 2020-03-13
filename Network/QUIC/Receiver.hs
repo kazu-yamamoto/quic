@@ -16,63 +16,77 @@ import Network.QUIC.Packet
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
-receiver conn recv = handleLog logAction $ forever
-    (recv >>= processCryptPacket conn)
+receiver conn recv = handleLog logAction $ do
+    loopHandshake
+    loopEstablished
   where
+    loopHandshake = do
+        CryptPacket hdr crypt <- recv
+        whenCIDisOK hdr $ processCryptPacketHandshake conn hdr crypt
+        established <- isConnectionEstablished conn
+        unless established loopHandshake
+    loopEstablished = forever $ do
+        CryptPacket hdr crypt <- recv
+        whenCIDisOK hdr $ processCryptPacket conn hdr crypt
     logAction msg = connDebugLog conn ("receiver: " ++ msg)
-
-processCryptPacket :: Connection -> CryptPacket -> IO ()
-processCryptPacket conn cpkt@(CryptPacket header crypt) = do
-    ok <- checkCID header
-    if not ok then do
-        qlogDropped conn cpkt
-        connDebugLog conn "CID is unknown"
-      else do
-        let level = packetEncryptionLevel header
-        -- If RTT1 comes just after Initial, checkEncryptionLevel
-        -- waits forever. To avoid this, timeout used.
-        -- If timeout happens, the packet cannot be decrypted
-        -- and thrown away.
-        mt <- timeout 100000 $ checkEncryptionLevel conn level
-        if isNothing mt then do
-            qlogDropped conn cpkt
-            connDebugLog conn "Timeout: ignoring a packet"
-          else do
-            peercid <- getPeerCID conn
-            when (isClient conn
-               && level == HandshakeLevel
-               && peercid /= headerPeerCID header) $ do
-                resetPeerCID conn $ headerPeerCID header
-            mplain <- decryptCrypt conn crypt level
-            case mplain of
-              Just plain@(Plain _ pn frames) -> do
-                  -- For Ping, record PPN first, then send an ACK.
-                  -- fixme: need to check Sec 13.1
-                  when (any ackEliciting frames) $
-                      addPeerPacketNumbers conn level pn
-                  unless (cryptLogged crypt) $
-                      qlogReceived conn $ PlainPacket header plain
-                  mapM_ (processFrame conn level) frames
-              Nothing -> do
-                  statelessReset <- isStateessReset conn header crypt
-                  if statelessReset then do
-                      connDebugLog conn "Connection is reset statelessly"
-                      setCloseReceived conn
-                      clearThreads conn
-                    else do
-                      qlogDropped conn cpkt
-                      connDebugLog conn $ "Cannot decrypt: " ++ show level
-                      return () -- fixme: sending statelss reset
-  where
+    whenCIDisOK hdr action = do
+        ok <- checkCID hdr
+        if ok then action else do
+            qlogDropped conn hdr
+            connDebugLog conn "CID is unknown"
     checkCID Initial{}           = return True
     checkCID RTT0{}              = return True
     checkCID (Handshake _ cid _) = myCIDsInclude conn cid
-    checkCID (Short       cid)   = do
-        ok <- myCIDsInclude conn cid
-        when ok $ do
+    checkCID (Short       cid  ) = do
+        included <- myCIDsInclude conn cid
+        when included $ do
             used <- isMyCID conn cid
             unless used $ setMyCID conn cid
-        return ok
+        return included
+
+processCryptPacketHandshake :: Connection -> Header -> Crypt -> IO ()
+processCryptPacketHandshake conn hdr crypt = do
+    let level = packetEncryptionLevel hdr
+    -- If RTT1 comes between Initial and Handshake,
+    -- checkEncryptionLevel waits forever. To avoid this, timeout
+    -- used. If timeout happens, the packet cannot be decrypted and
+    -- thrown away.
+    mt <- timeout 100000 $ checkEncryptionLevel conn level
+    if isNothing mt then do
+        qlogDropped conn hdr
+        connDebugLog conn "Timeout: ignoring a packet"
+      else do
+        peercid <- getPeerCID conn
+        when (isClient conn
+           && level == HandshakeLevel
+           && peercid /= headerPeerCID hdr) $ do
+            resetPeerCID conn $ headerPeerCID hdr
+        processCryptPacket conn hdr crypt
+
+processCryptPacket :: Connection -> Header -> Crypt -> IO ()
+processCryptPacket conn hdr crypt = do
+    let level = packetEncryptionLevel hdr
+    mplain <- decryptCrypt conn crypt level
+    case mplain of
+      Just plain@(Plain _ pn frames) -> do
+          -- For Ping, record PPN first, then send an ACK.
+          -- fixme: need to check Sec 13.1
+          when (any ackEliciting frames) $
+              addPeerPacketNumbers conn level pn
+          unless (cryptLogged crypt) $
+              qlogReceived conn $ PlainPacket hdr plain
+          mapM_ (processFrame conn level) frames
+      Nothing -> do
+          statelessReset <- isStateessReset conn hdr crypt
+          if statelessReset then do
+              -- fixme: qlog
+              connDebugLog conn "Connection is reset statelessly"
+              setCloseReceived conn
+              clearThreads conn
+            else do
+              qlogDropped conn hdr
+              connDebugLog conn $ "Cannot decrypt: " ++ show level
+              return () -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
