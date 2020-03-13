@@ -283,8 +283,7 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ p
                       qlogReceived conn $ PlainPacket hdr plain
                       let cpkt' = CryptPacket hdr crypt { cryptLogged = True }
                       migration conn peersa dCID ref cpkt'
-dispatch _ _ (PacketIB _)  _ _ _ _ = putStrLn "dispatch: BrokenPacket"
-dispatch _ _ _ _ _ _ _ = putStrLn "dispatch: orphan"
+dispatch _ _ ipkt  _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 
 ----------------------------------------------------------------
 
