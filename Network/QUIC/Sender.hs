@@ -83,8 +83,10 @@ construct conn lvl frames mTargetSize = do
               RTT0Level      -> PlainPacket (RTT0      ver peercid mycid)       (Plain (Flags 0) mypn frames'')
               HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames'')
               RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames'')
-        when (any ackEliciting frames) $
+        if any ackEliciting frames then
             keepPlainPacket conn [mypn] ppkt lvl ppns
+          else
+            clearPeerPacketNumbers conn lvl
         qlogSent conn ppkt
         encodePlainPacket conn ppkt mlen
 
