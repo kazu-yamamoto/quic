@@ -1,12 +1,10 @@
 module Network.QUIC.Utils where
 
-import Control.Monad (void)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
 import Data.Char (chr)
-import GHC.Event
 
 dec16 :: ByteString -> ByteString
 dec16 = fst . decode
@@ -22,8 +20,3 @@ enc16s = Short.toShort . encode . Short.fromShort
 
 shortToString :: ShortByteString -> String
 shortToString = map (chr . fromIntegral) . Short.unpack
-
-fire :: Int -> TimeoutCallback -> IO ()
-fire microseconds action = do
-    timmgr <- getSystemTimerManager
-    void $ registerTimeout timmgr microseconds action

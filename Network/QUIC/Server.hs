@@ -33,7 +33,6 @@ import Network.Socket hiding (accept)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import Time.System (timeCurrent, timeCurrentP)
-import System.Timeout
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -42,6 +41,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Socket
 import Network.QUIC.TLS
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

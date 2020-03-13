@@ -14,7 +14,6 @@ import qualified Network.Socket.ByteString as NSB
 import qualified Network.TLS as TLS
 import Network.TLS hiding (Version, HandshakeFailed)
 import Network.TLS.QUIC
-import System.Timeout
 
 import Network.QUIC.Client
 import Network.QUIC.Config
@@ -28,6 +27,7 @@ import Network.QUIC.Receiver
 import Network.QUIC.Sender
 import Network.QUIC.Server
 import Network.QUIC.Socket
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -36,7 +36,9 @@ import Network.QUIC.Types
 runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
 runQUICClient conf client = do
     when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
-    E.bracket (connect conf) close client
+    E.bracket (forkIO timeouter)
+              killThread
+              (\_ -> E.bracket (connect conf) close client)
 
 -- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
 connect :: ClientConfig -> IO Connection
@@ -129,7 +131,8 @@ runQUICServer conf server = handleLog debugLog $ do
         -- fixme: the case where sockets cannot be created.
         ssas <- mapM  udpServerListenSocket $ scAddresses conf
         tids <- mapM (runDispatcher dispatch conf) ssas
-        return (dispatch, tids)
+        ttid <- forkIO timeouter
+        return (dispatch, ttid:tids)
     teardown (dispatch, tids) = do
         clearDispatch dispatch
         mapM_ killThread tids

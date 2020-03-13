@@ -27,6 +27,7 @@ library
                        Network.QUIC.Sender
                        Network.QUIC.Server
                        Network.QUIC.Socket
+                       Network.QUIC.Timeout
                        Network.QUIC.TLS
                        Network.QUIC.TLS.Controller
                        Network.QUIC.TLS.Crypto

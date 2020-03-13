@@ -7,12 +7,12 @@ module Network.QUIC.Receiver (
 
 import Control.Concurrent
 import Network.TLS.QUIC hiding (RTT0)
-import System.Timeout
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
@@ -176,8 +176,10 @@ processFrame conn RTT1Level (Stream sid off dat fin)
           else void . forkIO $ do
             -- Client Finish and Stream are somtime out-ordered.
             -- This causes a race condition between transport and app.
-            waitEstablished conn -- fixme: timeout
-            putInputStream conn sid off dat fin
+            mx <- timeout 100000 $ waitEstablished conn
+            case mx of
+              Nothing -> return ()
+              Just _  -> putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     -- An implementation sends:
     --   Handshake PN=2

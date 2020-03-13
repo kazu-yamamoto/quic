@@ -7,7 +7,6 @@ module Network.QUIC.Client (
   , migration
   ) where
 
-import System.Timeout
 import Control.Concurrent
 import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
@@ -18,6 +17,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Socket
 import Network.QUIC.TLS
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
