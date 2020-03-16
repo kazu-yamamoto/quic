@@ -295,8 +295,11 @@ clientHQ cmd conn debug = do
 clientH3 :: String -> Connection -> (String -> IO ()) -> IO ()
 clientH3 authority conn debug = do
     hdrblk <- taglen 1 <$> qpackClient authority
+    -- 0: control, 4 settings
     sendStream conn  2 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
+    -- 2: from encoder to decoder
     sendStream conn  6 False $ BS.pack [2]
+    -- 3: from decoder to encoder
     sendStream conn 10 False $ BS.pack [3]
     sendStream conn  0 True hdrblk
     loop

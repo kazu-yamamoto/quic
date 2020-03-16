@@ -164,8 +164,11 @@ serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
+    -- 0: control, 4 settings
     sendStream conn  3 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
+    -- 2: from encoder to decoder
     sendStream conn  7 False $ BS.pack [2]
+    -- 3: from decoder to encoder
     sendStream conn 11 False $ BS.pack [3]
     hdrblock <- taglen 1 <$> qpackServer
     let bdyblock = taglen 0 html
