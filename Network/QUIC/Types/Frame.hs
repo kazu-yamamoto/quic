@@ -56,3 +56,8 @@ ackEliciting ConnectionCloseQUIC{} = False
 ackEliciting ConnectionCloseApp{}  = False
 ackEliciting Ack{}                 = False
 ackEliciting _                     = True
+
+retransmittable :: Frame -> Bool
+retransmittable Padding{}          = False
+retransmittable Ack{}              = False
+retransmittable _                  = True
