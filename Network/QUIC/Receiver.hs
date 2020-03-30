@@ -77,7 +77,7 @@ processCryptPacket conn hdr crypt = do
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
-              -- fixme: qlog
+              qlogReceived conn StatelessReset
               connDebugLog conn "Connection is reset statelessly"
               setCloseReceived conn
               clearThreads conn

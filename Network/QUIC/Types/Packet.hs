@@ -92,6 +92,8 @@ setCryptLogged  crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 0 }
 setCryptDelayed :: Crypt -> Crypt
 setCryptDelayed crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 1 }
 
+data StatelessReset = StatelessReset deriving (Eq, Show)
+
 ----------------------------------------------------------------
 
 data LongHeaderPacketType = InitialPacketType
