@@ -180,7 +180,8 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
         case mx of
           Nothing -> connDebugLog conn "Connection timeout"
           Just (sid, bs) -> do
-              connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs))
+              fin <- not <$> isStreamOpen conn sid
+              connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if fin then " Fin" else "")
               when ((sid `mod` 4) == 0) $ do
                   open <- isStreamOpen conn sid
                   when open $ sendStream conn sid True hdrbdy

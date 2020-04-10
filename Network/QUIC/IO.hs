@@ -11,9 +11,8 @@ import Network.QUIC.Types
 -- | Checking if the stream is open.
 isStreamOpen :: Connection -> StreamID -> IO Bool
 isStreamOpen conn sid = do
-    open <- isConnectionOpen conn
     fin <- getStreamFin conn sid
-    return (open && not fin)
+    return (not fin)
 
 -- | Sending data in stream 0.
 send :: Connection -> ByteString -> IO ()
