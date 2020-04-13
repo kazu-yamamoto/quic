@@ -38,7 +38,9 @@ data Frame = Padding Int
            deriving (Eq,Show)
 
 -- | Stream identifier.
-type StreamID = Int64
+--   This should be 62-bit interger.
+--   On 32-bit machines, the total number of stream identifiers is limited.
+type StreamID = Int
 type Delay = Int
 
 type Fin = Bool

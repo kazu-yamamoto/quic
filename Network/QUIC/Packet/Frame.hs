@@ -45,7 +45,7 @@ encodeFrame wbuf (Stream sid off dat fin) = do
         flag2 | fin       = flag1 .|. 0x01 -- fin
               | otherwise = flag1
     write8 wbuf flag2
-    encodeInt' wbuf sid
+    encodeInt' wbuf $ fromIntegral sid
     when (off /= 0) $ encodeInt' wbuf $ fromIntegral off
     encodeInt' wbuf $ fromIntegral $ B.length dat
     copyByteString wbuf dat
@@ -172,7 +172,7 @@ decodeResetFrame _ = return ResetStream -- fixme
 
 decodeStopSending :: ReadBuffer -> IO Frame
 decodeStopSending rbuf = do
-    sID <- decodeInt' rbuf
+    sID <- fromIntegral <$> decodeInt' rbuf
     err <- ApplicationError . fromIntegral <$> decodeInt' rbuf
     return $ StopSending sID err
 
@@ -183,7 +183,7 @@ decodeNewToken rbuf = do
 
 decodeStreamFrame :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
 decodeStreamFrame rbuf hasOff hasLen fin = do
-    sID <- decodeInt' rbuf
+    sID <- fromIntegral <$> decodeInt' rbuf
     off <- if hasOff then
              fromIntegral <$> decodeInt' rbuf
            else
@@ -201,7 +201,7 @@ decodeMaxData rbuf = MaxData . fromIntegral <$> decodeInt' rbuf
 
 decodeMaxStreamData :: ReadBuffer -> IO Frame
 decodeMaxStreamData rbuf = do
-    sID <- decodeInt' rbuf
+    sID <- fromIntegral <$> decodeInt' rbuf
     maxstrdata <- fromIntegral <$> decodeInt' rbuf
     return $ MaxStreamData sID maxstrdata
 
