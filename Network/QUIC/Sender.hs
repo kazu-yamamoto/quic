@@ -163,7 +163,7 @@ sendCryptoFragment conn send bs0 lvl = loop bs0
         send bss
         loop rest
 
-sendStreamFragment :: Connection -> SendMany -> StreamID -> ByteString -> Bool -> IO ()
+sendStreamFragment :: Connection -> SendMany -> StreamId -> ByteString -> Bool -> IO ()
 sendStreamFragment conn send sid dat0 fin0 = do
     closed <- getStreamFin conn sid
     if closed then

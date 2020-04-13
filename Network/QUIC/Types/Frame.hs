@@ -17,12 +17,12 @@ data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
            | ResetStream -- fixme
-           | StopSending StreamID ApplicationError
+           | StopSending StreamId ApplicationError
            | Crypto Offset CryptoData
            | NewToken Token
-           | Stream StreamID Offset StreamData Fin
+           | Stream StreamId Offset StreamData Fin
            | MaxData Int
-           | MaxStreamData StreamID Int
+           | MaxStreamData StreamId Int
            | MaxStreams Direction Int
            | DataBlocked -- fixme
            | StreamDataBlocked -- fixme
@@ -40,7 +40,7 @@ data Frame = Padding Int
 -- | Stream identifier.
 --   This should be 62-bit interger.
 --   On 32-bit machines, the total number of stream identifiers is limited.
-type StreamID = Int
+type StreamId = Int
 type Delay = Int
 
 type Fin = Bool

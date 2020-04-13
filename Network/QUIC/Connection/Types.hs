@@ -60,7 +60,7 @@ newStreamState = StreamState <$> newIORef emptyStreamInfo
                              <*> newIORef emptyStreamInfo
                              <*> newIORef []
 
-newtype StreamTable = StreamTable (Map StreamID StreamState)
+newtype StreamTable = StreamTable (Map StreamId StreamState)
 
 emptyStreamTable :: StreamTable
 emptyStreamTable = StreamTable Map.empty

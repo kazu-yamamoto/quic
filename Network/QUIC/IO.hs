@@ -10,7 +10,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Types
 
 -- | Checking if the stream is open.
-isStreamOpen :: Connection -> StreamID -> IO Bool
+isStreamOpen :: Connection -> StreamId -> IO Bool
 isStreamOpen conn sid = do
     fin <- getStreamFin conn sid
     return (not fin)
@@ -20,7 +20,7 @@ send :: Connection -> ByteString -> IO ()
 send conn dat = sendStream conn 0 dat False
 
 -- | Sending data in the stream. FIN is sent if 3rd argument is 'True'.
-sendStream :: Connection -> StreamID -> ByteString -> Fin -> IO ()
+sendStream :: Connection -> StreamId -> ByteString -> Fin -> IO ()
 sendStream conn sid dat fin = do
     open <- isConnectionOpen conn
     fin0 <- getStreamFin conn sid
@@ -36,7 +36,7 @@ shutdown :: Connection -> IO ()
 shutdown conn = shutdownStream conn 0
 
 -- | Sending a FIN in the stream.
-shutdownStream :: Connection -> StreamID -> IO ()
+shutdownStream :: Connection -> StreamId -> IO ()
 shutdownStream conn sid = do
     open <- isConnectionOpen conn
     if open then do
@@ -61,7 +61,7 @@ recv conn = do
 
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned. This throws 'QUICError'.
-recvStream :: Connection -> IO (StreamID, ByteString, Fin)
+recvStream :: Connection -> IO (StreamId, ByteString, Fin)
 recvStream conn = do
     mi <- takeInput conn
     case mi of
@@ -72,14 +72,14 @@ recvStream conn = do
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached
 
-isClientInitiatedBidirectional :: StreamID -> Bool
+isClientInitiatedBidirectional :: StreamId -> Bool
 isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0
 
-isServerInitiatedBidirectional :: StreamID -> Bool
+isServerInitiatedBidirectional :: StreamId -> Bool
 isServerInitiatedBidirectional  sid = (0b11 .&. sid) == 1
 
-isClientInitiatedUnidirectional :: StreamID -> Bool
+isClientInitiatedUnidirectional :: StreamId -> Bool
 isClientInitiatedUnidirectional sid = (0b11 .&. sid) == 2
 
-isServerInitiatedUnidirectional :: StreamID -> Bool
+isServerInitiatedUnidirectional :: StreamId -> Bool
 isServerInitiatedUnidirectional sid = (0b11 .&. sid) == 3

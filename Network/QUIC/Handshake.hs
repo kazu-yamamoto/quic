@@ -41,7 +41,7 @@ handshakeClient conf conn = do
     sendClientHelloAndRecvServerHello control conn $ ccEarlyData conf
     recvServerFinishedSendClientFinished control conn
 
-sendClientHelloAndRecvServerHello :: ClientController -> Connection -> Maybe (StreamID,ByteString) -> IO ()
+sendClientHelloAndRecvServerHello :: ClientController -> Connection -> Maybe (StreamId,ByteString) -> IO ()
 sendClientHelloAndRecvServerHello control conn mEarlyData = do
     SendClientHello ch0 mEarlySecInf <- control GetClientHello
     setEarlySecretInfo conn mEarlySecInf

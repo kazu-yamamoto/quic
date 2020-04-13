@@ -18,20 +18,20 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
-getStreamFin :: Connection -> StreamID -> IO Fin
+getStreamFin :: Connection -> StreamId -> IO Fin
 getStreamFin conn sid = do
     StreamState{..} <- checkStreamTable conn sid
     -- sstx is modified by only sender
     StreamInfo _ fin <- readIORef sstx
     return fin
 
-setStreamFin :: Connection -> StreamID -> IO ()
+setStreamFin :: Connection -> StreamId -> IO ()
 setStreamFin conn sid = do
     StreamState{..} <- checkStreamTable conn sid
     StreamInfo off _ <- readIORef sstx
     writeIORef sstx $ StreamInfo off True
 
-getStreamOffset :: Connection -> StreamID -> Int -> IO Offset
+getStreamOffset :: Connection -> StreamId -> Int -> IO Offset
 getStreamOffset conn sid len = do
     StreamState{..} <- checkStreamTable conn sid
     -- sstx is modified by only sender
@@ -39,7 +39,7 @@ getStreamOffset conn sid len = do
     writeIORef sstx $ StreamInfo (off + len) fin
     return off
 
-putInputStream :: Connection -> StreamID -> Offset -> StreamData -> Fin -> IO ()
+putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin -> IO ()
 putInputStream conn sid off dat fin = do
     (dats,fin1) <- isFragmentTop conn sid off dat fin
     loop fin1 dats
@@ -50,7 +50,7 @@ putInputStream conn sid off dat fin = do
         putInput conn $ InpStream sid d False
         loop fin1 ds
 
-isFragmentTop :: Connection -> StreamID -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
+isFragmentTop :: Connection -> StreamId -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
 isFragmentTop conn sid off dat fin = do
     StreamState{..} <- checkStreamTable conn sid
     -- ssrx is modified by only sender
@@ -96,7 +96,7 @@ split off0 xs0 = loop off0 xs0 id
       | off' == off = loop (off + len) xs (build . (dat :))
       | otherwise   = (build [], xxs, off')
 
-checkStreamTable :: Connection -> StreamID -> IO StreamState
+checkStreamTable :: Connection -> StreamId -> IO StreamState
 checkStreamTable Connection{..} sid = do
     -- reader and sender do not insert the same StreamState
     -- at the same time.
@@ -111,23 +111,23 @@ checkStreamTable Connection{..} sid = do
 
 ----------------------------------------------------------------
 
-initialCryptoStreamID,handshakeCryptoStreamID,rtt1CryptoStreamID :: StreamID
-initialCryptoStreamID   = -1
-handshakeCryptoStreamID = -2
-rtt1CryptoStreamID      = -3
+initialCryptoStreamId,handshakeCryptoStreamId,rtt1CryptoStreamId :: StreamId
+initialCryptoStreamId   = -1
+handshakeCryptoStreamId = -2
+rtt1CryptoStreamId      = -3
 
-toCryptoStreamID :: EncryptionLevel -> StreamID
-toCryptoStreamID InitialLevel   = initialCryptoStreamID
-toCryptoStreamID RTT0Level      = error "toCryptoStreamID"
-toCryptoStreamID HandshakeLevel = handshakeCryptoStreamID
-toCryptoStreamID RTT1Level      = rtt1CryptoStreamID
+toCryptoStreamId :: EncryptionLevel -> StreamId
+toCryptoStreamId InitialLevel   = initialCryptoStreamId
+toCryptoStreamId RTT0Level      = error "toCryptoStreamId"
+toCryptoStreamId HandshakeLevel = handshakeCryptoStreamId
+toCryptoStreamId RTT1Level      = rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 
 getCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
-getCryptoOffset conn lvl len = getStreamOffset conn (toCryptoStreamID lvl) len
+getCryptoOffset conn lvl len = getStreamOffset conn (toCryptoStreamId lvl) len
 
 putInputCrypto :: Connection -> EncryptionLevel -> Offset -> StreamData -> IO ()
 putInputCrypto conn lvl off cdat = do
-    (dats, _) <- isFragmentTop conn (toCryptoStreamID lvl) off cdat False
+    (dats, _) <- isFragmentTop conn (toCryptoStreamId lvl) off cdat False
     mapM_ (\d -> putCrypto conn $ InpHandshake lvl d) dats

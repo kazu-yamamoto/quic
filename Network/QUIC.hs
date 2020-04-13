@@ -27,7 +27,7 @@ module Network.QUIC (
   -- * Types
   , Connection
   , connDebugLog
-  , StreamID
+  , StreamId
   , isClientInitiatedBidirectional
   , isServerInitiatedBidirectional
   , isClientInitiatedUnidirectional
