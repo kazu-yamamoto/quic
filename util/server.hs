@@ -165,11 +165,11 @@ serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     -- 0: control, 4 settings
-    sendStream conn  3 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
+    sendStream conn  3 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
     -- 2: from encoder to decoder
-    sendStream conn  7 False $ BS.pack [2]
+    sendStream conn  7 (BS.pack [2]) False
     -- 3: from decoder to encoder
-    sendStream conn 11 False $ BS.pack [3]
+    sendStream conn 11 (BS.pack [3]) False
     hdrblock <- taglen 1 <$> qpackServer
     let bdyblock = taglen 0 html
         hdrbdy = BS.concat [hdrblock,bdyblock]
@@ -179,10 +179,8 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
         mx <- timeout 5000000 $ recvStream conn
         case mx of
           Nothing -> connDebugLog conn "Connection timeout"
-          Just (sid, bs) -> do
-              fin <- not <$> isStreamOpen conn sid
+          Just (sid, bs, fin) -> do
               connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if fin then " Fin" else "")
               when ((sid `mod` 4) == 0) $ do
-                  open <- isStreamOpen conn sid
-                  when open $ sendStream conn sid True hdrbdy
+                  unless fin $ sendStream conn sid hdrbdy True
               loop hdrbdy

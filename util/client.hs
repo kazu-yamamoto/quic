@@ -259,7 +259,7 @@ runClient2 conf Options{..} cmd addr debug res = do
         info <- getConnectionInfo conn
         if rtt0 then do
             debug "------------------------ Response for early data"
-            (sid, bs) <- recvStream conn
+            (sid, bs, _fin) <- recvStream conn
             debug $ "SID: " ++ show sid
             debug $ show $ BS.unpack bs
             debug "------------------------ Response for early data"
@@ -284,7 +284,7 @@ clientHQ cmd conn debug = do
     loop
   where
     loop = do
-        (sid, bs) <- recvStream conn
+        (sid, bs, _fin) <- recvStream conn
         when (sid /= 0) $ debug $ "SID: " ++ show sid
         if bs == "" then
             debug "Connection finished"
@@ -296,16 +296,16 @@ clientH3 :: String -> Connection -> (String -> IO ()) -> IO ()
 clientH3 authority conn debug = do
     hdrblk <- taglen 1 <$> qpackClient authority
     -- 0: control, 4 settings
-    sendStream conn  2 False $ BS.pack [0,4,8,1,80,0,6,128,0,128,0]
+    sendStream conn  2 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
     -- 2: from encoder to decoder
-    sendStream conn  6 False $ BS.pack [2]
+    sendStream conn  6 (BS.pack [2]) False
     -- 3: from decoder to encoder
-    sendStream conn 10 False $ BS.pack [3]
-    sendStream conn  0 True hdrblk
+    sendStream conn 10 (BS.pack [3]) False
+    sendStream conn  0 hdrblk True
     loop
   where
     loop = do
-        (sid, bs) <- recvStream conn
+        (sid, bs, _fin) <- recvStream conn
         debug $ "SID: " ++ show sid
         if bs == "" then
             debug "Connection finished"
