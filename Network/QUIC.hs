@@ -6,11 +6,7 @@ module Network.QUIC (
     runQUICClient
   , runQUICServer
   , stopQUICServer
-  -- * Basic IO
-  , recv
-  , send
-  , shutdown
-  -- * Advanced IO
+  -- * IO
   , recvStream
   , sendStream
   , shutdownStream

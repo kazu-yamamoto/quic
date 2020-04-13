@@ -15,10 +15,6 @@ isStreamOpen conn sid = do
     fin <- getStreamFin conn sid
     return (not fin)
 
--- | Sending data in stream 0.
-send :: Connection -> ByteString -> IO ()
-send conn dat = sendStream conn 0 dat False
-
 -- | Sending data in the stream. FIN is sent if 3rd argument is 'True'.
 sendStream :: Connection -> StreamId -> ByteString -> Fin -> IO ()
 sendStream conn sid dat fin = do
@@ -31,10 +27,6 @@ sendStream conn sid dat fin = do
       else
         putOutput conn $ OutStream sid dat fin
 
--- | Sending a FIN in stream 0.
-shutdown :: Connection -> IO ()
-shutdown conn = shutdownStream conn 0
-
 -- | Sending a FIN in the stream.
 shutdownStream :: Connection -> StreamId -> IO ()
 shutdownStream conn sid = do
@@ -43,21 +35,6 @@ shutdownStream conn sid = do
         putOutput conn $ OutShutdown sid
       else
         E.throwIO ConnectionIsClosed
-
--- | Receiving data in stream 0. In the case where a FIN is received or
---   an error occurs, an empty bytestring is returned.
-recv :: Connection -> IO ByteString
-recv conn = do
-    mi <- takeInput conn
-    case mi of
-      InpStream 0   _  True -> return ""
-      InpStream 0   bs _    -> return bs
-      InpStream _   _  _    -> return ""
-      InpError _            -> return ""
-      InpApplicationError{} -> return ""
-      InpTransportError{}   -> return ""
-      InpVersion{}          -> E.throwIO MustNotReached
-      InpHandshake{}        -> E.throwIO MustNotReached
 
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned. This throws 'QUICError'.
