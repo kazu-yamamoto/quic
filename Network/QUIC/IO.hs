@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.IO where
@@ -70,3 +71,15 @@ recvStream conn = do
       InpTransportError NoError _ _ -> return (0, "", True) -- fixme: 0
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached
+
+isClientInitiatedBidirectional :: StreamID -> Bool
+isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0
+
+isServerInitiatedBidirectional :: StreamID -> Bool
+isServerInitiatedBidirectional  sid = (0b11 .&. sid) == 1
+
+isClientInitiatedUnidirectional :: StreamID -> Bool
+isClientInitiatedUnidirectional sid = (0b11 .&. sid) == 2
+
+isServerInitiatedUnidirectional :: StreamID -> Bool
+isServerInitiatedUnidirectional sid = (0b11 .&. sid) == 3

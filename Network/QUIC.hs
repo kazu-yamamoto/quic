@@ -28,6 +28,10 @@ module Network.QUIC (
   , Connection
   , connDebugLog
   , StreamID
+  , isClientInitiatedBidirectional
+  , isServerInitiatedBidirectional
+  , isClientInitiatedUnidirectional
+  , isServerInitiatedUnidirectional
   , Fin
   , Version(..)
   , fromVersion
