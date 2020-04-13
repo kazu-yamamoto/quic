@@ -16,11 +16,11 @@ isStreamOpen conn sid = do
 
 -- | Sending data in stream 0.
 send :: Connection -> ByteString -> IO ()
-send conn dat = sendStream conn 0 False dat
+send conn dat = sendStream conn 0 dat False
 
 -- | Sending data in the stream. FIN is sent if 3rd argument is 'True'.
-sendStream :: Connection -> StreamID -> Fin -> ByteString -> IO ()
-sendStream conn sid fin dat = do
+sendStream :: Connection -> StreamID -> ByteString -> Fin -> IO ()
+sendStream conn sid dat fin = do
     open <- isConnectionOpen conn
     fin0 <- getStreamFin conn sid
     if not open then
@@ -49,9 +49,9 @@ recv :: Connection -> IO ByteString
 recv conn = do
     mi <- takeInput conn
     case mi of
-      InpStream 0   bs      -> return bs
-      InpStream _   _       -> return ""
-      InpFin _              -> return ""
+      InpStream 0   _  True -> return ""
+      InpStream 0   bs _    -> return bs
+      InpStream _   _  _    -> return ""
       InpError _            -> return ""
       InpApplicationError{} -> return ""
       InpTransportError{}   -> return ""
@@ -60,14 +60,13 @@ recv conn = do
 
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned. This throws 'QUICError'.
-recvStream :: Connection -> IO (StreamID, ByteString)
+recvStream :: Connection -> IO (StreamID, ByteString, Fin)
 recvStream conn = do
     mi <- takeInput conn
     case mi of
-      InpStream sid bs        -> return (sid, bs)
-      InpFin sid              -> return (sid, "")
+      InpStream sid bs fin    -> return (sid, bs, fin)
       InpError e              -> E.throwIO e
       InpApplicationError e r -> E.throwIO $ ApplicationErrorOccurs e r
-      InpTransportError NoError _ _ -> return (0, "") -- fixme: 0
+      InpTransportError NoError _ _ -> return (0, "", True) -- fixme: 0
       InpTransportError e _ r -> E.throwIO $ TransportErrorOccurs e r
       _                       -> E.throwIO MustNotReached

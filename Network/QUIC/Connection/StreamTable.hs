@@ -42,8 +42,13 @@ getStreamOffset conn sid len = do
 putInputStream :: Connection -> StreamID -> Offset -> StreamData -> Fin -> IO ()
 putInputStream conn sid off dat fin = do
     (dats,fin1) <- isFragmentTop conn sid off dat fin
-    mapM_ (\d -> putInput conn $ InpStream sid d) dats
-    when fin1 $ putInput conn $ InpFin sid
+    loop fin1 dats
+  where
+    loop _    []     = return ()
+    loop fin1 [d]    = putInput conn $ InpStream sid d fin1
+    loop fin1 (d:ds) = do
+        putInput conn $ InpStream sid d False
+        loop fin1 ds
 
 isFragmentTop :: Connection -> StreamID -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
 isFragmentTop conn sid off dat fin = do

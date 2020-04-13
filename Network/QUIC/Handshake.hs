@@ -29,7 +29,6 @@ recvCryptoData conn = do
       InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> E.throwIO   MustNotReached
-      InpFin{}                   -> E.throwIO   MustNotReached
 
 ----------------------------------------------------------------
 
