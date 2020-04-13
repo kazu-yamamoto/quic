@@ -284,12 +284,12 @@ clientHQ cmd conn debug = do
     loop
   where
     loop = do
-        (sid, bs, _fin) <- recvStream conn
+        (sid, bs, fin) <- recvStream conn
         when (sid /= 0) $ debug $ "SID: " ++ show sid
-        if bs == "" then
+        when (bs /= "") $ debug $ C8.unpack bs
+        if fin then
             debug "Connection finished"
-          else do
-            debug $ C8.unpack bs
+          else
             loop
 
 clientH3 :: String -> Connection -> (String -> IO ()) -> IO ()
@@ -305,10 +305,10 @@ clientH3 authority conn debug = do
     loop
   where
     loop = do
-        (sid, bs, _fin) <- recvStream conn
+        (sid, bs, fin) <- recvStream conn
         debug $ "SID: " ++ show sid
-        if bs == "" then
+        when (bs /= "") $ debug $ show $ BS.unpack bs
+        if fin then
             debug "Connection finished"
-          else do
-            debug $ show $ BS.unpack bs
+          else
             loop

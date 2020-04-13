@@ -181,6 +181,6 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
           Nothing -> connDebugLog conn "Connection timeout"
           Just (sid, bs, fin) -> do
               connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if fin then " Fin" else "")
-              when ((sid `mod` 4) == 0) $ do
-                  unless fin $ sendStream conn sid hdrbdy True
+              when (isClientInitiatedBidirectional sid) $
+                  sendStream conn sid hdrbdy True
               loop hdrbdy
