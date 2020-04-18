@@ -36,7 +36,9 @@ handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
     let sendEarlyData = isJust $ ccEarlyData conf
-    control <- clientController QuicCallbacks conf ver (setResumptionSession conn) sendEarlyData
+        qc = QuicCallbacks { quicNotifyExtensions = setPeerParams conn
+                           }
+    control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
     setClientController conn control
     sendClientHelloAndRecvServerHello control conn $ ccEarlyData conf
     recvServerFinishedSendClientFinished control conn
@@ -76,10 +78,9 @@ recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
               when ((n `mod` 3) == 2) $
                   sendCryptoData conn $ OutControl HandshakeLevel []
               loop (n + 1)
-          SendClientFinished cf exts appSecInf -> do
+          SendClientFinished cf appSecInf -> do
               setApplicationSecretInfo conn appSecInf
               setEncryptionLevel conn RTT1Level
-              setPeerParams conn exts
               sendCryptoData conn $ OutHndClientFinished cf
           _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
@@ -88,7 +89,9 @@ recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
-    control <- serverController QuicCallbacks conf ver origCID
+    let qc = QuicCallbacks { quicNotifyExtensions = setPeerParams conn
+                           }
+    control <- serverController qc conf ver origCID
     setServerController conn control
     sh <- recvClientHello control conn
     SendServerFinished sf appSecInf <- control GetServerFinished
@@ -107,11 +110,10 @@ recvClientHello control conn = loop
           SendRequestRetry hrr -> do
               sendCryptoData conn $ OutHndServerHelloR hrr
               loop
-          SendServerHello sh0 exts mEarlySecInf hndSecInf -> do
+          SendServerHello sh0 mEarlySecInf hndSecInf -> do
               setEarlySecretInfo conn mEarlySecInf
               setHandshakeSecretInfo conn hndSecInf
               setEncryptionLevel conn HandshakeLevel
-              setPeerParams conn exts
               return sh0
           ServerNeedsMore -> do
               -- To prevent CI0' above.
