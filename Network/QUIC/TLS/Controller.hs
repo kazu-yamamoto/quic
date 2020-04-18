@@ -27,8 +27,9 @@ sessionManager establish = SessionManager {
   , sessionInvalidate     = \_ -> return ()
   }
 
-clientController:: ClientConfig -> Version -> SessionEstablish -> Bool ->IO ClientController
-clientController ClientConfig{..} ver establish sendEarlyData = newQUICClient cparams
+clientController:: QuicCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ClientController
+clientController callbacks ClientConfig{..} ver establish sendEarlyData =
+    newQUICClient cparams callbacks
   where
     cparams = (defaultParamsClient ccServerName "") {
         clientShared            = cshared
@@ -62,11 +63,12 @@ clientController ClientConfig{..} ver establish sendEarlyData = newQUICClient cp
 nullServerController :: ServerController
 nullServerController _ = return ServerHandshakeDone
 
-serverController :: ServerConfig
+serverController :: QuicCallbacks
+                 -> ServerConfig
                  -> Version
                  -> OrigCID
                  -> IO ServerController
-serverController ServerConfig{..} ver origCID = do
+serverController callbacks ServerConfig{..} ver origCID = do
     Right cred <- credentialLoadX509 scCert scKey
     let qparams = case origCID of
           OCFirst _    -> confParameters scConfig
@@ -84,7 +86,7 @@ serverController ServerConfig{..} ver origCID = do
       , serverDebug     = debug
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
-    newQUICServer sparams
+    newQUICServer sparams callbacks
   where
     hook = def {
         onALPNClientSuggest = case scALPN of

@@ -36,7 +36,7 @@ handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
     let sendEarlyData = isJust $ ccEarlyData conf
-    control <- clientController conf ver (setResumptionSession conn) sendEarlyData
+    control <- clientController QuicCallbacks conf ver (setResumptionSession conn) sendEarlyData
     setClientController conn control
     sendClientHelloAndRecvServerHello control conn $ ccEarlyData conf
     recvServerFinishedSendClientFinished control conn
@@ -88,7 +88,7 @@ recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
-    control <- serverController conf ver origCID
+    control <- serverController QuicCallbacks conf ver origCID
     setServerController conn control
     sh <- recvClientHello control conn
     SendServerFinished sf appSecInf <- control GetServerFinished
