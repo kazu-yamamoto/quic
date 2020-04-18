@@ -36,7 +36,8 @@ handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
     let sendEarlyData = isJust $ ccEarlyData conf
-        qc = QuicCallbacks { quicNotifyExtensions = setPeerParams conn
+        qc = QuicCallbacks { quicNotifySecretEvent = \_ -> return ()
+                           , quicNotifyExtensions = setPeerParams conn
                            }
     control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
     setClientController conn control
@@ -89,7 +90,8 @@ recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
-    let qc = QuicCallbacks { quicNotifyExtensions = setPeerParams conn
+    let qc = QuicCallbacks { quicNotifySecretEvent = \_ -> return ()
+                           , quicNotifyExtensions = setPeerParams conn
                            }
     control <- serverController qc conf ver origCID
     setServerController conn control
