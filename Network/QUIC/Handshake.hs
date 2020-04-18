@@ -36,7 +36,7 @@ handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
     let sendEarlyData = isJust $ ccEarlyData conf
-        qc = QuicCallbacks { quicNotifySecretEvent = \_ -> return ()
+        qc = QuicCallbacks { quicNotifySecretEvent = quicSyncC
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
@@ -44,26 +44,30 @@ handshakeClient conf conn = do
     sendClientHelloAndRecvServerHello control conn $ ccEarlyData conf
     recvServerFinishedSendClientFinished control conn
 
+  where
+    quicSyncC (SyncEarlySecret mEarlySecInf) =
+        setEarlySecretInfo conn mEarlySecInf
+    quicSyncC (SyncHandshakeSecret hndSecInf) = do
+        setHandshakeSecretInfo conn hndSecInf
+        setEncryptionLevel conn HandshakeLevel
+    quicSyncC (SyncApplicationSecret appSecInf) = do
+        setApplicationSecretInfo conn appSecInf
+        setEncryptionLevel conn RTT1Level
+
 sendClientHelloAndRecvServerHello :: ClientController -> Connection -> Maybe (StreamId,ByteString) -> IO ()
 sendClientHelloAndRecvServerHello control conn mEarlyData = do
-    SendClientHello ch0 mEarlySecInf <- control GetClientHello
-    setEarlySecretInfo conn mEarlySecInf
+    SendClientHello ch0 <- control GetClientHello
     sendCryptoData conn $ OutHndClientHello ch0 mEarlyData
     (InitialLevel, sh0) <- recvCryptoData conn
     state0 <- control $ PutServerHello sh0
     case state0 of
-      RecvServerHello hndSecInf -> do
-          setHandshakeSecretInfo conn hndSecInf
-          setEncryptionLevel conn HandshakeLevel
-      SendClientHello ch1 mEarlySecInf1 -> do
-          setEarlySecretInfo conn mEarlySecInf1
+      RecvServerHello -> return ()
+      SendClientHello ch1 -> do
           sendCryptoData conn $ OutHndClientHello ch1 Nothing
           (InitialLevel, sh1) <- recvCryptoData conn
           state1 <- control $ PutServerHello sh1
           case state1 of
-            RecvServerHello hndSecInf -> do
-                setHandshakeSecretInfo conn hndSecInf
-                setEncryptionLevel conn HandshakeLevel
+            RecvServerHello -> return ()
             _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
       _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
 
@@ -79,9 +83,7 @@ recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
               when ((n `mod` 3) == 2) $
                   sendCryptoData conn $ OutControl HandshakeLevel []
               loop (n + 1)
-          SendClientFinished cf appSecInf -> do
-              setApplicationSecretInfo conn appSecInf
-              setEncryptionLevel conn RTT1Level
+          SendClientFinished cf ->
               sendCryptoData conn $ OutHndClientFinished cf
           _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
