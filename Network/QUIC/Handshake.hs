@@ -92,17 +92,25 @@ recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
-    let qc = QuicCallbacks { quicNotifySecretEvent = \_ -> return ()
+    let qc = QuicCallbacks { quicNotifySecretEvent = quicSyncS
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- serverController qc conf ver origCID
     setServerController conn control
     sh <- recvClientHello control conn
-    SendServerFinished sf appSecInf <- control GetServerFinished
-    setApplicationSecretInfo conn appSecInf
-    setEncryptionLevel conn RTT1Level
+    SendServerFinished sf <- control GetServerFinished
     sendCryptoData conn $ OutHndServerHello sh sf
     return ()
+
+  where
+    quicSyncS (SyncEarlySecret mEarlySecInf) =
+        setEarlySecretInfo conn mEarlySecInf
+    quicSyncS (SyncHandshakeSecret hndSecInf) = do
+        setHandshakeSecretInfo conn hndSecInf
+        setEncryptionLevel conn HandshakeLevel
+    quicSyncS (SyncApplicationSecret appSecInf) = do
+        setApplicationSecretInfo conn appSecInf
+        setEncryptionLevel conn RTT1Level
 
 recvClientHello :: ServerController -> Connection -> IO ServerHello
 recvClientHello control conn = loop
@@ -114,11 +122,7 @@ recvClientHello control conn = loop
           SendRequestRetry hrr -> do
               sendCryptoData conn $ OutHndServerHelloR hrr
               loop
-          SendServerHello sh0 mEarlySecInf hndSecInf -> do
-              setEarlySecretInfo conn mEarlySecInf
-              setHandshakeSecretInfo conn hndSecInf
-              setEncryptionLevel conn HandshakeLevel
-              return sh0
+          SendServerHello sh0 -> return sh0
           ServerNeedsMore -> do
               -- To prevent CI0' above.
               sendCryptoData conn $ OutControl InitialLevel []
