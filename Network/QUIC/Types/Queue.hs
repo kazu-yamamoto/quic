@@ -20,11 +20,8 @@ data Input = InpStream StreamId ByteString Fin
 data Output = OutStream StreamId ByteString Fin
             | OutShutdown StreamId
             | OutControl EncryptionLevel [Frame]
-            | OutHndClientHello  ByteString (Maybe (StreamId,ByteString))
-            | OutHndServerHello  ByteString ByteString
-            | OutHndServerHelloR ByteString
-            | OutHndClientFinished ByteString
-            | OutHndServerNST ByteString
+            | OutEarlyData (Maybe (StreamId,ByteString))
+            | OutHandshake [(EncryptionLevel,ByteString)]
             | OutPlainPacket PlainPacket [PacketNumber]
             deriving Show
 

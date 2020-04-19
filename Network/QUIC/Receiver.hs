@@ -105,9 +105,8 @@ processFrame conn lvl (Crypto off cdat) = do
               control <- getServerController conn
               res <- control PutClientFinished
               case res of
-                SendSessionTicket nst -> do
+                SendSessionTicket -> do
                     -- aka sendCryptoData
-                    putOutput conn $ OutHndServerNST nst
                     ServerHandshakeDone <- control ExitServer
                     clearServerController conn
                     --
