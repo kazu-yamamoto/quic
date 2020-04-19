@@ -4,6 +4,7 @@ module Network.QUIC.Handshake where
 
 import qualified Control.Exception as E
 import Data.ByteString
+import qualified Data.ByteString.Short as Short
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
@@ -26,9 +27,19 @@ recvCryptoData conn = do
       InpVersion (Just ver)      -> E.throwIO $ NextVersion ver
       InpVersion Nothing         -> E.throwIO   VersionNegotiationFailed
       InpError e                 -> E.throwIO e
-      InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
+      InpTransportError err _ bs
+          | err == NoError       -> return (RTT1Level, Short.fromShort bs) -- fixme: RTT1Level
+          | otherwise            -> E.throwIO $ TransportErrorOccurs err bs
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> E.throwIO   MustNotReached
+
+quicRecvTLS :: Connection -> CryptLevel -> IO ByteString
+quicRecvTLS conn CryptInitial           = do { (InitialLevel, bs) <- recvCryptoData conn; return bs }
+quicRecvTLS _    CryptMasterSecret      = error "QUIC does not receive data < TLS 1.3"
+quicRecvTLS conn CryptEarlySecret       = do { (HandshakeLevel, bs) <- recvCryptoData conn; return bs }
+quicRecvTLS conn CryptHandshakeSecret   = do { (HandshakeLevel, bs) <- recvCryptoData conn; return bs }
+quicRecvTLS conn CryptApplicationSecret = do { (RTT1Level, bs) <- recvCryptoData conn; return bs }
+-- fixme: should use better exceptions / avoid pattern match
 
 ----------------------------------------------------------------
 
@@ -36,7 +47,8 @@ handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
     let sendEarlyData = isJust $ ccEarlyData conf
-        qc = QuicCallbacks { quicNotifySecretEvent = quicSyncC
+        qc = QuicCallbacks { quicRecv = quicRecvTLS conn
+                           , quicNotifySecretEvent = quicSyncC
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
@@ -58,14 +70,12 @@ sendClientHelloAndRecvServerHello :: ClientController -> Connection -> Maybe (St
 sendClientHelloAndRecvServerHello control conn mEarlyData = do
     SendClientHello ch0 <- control GetClientHello
     sendCryptoData conn $ OutHndClientHello ch0 mEarlyData
-    (InitialLevel, sh0) <- recvCryptoData conn
-    state0 <- control $ PutServerHello sh0
+    state0 <- control PutServerHello
     case state0 of
       RecvServerHello -> return ()
       SendClientHello ch1 -> do
           sendCryptoData conn $ OutHndClientHello ch1 Nothing
-          (InitialLevel, sh1) <- recvCryptoData conn
-          state1 <- control $ PutServerHello sh1
+          state1 <- control PutServerHello
           case state1 of
             RecvServerHello -> return ()
             _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
@@ -74,15 +84,16 @@ sendClientHelloAndRecvServerHello control conn mEarlyData = do
 recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
 recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
   where
-    loop n = do
-        (HandshakeLevel, eesf) <- recvCryptoData conn
-        state <- control $ PutServerFinished eesf
+    loop _n = do
+        state <- control PutServerFinished
         case state of
-          ClientNeedsMore -> do
-              -- Sending ACKs for three times rule
-              when ((n `mod` 3) == 2) $
-                  sendCryptoData conn $ OutControl HandshakeLevel []
-              loop (n + 1)
+          -- fixme: not sure we need to keep this
+          --
+          -- ClientNeedsMore -> do
+          --     -- Sending ACKs for three times rule
+          --     when ((n `mod` 3) == 2) $
+          --         sendCryptoData conn $ OutControl HandshakeLevel []
+          --     loop (n + 1)
           SendClientFinished cf ->
               sendCryptoData conn $ OutHndClientFinished cf
           _ -> E.throwIO $ HandshakeFailed "putServerFinished"
@@ -92,7 +103,8 @@ recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
-    let qc = QuicCallbacks { quicNotifySecretEvent = quicSyncS
+    let qc = QuicCallbacks { quicRecv = quicRecvTLS conn
+                           , quicNotifySecretEvent = quicSyncS
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- serverController qc conf ver origCID
@@ -116,17 +128,18 @@ recvClientHello :: ServerController -> Connection -> IO ServerHello
 recvClientHello control conn = loop
   where
     loop = do
-        (InitialLevel, ch) <- recvCryptoData conn
-        state <- control $ PutClientHello ch
+        state <- control PutClientHello
         case state of
           SendRequestRetry hrr -> do
               sendCryptoData conn $ OutHndServerHelloR hrr
               loop
           SendServerHello sh0 -> return sh0
-          ServerNeedsMore -> do
-              -- To prevent CI0' above.
-              sendCryptoData conn $ OutControl InitialLevel []
-              loop
+          -- fixme: not sure we need to keep this
+          --
+          -- ServerNeedsMore -> do
+          --     -- To prevent CI0' above.
+          --     sendCryptoData conn $ OutControl InitialLevel []
+          --     loop
           _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()

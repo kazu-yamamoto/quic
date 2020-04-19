@@ -101,8 +101,9 @@ processFrame conn lvl (Crypto off cdat) = do
         | isClient conn -> do
               putInputCrypto conn lvl off cdat
         | otherwise -> do
+              putInputCrypto conn lvl off cdat
               control <- getServerController conn
-              res <- control $ PutClientFinished cdat
+              res <- control PutClientFinished
               case res of
                 SendSessionTicket nst -> do
                     -- aka sendCryptoData
@@ -125,9 +126,10 @@ processFrame conn lvl (Crypto off cdat) = do
                 _ -> return ()
       RTT1Level
         | isClient conn -> do
+              putInputCrypto conn lvl off cdat
               control <- getClientController conn
               -- RecvSessionTicket or ClientHandshakeDone
-              void $ control $ PutSessionTicket cdat
+              void $ control PutSessionTicket
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token) = do
