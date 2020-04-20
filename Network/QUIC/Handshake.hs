@@ -5,6 +5,7 @@ module Network.QUIC.Handshake where
 import qualified Control.Exception as E
 import Data.ByteString
 import qualified Data.ByteString.Short as Short
+import Data.IORef
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
@@ -13,6 +14,23 @@ import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Types
+
+----------------------------------------------------------------
+
+newtype HndState = HndState
+    { hsRecvCnt :: Int  -- number of 'recv' calls since last 'send'
+    }
+
+newHndStateRef :: IO (IORef HndState)
+newHndStateRef = newIORef HndState { hsRecvCnt = 0 }
+
+sendCompleted :: IORef HndState -> IO ()
+sendCompleted hsr = atomicModifyIORef' hsr $ \hs ->
+    (hs { hsRecvCnt = 0 }, ())
+
+recvCompleted :: IORef HndState -> IO Int
+recvCompleted hsr = atomicModifyIORef' hsr $ \hs ->
+    let cnt = hsRecvCnt hs in (hs { hsRecvCnt = cnt + 1 }, cnt)
 
 ----------------------------------------------------------------
 
@@ -33,16 +51,36 @@ recvCryptoData conn = do
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> E.throwIO   MustNotReached
 
-quicRecvTLS :: Connection -> CryptLevel -> IO ByteString
-quicRecvTLS conn CryptInitial           = do { (InitialLevel, bs) <- recvCryptoData conn; return bs }
-quicRecvTLS _    CryptMasterSecret      = error "QUIC does not receive data < TLS 1.3"
-quicRecvTLS conn CryptEarlySecret       = do { (HandshakeLevel, bs) <- recvCryptoData conn; return bs }
-quicRecvTLS conn CryptHandshakeSecret   = do { (HandshakeLevel, bs) <- recvCryptoData conn; return bs }
-quicRecvTLS conn CryptApplicationSecret = do { (RTT1Level, bs) <- recvCryptoData conn; return bs }
--- fixme: should use better exceptions / avoid pattern match
+quicRecvTLS :: Connection -> IORef HndState -> CryptLevel -> IO ByteString
+quicRecvTLS conn hsr level = do
+    let expected = case level of
+            CryptInitial           -> InitialLevel
+            CryptMasterSecret      -> error "QUIC does not receive data < TLS 1.3"
+            CryptEarlySecret       -> HandshakeLevel
+            CryptHandshakeSecret   -> HandshakeLevel
+            CryptApplicationSecret -> RTT1Level
+    (actual, bs) <- recvCryptoData conn
+    when (actual /= expected) $
+        error $ "encryption level mismatch: expected " ++ show expected ++
+                " but got " ++ show actual
+    n <- recvCompleted hsr
+    case expected of
+        InitialLevel | isServer conn ->
+            -- To prevent CI0'
+            when (n > 0) $
+                sendCryptoData conn $ OutControl InitialLevel []
+        HandshakeLevel | isClient conn ->
+            -- Sending ACKs for three times rule
+            when ((n `mod` 3) == 0) $
+                sendCryptoData conn $ OutControl HandshakeLevel []
+        _ -> return ()
+    return bs
+-- fixme: should use better exceptions
 
-quicSendTLS :: Connection -> [(CryptLevel, ByteString)] -> IO ()
-quicSendTLS conn = sendCryptoData conn . OutHandshake . fmap convertLevel
+quicSendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
+quicSendTLS conn hsr x = do
+    sendCryptoData conn $ OutHandshake $ fmap convertLevel x
+    sendCompleted hsr
   where
     convertLevel (CryptInitial, bs) = (InitialLevel, bs)
     convertLevel (CryptMasterSecret, _) = error "QUIC does not send data < TLS 1.3"
@@ -56,9 +94,10 @@ quicSendTLS conn = sendCryptoData conn . OutHandshake . fmap convertLevel
 handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
+    hsr <- newHndStateRef
     let sendEarlyData = isJust $ ccEarlyData conf
-        qc = QuicCallbacks { quicSend = quicSendTLS conn
-                           , quicRecv = quicRecvTLS conn
+        qc = QuicCallbacks { quicSend = quicSendTLS conn hsr
+                           , quicRecv = quicRecvTLS conn hsr
                            , quicNotifySecretEvent = quicSyncC
                            , quicNotifyExtensions = setPeerParams conn
                            }
@@ -92,18 +131,9 @@ sendClientHelloAndRecvServerHello control _conn = do
       _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
 
 recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
-recvServerFinishedSendClientFinished control _conn = loop (1 :: Int)
-  where
-    loop _n = do
+recvServerFinishedSendClientFinished control _conn = do
         state <- control PutServerFinished
         case state of
-          -- fixme: not sure we need to keep this
-          --
-          -- ClientNeedsMore -> do
-          --     -- Sending ACKs for three times rule
-          --     when ((n `mod` 3) == 2) $
-          --         sendCryptoData conn $ OutControl HandshakeLevel []
-          --     loop (n + 1)
           SendClientFinished -> return ()
           _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
@@ -112,8 +142,9 @@ recvServerFinishedSendClientFinished control _conn = loop (1 :: Int)
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
-    let qc = QuicCallbacks { quicSend = quicSendTLS conn
-                           , quicRecv = quicRecvTLS conn
+    hsr <- newHndStateRef
+    let qc = QuicCallbacks { quicSend = quicSendTLS conn hsr
+                           , quicRecv = quicRecvTLS conn hsr
                            , quicNotifySecretEvent = quicSyncS
                            , quicNotifyExtensions = setPeerParams conn
                            }
@@ -141,12 +172,6 @@ recvClientHello control _conn = loop
         case state of
           SendRequestRetry -> loop
           SendServerHello -> return ()
-          -- fixme: not sure we need to keep this
-          --
-          -- ServerNeedsMore -> do
-          --     -- To prevent CI0' above.
-          --     sendCryptoData conn $ OutControl InitialLevel []
-          --     loop
           _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
