@@ -56,7 +56,7 @@ quicRecvTLS conn hsr level = do
     let expected = case level of
             CryptInitial           -> InitialLevel
             CryptMasterSecret      -> error "QUIC does not receive data < TLS 1.3"
-            CryptEarlySecret       -> HandshakeLevel
+            CryptEarlySecret       -> error "QUIC does not send early data with TLS library"
             CryptHandshakeSecret   -> HandshakeLevel
             CryptApplicationSecret -> RTT1Level
     (actual, bs) <- recvCryptoData conn
@@ -84,7 +84,7 @@ quicSendTLS conn hsr x = do
   where
     convertLevel (CryptInitial, bs) = (InitialLevel, bs)
     convertLevel (CryptMasterSecret, _) = error "QUIC does not send data < TLS 1.3"
-    convertLevel (CryptEarlySecret, bs) = (RTT0Level, bs)
+    convertLevel (CryptEarlySecret, _) = error "QUIC does not receive early data with TLS library"
     convertLevel (CryptHandshakeSecret, bs) = (HandshakeLevel, bs)
     convertLevel (CryptApplicationSecret, bs) = (RTT1Level, bs)
 -- fixme: should use better exceptions
