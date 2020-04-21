@@ -150,9 +150,10 @@ handshakeServer conf origCID conn = do
                            }
     control <- serverController qc conf ver origCID
     setServerController conn control
-    recvClientHello control conn
-    SendServerFinished <- control GetServerFinished
-    return ()
+    state <- control PutClientHello
+    case state of
+        SendServerFinished -> return ()
+        _ -> E.throwIO $ HandshakeFailed "handshakeServer"
 
   where
     quicSyncS (SyncEarlySecret mEarlySecInf) =
@@ -163,16 +164,6 @@ handshakeServer conf origCID conn = do
     quicSyncS (SyncApplicationSecret appSecInf) = do
         setApplicationSecretInfo conn appSecInf
         setEncryptionLevel conn RTT1Level
-
-recvClientHello :: ServerController -> Connection -> IO ()
-recvClientHello control _conn = loop
-  where
-    loop = do
-        state <- control PutClientHello
-        case state of
-          SendRequestRetry -> loop
-          SendServerHello -> return ()
-          _ -> E.throwIO $ HandshakeFailed "recvClientHello"
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]
