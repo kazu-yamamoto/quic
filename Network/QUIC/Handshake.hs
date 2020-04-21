@@ -103,8 +103,10 @@ handshakeClient conf conn = do
                            }
     control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
     setClientController conn control
-    sendClientHelloAndRecvServerHello control conn
-    recvServerFinishedSendClientFinished control conn
+    state <- control GetClientHello
+    case state of
+        SendClientFinished -> return ()
+        _ -> E.throwIO $ HandshakeFailed "handshakeClient"
 
   where
     quicSyncC (SyncEarlySecret mEarlySecInf) = do
@@ -116,26 +118,6 @@ handshakeClient conf conn = do
     quicSyncC (SyncApplicationSecret appSecInf) = do
         setApplicationSecretInfo conn appSecInf
         setEncryptionLevel conn RTT1Level
-
-sendClientHelloAndRecvServerHello :: ClientController -> Connection -> IO ()
-sendClientHelloAndRecvServerHello control _conn = do
-    SendClientHello <- control GetClientHello
-    state0 <- control PutServerHello
-    case state0 of
-      RecvServerHello -> return ()
-      SendClientHello -> do
-          state1 <- control PutServerHello
-          case state1 of
-            RecvServerHello -> return ()
-            _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
-      _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
-
-recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
-recvServerFinishedSendClientFinished control _conn = do
-        state <- control PutServerFinished
-        case state of
-          SendClientFinished -> return ()
-          _ -> E.throwIO $ HandshakeFailed "putServerFinished"
 
 ----------------------------------------------------------------
 
