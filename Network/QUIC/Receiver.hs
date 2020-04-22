@@ -102,7 +102,12 @@ processFrame conn lvl (Crypto off cdat) = do
               putInputCrypto conn lvl off cdat
         | otherwise -> do
               putInputCrypto conn lvl off cdat
-              getServerController conn >>= sendSessionTicket conn
+              -- fixme: Trying to execute the end of server handshake in a
+              -- separate thread so that the Receiver can continue its loop and
+              -- execute `putInputCrypto` again if needed.  Ideally this should
+              -- be done in a "managed" thread that we can kill if needed.  For
+              -- now this is just a test.
+              void $ forkIO $ getServerController conn >>= sendSessionTicket conn
       RTT1Level
         | isClient conn -> do
               putInputCrypto conn lvl off cdat
