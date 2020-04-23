@@ -30,6 +30,7 @@ import Data.IORef
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connection.Misc
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Types
@@ -37,13 +38,26 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 setEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
-setEncryptionLevel Connection{..} level =
-    atomically $ writeTVar encryptionLevel level
+setEncryptionLevel conn@Connection{..} level = do
+    (_, q) <- getSockInfo conn
+    atomically $ do
+        writeTVar encryptionLevel level
+        case level of
+          HandshakeLevel -> readTVar pendingHandshake >>= mapM_ (prependRecvQ q)
+          RTT1Level      -> readTVar pendingRTT1 >>= mapM_ (prependRecvQ q)
+          _              -> return ()
 
-checkEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
-checkEncryptionLevel Connection{..} level = atomically $ do
+checkEncryptionLevel :: Connection -> EncryptionLevel -> CryptPacket -> IO Bool
+checkEncryptionLevel Connection{..} level cpkt = atomically $ do
     l <- readTVar encryptionLevel
-    check (l >= level)
+    if l >= level then
+        return True
+      else do
+        case level of
+          HandshakeLevel -> modifyTVar' pendingHandshake (cpkt :)
+          RTT1Level      -> modifyTVar' pendingRTT1 (cpkt :)
+          _              -> return ()
+        return False
 
 ----------------------------------------------------------------
 

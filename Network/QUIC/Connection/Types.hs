@@ -173,6 +173,8 @@ data Connection = Connection {
   , streamTable       :: IORef StreamTable
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
+  , pendingHandshake  :: TVar [CryptPacket]
+  , pendingRTT1       :: TVar [CryptPacket]
   , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
   , elySecInfo        :: IORef EarlySecretInfo
   , hndSecInfo        :: IORef HandshakeSecretInfo
@@ -213,6 +215,8 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef emptyStreamTable
         -- TLS
         <*> newTVarIO InitialLevel
+        <*> newTVarIO []
+        <*> newTVarIO []
         <*> newIORef isecs
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)

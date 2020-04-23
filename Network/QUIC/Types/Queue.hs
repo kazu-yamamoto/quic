@@ -35,3 +35,6 @@ readRecvQ (RecvQ q) = atomically $ readTQueue q
 
 writeRecvQ :: RecvQ -> CryptPacket -> IO ()
 writeRecvQ (RecvQ q) x = atomically $ writeTQueue q x
+
+prependRecvQ :: RecvQ -> CryptPacket -> STM ()
+prependRecvQ (RecvQ q) = unGetTQueue q

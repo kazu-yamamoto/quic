@@ -21,8 +21,8 @@ receiver conn recv = handleLog logAction $ do
     loopEstablished
   where
     loopHandshake = do
-        CryptPacket hdr crypt <- recv
-        processCryptPacketHandshake conn hdr crypt
+        cpkt <- recv
+        processCryptPacketHandshake conn cpkt
         established <- isConnectionEstablished conn
         unless established loopHandshake
     loopEstablished = forever $ do
@@ -38,22 +38,11 @@ receiver conn recv = handleLog logAction $ do
             connDebugLog conn "CID is unknown"
     logAction msg = connDebugLog conn ("receiver: " ++ msg)
 
-processCryptPacketHandshake :: Connection -> Header -> Crypt -> IO ()
-processCryptPacketHandshake conn hdr crypt = do
+processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
+processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
     let level = packetEncryptionLevel hdr
-    -- If RTT1 comes between Initial and Handshake,
-    -- checkEncryptionLevel waits forever. To avoid this, timeout
-    -- used. If timeout happens, the packet cannot be decrypted and
-    -- thrown away.
-    mt <- timeout 100000 $ checkEncryptionLevel conn level
-    if isNothing mt then do
-        if isCryptDelayed crypt then do
-            qlogDropped conn hdr
-            connDebugLog conn "Timeout: ignoring a packet"
-          else do
-            (_, q) <- getSockInfo conn
-            writeRecvQ q $ CryptPacket hdr $ setCryptDelayed crypt
-      else do
+    decryptable <- checkEncryptionLevel conn level cpkt
+    when decryptable $ do
         peercid <- getPeerCID conn
         when (isClient conn
            && level == HandshakeLevel
