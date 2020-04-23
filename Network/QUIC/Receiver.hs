@@ -140,19 +140,8 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     clearThreads conn
 processFrame conn RTT0Level (Stream sid off dat fin) = do
     putInputStream conn sid off dat fin
-processFrame conn RTT1Level (Stream sid off dat fin)
-  | isClient conn = putInputStream conn sid off dat fin
-  | otherwise     = do
-        established <- isConnectionEstablished conn
-        if established then
+processFrame conn RTT1Level (Stream sid off dat fin) =
             putInputStream conn sid off dat fin
-          else void . forkIO $ do
-            -- Client Finish and Stream are somtime out-ordered.
-            -- This causes a race condition between transport and app.
-            mx <- timeout 100000 $ waitEstablished conn
-            case mx of
-              Nothing -> return ()
-              Just _  -> putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     -- An implementation sends:
     --   Handshake PN=2
@@ -177,6 +166,7 @@ sendSessionTicket conn control = do
     res <- control PutClientFinished
     case res of
       SendSessionTicket -> do
+          setEncryptionLevel conn RTT1Level
           -- aka sendCryptoData
           ServerHandshakeDone <- control ExitServer
           clearServerController conn

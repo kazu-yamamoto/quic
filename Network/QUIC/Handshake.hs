@@ -143,9 +143,10 @@ handshakeServer conf origCID conn = do
     quicSyncS (SyncHandshakeSecret hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         setEncryptionLevel conn HandshakeLevel
-    quicSyncS (SyncApplicationSecret appSecInf) = do
+    quicSyncS (SyncApplicationSecret appSecInf) =
         setApplicationSecretInfo conn appSecInf
-        setEncryptionLevel conn RTT1Level
+        -- will switch to RTT1Level after client Finished
+        -- is received and verified
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]
