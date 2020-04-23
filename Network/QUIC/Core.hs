@@ -102,6 +102,8 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger = do
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
     handshakeClient conf conn `E.onException` clearThreads conn
+    tid4 <- forkIO $ getClientController conn >>= handshakeClientAsync conn
+    addThreadIds conn [tid4]
     params <- getPeerParameters conn
     case statelessResetToken params of
       Nothing  -> return ()
@@ -171,6 +173,8 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             setThreadIds conn [tid0,tid1,tid2,tid3]
             setMainThreadId conn mainThreadId
             handshakeServer conf oCID conn `E.onException` clearThreads conn
+            tid4 <- forkIO $ getServerController conn >>= handshakeServerAsync conn
+            addThreadIds conn [tid4]
             setRegister conn register unregister
             register myCID conn
             info <- getConnectionInfo conn

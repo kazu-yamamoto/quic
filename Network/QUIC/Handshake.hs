@@ -10,9 +10,12 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Exception
 import Network.QUIC.Imports
+import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -119,6 +122,18 @@ handshakeClient conf conn = do
         setApplicationSecretInfo conn appSecInf
         setEncryptionLevel conn RTT1Level
 
+-- second half the the TLS handshake, executed out of the main thread
+handshakeClientAsync :: Connection -> ClientController -> IO ()
+handshakeClientAsync conn control = handleLog logAction $
+    -- RecvSessionTicket or ClientHandshakeDone
+    void $ control PutSessionTicket
+  where
+    -- fixme: Is there a way to properly report a TLS failure occurring here to
+    -- the application code?  This part contains only reception of a ticket,
+    -- this is not a major concern.   But nontheless there is validation of TLS
+    -- messages happening here.
+    logAction msg = connDebugLog conn ("client handshake: " ++ msg)
+
 ----------------------------------------------------------------
 
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
@@ -147,6 +162,36 @@ handshakeServer conf origCID conn = do
         setApplicationSecretInfo conn appSecInf
         -- will switch to RTT1Level after client Finished
         -- is received and verified
+
+-- second half the the TLS handshake, executed out of the main thread
+handshakeServerAsync :: Connection -> ServerController -> IO ()
+handshakeServerAsync conn control = handleLog logAction $ do
+    res <- control PutClientFinished
+    case res of
+      SendSessionTicket -> do
+          setEncryptionLevel conn RTT1Level
+          -- aka sendCryptoData
+          ServerHandshakeDone <- control ExitServer
+          clearServerController conn
+          --
+          setConnectionEstablished conn
+          fire 2000000 $ dropSecrets conn
+          --
+          cryptoToken <- generateToken =<< getVersion conn
+          mgr <- getTokenManager conn
+          token <- encryptToken mgr cryptoToken
+          cidInfo <- getNewMyCID conn
+          register <- getRegister conn
+          register (cidInfoCID cidInfo) conn
+          let ncid = NewConnectionID cidInfo 0
+          let frames = [HandshakeDone,NewToken token,ncid]
+          putOutput conn $ OutControl RTT1Level frames
+      _ -> return ()
+  where
+    -- fixme: Is there a way to properly report a TLS failure occurring here to
+    -- the application code?  This part of the handshake includes verification
+    -- of client Finished message, a major security step.
+    logAction msg = connDebugLog conn ("server handshake: " ++ msg)
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]

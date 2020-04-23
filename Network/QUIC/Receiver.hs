@@ -5,7 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Control.Concurrent
 import Network.TLS.QUIC hiding (RTT0)
 
 import Network.QUIC.Connection
@@ -86,21 +85,11 @@ processFrame conn lvl (Crypto off cdat) = do
           putInputCrypto conn lvl off cdat
       RTT0Level -> do
           connDebugLog conn $ "processFrame: invalid packet type " ++ show lvl
-      HandshakeLevel
-        | isClient conn -> do
-              putInputCrypto conn lvl off cdat
-        | otherwise -> do
-              putInputCrypto conn lvl off cdat
-              -- fixme: Trying to execute the end of server handshake in a
-              -- separate thread so that the Receiver can continue its loop and
-              -- execute `putInputCrypto` again if needed.  Ideally this should
-              -- be done in a "managed" thread that we can kill if needed.  For
-              -- now this is just a test.
-              void $ forkIO $ getServerController conn >>= sendSessionTicket conn
+      HandshakeLevel ->
+          putInputCrypto conn lvl off cdat
       RTT1Level
-        | isClient conn -> do
+        | isClient conn ->
               putInputCrypto conn lvl off cdat
-              getClientController conn >>= recvSessionTicket conn
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token) = do
@@ -141,7 +130,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
 processFrame conn RTT0Level (Stream sid off dat fin) = do
     putInputStream conn sid off dat fin
 processFrame conn RTT1Level (Stream sid off dat fin) =
-            putInputStream conn sid off dat fin
+    putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     -- An implementation sends:
     --   Handshake PN=2
@@ -160,35 +149,6 @@ processFrame conn _ HandshakeDone = do
         dropSecrets conn
 processFrame conn _ _frame        = do
     connDebugLog conn $ "processFrame: " ++ show _frame
-
-sendSessionTicket :: Connection -> ServerController -> IO ()
-sendSessionTicket conn control = do
-    res <- control PutClientFinished
-    case res of
-      SendSessionTicket -> do
-          setEncryptionLevel conn RTT1Level
-          -- aka sendCryptoData
-          ServerHandshakeDone <- control ExitServer
-          clearServerController conn
-          --
-          setConnectionEstablished conn
-          fire 2000000 $ dropSecrets conn
-          --
-          cryptoToken <- generateToken =<< getVersion conn
-          mgr <- getTokenManager conn
-          token <- encryptToken mgr cryptoToken
-          cidInfo <- getNewMyCID conn
-          register <- getRegister conn
-          register (cidInfoCID cidInfo) conn
-          let ncid = NewConnectionID cidInfo 0
-          let frames = [HandshakeDone,NewToken token,ncid]
-          putOutput conn $ OutControl RTT1Level frames
-      _ -> return ()
-
-recvSessionTicket :: Connection -> ClientController -> IO ()
-recvSessionTicket _conn control =
-    -- RecvSessionTicket or ClientHandshakeDone
-    void $ control PutSessionTicket
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.

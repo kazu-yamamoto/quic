@@ -4,6 +4,7 @@ module Network.QUIC.Connection.Misc (
     setVersion
   , getVersion
   , setThreadIds
+  , addThreadIds
   , clearThreads
   , getSockInfo
   , setSockInfo
@@ -31,6 +32,11 @@ setThreadIds :: Connection -> [ThreadId] -> IO ()
 setThreadIds Connection{..} tids = do
     wtids <- mapM mkWeakThreadId tids
     writeIORef threadIds wtids
+
+addThreadIds :: Connection -> [ThreadId] -> IO ()
+addThreadIds Connection{..} tids = do
+    wtids <- mapM mkWeakThreadId tids
+    modifyIORef threadIds (wtids ++)
 
 clearThreads :: Connection -> IO ()
 clearThreads Connection{..} = do

@@ -58,6 +58,7 @@ module Network.QUIC.Connection (
   , setVersion
   , getVersion
   , setThreadIds
+  , addThreadIds
   , clearThreads
   , getSockInfo
   , setSockInfo
