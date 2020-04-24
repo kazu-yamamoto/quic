@@ -54,8 +54,8 @@ recvCryptoData conn = do
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> E.throwIO   MustNotReached
 
-quicRecvTLS :: Connection -> IORef HndState -> CryptLevel -> IO ByteString
-quicRecvTLS conn hsr level = do
+recvTLS :: Connection -> IORef HndState -> CryptLevel -> IO ByteString
+recvTLS conn hsr level = do
     let expected = case level of
             CryptInitial           -> InitialLevel
             CryptMasterSecret      -> error "QUIC does not receive data < TLS 1.3"
@@ -80,8 +80,8 @@ quicRecvTLS conn hsr level = do
     return bs
 -- fixme: should use better exceptions
 
-quicSendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
-quicSendTLS conn hsr x = do
+sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
+sendTLS conn hsr x = do
     sendCryptoData conn $ OutHandshake $ fmap convertLevel x
     sendCompleted hsr
   where
@@ -99,9 +99,9 @@ handshakeClient conf conn = do
     ver <- getVersion conn
     hsr <- newHndStateRef
     let sendEarlyData = isJust $ ccEarlyData conf
-        qc = QuicCallbacks { quicSend = quicSendTLS conn hsr
-                           , quicRecv = quicRecvTLS conn hsr
-                           , quicNotifySecretEvent = quicSyncC
+        qc = QUICCallbacks { quicSend = sendTLS conn hsr
+                           , quicRecv = recvTLS conn hsr
+                           , quicInstallKeys = installKeysClient
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
@@ -112,13 +112,13 @@ handshakeClient conf conn = do
         _ -> E.throwIO $ HandshakeFailed "handshakeClient"
 
   where
-    quicSyncC (SyncEarlySecret mEarlySecInf) = do
+    installKeysClient (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
         sendCryptoData conn $ OutEarlyData (ccEarlyData conf)
-    quicSyncC (SyncHandshakeSecret hndSecInf) = do
+    installKeysClient (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         setEncryptionLevel conn HandshakeLevel
-    quicSyncC (SyncApplicationSecret appSecInf) = do
+    installKeysClient (InstallApplicationKeys appSecInf) = do
         setApplicationSecretInfo conn appSecInf
         setEncryptionLevel conn RTT1Level
 
@@ -140,9 +140,9 @@ handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
     hsr <- newHndStateRef
-    let qc = QuicCallbacks { quicSend = quicSendTLS conn hsr
-                           , quicRecv = quicRecvTLS conn hsr
-                           , quicNotifySecretEvent = quicSyncS
+    let qc = QUICCallbacks { quicSend = sendTLS conn hsr
+                           , quicRecv = recvTLS conn hsr
+                           , quicInstallKeys = installKeysServer
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- serverController qc conf ver origCID
@@ -153,12 +153,12 @@ handshakeServer conf origCID conn = do
         _ -> E.throwIO $ HandshakeFailed "handshakeServer"
 
   where
-    quicSyncS (SyncEarlySecret mEarlySecInf) =
+    installKeysServer (InstallEarlyKeys mEarlySecInf) =
         setEarlySecretInfo conn mEarlySecInf
-    quicSyncS (SyncHandshakeSecret hndSecInf) = do
+    installKeysServer (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         setEncryptionLevel conn HandshakeLevel
-    quicSyncS (SyncApplicationSecret appSecInf) =
+    installKeysServer (InstallApplicationKeys appSecInf) =
         setApplicationSecretInfo conn appSecInf
         -- will switch to RTT1Level after client Finished
         -- is received and verified

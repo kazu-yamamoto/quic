@@ -27,7 +27,7 @@ sessionManager establish = SessionManager {
   , sessionInvalidate     = \_ -> return ()
   }
 
-clientController:: QuicCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ClientController
+clientController:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ClientController
 clientController callbacks ClientConfig{..} ver establish sendEarlyData =
     newQUICClient cparams callbacks
   where
@@ -63,7 +63,7 @@ clientController callbacks ClientConfig{..} ver establish sendEarlyData =
 nullServerController :: ServerController
 nullServerController _ = return ServerHandshakeDone
 
-serverController :: QuicCallbacks
+serverController :: QUICCallbacks
                  -> ServerConfig
                  -> Version
                  -> OrigCID
