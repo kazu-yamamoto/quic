@@ -122,9 +122,9 @@ handshakeClient conf conn = do
                            }
     control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
     setClientController conn control
-    state <- control GetClientHello
+    state <- control EnterClient
     case state of
-        SendClientFinished -> return ()
+        ClientHandshakeComplete -> return ()
         ClientHandshakeFailed e -> notifyPeer conn e >>= E.throwIO
         _ -> E.throwIO $ HandshakeFailed $ "handshakeClient: unexpected " ++ show state
 
@@ -141,11 +141,10 @@ handshakeClient conf conn = do
 
 -- second half the the TLS handshake, executed out of the main thread
 handshakeClientAsync :: Connection -> ClientController -> IO ()
-handshakeClientAsync conn control = handleLog logAction $ do
-    -- RecvSessionTicket or ClientHandshakeDone
-    state <- control PutSessionTicket
+handshakeClientAsync conn control = handleLog logAction $ forever $ do
+    state <- control RecvSessionTickets
     case state of
-        RecvSessionTicket -> return ()
+        ClientRecvSessionTicket -> return ()
         ClientHandshakeFailed e -> notifyPeerAsync conn e >>= E.throwIO
         _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
   where
@@ -164,9 +163,9 @@ handshakeServer conf origCID conn = do
                            }
     control <- serverController qc conf ver origCID
     setServerController conn control
-    state <- control PutClientHello
+    state <- control EnterServer
     case state of
-        SendServerFinished -> return ()
+        ServerFinishedSent -> return ()
         ServerHandshakeFailed e -> notifyPeer conn e >>= E.throwIO
         _ -> E.throwIO $ HandshakeFailed $ "handshakeServer: unexpected " ++ show state
 
@@ -184,9 +183,9 @@ handshakeServer conf origCID conn = do
 -- second half the the TLS handshake, executed out of the main thread
 handshakeServerAsync :: Connection -> ServerController -> IO ()
 handshakeServerAsync conn control = handleLog logAction $ do
-    state <- control PutClientFinished
+    state <- control CompleteServer
     case state of
-      SendSessionTicket -> do
+      ServerHandshakeComplete -> do
           setEncryptionLevel conn RTT1Level
           -- aka sendCryptoData
           ServerHandshakeDone <- control ExitServer
