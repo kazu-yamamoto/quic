@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#initial-secrets
 
@@ -10,6 +11,14 @@ import Test.Hspec
 import Network.QUIC.TLS
 import Network.QUIC.Types
 import Network.QUIC.Utils
+
+----------------------------------------------------------------
+
+instance Eq (ClientTrafficSecret a) where
+    ClientTrafficSecret x == ClientTrafficSecret y = x == y
+
+instance Eq (ServerTrafficSecret a) where
+    ServerTrafficSecret x == ServerTrafficSecret y = x == y
 
 ----------------------------------------------------------------
 
