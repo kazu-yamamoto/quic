@@ -19,6 +19,7 @@ module Network.QUIC.Connection (
   , nullPeerPacketNumbers
   , fromPeerPacketNumbers
   -- * Crypto
+  , getEncryptionLevel
   , setEncryptionLevel
   , checkEncryptionLevel
   , getPeerParameters

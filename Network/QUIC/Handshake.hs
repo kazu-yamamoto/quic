@@ -4,8 +4,8 @@ module Network.QUIC.Handshake where
 
 import qualified Control.Exception as E
 import Data.ByteString
-import qualified Data.ByteString.Short as Short
 import Data.IORef
+import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
@@ -40,57 +40,73 @@ recvCompleted hsr = atomicModifyIORef' hsr $ \hs ->
 sendCryptoData :: Connection -> Output -> IO ()
 sendCryptoData = putOutput
 
-recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString)
+recvCryptoData :: Connection -> IO (Either TLS.TLSError (EncryptionLevel, ByteString))
 recvCryptoData conn = do
     dat <- takeCrypto conn
     case dat of
-      InpHandshake lvl bs        -> return (lvl, bs)
+      InpHandshake lvl bs        -> return $ Right (lvl, bs)
+      -- When possible we return normal TLS errors to TLS callbacks.
+      InpTransportError err _ bs
+          | err == NoError       -> return $ Left TLS.Error_EOF
+          | otherwise            ->
+              let msg | bs == ""  = "received transport error during TLS handshake: " ++ show err
+                      | otherwise = "received transport error during TLS handshake: " ++ show err ++ ", reason=" ++ show bs
+               in return $ Left $ unexpectedMessage msg
+      -- When QUICError values have no TLS counterpart: we throw them as is.
+      -- TLS will transform into TLS.Error_Misc, this is quite unfortunate.
       InpVersion (Just ver)      -> E.throwIO $ NextVersion ver
       InpVersion Nothing         -> E.throwIO   VersionNegotiationFailed
       InpError e                 -> E.throwIO e
-      InpTransportError err _ bs
-          | err == NoError       -> return (RTT1Level, Short.fromShort bs) -- fixme: RTT1Level
-          | otherwise            -> E.throwIO $ TransportErrorOccurs err bs
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> E.throwIO   MustNotReached
 
-recvTLS :: Connection -> IORef HndState -> CryptLevel -> IO ByteString
-recvTLS conn hsr level = do
-    let expected = case level of
-            CryptInitial           -> InitialLevel
-            CryptMasterSecret      -> error "QUIC does not receive data < TLS 1.3"
-            CryptEarlySecret       -> error "QUIC does not send early data with TLS library"
-            CryptHandshakeSecret   -> HandshakeLevel
-            CryptApplicationSecret -> RTT1Level
-    (actual, bs) <- recvCryptoData conn
-    when (actual /= expected) $
-        error $ "encryption level mismatch: expected " ++ show expected ++
-                " but got " ++ show actual
-    n <- recvCompleted hsr
-    case expected of
-        InitialLevel | isServer conn ->
-            -- To prevent CI0'
-            when (n > 0) $
-                sendCryptoData conn $ OutControl InitialLevel []
-        HandshakeLevel | isClient conn ->
-            -- Sending ACKs for three times rule
-            when ((n `mod` 3) == 0) $
-                sendCryptoData conn $ OutControl HandshakeLevel []
-        _ -> return ()
-    return bs
--- fixme: should use better exceptions
+recvTLS :: Connection -> IORef HndState -> CryptLevel -> IO (Either TLS.TLSError ByteString)
+recvTLS conn hsr level =
+    case level of
+            CryptInitial           -> go InitialLevel
+            CryptMasterSecret      -> failure "QUIC does not receive data < TLS 1.3"
+            CryptEarlySecret       -> failure "QUIC does not send early data with TLS library"
+            CryptHandshakeSecret   -> go HandshakeLevel
+            CryptApplicationSecret -> go RTT1Level
+  where
+    failure = return . Left . internalError
+
+    go expected = do
+        recvResult <- recvCryptoData conn
+        case recvResult of
+            Left err -> return $ Left err
+            Right (actual, bs)
+                | actual /= expected -> failure $
+                    "encryption level mismatch: expected " ++ show expected ++
+                    " but got " ++ show actual
+                | otherwise -> do
+                    n <- recvCompleted hsr
+                    case expected of
+                        InitialLevel | isServer conn ->
+                            -- To prevent CI0'
+                            when (n > 0) $
+                                sendCryptoData conn $ OutControl InitialLevel []
+                        HandshakeLevel | isClient conn ->
+                            -- Sending ACKs for three times rule
+                            when ((n `mod` 3) == 0) $
+                                sendCryptoData conn $ OutControl HandshakeLevel []
+                        _ -> return ()
+                    return (Right bs)
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
 sendTLS conn hsr x = do
-    sendCryptoData conn $ OutHandshake $ fmap convertLevel x
+    mapM convertLevel x >>= sendCryptoData conn . OutHandshake
     sendCompleted hsr
   where
-    convertLevel (CryptInitial, bs) = (InitialLevel, bs)
-    convertLevel (CryptMasterSecret, _) = error "QUIC does not send data < TLS 1.3"
-    convertLevel (CryptEarlySecret, _) = error "QUIC does not receive early data with TLS library"
-    convertLevel (CryptHandshakeSecret, bs) = (HandshakeLevel, bs)
-    convertLevel (CryptApplicationSecret, bs) = (RTT1Level, bs)
--- fixme: should use better exceptions
+    convertLevel (CryptInitial, bs) = return (InitialLevel, bs)
+    convertLevel (CryptMasterSecret, _) = errorTLS "QUIC does not send data < TLS 1.3"
+    convertLevel (CryptEarlySecret, _) = errorTLS "QUIC does not receive early data with TLS library"
+    convertLevel (CryptHandshakeSecret, bs) = return (HandshakeLevel, bs)
+    convertLevel (CryptApplicationSecret, bs) = return (RTT1Level, bs)
+
+internalError, unexpectedMessage :: String -> TLS.TLSError
+internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
+unexpectedMessage msg = TLS.Error_Protocol (msg, True, TLS.UnexpectedMessage)
 
 ----------------------------------------------------------------
 
@@ -109,7 +125,7 @@ handshakeClient conf conn = do
     state <- control GetClientHello
     case state of
         SendClientFinished -> return ()
-        ClientHandshakeFailed e -> E.throwIO $ HandshakeFailed $ "handshakeClient: " ++ show e
+        ClientHandshakeFailed e -> notifyPeer conn e >>= E.throwIO
         _ -> E.throwIO $ HandshakeFailed $ "handshakeClient: unexpected " ++ show state
 
   where
@@ -130,13 +146,9 @@ handshakeClientAsync conn control = handleLog logAction $ do
     state <- control PutSessionTicket
     case state of
         RecvSessionTicket -> return ()
-        ClientHandshakeFailed e -> E.throwIO $ HandshakeFailed $ show e
+        ClientHandshakeFailed e -> notifyPeerAsync conn e >>= E.throwIO
         _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
   where
-    -- fixme: Is there a way to properly report a TLS failure occurring here to
-    -- the application code?  This part contains only reception of a ticket,
-    -- this is not a major concern.   But nontheless there is validation of TLS
-    -- messages happening here.
     logAction msg = connDebugLog conn ("client handshake: " ++ msg)
 
 ----------------------------------------------------------------
@@ -155,7 +167,7 @@ handshakeServer conf origCID conn = do
     state <- control PutClientHello
     case state of
         SendServerFinished -> return ()
-        ServerHandshakeFailed e -> E.throwIO $ HandshakeFailed $ "handshakeServer: " ++ show e
+        ServerHandshakeFailed e -> notifyPeer conn e >>= E.throwIO
         _ -> E.throwIO $ HandshakeFailed $ "handshakeServer: unexpected " ++ show state
 
   where
@@ -192,12 +204,9 @@ handshakeServerAsync conn control = handleLog logAction $ do
           let ncid = NewConnectionID cidInfo 0
           let frames = [HandshakeDone,NewToken token,ncid]
           putOutput conn $ OutControl RTT1Level frames
-      ServerHandshakeFailed e -> E.throwIO $ HandshakeFailed $ show e
+      ServerHandshakeFailed e -> notifyPeerAsync conn e >>= E.throwIO
       _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
   where
-    -- fixme: Is there a way to properly report a TLS failure occurring here to
-    -- the application code?  This part of the handshake includes verification
-    -- of client Finished message, a major security step.
     logAction msg = connDebugLog conn ("server handshake: " ++ msg)
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
@@ -208,3 +217,17 @@ setPeerParams conn [ExtensionRaw extid params]
           Nothing    -> connDebugLog conn "cannot decode parameters"
           Just plist -> setPeerParameters conn plist
 setPeerParams _ _ = return ()
+
+notifyPeer :: Connection -> TLS.TLSError -> IO QUICError
+notifyPeer conn err = do
+    let ad = errorToAlertDescription err
+        frames = [ConnectionCloseQUIC (CryptoError ad) 0 ""]
+    level <- getEncryptionLevel conn
+    putOutput conn $ OutControl level frames
+    return $ HandshakeFailed $ errorToAlertMessage err
+
+notifyPeerAsync :: Connection -> TLS.TLSError -> IO QUICError
+notifyPeerAsync conn err = do
+    exception <- notifyPeer conn err
+    putInput conn $ InpError exception  -- also report in next recvStream
+    return exception

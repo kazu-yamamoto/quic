@@ -3,6 +3,7 @@
 
 module Network.QUIC.Connection.Crypto (
     setEncryptionLevel
+  , getEncryptionLevel
   , checkEncryptionLevel
   --
   , getPeerParameters
@@ -46,6 +47,10 @@ setEncryptionLevel conn@Connection{..} level = do
           HandshakeLevel -> readTVar pendingHandshake >>= mapM_ (prependRecvQ q)
           RTT1Level      -> readTVar pendingRTT1 >>= mapM_ (prependRecvQ q)
           _              -> return ()
+          -- fixme: should this be reversed?
+
+getEncryptionLevel :: Connection -> IO EncryptionLevel
+getEncryptionLevel Connection{..} = readTVarIO encryptionLevel
 
 checkEncryptionLevel :: Connection -> EncryptionLevel -> CryptPacket -> IO Bool
 checkEncryptionLevel Connection{..} level cpkt = atomically $ do
