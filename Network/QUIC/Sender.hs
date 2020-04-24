@@ -147,8 +147,12 @@ sendCryptoFragments conn send = loop 1024 maximumQUICPacketSize id
             bss1 <- construct conn lvl [frame1] [] mTargetSize
             let len1 = len0 - B.length bs
                 sz1  = sz0  - sum (map B.length bss1)
-            -- fixme: should we also check that sz1 does not become negative?
-            loop len1 sz1 (pre0 . (bss1 ++)) xs
+            if sz1 >= 48
+                then loop len1 sz1 (pre0 . (bss1 ++)) xs
+                else do
+                    bss1' <- construct conn lvl [frame1] [] (Just sz0)
+                    send (pre0 bss1')
+                    loop 1024 maximumQUICPacketSize id xs
 
 sendStreamFragment :: Connection -> SendMany -> StreamId -> ByteString -> Bool -> IO ()
 sendStreamFragment conn send sid dat0 fin0 = do
