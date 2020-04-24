@@ -9,7 +9,7 @@ import Network.QUIC.Types.Frame
 import Network.QUIC.Types.Packet
 import Network.QUIC.Types.UserError
 
-data Input = InpStream StreamId ByteString Fin
+data Input = InpStream StreamId StreamData Fin
            | InpHandshake EncryptionLevel ByteString
            | InpTransportError TransportError FrameType ReasonPhrase
            | InpApplicationError ApplicationError ReasonPhrase
@@ -17,7 +17,7 @@ data Input = InpStream StreamId ByteString Fin
            | InpError QUICError
            deriving Show
 
-data Output = OutStream StreamId ByteString Fin
+data Output = OutStream StreamId [StreamData] Fin
             | OutShutdown StreamId
             | OutControl EncryptionLevel [Frame]
             | OutEarlyData (Maybe (StreamId,ByteString))

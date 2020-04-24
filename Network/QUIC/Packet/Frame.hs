@@ -38,7 +38,7 @@ encodeFrame wbuf (NewToken token) = do
     write8 wbuf 0x07
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
-encodeFrame wbuf (Stream sid off dat fin) = do
+encodeFrame wbuf (Stream sid off dats fin) = do
     let flag0 = 0x08 .|. 0x02 -- len
         flag1 | off /= 0  = flag0 .|. 0x04 -- off
               | otherwise = flag0
@@ -47,8 +47,8 @@ encodeFrame wbuf (Stream sid off dat fin) = do
     write8 wbuf flag2
     encodeInt' wbuf $ fromIntegral sid
     when (off /= 0) $ encodeInt' wbuf $ fromIntegral off
-    encodeInt' wbuf $ fromIntegral $ B.length dat
-    copyByteString wbuf dat
+    encodeInt' wbuf $ fromIntegral $ sum $ map B.length dats
+    mapM_ (copyByteString wbuf) dats
 encodeFrame wbuf (MaxStreams dir ms) = do
     case dir of
       Bidi -> write8 wbuf 0x12
@@ -194,7 +194,7 @@ decodeStreamFrame rbuf hasOff hasLen fin = do
            else do
              len <- remainingSize rbuf
              extractByteString rbuf len
-    return $ Stream sID off dat fin
+    return $ Stream sID off [dat] fin
 
 decodeMaxData :: ReadBuffer -> IO Frame
 decodeMaxData rbuf = MaxData . fromIntegral <$> decodeInt' rbuf

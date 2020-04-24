@@ -109,17 +109,17 @@ sendOutput conn send (OutEarlyData mEarlyData) =
       Nothing -> return ()
       Just (sid,earlyData) -> do
           off <- getStreamOffset conn sid $ B.length earlyData
-          bss1 <- construct conn RTT0Level [Stream sid off earlyData True] [] $ Just maximumQUICPacketSize
+          bss1 <- construct conn RTT0Level [Stream sid off [earlyData] True] [] $ Just maximumQUICPacketSize
           send bss1
 sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
-sendOutput conn send (OutStream sid dat fin) = do
-    sendStreamFragment conn send sid dat fin
+sendOutput conn send (OutStream sid dats fin) = do
+    sendStreamFragment conn send sid dats fin
 sendOutput conn send (OutShutdown sid) = do
     off <- getStreamOffset conn sid 0
-    let frame = Stream sid off "" True
+    let frame = Stream sid off [] True
     bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
     send bss
 sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
@@ -154,24 +154,45 @@ sendCryptoFragments conn send = loop 1024 maximumQUICPacketSize id
                     send (pre0 bss1')
                     loop 1024 maximumQUICPacketSize id xs
 
-sendStreamFragment :: Connection -> SendMany -> StreamId -> ByteString -> Bool -> IO ()
-sendStreamFragment conn send sid dat0 fin0 = do
+sendStreamFragment :: Connection -> SendMany -> StreamId -> [ByteString] -> Bool -> IO ()
+sendStreamFragment conn send sid dats0 fin0 = do
     closed <- getStreamFin conn sid
     if closed then
         connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
       else do
-        loop dat0
+        loop dats0
         when fin0 $ setStreamFin conn sid
   where
-    loop "" = return ()
-    loop dat = do
-        let (target,rest) = B.splitAt 1024 dat
-        off <- getStreamOffset conn sid $ B.length target
-        let fin = fin0 && rest == ""
-            frame = Stream sid off dat fin
+    loop :: [ByteString] -> IO ()
+    loop [] = return ()
+    loop dats = do
+        let (dats1,dats2) = splitChunks dats
+            len = sum $ map B.length dats1
+        off <- getStreamOffset conn sid len
+        let fin = fin0 && null dats2
+            frame = Stream sid off dats1 fin
         bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
         send bss
-        loop rest
+        loop dats2
+
+-- Typical case: [3, 1024, 1024, 1024, 200]
+splitChunks :: [ByteString] -> ([ByteString],[ByteString])
+splitChunks bs0 = loop bs0 0 id
+  where
+    threshold  =  832
+    limitation = 1040
+    loop [] _  build    = let curr = build [] in (curr, [])
+    loop bbs@(b:bs) siz0 build
+      | siz <= threshold  = let build' = build . (b :) in loop bs siz build'
+      | siz <= limitation = let curr = build [b] in (curr, bs)
+      | len >  limitation = let (u,b') = B.splitAt (limitation - siz0) b
+                                curr = build [u]
+                                bs' = b':bs
+                            in (curr,bs')
+      | otherwise         = let curr = build [] in (curr, bbs)
+      where
+        siz = len + siz0
+        len = B.length b
 
 ----------------------------------------------------------------
 

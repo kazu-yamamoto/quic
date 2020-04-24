@@ -75,10 +75,10 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 
 encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO [ByteString]
 encodePlainPacket conn ppkt mlen = do
-    (hdr,bdy) <- encodePlainPacket' conn ppkt mlen
-    return [hdr,bdy]
+    (hdr,bdys) <- encodePlainPacket' conn ppkt mlen
+    return (hdr:bdys)
 
-encodePlainPacket' :: Connection -> PlainPacket -> Maybe Int -> IO (ByteString, ByteString)
+encodePlainPacket' :: Connection -> PlainPacket -> Maybe Int -> IO (ByteString, [ByteString])
 encodePlainPacket' conn (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
@@ -146,7 +146,7 @@ encodeLongHeaderPP _conn wbuf pkttyp ver dCID sCID flags pn = do
 
 ----------------------------------------------------------------
 
-protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO ByteString
+protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO [ByteString]
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     secret <- getTxSecret conn lvl
     cipher <- getCipher conn lvl
@@ -186,8 +186,9 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
 
 ----------------------------------------------------------------
 
-protectHeader :: Buffer -> Buffer -> Int -> Cipher -> Secret -> CipherText -> IO ()
-protectHeader headerBeg pnBeg epnLen cipher secret ciphertext = do
+-- fixme
+protectHeader :: Buffer -> Buffer -> Int -> Cipher -> Secret -> [CipherText] -> IO ()
+protectHeader headerBeg pnBeg epnLen cipher secret ctxttag0 = do
     flags <- Flags <$> peek8 headerBeg 0
     let Flags proFlags = protectFlags flags (mask `B.index` 0)
     poke8 proFlags headerBeg 0
@@ -196,12 +197,18 @@ protectHeader headerBeg pnBeg epnLen cipher secret ciphertext = do
     when (epnLen >= 3) $ shuffle 2
     when (epnLen == 4) $ shuffle 3
   where
-    ciphertext'
-      | epnLen == 1 = B.drop 3 ciphertext
-      | epnLen == 2 = B.drop 2 ciphertext
-      | epnLen == 3 = B.drop 1 ciphertext
-      | otherwise   = ciphertext
-    sample = Sample $ B.take (sampleLength cipher) ciphertext'
+    [ctxt0,tag0] = ctxttag0
+    ctxt
+      | epnLen == 1 = B.drop 3 ctxt0
+      | epnLen == 2 = B.drop 2 ctxt0
+      | epnLen == 3 = B.drop 1 ctxt0
+      | otherwise   = ctxt0
+    slen = sampleLength cipher
+    clen = B.length ctxt
+    -- We assume that clen (the size of ciphertext) is larger than
+    -- or equal to sample length (16 bytes) in many cases.
+    sample | clen >= slen = Sample $ B.take slen ctxt
+           | otherwise    = Sample $ (ctxt `B.append` B.take (slen - clen) tag0)
     hpKey = headerProtectionKey cipher secret
     Mask mask = protectionMask cipher hpKey sample
     shuffle n = do
@@ -212,7 +219,7 @@ protectHeader headerBeg pnBeg epnLen cipher secret ciphertext = do
 ----------------------------------------------------------------
 
 encrypt :: Cipher -> Secret -> PlainText -> ByteString -> PacketNumber
-        -> CipherText
+        -> [CipherText]
 encrypt cipher secret plaintext header pn =
     encryptPayload cipher key nonce plaintext (AddDat header)
   where

@@ -25,7 +25,19 @@ sendStream conn sid dat fin = do
       else if fin0 then
         E.throwIO StreamIsClosed
       else
-        putOutput conn $ OutStream sid dat fin
+        putOutput conn $ OutStream sid [dat] fin
+
+-- | Sending a list of data in the stream. FIN is sent if 3rd argument is 'True'.
+sendStreamMany :: Connection -> StreamId -> [ByteString] -> Fin -> IO ()
+sendStreamMany conn sid dats fin = do
+    open <- isConnectionOpen conn
+    fin0 <- getStreamFin conn sid
+    if not open then
+        E.throwIO ConnectionIsClosed
+      else if fin0 then
+        E.throwIO StreamIsClosed
+      else
+        putOutput conn $ OutStream sid dats fin
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Connection -> StreamId -> IO ()

@@ -158,7 +158,10 @@ initialVector cipher (Secret secret) = IV iv
 
 ----------------------------------------------------------------
 
-cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> CipherText
+-- It would be nice to take [PlainText] and update AEAD context with
+-- [PlainText]. But since each PlainText is not aligned to cipher block,
+-- it's impossible.
+cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 cipherEncrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmEncrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
@@ -177,13 +180,14 @@ cipherDecrypt cipher
 defaultCipherOverhead :: Int
 defaultCipherOverhead = 16
 
-aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
+aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 aes128gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
-    ciphertext `B.append` convert tag
+    [ciphertext,tag]
   where
     aes = throwCryptoError (cipherInit key) :: AES128
     aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aead ad plaintext defaultCipherOverhead
+    (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext defaultCipherOverhead
+    tag = convert tag0
 
 aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
@@ -193,13 +197,14 @@ aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
         authtag = AuthTag $ convert tag
     aeadSimpleDecrypt aead ad ciphertext authtag
 
-aes256gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
+aes256gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 aes256gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
-    ciphertext `B.append` convert tag
+    [ciphertext, tag]
   where
     aes = throwCryptoError (cipherInit key) :: AES256
     aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-    (AuthTag tag, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+    (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+    tag = convert tag0
 
 aes256gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
@@ -209,9 +214,9 @@ aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
         authtag = AuthTag $ convert tag
     aeadSimpleDecrypt aead ad ciphertext authtag
 
-chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AddDat -> CipherText
+chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
-    ciphertext `B.append` convert tag
+    [ciphertext,convert tag]
   where
     st1 = throwCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
     st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st1)
@@ -234,7 +239,7 @@ makeNonce (IV iv) pn = Nonce nonce
   where
     nonce = bsXORpad iv pn
 
-encryptPayload :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> CipherText
+encryptPayload :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 encryptPayload cipher key nonce plaintext header =
     cipherEncrypt cipher key nonce plaintext header
 
@@ -297,7 +302,7 @@ bsXORpad iv pn = B.pack $ zipWith xor ivl pnl
 
 calculateIntegrityTag :: CID -> ByteString -> ByteString
 calculateIntegrityTag oCID pseudo0 =
-    aes128gcmEncrypt key nonce "" (AddDat pseudo)
+    B.concat $ aes128gcmEncrypt key nonce "" (AddDat pseudo)
   where
     (ocid, ocidlen) = unpackCID oCID
     pseudo = B.concat [B.singleton ocidlen
