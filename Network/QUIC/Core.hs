@@ -11,7 +11,6 @@ import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
-import qualified Network.TLS as TLS
 import Network.TLS hiding (Version, HandshakeFailed)
 import Network.TLS.QUIC
 
@@ -62,8 +61,6 @@ connect conf = do
         handshakeClientConnection conf conn send recv qlogger `E.onException` cls
         return conn
     check se
-      | Just e@(TLS.Error_Protocol _) <- E.fromException se =
-                Left $ HandshakeFailed $ show $ errorToAlertDescription e
       | Just (NextVersion ver) <- E.fromException se = Right ver
       | Just (e :: QUICError)  <- E.fromException se = Left e
       | otherwise = Left $ BadThingHappen se
@@ -102,6 +99,8 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger = do
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
     handshakeClient conf conn `E.onException` clearThreads conn
+    tid4 <- forkIO $ getClientController conn >>= handshakeClientAsync conn
+    addThreadIds conn [tid4]
     params <- getPeerParameters conn
     case statelessResetToken params of
       Nothing  -> return ()
@@ -138,7 +137,7 @@ runQUICServer conf server = handleLog debugLog $ do
         mapM_ killThread tids
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId -> IO Connection
-createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
+createServerConnection conf dispatch acc mainThreadId = do
     let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
@@ -171,15 +170,14 @@ createServerConnection conf dispatch acc mainThreadId = E.handle tlserr $ do
             setThreadIds conn [tid0,tid1,tid2,tid3]
             setMainThreadId conn mainThreadId
             handshakeServer conf oCID conn `E.onException` clearThreads conn
+            tid4 <- forkIO $ getServerController conn >>= handshakeServerAsync conn
+            addThreadIds conn [tid4]
             setRegister conn register unregister
             register myCID conn
             info <- getConnectionInfo conn
             debugLog $ show info
             return conn
     setup `E.onException` cls
-  where
-    -- fixme: translate all exceptions to QUICError
-    tlserr e = E.throwIO $ HandshakeFailed $ show $ errorToAlertDescription e
 
 -- | Stopping the main thread of the server.
 stopQUICServer :: Connection -> IO ()

@@ -19,6 +19,7 @@ module Network.QUIC.Connection (
   , nullPeerPacketNumbers
   , fromPeerPacketNumbers
   -- * Crypto
+  , getEncryptionLevel
   , setEncryptionLevel
   , checkEncryptionLevel
   , getPeerParameters
@@ -58,6 +59,7 @@ module Network.QUIC.Connection (
   , setVersion
   , getVersion
   , setThreadIds
+  , addThreadIds
   , clearThreads
   , getSockInfo
   , setSockInfo

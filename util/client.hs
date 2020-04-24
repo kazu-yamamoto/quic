@@ -279,8 +279,8 @@ runClient2 conf Options{..} cmd addr debug res = do
 
 clientHQ :: ByteString -> Connection -> (String -> IO ()) -> IO ()
 clientHQ cmd conn debug = do
-    send conn cmd
-    shutdown conn
+    sendStream conn 0 cmd True
+    shutdownStream conn 0
     loop
   where
     loop = do

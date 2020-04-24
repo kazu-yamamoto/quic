@@ -151,16 +151,17 @@ serverHQ :: Connection -> IO ()
 serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
   where
     loop = do
-        mbs <- timeout 5000000 $ recv conn
+        mbs <- timeout 5000000 $ recvStream conn
         case mbs of
           Nothing -> connDebugLog conn "Connection timeout"
-          Just "" -> do
-              send conn html
-              shutdown conn
-              connDebugLog conn "Connection finished"
-          Just bs -> do
-              connDebugLog conn $ C8.unpack bs
-              loop
+          Just (_sid, bs, fin) -> do
+              sendStream conn 0 html True
+              shutdownStream conn 0
+              when (bs /= "") $ connDebugLog conn $ C8.unpack bs
+              if fin then
+                  connDebugLog conn "Connection finished"
+                else
+                  loop
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do

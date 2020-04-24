@@ -73,10 +73,10 @@ library
                      , crypto-token
                      , data-default-class
                      , hourglass
-                     , iproute
+                     , iproute >= 1.7.8
                      , memory
                      , network
-                     , network-byte-order
+                     , network-byte-order >= 0.1.3.0
                      , psqueues
                      , stm
                      , tls

@@ -5,7 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Control.Concurrent
 import Network.TLS.QUIC hiding (RTT0)
 
 import Network.QUIC.Connection
@@ -21,8 +20,8 @@ receiver conn recv = handleLog logAction $ do
     loopEstablished
   where
     loopHandshake = do
-        CryptPacket hdr crypt <- recv
-        processCryptPacketHandshake conn hdr crypt
+        cpkt <- recv
+        processCryptPacketHandshake conn cpkt
         established <- isConnectionEstablished conn
         unless established loopHandshake
     loopEstablished = forever $ do
@@ -38,22 +37,11 @@ receiver conn recv = handleLog logAction $ do
             connDebugLog conn "CID is unknown"
     logAction msg = connDebugLog conn ("receiver: " ++ msg)
 
-processCryptPacketHandshake :: Connection -> Header -> Crypt -> IO ()
-processCryptPacketHandshake conn hdr crypt = do
+processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
+processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
     let level = packetEncryptionLevel hdr
-    -- If RTT1 comes between Initial and Handshake,
-    -- checkEncryptionLevel waits forever. To avoid this, timeout
-    -- used. If timeout happens, the packet cannot be decrypted and
-    -- thrown away.
-    mt <- timeout 100000 $ checkEncryptionLevel conn level
-    if isNothing mt then do
-        if isCryptDelayed crypt then do
-            qlogDropped conn hdr
-            connDebugLog conn "Timeout: ignoring a packet"
-          else do
-            (_, q) <- getSockInfo conn
-            writeRecvQ q $ CryptPacket hdr $ setCryptDelayed crypt
-      else do
+    decryptable <- checkEncryptionLevel conn level cpkt
+    when decryptable $ do
         peercid <- getPeerCID conn
         when (isClient conn
            && level == HandshakeLevel
@@ -97,37 +85,11 @@ processFrame conn lvl (Crypto off cdat) = do
           putInputCrypto conn lvl off cdat
       RTT0Level -> do
           connDebugLog conn $ "processFrame: invalid packet type " ++ show lvl
-      HandshakeLevel
-        | isClient conn -> do
-              putInputCrypto conn lvl off cdat
-        | otherwise -> do
-              control <- getServerController conn
-              res <- control $ PutClientFinished cdat
-              case res of
-                SendSessionTicket nst -> do
-                    -- aka sendCryptoData
-                    putOutput conn $ OutHndServerNST nst
-                    ServerHandshakeDone <- control ExitServer
-                    clearServerController conn
-                    --
-                    setConnectionEstablished conn
-                    fire 2000000 $ dropSecrets conn
-                    --
-                    cryptoToken <- generateToken =<< getVersion conn
-                    mgr <- getTokenManager conn
-                    token <- encryptToken mgr cryptoToken
-                    cidInfo <- getNewMyCID conn
-                    register <- getRegister conn
-                    register (cidInfoCID cidInfo) conn
-                    let ncid = NewConnectionID cidInfo 0
-                    let frames = [HandshakeDone,NewToken token,ncid]
-                    putOutput conn $ OutControl RTT1Level frames
-                _ -> return ()
+      HandshakeLevel ->
+          putInputCrypto conn lvl off cdat
       RTT1Level
-        | isClient conn -> do
-              control <- getClientController conn
-              -- RecvSessionTicket or ClientHandshakeDone
-              void $ control $ PutSessionTicket cdat
+        | isClient conn ->
+              putInputCrypto conn lvl off cdat
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token) = do
@@ -167,19 +129,8 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     clearThreads conn
 processFrame conn RTT0Level (Stream sid off dat fin) = do
     putInputStream conn sid off dat fin
-processFrame conn RTT1Level (Stream sid off dat fin)
-  | isClient conn = putInputStream conn sid off dat fin
-  | otherwise     = do
-        established <- isConnectionEstablished conn
-        if established then
-            putInputStream conn sid off dat fin
-          else void . forkIO $ do
-            -- Client Finish and Stream are somtime out-ordered.
-            -- This causes a race condition between transport and app.
-            mx <- timeout 100000 $ waitEstablished conn
-            case mx of
-              Nothing -> return ()
-              Just _  -> putInputStream conn sid off dat fin
+processFrame conn RTT1Level (Stream sid off dat fin) =
+    putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     -- An implementation sends:
     --   Handshake PN=2

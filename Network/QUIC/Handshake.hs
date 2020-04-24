@@ -4,120 +4,209 @@ module Network.QUIC.Handshake where
 
 import qualified Control.Exception as E
 import Data.ByteString
+import Data.IORef
+import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Exception
 import Network.QUIC.Imports
+import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
+import Network.QUIC.Timeout
 import Network.QUIC.Types
+
+----------------------------------------------------------------
+
+newtype HndState = HndState
+    { hsRecvCnt :: Int  -- number of 'recv' calls since last 'send'
+    }
+
+newHndStateRef :: IO (IORef HndState)
+newHndStateRef = newIORef HndState { hsRecvCnt = 0 }
+
+sendCompleted :: IORef HndState -> IO ()
+sendCompleted hsr = atomicModifyIORef' hsr $ \hs ->
+    (hs { hsRecvCnt = 0 }, ())
+
+recvCompleted :: IORef HndState -> IO Int
+recvCompleted hsr = atomicModifyIORef' hsr $ \hs ->
+    let cnt = hsRecvCnt hs in (hs { hsRecvCnt = cnt + 1 }, cnt)
 
 ----------------------------------------------------------------
 
 sendCryptoData :: Connection -> Output -> IO ()
 sendCryptoData = putOutput
 
-recvCryptoData :: Connection -> IO (EncryptionLevel, ByteString)
+recvCryptoData :: Connection -> IO (Either TLS.TLSError (EncryptionLevel, ByteString))
 recvCryptoData conn = do
     dat <- takeCrypto conn
     case dat of
-      InpHandshake lvl bs        -> return (lvl, bs)
+      InpHandshake lvl bs        -> return $ Right (lvl, bs)
+      -- When possible we return normal TLS errors to TLS callbacks.
+      InpTransportError err _ bs
+          | err == NoError       -> return $ Left TLS.Error_EOF
+          | otherwise            ->
+              let msg | bs == ""  = "received transport error during TLS handshake: " ++ show err
+                      | otherwise = "received transport error during TLS handshake: " ++ show err ++ ", reason=" ++ show bs
+               in return $ Left $ unexpectedMessage msg
+      -- When QUICError values have no TLS counterpart: we throw them as is.
+      -- TLS will transform into TLS.Error_Misc, this is quite unfortunate.
       InpVersion (Just ver)      -> E.throwIO $ NextVersion ver
       InpVersion Nothing         -> E.throwIO   VersionNegotiationFailed
       InpError e                 -> E.throwIO e
-      InpTransportError err _ bs -> E.throwIO $ TransportErrorOccurs err bs
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpStream{}                -> E.throwIO   MustNotReached
+
+recvTLS :: Connection -> IORef HndState -> CryptLevel -> IO (Either TLS.TLSError ByteString)
+recvTLS conn hsr level =
+    case level of
+            CryptInitial           -> go InitialLevel
+            CryptMasterSecret      -> failure "QUIC does not receive data < TLS 1.3"
+            CryptEarlySecret       -> failure "QUIC does not send early data with TLS library"
+            CryptHandshakeSecret   -> go HandshakeLevel
+            CryptApplicationSecret -> go RTT1Level
+  where
+    failure = return . Left . internalError
+
+    go expected = do
+        recvResult <- recvCryptoData conn
+        case recvResult of
+            Left err -> return $ Left err
+            Right (actual, bs)
+                | actual /= expected -> failure $
+                    "encryption level mismatch: expected " ++ show expected ++
+                    " but got " ++ show actual
+                | otherwise -> do
+                    n <- recvCompleted hsr
+                    case expected of
+                        InitialLevel | isServer conn ->
+                            -- To prevent CI0'
+                            when (n > 0) $
+                                sendCryptoData conn $ OutControl InitialLevel []
+                        HandshakeLevel | isClient conn ->
+                            -- Sending ACKs for three times rule
+                            when ((n `mod` 3) == 0) $
+                                sendCryptoData conn $ OutControl HandshakeLevel []
+                        _ -> return ()
+                    return (Right bs)
+
+sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
+sendTLS conn hsr x = do
+    mapM convertLevel x >>= sendCryptoData conn . OutHandshake
+    sendCompleted hsr
+  where
+    convertLevel (CryptInitial, bs) = return (InitialLevel, bs)
+    convertLevel (CryptMasterSecret, _) = errorTLS "QUIC does not send data < TLS 1.3"
+    convertLevel (CryptEarlySecret, _) = errorTLS "QUIC does not receive early data with TLS library"
+    convertLevel (CryptHandshakeSecret, bs) = return (HandshakeLevel, bs)
+    convertLevel (CryptApplicationSecret, bs) = return (RTT1Level, bs)
+
+internalError, unexpectedMessage :: String -> TLS.TLSError
+internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
+unexpectedMessage msg = TLS.Error_Protocol (msg, True, TLS.UnexpectedMessage)
 
 ----------------------------------------------------------------
 
 handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
+    hsr <- newHndStateRef
     let sendEarlyData = isJust $ ccEarlyData conf
-    control <- clientController conf ver (setResumptionSession conn) sendEarlyData
+        qc = QUICCallbacks { quicSend = sendTLS conn hsr
+                           , quicRecv = recvTLS conn hsr
+                           , quicInstallKeys = installKeysClient
+                           , quicNotifyExtensions = setPeerParams conn
+                           }
+    control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
     setClientController conn control
-    sendClientHelloAndRecvServerHello control conn $ ccEarlyData conf
-    recvServerFinishedSendClientFinished control conn
+    state <- control EnterClient
+    case state of
+        ClientHandshakeComplete -> return ()
+        ClientHandshakeFailed e -> notifyPeer conn e >>= E.throwIO
+        _ -> E.throwIO $ HandshakeFailed $ "handshakeClient: unexpected " ++ show state
 
-sendClientHelloAndRecvServerHello :: ClientController -> Connection -> Maybe (StreamId,ByteString) -> IO ()
-sendClientHelloAndRecvServerHello control conn mEarlyData = do
-    SendClientHello ch0 mEarlySecInf <- control GetClientHello
-    setEarlySecretInfo conn mEarlySecInf
-    sendCryptoData conn $ OutHndClientHello ch0 mEarlyData
-    (InitialLevel, sh0) <- recvCryptoData conn
-    state0 <- control $ PutServerHello sh0
-    case state0 of
-      RecvServerHello hndSecInf -> do
-          setHandshakeSecretInfo conn hndSecInf
-          setEncryptionLevel conn HandshakeLevel
-      SendClientHello ch1 mEarlySecInf1 -> do
-          setEarlySecretInfo conn mEarlySecInf1
-          sendCryptoData conn $ OutHndClientHello ch1 Nothing
-          (InitialLevel, sh1) <- recvCryptoData conn
-          state1 <- control $ PutServerHello sh1
-          case state1 of
-            RecvServerHello hndSecInf -> do
-                setHandshakeSecretInfo conn hndSecInf
-                setEncryptionLevel conn HandshakeLevel
-            _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
-      _ -> E.throwIO $ HandshakeFailed "sendClientHelloAndRecvServerHello"
-
-recvServerFinishedSendClientFinished :: ClientController -> Connection -> IO ()
-recvServerFinishedSendClientFinished control conn = loop (1 :: Int)
   where
-    loop n = do
-        (HandshakeLevel, eesf) <- recvCryptoData conn
-        state <- control $ PutServerFinished eesf
-        case state of
-          ClientNeedsMore -> do
-              -- Sending ACKs for three times rule
-              when ((n `mod` 3) == 2) $
-                  sendCryptoData conn $ OutControl HandshakeLevel []
-              loop (n + 1)
-          SendClientFinished cf exts appSecInf -> do
-              setApplicationSecretInfo conn appSecInf
-              setEncryptionLevel conn RTT1Level
-              setPeerParams conn exts
-              sendCryptoData conn $ OutHndClientFinished cf
-          _ -> E.throwIO $ HandshakeFailed "putServerFinished"
+    installKeysClient (InstallEarlyKeys mEarlySecInf) = do
+        setEarlySecretInfo conn mEarlySecInf
+        sendCryptoData conn $ OutEarlyData (ccEarlyData conf)
+    installKeysClient (InstallHandshakeKeys hndSecInf) = do
+        setHandshakeSecretInfo conn hndSecInf
+        setEncryptionLevel conn HandshakeLevel
+    installKeysClient (InstallApplicationKeys appSecInf) = do
+        setApplicationSecretInfo conn appSecInf
+        setEncryptionLevel conn RTT1Level
+
+-- second half the the TLS handshake, executed out of the main thread
+handshakeClientAsync :: Connection -> ClientController -> IO ()
+handshakeClientAsync conn control = handleLog logAction $ forever $ do
+    state <- control RecvSessionTickets
+    case state of
+        ClientRecvSessionTicket -> return ()
+        ClientHandshakeFailed e -> notifyPeerAsync conn e >>= E.throwIO
+        _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
+  where
+    logAction msg = connDebugLog conn ("client handshake: " ++ msg)
 
 ----------------------------------------------------------------
 
 handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
 handshakeServer conf origCID conn = do
     ver <- getVersion conn
-    control <- serverController conf ver origCID
+    hsr <- newHndStateRef
+    let qc = QUICCallbacks { quicSend = sendTLS conn hsr
+                           , quicRecv = recvTLS conn hsr
+                           , quicInstallKeys = installKeysServer
+                           , quicNotifyExtensions = setPeerParams conn
+                           }
+    control <- serverController qc conf ver origCID
     setServerController conn control
-    sh <- recvClientHello control conn
-    SendServerFinished sf appSecInf <- control GetServerFinished
-    setApplicationSecretInfo conn appSecInf
-    setEncryptionLevel conn RTT1Level
-    sendCryptoData conn $ OutHndServerHello sh sf
-    return ()
+    state <- control EnterServer
+    case state of
+        ServerFinishedSent -> return ()
+        ServerHandshakeFailed e -> notifyPeer conn e >>= E.throwIO
+        _ -> E.throwIO $ HandshakeFailed $ "handshakeServer: unexpected " ++ show state
 
-recvClientHello :: ServerController -> Connection -> IO ServerHello
-recvClientHello control conn = loop
   where
-    loop = do
-        (InitialLevel, ch) <- recvCryptoData conn
-        state <- control $ PutClientHello ch
-        case state of
-          SendRequestRetry hrr -> do
-              sendCryptoData conn $ OutHndServerHelloR hrr
-              loop
-          SendServerHello sh0 exts mEarlySecInf hndSecInf -> do
-              setEarlySecretInfo conn mEarlySecInf
-              setHandshakeSecretInfo conn hndSecInf
-              setEncryptionLevel conn HandshakeLevel
-              setPeerParams conn exts
-              return sh0
-          ServerNeedsMore -> do
-              -- To prevent CI0' above.
-              sendCryptoData conn $ OutControl InitialLevel []
-              loop
-          _ -> E.throwIO $ HandshakeFailed "recvClientHello"
+    installKeysServer (InstallEarlyKeys mEarlySecInf) =
+        setEarlySecretInfo conn mEarlySecInf
+    installKeysServer (InstallHandshakeKeys hndSecInf) = do
+        setHandshakeSecretInfo conn hndSecInf
+        setEncryptionLevel conn HandshakeLevel
+    installKeysServer (InstallApplicationKeys appSecInf) =
+        setApplicationSecretInfo conn appSecInf
+        -- will switch to RTT1Level after client Finished
+        -- is received and verified
+
+-- second half the the TLS handshake, executed out of the main thread
+handshakeServerAsync :: Connection -> ServerController -> IO ()
+handshakeServerAsync conn control = handleLog logAction $ do
+    state <- control CompleteServer
+    case state of
+      ServerHandshakeComplete -> do
+          setEncryptionLevel conn RTT1Level
+          -- aka sendCryptoData
+          ServerHandshakeDone <- control ExitServer
+          clearServerController conn
+          --
+          setConnectionEstablished conn
+          fire 2000000 $ dropSecrets conn
+          --
+          cryptoToken <- generateToken =<< getVersion conn
+          mgr <- getTokenManager conn
+          token <- encryptToken mgr cryptoToken
+          cidInfo <- getNewMyCID conn
+          register <- getRegister conn
+          register (cidInfoCID cidInfo) conn
+          let ncid = NewConnectionID cidInfo 0
+          let frames = [HandshakeDone,NewToken token,ncid]
+          putOutput conn $ OutControl RTT1Level frames
+      ServerHandshakeFailed e -> notifyPeerAsync conn e >>= E.throwIO
+      _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
+  where
+    logAction msg = connDebugLog conn ("server handshake: " ++ msg)
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]
@@ -127,3 +216,17 @@ setPeerParams conn [ExtensionRaw extid params]
           Nothing    -> connDebugLog conn "cannot decode parameters"
           Just plist -> setPeerParameters conn plist
 setPeerParams _ _ = return ()
+
+notifyPeer :: Connection -> TLS.TLSError -> IO QUICError
+notifyPeer conn err = do
+    let ad = errorToAlertDescription err
+        frames = [ConnectionCloseQUIC (CryptoError ad) 0 ""]
+    level <- getEncryptionLevel conn
+    putOutput conn $ OutControl level frames
+    return $ HandshakeFailed $ errorToAlertMessage err
+
+notifyPeerAsync :: Connection -> TLS.TLSError -> IO QUICError
+notifyPeerAsync conn err = do
+    exception <- notifyPeer conn err
+    putInput conn $ InpError exception  -- also report in next recvStream
+    return exception

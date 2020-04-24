@@ -104,38 +104,14 @@ sender conn send = handleLog logAction $ forever
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
 sendOutput :: Connection -> SendMany -> Output ->IO ()
-sendOutput conn send (OutHndClientHello ch mEarlyData) = do
-    sendCryptoFragment conn send ch InitialLevel
+sendOutput conn send (OutEarlyData mEarlyData) =
     case mEarlyData of
       Nothing -> return ()
       Just (sid,earlyData) -> do
           off <- getStreamOffset conn sid $ B.length earlyData
           bss1 <- construct conn RTT0Level [Stream sid off earlyData True] [] $ Just maximumQUICPacketSize
           send bss1
-sendOutput conn send (OutHndServerHello sh sf) = do
-    frame0 <- cryptoFrame conn sh InitialLevel
-    bss0 <- construct conn InitialLevel [frame0] [] Nothing
-    -- 824 = 1024 - 200 (size of sh)
-    -- but 900 is good enough...
-    let (sf1,sf2) = B.splitAt 824 sf
-    let size = maximumQUICPacketSize - sum (map B.length bss0)
-    frame1 <- cryptoFrame conn sf1 HandshakeLevel
-    bss1 <- construct conn HandshakeLevel [frame1] [] $ Just size
-    send (bss0 ++ bss1)
-    sendCryptoFragment conn send sf2 HandshakeLevel
-sendOutput conn send (OutHndServerHelloR sh) = do
-    frame <- cryptoFrame conn sh InitialLevel
-    bss <- construct conn InitialLevel [frame] [] $ Just maximumQUICPacketSize
-    send bss
-sendOutput conn send (OutHndClientFinished cf) = do
-    -- fixme size
-    frame <- cryptoFrame conn cf HandshakeLevel
-    bss <- construct conn HandshakeLevel [frame] [] $ Just maximumQUICPacketSize
-    send bss
-sendOutput conn send (OutHndServerNST nst) = do
-    frame <- cryptoFrame conn nst RTT1Level
-    bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
-    send bss
+sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
@@ -152,16 +128,31 @@ sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
     bss <- construct conn lvl frames pns $ Just maximumQUICPacketSize
     send bss
 
-sendCryptoFragment :: Connection -> SendMany -> ByteString -> EncryptionLevel -> IO ()
-sendCryptoFragment conn send bs0 lvl = loop bs0
+sendCryptoFragments :: Connection -> SendMany -> [(EncryptionLevel, CryptoData)] ->IO ()
+sendCryptoFragments conn send = loop 1024 maximumQUICPacketSize id
   where
-    loop "" = return ()
-    loop bs = do
-        let (target,rest) = B.splitAt 1024 bs
-        frame <- cryptoFrame conn target lvl
-        bss <- construct conn lvl [frame] [] $ Just maximumQUICPacketSize
-        send bss
-        loop rest
+    loop _ _ pre0 [] =
+        let bss0 = pre0 []
+         in unless (null bss0) (send bss0)
+    loop len0 sz0 pre0 ((lvl, bs) : xs)
+        | B.length bs > len0 = do
+            let (target, rest) = B.splitAt len0 bs
+            frame1 <- cryptoFrame conn target lvl
+            bss1 <- construct conn lvl [frame1] [] (Just sz0)
+            send (pre0 bss1)
+            loop 1024 maximumQUICPacketSize id ((lvl, rest) : xs)
+        | otherwise = do
+            frame1 <- cryptoFrame conn bs lvl
+            let mTargetSize = if null xs then Just sz0 else Nothing
+            bss1 <- construct conn lvl [frame1] [] mTargetSize
+            let len1 = len0 - B.length bs
+                sz1  = sz0  - sum (map B.length bss1)
+            if sz1 >= 48
+                then loop len1 sz1 (pre0 . (bss1 ++)) xs
+                else do
+                    bss1' <- construct conn lvl [frame1] [] (Just sz0)
+                    send (pre0 bss1')
+                    loop 1024 maximumQUICPacketSize id xs
 
 sendStreamFragment :: Connection -> SendMany -> StreamId -> ByteString -> Bool -> IO ()
 sendStreamFragment conn send sid dat0 fin0 = do
