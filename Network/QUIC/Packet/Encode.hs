@@ -75,11 +75,11 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 
 encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO [ByteString]
 encodePlainPacket conn ppkt mlen = do
-    (hdr,bdys) <- encodePlainPacket' conn ppkt mlen
-    return (hdr:bdys)
+    wbuf <- newWriteBuffer (headerBuffer conn) (headerBufferSize conn)
+    encodePlainPacket' conn wbuf ppkt mlen
 
-encodePlainPacket' :: Connection -> PlainPacket -> Maybe Int -> IO (ByteString, [ByteString])
-encodePlainPacket' conn (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
+encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO [ByteString]
+encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf InitialPacketType ver dCID sCID flags pn
@@ -89,21 +89,21 @@ encodePlainPacket' conn (PlainPacket (Initial ver dCID sCID token) (Plain flags 
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen InitialLevel
 
-encodePlainPacket' conn (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
+encodePlainPacket' conn wbuf (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf RTT0PacketType ver dCID sCID flags pn
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT0Level
 
-encodePlainPacket' conn (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
+encodePlainPacket' conn wbuf (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf HandshakePacketType ver dCID sCID flags pn
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen HandshakeLevel
 
-encodePlainPacket' conn (PlainPacket (Short dCID) (Plain flags pn frames)) mlen = withWriteBuffer' maximumQUICHeaderSize $ \wbuf -> do
+encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames)) mlen = do
     -- flag
     let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen
@@ -150,18 +150,17 @@ protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> 
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     secret <- getTxSecret conn lvl
     cipher <- getCipher conn lvl
-    plaintext0 <- encodeFrames frames
+    (plaintext0,siz) <- encodeFramesWithPadding (payloadBuffer conn) (payloadBufferSize conn) frames
+    here <- currentOffset wbuf
     let taglen = tagLength cipher
-    plaintext <- case mlen of
-      Nothing -> return plaintext0
-      Just expectedSize -> do
-          here <- currentOffset wbuf
-          let headerSize = (here `minusPtr` headerBeg)
-                         + (if lvl /= RTT1Level then 2 else 0)
-                         + epnLen
-              restSize = expectedSize - headerSize - B.length plaintext0 - taglen
-          padding <- encodeFrames [Padding restSize]
-          return $ plaintext0 `B.append` padding
+        plaintext = case mlen of
+                      Nothing -> B.take siz plaintext0
+                      Just expectedSize ->
+                          let headerSize = (here `minusPtr` headerBeg)
+                                         + (if lvl /= RTT1Level then 2 else 0)
+                                         + epnLen
+                              plainSize = expectedSize - headerSize - taglen
+                          in B.take plainSize plaintext0
     when (lvl /= RTT1Level) $ do
         let len = epnLen + B.length plaintext + taglen
         -- length: assuming 2byte length
@@ -182,7 +181,8 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     let ciphertext = encrypt cipher secret plaintext header pn
     -- protecting header
     protectHeader headerBeg pnBeg epnLen cipher secret ciphertext
-    return ciphertext
+    hdr <- toByteString wbuf
+    return (hdr:ciphertext)
 
 ----------------------------------------------------------------
 

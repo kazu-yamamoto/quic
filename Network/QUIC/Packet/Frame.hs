@@ -1,8 +1,10 @@
 module Network.QUIC.Packet.Frame (
     encodeFrames
+  , encodeFramesWithPadding
   , decodeFrames
   ) where
 
+import Network.Socket.Internal (zeroMemory)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
 
@@ -14,6 +16,17 @@ import Network.QUIC.Types
 encodeFrames :: [Frame] -> IO ByteString
 encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
   mapM_ (encodeFrame wbuf) frames
+
+encodeFramesWithPadding :: Buffer -> BufferSize -> [Frame] -> IO (ByteString, Int)
+encodeFramesWithPadding buf siz frames = do
+    zeroMemory buf $ fromIntegral siz -- padding
+    wbuf <- newWriteBuffer buf siz
+    save wbuf
+    mapM_ (encodeFrame wbuf) frames
+    size <- savingSize wbuf
+    goBack wbuf
+    bs <- extractByteString wbuf siz
+    return (bs, size)
 
 encodeFrame :: WriteBuffer -> Frame -> IO ()
 encodeFrame wbuf (Padding n) = replicateM_ n $ write8 wbuf 0x00

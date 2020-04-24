@@ -121,6 +121,11 @@ module Network.QUIC.Connection (
   , qlogDropped
   , qlogRecvInitial
   , qlogSentRetry
+  -- Types
+  , headerBuffer
+  , headerBufferSize
+  , payloadBuffer
+  , payloadBufferSize
   ) where
 
 import Network.QUIC.Connection.Crypto

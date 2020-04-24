@@ -9,6 +9,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
+import Foreign.Marshal.Alloc (free)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import Network.TLS hiding (Version, HandshakeFailed)
@@ -198,6 +199,8 @@ close conn = do
     clearThreads conn
     -- close the socket after threads reading/writing the socket die.
     connClose conn
+    free $ headerBuffer conn
+    free $ payloadBuffer conn
 
 ----------------------------------------------------------------
 
