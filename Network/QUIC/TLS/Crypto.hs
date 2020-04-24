@@ -4,7 +4,6 @@
 module Network.QUIC.TLS.Crypto (
   -- * Payload encryption
     defaultCipher
-  , defaultCipherOverhead
   , initialSecrets
   , clientInitialSecret
   , serverInitialSecret
@@ -16,6 +15,7 @@ module Network.QUIC.TLS.Crypto (
   , decryptPayload
   -- * Header Protection
   , protectionMask
+  , tagLength
   , sampleLength
   , bsXOR
 --  , unprotectHeader
@@ -177,23 +177,20 @@ cipherDecrypt cipher
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chacha20poly1305Decrypt
   | otherwise                                      = error "cipherDecrypt"
 
-defaultCipherOverhead :: Int
-defaultCipherOverhead = 16
-
 aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 aes128gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
     [ciphertext,tag]
   where
     aes = throwCryptoError (cipherInit key) :: AES128
     aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-    (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext defaultCipherOverhead
+    (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
     tag = convert tag0
 
 aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
     aes  <- maybeCryptoError $ cipherInit key :: Maybe AES128
     aead <- maybeCryptoError $ aeadInit AEAD_GCM aes nonce
-    let (ciphertext, tag) = B.splitAt (B.length ciphertag - defaultCipherOverhead) ciphertag
+    let (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
         authtag = AuthTag $ convert tag
     aeadSimpleDecrypt aead ad ciphertext authtag
 
@@ -280,12 +277,20 @@ chachaEncrypt (Key key) (Sample sample0) = Mask mask
     st = ChaCha.initialize 20 key nonce
     (mask,_) = ChaCha.combine st "\x0\x0\x0\x0\x0"
 
+tagLength :: Cipher -> Int
+tagLength cipher
+  | cipher == cipher_TLS13_AES128GCM_SHA256        = 16
+  | cipher == cipher_TLS13_AES128CCM_SHA256        = 16
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = 16
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = 16 -- fixme
+  | otherwise                                      = error "tagLength"
+
 sampleLength :: Cipher -> Int
 sampleLength cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = 16
   | cipher == cipher_TLS13_AES128CCM_SHA256        = 16
   | cipher == cipher_TLS13_AES256GCM_SHA384        = 16
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = 16
+  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = 16 -- fixme
   | otherwise                                      = error "sampleLength"
 
 bsXOR :: ByteString -> ByteString -> ByteString

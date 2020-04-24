@@ -151,6 +151,7 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     secret <- getTxSecret conn lvl
     cipher <- getCipher conn lvl
     plaintext0 <- encodeFrames frames
+    let taglen = tagLength cipher
     plaintext <- case mlen of
       Nothing -> return plaintext0
       Just expectedSize -> do
@@ -158,12 +159,11 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
           let headerSize = (here `minusPtr` headerBeg)
                          + (if lvl /= RTT1Level then 2 else 0)
                          + epnLen
-              -- fixme: 16 = cipher overhead
-              restSize = expectedSize - headerSize - B.length plaintext0 - 16
+              restSize = expectedSize - headerSize - B.length plaintext0 - taglen
           padding <- encodeFrames [Padding restSize]
           return $ plaintext0 `B.append` padding
     when (lvl /= RTT1Level) $ do
-        let len = epnLen + B.length plaintext + 16 -- fixme: crypto overhead
+        let len = epnLen + B.length plaintext + taglen
         -- length: assuming 2byte length
         encodeInt'2 wbuf $ fromIntegral len
     pnBeg <- currentOffset wbuf
