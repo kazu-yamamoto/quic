@@ -109,7 +109,8 @@ handshakeClient conf conn = do
     state <- control GetClientHello
     case state of
         SendClientFinished -> return ()
-        _ -> E.throwIO $ HandshakeFailed "handshakeClient"
+        ClientHandshakeFailed e -> E.throwIO $ HandshakeFailed $ "handshakeClient: " ++ show e
+        _ -> E.throwIO $ HandshakeFailed $ "handshakeClient: unexpected " ++ show state
 
   where
     installKeysClient (InstallEarlyKeys mEarlySecInf) = do
@@ -124,9 +125,13 @@ handshakeClient conf conn = do
 
 -- second half the the TLS handshake, executed out of the main thread
 handshakeClientAsync :: Connection -> ClientController -> IO ()
-handshakeClientAsync conn control = handleLog logAction $
+handshakeClientAsync conn control = handleLog logAction $ do
     -- RecvSessionTicket or ClientHandshakeDone
-    void $ control PutSessionTicket
+    state <- control PutSessionTicket
+    case state of
+        RecvSessionTicket -> return ()
+        ClientHandshakeFailed e -> E.throwIO $ HandshakeFailed $ show e
+        _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
   where
     -- fixme: Is there a way to properly report a TLS failure occurring here to
     -- the application code?  This part contains only reception of a ticket,
@@ -150,7 +155,8 @@ handshakeServer conf origCID conn = do
     state <- control PutClientHello
     case state of
         SendServerFinished -> return ()
-        _ -> E.throwIO $ HandshakeFailed "handshakeServer"
+        ServerHandshakeFailed e -> E.throwIO $ HandshakeFailed $ "handshakeServer: " ++ show e
+        _ -> E.throwIO $ HandshakeFailed $ "handshakeServer: unexpected " ++ show state
 
   where
     installKeysServer (InstallEarlyKeys mEarlySecInf) =
@@ -166,8 +172,8 @@ handshakeServer conf origCID conn = do
 -- second half the the TLS handshake, executed out of the main thread
 handshakeServerAsync :: Connection -> ServerController -> IO ()
 handshakeServerAsync conn control = handleLog logAction $ do
-    res <- control PutClientFinished
-    case res of
+    state <- control PutClientFinished
+    case state of
       SendSessionTicket -> do
           setEncryptionLevel conn RTT1Level
           -- aka sendCryptoData
@@ -186,7 +192,8 @@ handshakeServerAsync conn control = handleLog logAction $ do
           let ncid = NewConnectionID cidInfo 0
           let frames = [HandshakeDone,NewToken token,ncid]
           putOutput conn $ OutControl RTT1Level frames
-      _ -> return ()
+      ServerHandshakeFailed e -> E.throwIO $ HandshakeFailed $ show e
+      _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
   where
     -- fixme: Is there a way to properly report a TLS failure occurring here to
     -- the application code?  This part of the handshake includes verification
