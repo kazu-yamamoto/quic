@@ -63,6 +63,8 @@ module Network.QUIC.Connection (
   , clearThreads
   , getSockInfo
   , setSockInfo
+  , getNextVersion
+  , setNextVersion
   -- * Transmit
   , keepPlainPacket
   , releasePlainPacket

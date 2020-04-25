@@ -185,6 +185,8 @@ data Connection = Connection {
   , headerBufferSize  :: BufferSize
   , payloadBuffer     :: Buffer
   , payloadBufferSize :: BufferSize
+  -- Misc
+  , nextVersion       :: IORef (Maybe Version)
   }
 
 newConnection :: Role -> Version -> CID -> CID
@@ -231,6 +233,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> return 256
         <*> mallocBytes 1280
         <*> return 1280
+        <*> newIORef Nothing
   where
     initialRoleInfo
       | rl == Client = defaultClientRoleInfo

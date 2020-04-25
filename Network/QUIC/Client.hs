@@ -35,6 +35,9 @@ readerClient myVers s q conn = handleLog logAction $ forever $ do
                   ver:_ -> do
                       ok <- checkCIDs conn dCID (Left sCID)
                       return $ if ok then Just ver else Nothing
+        case mver of
+          Nothing  -> return ()
+          Just ver -> setNextVersion conn ver
         putCrypto conn $ InpVersion mver
     putQ (PacketIC pkt) = writeRecvQ q pkt
     putQ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
