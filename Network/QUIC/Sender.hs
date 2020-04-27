@@ -109,7 +109,7 @@ sendOutput conn send (OutEarlyData mEarlyData) =
       Nothing -> return ()
       Just (sid,earlyData) -> do
           off <- getStreamOffset conn sid $ B.length earlyData
-          bss1 <- construct conn RTT0Level [Stream sid off [earlyData] True] [] $ Just maximumQUICPacketSize
+          bss1 <- construct conn RTT0Level [StreamF sid off [earlyData] True] [] $ Just maximumQUICPacketSize
           send bss1
 sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
@@ -119,7 +119,7 @@ sendOutput conn send (OutStream sid dats fin) = do
     sendStreamFragment conn send sid dats fin
 sendOutput conn send (OutShutdown sid) = do
     off <- getStreamOffset conn sid 0
-    let frame = Stream sid off [] True
+    let frame = StreamF sid off [] True
     bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
     send bss
 sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
@@ -170,7 +170,7 @@ sendStreamFragment conn send sid dats0 fin0 = do
             len = sum $ map B.length dats1
         off <- getStreamOffset conn sid len
         let fin = fin0 && null dats2
-            frame = Stream sid off dats1 fin
+            frame = StreamF sid off dats1 fin
         bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
         send bss
         loop dats2

@@ -127,9 +127,9 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
-processFrame conn RTT0Level (Stream sid off (dat:_) fin) = do
+processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     putInputStream conn sid off dat fin
-processFrame conn RTT1Level (Stream sid off (dat:_) fin) =
+processFrame conn RTT1Level (StreamF sid off (dat:_) fin) =
     putInputStream conn sid off dat fin
 processFrame conn lvl Ping = do
     -- An implementation sends:

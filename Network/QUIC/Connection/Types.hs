@@ -9,8 +9,8 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Foreign.Marshal.Alloc (mallocBytes)
@@ -40,6 +40,20 @@ data CloseState = CloseState {
 
 ----------------------------------------------------------------
 
+type WindowSize = Int
+
+data Stream = Stream {
+    streamId     :: StreamId
+  , streamWindow :: TVar WindowSize
+  , streamState  :: StreamState
+  }
+
+-- fixme: 65536
+newStream :: StreamId -> IO Stream
+newStream sid = Stream sid <$> newTVarIO 65536 <*> newStreamState
+
+----------------------------------------------------------------
+
 data StreamInfo = StreamInfo {
     siOff :: Offset
   , siFin :: Fin
@@ -61,7 +75,7 @@ newStreamState = StreamState <$> newIORef emptyStreamInfo
                              <*> newIORef emptyStreamInfo
                              <*> newIORef []
 
-newtype StreamTable = StreamTable (Map StreamId StreamState)
+newtype StreamTable = StreamTable (IntMap Stream)
 
 emptyStreamTable :: StreamTable
 emptyStreamTable = StreamTable Map.empty

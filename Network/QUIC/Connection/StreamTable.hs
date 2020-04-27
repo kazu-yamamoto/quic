@@ -11,7 +11,7 @@ module Network.QUIC.Connection.StreamTable (
 
 import qualified Data.ByteString as BS
 import Data.IORef
-import qualified Data.Map.Strict as Map
+import qualified Data.IntMap.Strict as Map
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
@@ -20,20 +20,20 @@ import Network.QUIC.Types
 
 getStreamFin :: Connection -> StreamId -> IO Fin
 getStreamFin conn sid = do
-    StreamState{..} <- checkStreamTable conn sid
+    Stream _ _ StreamState{..} <- checkStreamTable conn sid
     -- sstx is modified by only sender
     StreamInfo _ fin <- readIORef sstx
     return fin
 
 setStreamFin :: Connection -> StreamId -> IO ()
 setStreamFin conn sid = do
-    StreamState{..} <- checkStreamTable conn sid
+    Stream _ _ StreamState{..} <- checkStreamTable conn sid
     StreamInfo off _ <- readIORef sstx
     writeIORef sstx $ StreamInfo off True
 
 getStreamOffset :: Connection -> StreamId -> Int -> IO Offset
 getStreamOffset conn sid len = do
-    StreamState{..} <- checkStreamTable conn sid
+    Stream _ _ StreamState{..} <- checkStreamTable conn sid
     -- sstx is modified by only sender
     StreamInfo off fin <- readIORef sstx
     writeIORef sstx $ StreamInfo (off + len) fin
@@ -52,7 +52,7 @@ putInputStream conn sid off dat fin = do
 
 isFragmentTop :: Connection -> StreamId -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
 isFragmentTop conn sid off dat fin = do
-    StreamState{..} <- checkStreamTable conn sid
+    Stream _ _ StreamState{..} <- checkStreamTable conn sid
     -- ssrx is modified by only sender
     si0@(StreamInfo off0 fin0) <- readIORef ssrx
     if fin && fin0 then do
@@ -96,18 +96,18 @@ split off0 xs0 = loop off0 xs0 id
       | off' == off = loop (off + len) xs (build . (dat :))
       | otherwise   = (build [], xxs, off')
 
-checkStreamTable :: Connection -> StreamId -> IO StreamState
+checkStreamTable :: Connection -> StreamId -> IO Stream
 checkStreamTable Connection{..} sid = do
     -- reader and sender do not insert the same StreamState
     -- at the same time.
     StreamTable tbl0 <- readIORef streamTable
     case Map.lookup sid tbl0 of
       Nothing -> do
-          ss <- newStreamState
+          s <- newStream sid
           atomicModifyIORef streamTable $ \(StreamTable tbl) ->
-            (StreamTable $ Map.insert sid ss tbl, ())
-          return ss
-      Just ss -> return ss
+            (StreamTable $ Map.insert sid s tbl, ())
+          return s
+      Just s -> return s
 
 ----------------------------------------------------------------
 
