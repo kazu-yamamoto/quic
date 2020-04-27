@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.StreamTable (
@@ -25,6 +26,7 @@ getStreamOffset Stream{..} len = do
     writeIORef streamStateTx $ StreamState (off + len) fin
     return off
 
+-- See takeStreamData
 putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin -> IO ()
 putInputStream conn sid off dat fin = do
     ms <- findStream conn sid
@@ -39,9 +41,11 @@ putInputStream conn sid off dat fin = do
           loop s fin1 dats
   where
     loop _ _    []     = return ()
-    loop s fin1 [d]    = putStreamData s (d,fin1)
+    loop s fin1 [d]    = do
+        putStreamData s d
+        when fin1 $ putStreamData s ""
     loop s fin1 (d:ds) = do
-        putStreamData s (d,False)
+        putStreamData s d
         loop s fin1 ds
 
 isFragmentTop :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
@@ -53,7 +57,7 @@ isFragmentTop Stream{..} off dat fin = do
         return ([], False)
       else do
         let fin1 = fin0 || fin
-            si1 = si0 { siFin = fin1 }
+            si1 = si0 { streamFin = fin1 }
             len = BS.length dat
         if off < off0 then -- ignoring
           return ([], False)
@@ -61,7 +65,7 @@ isFragmentTop Stream{..} off dat fin = do
             let off1 = off0 + len
             xs0 <- readIORef streamReass
             let (dats,xs,off2) = split off1 xs0
-            writeIORef streamStateRx si1 { siOff = off2 }
+            writeIORef streamStateRx si1 { streamOffset = off2 }
             writeIORef streamReass xs
             return (dat:dats, fin1)
           else do

@@ -115,8 +115,8 @@ sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
-sendOutput conn send (OutStream s dats fin) = do
-    sendStreamFragment conn send s dats fin
+sendOutput conn send (OutStream s dats) = do
+    sendStreamFragment conn send s dats False
 sendOutput conn send (OutShutdown s) = do
     off <- getStreamOffset s 0
     let frame = StreamF (streamId s) off [] True

@@ -25,43 +25,30 @@ isStreamOpen s = do
     fin <- getStreamFin s
     return (not fin)
 
--- | Sending data in the stream. FIN is sent if 3rd argument is 'True'.
-sendStream :: Stream -> ByteString -> Fin -> IO ()
-sendStream s dat fin = do
-    let conn = streamConnection s
-    open <- isConnectionOpen conn
-    fin0 <- getStreamFin s
-    if not open then
-        E.throwIO ConnectionIsClosed
-      else if fin0 then
-        E.throwIO StreamIsClosed
-      else
-        putOutput conn $ OutStream s [dat] fin
+-- | Sending data in the stream.
+sendStream :: Stream -> ByteString -> IO ()
+sendStream s dat = sendStreamMany s [dat]
 
--- | Sending a list of data in the stream. FIN is sent if 3rd argument is 'True'.
-sendStreamMany :: Connection -> Stream -> [ByteString] -> Fin -> IO ()
-sendStreamMany conn s dats fin = do
-    open <- isConnectionOpen conn
-    fin0 <- getStreamFin s
-    if not open then
-        E.throwIO ConnectionIsClosed
-      else if fin0 then
-        E.throwIO StreamIsClosed
-      else
-        putOutput conn $ OutStream s dats fin
+-- | Sending a list of data in the stream.
+sendStreamMany :: Stream -> [ByteString] -> IO ()
+sendStreamMany s dats = do
+    let conn = streamConnection s
+    copen <- isConnectionOpen conn
+    unless copen $ E.throwIO ConnectionIsClosed
+    open <- isStreamOpen s
+    unless open $ E.throwIO StreamIsClosed
+    putOutput conn $ OutStream s dats
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
 shutdownStream s = do
     let conn = streamConnection s
-    open <- isConnectionOpen conn
-    if open then do
-        putOutput conn $ OutShutdown s
-      else
-        E.throwIO ConnectionIsClosed
+    copen <- isConnectionOpen conn
+    unless copen $ E.throwIO ConnectionIsClosed
+    putOutput conn $ OutShutdown s
 
 -- | Receiving data in the stream. In the case where a FIN is received
---   an empty bytestring is returned. This throws 'QUICError'.
+--   an empty bytestring is returned.
 acceptStream :: Connection -> IO (Either QUICError Stream)
 acceptStream conn = do
     mi <- takeInput conn
@@ -74,8 +61,8 @@ acceptStream conn = do
       _                       -> E.throwIO MustNotReached
 
 -- | Receiving data in the stream. In the case where a FIN is received
---   an empty bytestring is returned. This throws 'QUICError'.
-recvStream :: Stream -> IO (ByteString, Fin)
+--   an empty bytestring is returned.
+recvStream :: Stream -> Int -> IO ByteString
 recvStream = takeStreamData
 
 isClientInitiatedBidirectional :: StreamId -> Bool
