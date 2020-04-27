@@ -43,37 +43,30 @@ data CloseState = CloseState {
 type WindowSize = Int
 
 data Stream = Stream {
-    streamId     :: StreamId
-  , streamWindow :: TVar WindowSize
-  , streamState  :: StreamState
+    streamId      :: StreamId
+  , streamWindow  :: TVar WindowSize
+  , streamStateTx :: IORef StreamState
+  , streamStateRx :: IORef StreamState
+  , streamReass   :: IORef [Reassemble]
   }
 
--- fixme: 65536
 newStream :: StreamId -> IO Stream
-newStream sid = Stream sid <$> newTVarIO 65536 <*> newStreamState
+newStream sid = Stream sid <$> newTVarIO 65536 -- fixme
+                           <*> newIORef emptyStreamState
+                           <*> newIORef emptyStreamState
+                           <*> newIORef []
 
 ----------------------------------------------------------------
 
-data StreamInfo = StreamInfo {
+data StreamState = StreamState {
     siOff :: Offset
   , siFin :: Fin
   } deriving (Eq, Show)
 
-emptyStreamInfo :: StreamInfo
-emptyStreamInfo = StreamInfo 0 False
+emptyStreamState :: StreamState
+emptyStreamState = StreamState 0 False
 
 data Reassemble = Reassemble StreamData Offset Int deriving (Eq, Show)
-
-data StreamState = StreamState {
-    sstx :: IORef StreamInfo
-  , ssrx :: IORef StreamInfo
-  , ssreass :: IORef [Reassemble]
-  }
-
-newStreamState :: IO StreamState
-newStreamState = StreamState <$> newIORef emptyStreamInfo
-                             <*> newIORef emptyStreamInfo
-                             <*> newIORef []
 
 newtype StreamTable = StreamTable (IntMap Stream)
 

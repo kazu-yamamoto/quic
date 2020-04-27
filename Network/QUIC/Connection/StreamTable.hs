@@ -20,23 +20,23 @@ import Network.QUIC.Types
 
 getStreamFin :: Connection -> StreamId -> IO Fin
 getStreamFin conn sid = do
-    Stream _ _ StreamState{..} <- checkStreamTable conn sid
+    Stream{..} <- checkStreamTable conn sid
     -- sstx is modified by only sender
-    StreamInfo _ fin <- readIORef sstx
+    StreamState _ fin <- readIORef streamStateTx
     return fin
 
 setStreamFin :: Connection -> StreamId -> IO ()
 setStreamFin conn sid = do
-    Stream _ _ StreamState{..} <- checkStreamTable conn sid
-    StreamInfo off _ <- readIORef sstx
-    writeIORef sstx $ StreamInfo off True
+    Stream{..} <- checkStreamTable conn sid
+    StreamState off _ <- readIORef streamStateTx
+    writeIORef streamStateTx $ StreamState off True
 
 getStreamOffset :: Connection -> StreamId -> Int -> IO Offset
 getStreamOffset conn sid len = do
-    Stream _ _ StreamState{..} <- checkStreamTable conn sid
+    Stream{..} <- checkStreamTable conn sid
     -- sstx is modified by only sender
-    StreamInfo off fin <- readIORef sstx
-    writeIORef sstx $ StreamInfo (off + len) fin
+    StreamState off fin <- readIORef streamStateTx
+    writeIORef streamStateTx $ StreamState (off + len) fin
     return off
 
 putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin -> IO ()
@@ -52,9 +52,9 @@ putInputStream conn sid off dat fin = do
 
 isFragmentTop :: Connection -> StreamId -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
 isFragmentTop conn sid off dat fin = do
-    Stream _ _ StreamState{..} <- checkStreamTable conn sid
+    Stream{..} <- checkStreamTable conn sid
     -- ssrx is modified by only sender
-    si0@(StreamInfo off0 fin0) <- readIORef ssrx
+    si0@(StreamState off0 fin0) <- readIORef streamStateRx
     if fin && fin0 then do
         putStrLn "Illegal Fin" -- fixme
         return ([], False)
@@ -66,15 +66,15 @@ isFragmentTop conn sid off dat fin = do
           return ([], False)
         else if off == off0 then do
             let off1 = off0 + len
-            xs0 <- readIORef ssreass
+            xs0 <- readIORef streamReass
             let (dats,xs,off2) = split off1 xs0
-            writeIORef ssrx si1 { siOff = off2 }
-            writeIORef ssreass xs
+            writeIORef streamStateRx si1 { siOff = off2 }
+            writeIORef streamReass xs
             return (dat:dats, fin1)
           else do
-            writeIORef ssrx si1
+            writeIORef streamStateRx si1
             let x = Reassemble dat off len
-            modifyIORef' ssreass (push x)
+            modifyIORef' streamReass (push x)
             return ([], False)
 
 push :: Reassemble -> [Reassemble] -> [Reassemble]
