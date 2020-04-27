@@ -156,13 +156,13 @@ serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
           Nothing -> connDebugLog conn "Connection timeout"
           Just (Left e)  -> print e
           Just (Right s) -> do
-              (bs,fin) <- recvStream s
-              sendStream s html True
+              bs <- recvStream s 1024
+              sendStream s html
               shutdownStream s
-              when (bs /= "") $ connDebugLog conn $ C8.unpack bs
-              if fin then
+              if bs == "" then
                   connDebugLog conn "Connection finished"
-                else
+                else do
+                  connDebugLog conn $ C8.unpack bs
                   loop
 
 serverH3 :: Connection -> IO ()
@@ -171,11 +171,11 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     s7 <- unidirectionalStream conn
     s11 <- unidirectionalStream conn
     -- 0: control, 4 settings
-    sendStream s3 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
+    sendStream s3 (BS.pack [0,4,8,1,80,0,6,128,0,128,0])
     -- 2: from encoder to decoder
-    sendStream s7 (BS.pack [2]) False
+    sendStream s7 (BS.pack [2])
     -- 3: from decoder to encoder
-    sendStream s11 (BS.pack [3]) False
+    sendStream s11 (BS.pack [3])
     hdrblock <- taglen 1 <$> qpackServer
     let bdyblock = taglen 0 html
         hdrbdy = BS.concat [hdrblock,bdyblock]
@@ -187,9 +187,10 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
           Nothing -> connDebugLog conn "Connection timeout"
           Just (Left e) -> print e
           Just (Right s) -> do -- forkIO
-              (bs, fin) <- recvStream s
+              bs <- recvStream s 1024
               let sid = streamId s
-              connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if fin then " Fin" else "")
-              when (isClientInitiatedBidirectional sid) $
-                  sendStream s hdrbdy True
+              connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
+              when (isClientInitiatedBidirectional sid) $ do
+                  sendStream s hdrbdy
+                  shutdownStream s
               loop hdrbdy

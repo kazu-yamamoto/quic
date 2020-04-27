@@ -262,7 +262,7 @@ runClient2 conf Options{..} cmd addr debug res = do
             es0 <- acceptStream conn
             case es0 of
               Right s0 -> do
-                  (bs, _fin) <- recvStream s0
+                  bs <- recvStream s0 1024
                   debug $ "SID: " ++ show (streamId s0)
                   debug $ show $ BS.unpack bs
                   debug "------------------------ Response for early data"
@@ -284,16 +284,16 @@ runClient2 conf Options{..} cmd addr debug res = do
 clientHQ :: ByteString -> Connection -> (String -> IO ()) -> IO ()
 clientHQ cmd conn debug = do
     s <- stream conn
-    sendStream s cmd True
+    sendStream s cmd
     shutdownStream s
     loop s
   where
     loop s = do
-        (bs, fin) <- recvStream s
-        when (bs /= "") $ debug $ C8.unpack bs
-        if fin then
+        bs <- recvStream s 1024
+        if bs == "" then
             debug "Connection finished"
-          else
+          else do
+            debug $ C8.unpack bs
             loop s
 
 clientH3 :: String -> Connection -> (String -> IO ()) -> IO ()
@@ -304,19 +304,20 @@ clientH3 authority conn debug = do
     s6 <- unidirectionalStream conn
     s10 <- unidirectionalStream conn
     -- 0: control, 4 settings
-    sendStream s2 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
+    sendStream s2 (BS.pack [0,4,8,1,80,0,6,128,0,128,0])
     -- 2: from encoder to decoder
-    sendStream s6 (BS.pack [2]) False
+    sendStream s6 (BS.pack [2])
     -- 3: from decoder to encoder
-    sendStream s10 (BS.pack [3]) False
-    sendStream s0 hdrblk True
+    sendStream s10 (BS.pack [3])
+    sendStream s0 hdrblk
+    shutdownStream s0
     loop s0
   where
     loop s0 = do
-        (bs, fin) <- recvStream s0
+        bs <- recvStream s0 1024
         debug $ "SID: " ++ show (streamId s0)
-        when (bs /= "") $ debug $ show $ BS.unpack bs
-        if fin then
+        if bs == "" then
             debug "Connection finished"
-          else
+          else do
+            debug $ show $ BS.unpack bs
             loop s0
