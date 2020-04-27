@@ -83,7 +83,7 @@ testHandshake2 cc1 sc (mode1, mode2) mEarlyData = void $ concurrently client ser
         let cc2 = cc1 { ccResumption = res
                       , ccEarlyData = case mEarlyData of
                           Nothing -> Nothing
-                          Just bs -> Just (0, bs)
+                          Just bs -> Just bs
                       }
         void $ runClient cc2 mode2
     server = do

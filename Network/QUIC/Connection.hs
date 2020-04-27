@@ -81,13 +81,21 @@ module Network.QUIC.Connection (
   , isCloseSent
   , waitEstablished
   , waitClosed
+  -- * Stream
+  , getMyNewStreamId
+  , getMyNewUniStreamId
+  , getPeerStreamID
+  , setPeerStreamID
+  , getStreamFin
+  , setStreamFin
   -- * StreamTable
   , getStreamOffset
   , putInputStream
   , getCryptoOffset
   , putInputCrypto
-  , getStreamFin
-  , setStreamFin
+  , findStream
+  , insertStream
+  , insertCryptoStreams
   -- * Queue
   , takeInput
   , putInput
@@ -124,10 +132,15 @@ module Network.QUIC.Connection (
   , qlogRecvInitial
   , qlogSentRetry
   -- Types
+  , Stream(streamId,streamConnection)
   , headerBuffer
   , headerBufferSize
   , payloadBuffer
   , payloadBufferSize
+  , Input(..)
+  , Output(..)
+  , takeStreamData
+  , putStreamData
   ) where
 
 import Network.QUIC.Connection.Crypto
@@ -137,6 +150,7 @@ import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Role
 import Network.QUIC.Connection.State
+import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Transmit
 import Network.QUIC.Connection.Types

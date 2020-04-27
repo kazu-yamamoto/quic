@@ -58,7 +58,7 @@ recvCryptoData conn = do
       InpVersion Nothing         -> E.throwIO   VersionNegotiationFailed
       InpError e                 -> E.throwIO e
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
-      InpStream{}                -> E.throwIO   MustNotReached
+      InpNewStream{}             -> E.throwIO   MustNotReached
 
 recvTLS :: Connection -> IORef HndState -> CryptLevel -> IO (Either TLS.TLSError ByteString)
 recvTLS conn hsr level =
@@ -135,7 +135,9 @@ handshakeClient conf conn = do
   where
     installKeysClient (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
-        sendCryptoData conn $ OutEarlyData (ccEarlyData conf)
+        case ccEarlyData conf of
+          Nothing        -> return ()
+          Just earlyData -> sendCryptoData conn $ OutEarlyData earlyData
     installKeysClient (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         setEncryptionLevel conn HandshakeLevel

@@ -45,7 +45,7 @@ data ClientConfig = ClientConfig {
   , ccALPN       :: Version -> IO (Maybe [ByteString])
   , ccValidate   :: Bool
   , ccResumption :: ResumptionInfo
-  , ccEarlyData  :: Maybe (StreamId,ByteString)
+  , ccEarlyData  :: Maybe ByteString
   , ccConfig     :: Config
   }
 

@@ -4,6 +4,7 @@ module Network.QUIC.Types (
   , Receive
   , LogAction
   , Close
+  , Direction(..)
   , module Network.QUIC.Types.Ack
   , module Network.QUIC.Types.CID
   , module Network.QUIC.Types.Error

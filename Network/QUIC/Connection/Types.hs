@@ -43,18 +43,30 @@ data CloseState = CloseState {
 type WindowSize = Int
 
 data Stream = Stream {
-    streamId      :: StreamId
-  , streamWindow  :: TVar WindowSize
-  , streamStateTx :: IORef StreamState
-  , streamStateRx :: IORef StreamState
-  , streamReass   :: IORef [Reassemble]
+    streamId         :: StreamId
+  , streamConnection :: Connection -- fixme: used for outputQ only
+  , streamInputQ     :: TQueue (ByteString, Fin)
+  , streamWindow     :: TVar WindowSize
+  , streamStateTx    :: IORef StreamState
+  , streamStateRx    :: IORef StreamState
+  , streamReass      :: IORef [Reassemble]
   }
 
-newStream :: StreamId -> IO Stream
-newStream sid = Stream sid <$> newTVarIO 65536 -- fixme
-                           <*> newIORef emptyStreamState
-                           <*> newIORef emptyStreamState
-                           <*> newIORef []
+instance Show Stream where
+    show s = show $ streamId s
+
+newStream :: Connection -> StreamId -> IO Stream
+newStream conn sid = Stream sid conn <$> newTQueueIO
+                                     <*> newTVarIO 65536 -- fixme
+                                     <*> newIORef emptyStreamState
+                                     <*> newIORef emptyStreamState
+                                     <*> newIORef []
+
+takeStreamData :: Stream -> IO (ByteString, Fin)
+takeStreamData Stream{..} = atomically $ readTQueue streamInputQ
+
+putStreamData :: Stream -> (ByteString, Fin) -> IO ()
+putStreamData Stream{..} = atomically . writeTQueue streamInputQ
 
 ----------------------------------------------------------------
 
@@ -179,6 +191,9 @@ data Connection = Connection {
   , packetNumber      :: IORef PacketNumber      -- squeezing three to one
   , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
   , streamTable       :: IORef StreamTable
+  , myStreamId        :: IORef StreamId
+  , myUniStreamId     :: IORef StreamId
+  , peerStreamId      :: IORef StreamId
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingHandshake  :: TVar [CryptPacket]
@@ -228,6 +243,9 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef 0
         <*> newIORef (PeerPacketNumbers Set.empty)
         <*> newIORef emptyStreamTable
+        <*> newIORef (if isclient then 0 else 1)
+        <*> newIORef (if isclient then 2 else 3)
+        <*> newIORef (if isclient then 1 else 0)
         -- TLS
         <*> newTVarIO InitialLevel
         <*> newTVarIO []
@@ -242,9 +260,10 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> return 1280
         <*> newIORef Nothing
   where
+    isclient = rl == Client
     initialRoleInfo
-      | rl == Client = defaultClientRoleInfo
-      | otherwise    = defaultServerRoleInfo
+      | isclient  = defaultClientRoleInfo
+      | otherwise = defaultServerRoleInfo
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
@@ -276,3 +295,21 @@ isClient Connection{..} = role == Client
 
 isServer :: Connection -> Bool
 isServer Connection{..} = role == Server
+
+----------------------------------------------------------------
+
+data Input = InpNewStream Stream
+           | InpHandshake EncryptionLevel ByteString
+           | InpTransportError TransportError FrameType ReasonPhrase
+           | InpApplicationError ApplicationError ReasonPhrase
+           | InpVersion (Maybe Version)
+           | InpError QUICError
+           deriving Show
+
+data Output = OutStream Stream [StreamData] Fin
+            | OutShutdown Stream
+            | OutControl EncryptionLevel [Frame]
+            | OutEarlyData ByteString
+            | OutHandshake [(EncryptionLevel,ByteString)]
+            | OutPlainPacket PlainPacket [PacketNumber]
+            deriving Show

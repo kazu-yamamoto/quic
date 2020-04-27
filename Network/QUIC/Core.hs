@@ -87,6 +87,7 @@ createClientConnection conf@ClientConfig{..} ver = do
         qlogger = newQlogger qq "client" (show peerCID) $ confQLog ccConfig peerCID
     debugLog $ "Original CID: " ++ show peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
+    insertCryptoStreams conn -- fixme: cleanup
     void $ forkIO $ readerClient (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
     return (conn,send,recv,cls,qlogger)
@@ -155,6 +156,7 @@ createServerConnection conf dispatch acc mainThreadId = do
             NS.close s
         setup = do
             conn <- serverConnection conf ver myCID peerCID oCID debugLog qLog cls sref
+            insertCryptoStreams conn -- fixme: cleanup
             when retried $ do
                 qlogRecvInitial conn
                 qlogSentRetry conn

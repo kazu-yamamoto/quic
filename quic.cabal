@@ -50,6 +50,7 @@ library
                        Network.QUIC.Connection.Queue
                        Network.QUIC.Connection.Role
                        Network.QUIC.Connection.State
+                       Network.QUIC.Connection.Stream
                        Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Transmit
                        Network.QUIC.Connection.Types

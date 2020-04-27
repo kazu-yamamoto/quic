@@ -6,11 +6,19 @@ module Network.QUIC (
     runQUICClient
   , runQUICServer
   , stopQUICServer
+  , Connection
+  -- * Stream
+  , Stream
+  , stream
+  , unidirectionalStream
+  , acceptStream
+  , isStreamOpen
+  , streamId
+  , StreamId
   -- * IO
   , recvStream
   , sendStream
   , shutdownStream
-  , isStreamOpen
   , migration
   , Migration(..)
   -- * Configrations
@@ -21,9 +29,7 @@ module Network.QUIC (
   , Config(..)
   , defaultConfig
   -- * Types
-  , Connection
   , connDebugLog
-  , StreamId
   , isClientInitiatedBidirectional
   , isServerInitiatedBidirectional
   , isClientInitiatedUnidirectional

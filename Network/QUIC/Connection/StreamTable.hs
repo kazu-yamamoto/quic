@@ -5,8 +5,9 @@ module Network.QUIC.Connection.StreamTable (
   , putInputStream
   , getCryptoOffset
   , putInputCrypto
-  , getStreamFin
-  , setStreamFin
+  , findStream
+  , insertStream
+  , insertCryptoStreams
   ) where
 
 import qualified Data.ByteString as BS
@@ -18,41 +19,33 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
-getStreamFin :: Connection -> StreamId -> IO Fin
-getStreamFin conn sid = do
-    Stream{..} <- checkStreamTable conn sid
-    -- sstx is modified by only sender
-    StreamState _ fin <- readIORef streamStateTx
-    return fin
-
-setStreamFin :: Connection -> StreamId -> IO ()
-setStreamFin conn sid = do
-    Stream{..} <- checkStreamTable conn sid
-    StreamState off _ <- readIORef streamStateTx
-    writeIORef streamStateTx $ StreamState off True
-
-getStreamOffset :: Connection -> StreamId -> Int -> IO Offset
-getStreamOffset conn sid len = do
-    Stream{..} <- checkStreamTable conn sid
-    -- sstx is modified by only sender
+getStreamOffset :: Stream -> Int -> IO Offset
+getStreamOffset Stream{..} len = do
     StreamState off fin <- readIORef streamStateTx
     writeIORef streamStateTx $ StreamState (off + len) fin
     return off
 
 putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin -> IO ()
 putInputStream conn sid off dat fin = do
-    (dats,fin1) <- isFragmentTop conn sid off dat fin
-    loop fin1 dats
+    ms <- findStream conn sid
+    case ms of
+      Just s -> do
+          (dats,fin1) <- isFragmentTop s off dat fin
+          loop s fin1 dats
+      Nothing -> do
+          s <- insertStream conn sid
+          putInput conn $ InpNewStream s
+          (dats,fin1) <- isFragmentTop s off dat fin
+          loop s fin1 dats
   where
-    loop _    []     = return ()
-    loop fin1 [d]    = putInput conn $ InpStream sid d fin1
-    loop fin1 (d:ds) = do
-        putInput conn $ InpStream sid d False
-        loop fin1 ds
+    loop _ _    []     = return ()
+    loop s fin1 [d]    = putStreamData s (d,fin1)
+    loop s fin1 (d:ds) = do
+        putStreamData s (d,False)
+        loop s fin1 ds
 
-isFragmentTop :: Connection -> StreamId -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
-isFragmentTop conn sid off dat fin = do
-    Stream{..} <- checkStreamTable conn sid
+isFragmentTop :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
+isFragmentTop Stream{..} off dat fin = do
     -- ssrx is modified by only sender
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     if fin && fin0 then do
@@ -96,18 +89,22 @@ split off0 xs0 = loop off0 xs0 id
       | off' == off = loop (off + len) xs (build . (dat :))
       | otherwise   = (build [], xxs, off')
 
-checkStreamTable :: Connection -> StreamId -> IO Stream
-checkStreamTable Connection{..} sid = do
+findStream :: Connection -> StreamId -> IO (Maybe Stream)
+findStream Connection{..} sid = do
     -- reader and sender do not insert the same StreamState
     -- at the same time.
     StreamTable tbl0 <- readIORef streamTable
-    case Map.lookup sid tbl0 of
-      Nothing -> do
-          s <- newStream sid
-          atomicModifyIORef streamTable $ \(StreamTable tbl) ->
-            (StreamTable $ Map.insert sid s tbl, ())
-          return s
-      Just s -> return s
+    return $ Map.lookup sid tbl0
+
+insertStream :: Connection -> StreamId -> IO Stream
+insertStream conn@Connection{..} sid = do
+    s <- newStream conn sid
+    atomicModifyIORef streamTable $ ins s
+    return s
+  where
+    ins s (StreamTable tbl) = (stbl, ())
+      where
+        stbl = StreamTable $ Map.insert sid s tbl
 
 ----------------------------------------------------------------
 
@@ -124,10 +121,25 @@ toCryptoStreamId RTT1Level      = rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 
+insertCryptoStreams :: Connection -> IO ()
+insertCryptoStreams conn = do
+    void $ insertStream conn initialCryptoStreamId
+    void $ insertStream conn handshakeCryptoStreamId
+    void $ insertStream conn rtt1CryptoStreamId
+
+-- FIXME:: deleteCryptoStreams
+
+----------------------------------------------------------------
+
 getCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
-getCryptoOffset conn lvl len = getStreamOffset conn (toCryptoStreamId lvl) len
+getCryptoOffset conn lvl len = do
+    let sid = toCryptoStreamId lvl
+    Just s <- findStream conn sid
+    getStreamOffset s len
 
 putInputCrypto :: Connection -> EncryptionLevel -> Offset -> StreamData -> IO ()
 putInputCrypto conn lvl off cdat = do
-    (dats, _) <- isFragmentTop conn (toCryptoStreamId lvl) off cdat False
+    let sid = toCryptoStreamId lvl
+    Just s <- findStream conn sid
+    (dats, _) <- isFragmentTop s off cdat False
     mapM_ (\d -> putCrypto conn $ InpHandshake lvl d) dats

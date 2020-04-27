@@ -10,6 +10,7 @@ import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
+import Network.QUIC.IO
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Types
@@ -104,22 +105,21 @@ sender conn send = handleLog logAction $ forever
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
 sendOutput :: Connection -> SendMany -> Output ->IO ()
-sendOutput conn send (OutEarlyData mEarlyData) =
-    case mEarlyData of
-      Nothing -> return ()
-      Just (sid,earlyData) -> do
-          off <- getStreamOffset conn sid $ B.length earlyData
-          bss1 <- construct conn RTT0Level [StreamF sid off [earlyData] True] [] $ Just maximumQUICPacketSize
-          send bss1
+sendOutput conn send (OutEarlyData earlyData) = do
+    s <- stream conn
+    let sid = streamId s
+    off <- getStreamOffset s $ B.length earlyData
+    bss1 <- construct conn RTT0Level [StreamF sid off [earlyData] True] [] $ Just maximumQUICPacketSize
+    send bss1
 sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
-sendOutput conn send (OutStream sid dats fin) = do
-    sendStreamFragment conn send sid dats fin
-sendOutput conn send (OutShutdown sid) = do
-    off <- getStreamOffset conn sid 0
-    let frame = StreamF sid off [] True
+sendOutput conn send (OutStream s dats fin) = do
+    sendStreamFragment conn send s dats fin
+sendOutput conn send (OutShutdown s) = do
+    off <- getStreamOffset s 0
+    let frame = StreamF (streamId s) off [] True
     bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
     send bss
 sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
@@ -154,21 +154,22 @@ sendCryptoFragments conn send = loop 1024 maximumQUICPacketSize id
                     send (pre0 bss1')
                     loop 1024 maximumQUICPacketSize id xs
 
-sendStreamFragment :: Connection -> SendMany -> StreamId -> [ByteString] -> Bool -> IO ()
-sendStreamFragment conn send sid dats0 fin0 = do
-    closed <- getStreamFin conn sid
+sendStreamFragment :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
+sendStreamFragment conn send s dats0 fin0 = do
+    closed <- getStreamFin s
     if closed then
         connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
       else do
         loop dats0
-        when fin0 $ setStreamFin conn sid
+        when fin0 $ setStreamFin s
   where
+    sid = streamId s
     loop :: [ByteString] -> IO ()
     loop [] = return ()
     loop dats = do
         let (dats1,dats2) = splitChunks dats
             len = sum $ map B.length dats1
-        off <- getStreamOffset conn sid len
+        off <- getStreamOffset s len
         let fin = fin0 && null dats2
             frame = StreamF sid off dats1 fin
         bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
