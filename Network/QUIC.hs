@@ -11,7 +11,6 @@ module Network.QUIC (
   , Stream
   , stream
   , unidirectionalStream
-  , acceptStream
   , isStreamOpen
   , streamId
   , StreamId
@@ -19,6 +18,9 @@ module Network.QUIC (
   , recvStream
   , sendStream
   , shutdownStream
+  -- * Server
+  , acceptStream
+  -- * Client
   , migration
   , Migration(..)
   -- * Configrations

@@ -74,6 +74,7 @@ data Migration = ChangeServerCID
                | MigrateTo -- SockAddr
                deriving (Eq, Show)
 
+-- | Migrating.
 migration :: Connection -> Migration -> IO Bool
 migration conn typ
   | isClient conn = do
