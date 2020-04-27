@@ -259,10 +259,14 @@ runClient2 conf Options{..} cmd addr debug res = do
         info <- getConnectionInfo conn
         if rtt0 then do
             debug "------------------------ Response for early data"
-            (sid, bs, _fin) <- recvStream conn
-            debug $ "SID: " ++ show sid
-            debug $ show $ BS.unpack bs
-            debug "------------------------ Response for early data"
+            es0 <- acceptStream conn
+            case es0 of
+              Right s0 -> do
+                  (bs, _fin) <- recvStream s0
+                  debug $ "SID: " ++ show (streamId s0)
+                  debug $ show $ BS.unpack bs
+                  debug "------------------------ Response for early data"
+              _ -> return ()
           else do
             let client = case alpn info of
                   Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
@@ -273,42 +277,46 @@ runClient2 conf Options{..} cmd addr debug res = do
     rtt0 = opt0RTT && is0RTTPossible res
     conf' | rtt0 = conf {
                 ccResumption = res
-              , ccEarlyData  = Just (0, cmd) -- fixme
+              , ccEarlyData  = Just cmd
               }
           | otherwise = conf { ccResumption = res }
 
 clientHQ :: ByteString -> Connection -> (String -> IO ()) -> IO ()
 clientHQ cmd conn debug = do
-    sendStream conn 0 cmd True
-    shutdownStream conn 0
-    loop
+    s <- stream conn
+    sendStream s cmd True
+    shutdownStream s
+    loop s
   where
-    loop = do
-        (sid, bs, fin) <- recvStream conn
-        when (sid /= 0) $ debug $ "SID: " ++ show sid
+    loop s = do
+        (bs, fin) <- recvStream s
         when (bs /= "") $ debug $ C8.unpack bs
         if fin then
             debug "Connection finished"
           else
-            loop
+            loop s
 
 clientH3 :: String -> Connection -> (String -> IO ()) -> IO ()
 clientH3 authority conn debug = do
     hdrblk <- taglen 1 <$> qpackClient authority
+    s0 <- stream conn
+    s2 <- unidirectionalStream conn
+    s6 <- unidirectionalStream conn
+    s10 <- unidirectionalStream conn
     -- 0: control, 4 settings
-    sendStream conn  2 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
+    sendStream s2 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
     -- 2: from encoder to decoder
-    sendStream conn  6 (BS.pack [2]) False
+    sendStream s6 (BS.pack [2]) False
     -- 3: from decoder to encoder
-    sendStream conn 10 (BS.pack [3]) False
-    sendStream conn  0 hdrblk True
-    loop
+    sendStream s10 (BS.pack [3]) False
+    sendStream s0 hdrblk True
+    loop s0
   where
-    loop = do
-        (sid, bs, fin) <- recvStream conn
-        debug $ "SID: " ++ show sid
+    loop s0 = do
+        (bs, fin) <- recvStream s0
+        debug $ "SID: " ++ show (streamId s0)
         when (bs /= "") $ debug $ show $ BS.unpack bs
         if fin then
             debug "Connection finished"
           else
-            loop
+            loop s0

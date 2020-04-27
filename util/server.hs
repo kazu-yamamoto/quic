@@ -151,12 +151,14 @@ serverHQ :: Connection -> IO ()
 serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
   where
     loop = do
-        mbs <- timeout 5000000 $ recvStream conn
+        mbs <- timeout 5000000 $ acceptStream conn
         case mbs of
           Nothing -> connDebugLog conn "Connection timeout"
-          Just (_sid, bs, fin) -> do
-              sendStream conn 0 html True
-              shutdownStream conn 0
+          Just (Left e)  -> print e
+          Just (Right s) -> do
+              (bs,fin) <- recvStream s
+              sendStream s html True
+              shutdownStream s
               when (bs /= "") $ connDebugLog conn $ C8.unpack bs
               if fin then
                   connDebugLog conn "Connection finished"
@@ -165,23 +167,29 @@ serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
+    s3 <- unidirectionalStream conn
+    s7 <- unidirectionalStream conn
+    s11 <- unidirectionalStream conn
     -- 0: control, 4 settings
-    sendStream conn  3 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
+    sendStream s3 (BS.pack [0,4,8,1,80,0,6,128,0,128,0]) False
     -- 2: from encoder to decoder
-    sendStream conn  7 (BS.pack [2]) False
+    sendStream s7 (BS.pack [2]) False
     -- 3: from decoder to encoder
-    sendStream conn 11 (BS.pack [3]) False
+    sendStream s11 (BS.pack [3]) False
     hdrblock <- taglen 1 <$> qpackServer
     let bdyblock = taglen 0 html
         hdrbdy = BS.concat [hdrblock,bdyblock]
     loop hdrbdy
   where
     loop hdrbdy = do
-        mx <- timeout 5000000 $ recvStream conn
+        mx <- timeout 5000000 $ acceptStream conn
         case mx of
           Nothing -> connDebugLog conn "Connection timeout"
-          Just (sid, bs, fin) -> do
+          Just (Left e) -> print e
+          Just (Right s) -> do -- forkIO
+              (bs, fin) <- recvStream s
+              let sid = streamId s
               connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if fin then " Fin" else "")
               when (isClientInitiatedBidirectional sid) $
-                  sendStream conn sid hdrbdy True
+                  sendStream s hdrbdy True
               loop hdrbdy
