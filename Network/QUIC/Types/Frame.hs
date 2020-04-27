@@ -11,7 +11,7 @@ import Network.QUIC.Types.Error
 
 type FrameType = Int
 
-data Direction = Uni | Bidi deriving (Eq, Show)
+data Direction = Unidirectional | Bidirectional deriving (Eq, Show)
 
 data Frame = Padding Int
            | Ping

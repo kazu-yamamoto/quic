@@ -64,8 +64,8 @@ encodeFrame wbuf (Stream sid off dats fin) = do
     mapM_ (copyByteString wbuf) dats
 encodeFrame wbuf (MaxStreams dir ms) = do
     case dir of
-      Bidi -> write8 wbuf 0x12
-      Uni  -> write8 wbuf 0x13
+      Bidirectional  -> write8 wbuf 0x12
+      Unidirectional -> write8 wbuf 0x13
     encodeInt' wbuf $ fromIntegral ms
 encodeFrame wbuf (NewConnectionID cidInfo rpt) = do
     write8 wbuf 0x18
@@ -131,8 +131,8 @@ decodeFrame rbuf = do
               decodeStreamFrame rbuf off len fin
       0x10 -> decodeMaxData rbuf
       0x11 -> decodeMaxStreamData rbuf
-      0x12 -> decodeMaxStreams rbuf Bidi
-      0x13 -> decodeMaxStreams rbuf Uni
+      0x12 -> decodeMaxStreams rbuf Bidirectional
+      0x13 -> decodeMaxStreams rbuf Unidirectional
       0x18 -> decodeNewConnectionID rbuf
       0x19 -> decodeRetireConnectionID rbuf
       0x1a -> decodePathChallenge rbuf
