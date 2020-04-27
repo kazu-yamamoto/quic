@@ -44,7 +44,7 @@ data CloseState = CloseState {
 type WindowSize = Int
 
 data Stream = Stream {
-    streamId         :: StreamId
+    streamId         :: StreamId -- ^ Getting stream identifier.
   , streamConnection :: Connection -- fixme: used for outputQ only
   , streamQ          :: StreamQ
   , streamWindow     :: TVar WindowSize

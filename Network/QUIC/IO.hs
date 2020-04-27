@@ -9,11 +9,13 @@ import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
+-- | Creating a bidirectional stream.
 stream :: Connection -> IO Stream
 stream conn = do
     sid <- getMyNewStreamId conn
     insertStream conn sid
 
+-- | Creating a unidirectional stream.
 unidirectionalStream :: Connection -> IO Stream
 unidirectionalStream conn = do
     sid <- getMyNewUniStreamId conn
@@ -47,8 +49,7 @@ shutdownStream s = do
     unless copen $ E.throwIO ConnectionIsClosed
     putOutput conn $ OutShutdown s
 
--- | Receiving data in the stream. In the case where a FIN is received
---   an empty bytestring is returned.
+-- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO (Either QUICError Stream)
 acceptStream conn = do
     mi <- takeInput conn

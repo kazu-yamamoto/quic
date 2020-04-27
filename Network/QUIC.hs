@@ -34,7 +34,6 @@ module Network.QUIC (
   , isServerInitiatedBidirectional
   , isClientInitiatedUnidirectional
   , isServerInitiatedUnidirectional
-  , Fin
   , Version(..)
   , fromVersion
   , CID
