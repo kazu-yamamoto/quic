@@ -40,6 +40,7 @@ library
                        Network.QUIC.Types.Packet
                        Network.QUIC.Types.Queue
                        Network.QUIC.Types.Resumption
+                       Network.QUIC.Types.Stream
                        Network.QUIC.Types.UserError
                        Network.QUIC.Utils
   other-modules:

@@ -13,7 +13,6 @@ import Data.IORef
 import qualified Data.IntMap.Strict as Map
 
 import Network.QUIC.Connection.Queue
-import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -36,8 +35,8 @@ findStream Connection{..} sid = do
     return $ Map.lookup sid tbl0
 
 insertStream :: Connection -> StreamId -> IO Stream
-insertStream conn@Connection{..} sid = do
-    s <- newStream conn sid
+insertStream Connection{..} sid = do
+    s <- newStream sid outputQ
     atomicModifyIORef streamTable $ ins s
     return s
   where

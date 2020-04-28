@@ -86,9 +86,6 @@ module Network.QUIC.Connection (
   , getMyNewUniStreamId
   , getPeerStreamID
   , setPeerStreamID
-  , getStreamOffset
-  , getStreamFin
-  , setStreamFin
   -- * StreamTable
   , putInputStream
   , putInputCrypto
@@ -102,6 +99,7 @@ module Network.QUIC.Connection (
   , putCrypto
   , takeOutput
   , putOutput
+  , putOutput'
   , putOutputPP
   -- * Role
   , getClientController
@@ -131,15 +129,10 @@ module Network.QUIC.Connection (
   , qlogRecvInitial
   , qlogSentRetry
   -- Types
-  , Stream(streamId,streamConnection)
   , headerBuffer
   , headerBufferSize
   , payloadBuffer
   , payloadBufferSize
-  , Input(..)
-  , Output(..)
-  , takeStreamData
-  , putStreamData
   ) where
 
 import Network.QUIC.Connection.Crypto

@@ -4,7 +4,6 @@
 
 module Network.QUIC.Connection.Types where
 
-import qualified Data.ByteString as BS
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
@@ -40,97 +39,6 @@ data CloseState = CloseState {
   } deriving (Eq, Show)
 
 ----------------------------------------------------------------
-
-type WindowSize = Int
-
-data Stream = Stream {
-    streamId         :: StreamId -- ^ Getting stream identifier.
-  , streamConnection :: Connection -- fixme: used for outputQ only
-  , streamQ          :: StreamQ
-  , streamWindow     :: TVar WindowSize
-  , streamStateTx    :: IORef StreamState
-  , streamStateRx    :: IORef StreamState
-  , streamReass      :: IORef [Reassemble]
-  }
-
-instance Show Stream where
-    show s = show $ streamId s
-
-newStream :: Connection -> StreamId -> IO Stream
-newStream conn sid = Stream sid conn <$> newStreamQ
-                                     <*> newTVarIO 65536 -- fixme
-                                     <*> newIORef emptyStreamState
-                                     <*> newIORef emptyStreamState
-                                     <*> newIORef []
-
-data StreamQ = StreamQ {
-    streamInputQ :: TQueue ByteString
-  , pendingData  :: IORef (Maybe ByteString)
-  , finReceived  :: IORef Bool
-  }
-
-newStreamQ :: IO StreamQ
-newStreamQ = StreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
-
-putStreamData :: Stream -> ByteString -> IO ()
-putStreamData Stream{..} = atomically . writeTQueue (streamInputQ streamQ)
-
-takeStreamData :: Stream -> Int -> IO ByteString
-takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
-    fin <- readIORef finReceived
-    if fin then
-        return ""
-      else do
-        mb <- readIORef pendingData
-        case mb of
-          Nothing -> do
-              b0 <- atomically $ readTQueue streamInputQ
-              if b0 == "" then do
-                  writeIORef finReceived True
-                  return ""
-                else do
-                  let len = BS.length b0
-                  case len `compare` siz0 of
-                      LT -> tryRead (siz0 - len) (b0 :)
-                      EQ -> return b0
-                      GT -> do
-                          let (b1,b2) = BS.splitAt siz0 b0
-                          writeIORef pendingData $ Just b2
-                          return b1
-          Just b0 -> do
-              writeIORef pendingData Nothing
-              let len = BS.length b0
-              tryRead (siz0 - len) (b0 :)
-  where
-    tryRead siz build = do
-        mb <- atomically $ tryReadTQueue streamInputQ
-        case mb of
-          Nothing -> return $ BS.concat $ build []
-          Just b  -> do
-              if b == "" then do
-                  writeIORef finReceived True
-                  return $ BS.concat $ build []
-                else do
-                  let len = BS.length b
-                  case len `compare` siz of
-                    LT -> tryRead (siz - len) (build . (b :))
-                    EQ -> return $ BS.concat $ build []
-                    GT -> do
-                        let (b1,b2) = BS.splitAt siz0 b
-                        writeIORef pendingData $ Just b2
-                        return $ BS.concat $ build [b1]
-
-----------------------------------------------------------------
-
-data StreamState = StreamState {
-    streamOffset :: Offset
-  , streamFin :: Fin
-  } deriving (Eq, Show)
-
-emptyStreamState :: StreamState
-emptyStreamState = StreamState 0 False
-
-data Reassemble = Reassemble StreamData Offset Int deriving (Eq, Show)
 
 newtype StreamTable = StreamTable (IntMap Stream)
 
@@ -347,21 +255,3 @@ isClient Connection{..} = role == Client
 
 isServer :: Connection -> Bool
 isServer Connection{..} = role == Server
-
-----------------------------------------------------------------
-
-data Input = InpNewStream Stream
-           | InpHandshake EncryptionLevel ByteString
-           | InpTransportError TransportError FrameType ReasonPhrase
-           | InpApplicationError ApplicationError ReasonPhrase
-           | InpVersion (Maybe Version)
-           | InpError QUICError
-           deriving Show
-
-data Output = OutStream Stream [StreamData]
-            | OutShutdown Stream
-            | OutControl EncryptionLevel [Frame]
-            | OutEarlyData ByteString
-            | OutHandshake [(EncryptionLevel,ByteString)]
-            | OutPlainPacket PlainPacket [PacketNumber]
-            deriving Show

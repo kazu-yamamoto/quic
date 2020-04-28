@@ -34,20 +34,13 @@ sendStream s dat = sendStreamMany s [dat]
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
-    let conn = streamConnection s
-    copen <- isConnectionOpen conn
-    unless copen $ E.throwIO ConnectionIsClosed
     open <- isStreamOpen s
     unless open $ E.throwIO StreamIsClosed
-    putOutput conn $ OutStream s dats
+    putOutput' (streamOutputQ s) $ OutStream s dats
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
-shutdownStream s = do
-    let conn = streamConnection s
-    copen <- isConnectionOpen conn
-    unless copen $ E.throwIO ConnectionIsClosed
-    putOutput conn $ OutShutdown s
+shutdownStream s = putOutput' (streamOutputQ s) $ OutShutdown s
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO (Either QUICError Stream)
