@@ -110,7 +110,7 @@ takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
           Just b  -> do
               if b == "" then do
                   writeIORef finReceived True
-                  return ""
+                  return $ BS.concat $ build []
                 else do
                   let len = BS.length b
                   case len `compare` siz of
