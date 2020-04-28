@@ -100,9 +100,8 @@ getPeerParameters :: Connection -> IO Parameters
 getPeerParameters Connection{..} = readIORef peerParams
 
 setPeerParameters :: Connection -> ParametersList -> IO ()
-setPeerParameters Connection{..} plist = do
-    def <- readIORef peerParams
-    writeIORef peerParams $ updateParameters def plist
+setPeerParameters Connection{..} plist =
+    modifyIORef peerParams $ \def -> updateParameters def plist
 
 ----------------------------------------------------------------
 
