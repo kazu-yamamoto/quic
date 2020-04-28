@@ -86,16 +86,15 @@ module Network.QUIC.Connection (
   , getMyNewUniStreamId
   , getPeerStreamID
   , setPeerStreamID
+  , getStreamOffset
   , getStreamFin
   , setStreamFin
   -- * StreamTable
-  , getStreamOffset
   , putInputStream
-  , getCryptoOffset
   , putInputCrypto
-  , findStream
   , insertStream
   , insertCryptoStreams
+  , getCryptoOffset
   -- * Queue
   , takeInput
   , putInput

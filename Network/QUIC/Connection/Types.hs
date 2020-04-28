@@ -75,7 +75,6 @@ newStreamQ = StreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
 putStreamData :: Stream -> ByteString -> IO ()
 putStreamData Stream{..} = atomically . writeTQueue (streamInputQ streamQ)
 
--- See putInputStream
 takeStreamData :: Stream -> Int -> IO ByteString
 takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
     fin <- readIORef finReceived

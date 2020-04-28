@@ -189,6 +189,7 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
           Just (Right s) -> do -- forkIO
               bs <- recvStream s 1024
               let sid = streamId s
+              putStrLn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
               connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
               when (isClientInitiatedBidirectional sid) $ do
                   sendStream s hdrbdy
