@@ -17,6 +17,7 @@ module Network.QUIC (
   -- * IO
   , recvStream
   , sendStream
+  , sendStreamMany
   , shutdownStream
   -- * Server
   , acceptStream
