@@ -178,7 +178,7 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     sendStream s11 (BS.pack [3])
     hdrblock <- taglen 1 <$> qpackServer
     let bdyblock = taglen 0 html
-        hdrbdy = BS.concat [hdrblock,bdyblock]
+        hdrbdy = [hdrblock,bdyblock]
     loop hdrbdy
   where
     loop hdrbdy = do
@@ -192,6 +192,6 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
               putStrLn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
               connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
               when (isClientInitiatedBidirectional sid) $ do
-                  sendStream s hdrbdy
+                  sendStreamMany s hdrbdy
                   shutdownStream s
               loop hdrbdy
