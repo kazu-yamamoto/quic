@@ -173,31 +173,56 @@ putStreamData s off dat fin = do
         loop fin1 ds
 
 isFragmentTop :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
-isFragmentTop Stream{..} off dat fin = do
-    -- ssrx is modified by only sender
+isFragmentTop Stream{..} _   "" False = return ([], False)
+isFragmentTop Stream{..} off "" True  = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
-    if fin && fin0 then do
+    if fin0 then do
         putStrLn "Illegal Fin" -- fixme
         return ([], False)
-      else do
-        let fin1 = fin0 || fin
-            si1 = si0 { streamFin = fin1 }
-            len = BS.length dat
-        if off < off0 then -- ignoring
-          return ([], False)
-        else if off == off0 then do
-            let off1 = off0 + len
-            xs0 <- readIORef streamReass
-            let (dats,xs,off2) = split off1 xs0
-            writeIORef streamStateRx si1 { streamOffset = off2 }
-            writeIORef streamReass xs
-            return (dat:dats, fin1)
-          else do
+      else case off0 `compare` off of
+        LT -> do
+            let si1 = si0 { streamFin = True }
             writeIORef streamStateRx si1
-            when (dat /= "") $ do
-                let x = Reassemble dat off len
-                modifyIORef' streamReass (push x)
+            return   ([], False)
+        EQ -> return ([], True)  -- would ignore succeeding fragments
+        GT -> return ([], False) -- ignoring ""
+isFragmentTop Stream{..} off dat False = do
+    si0@(StreamState off0 fin0) <- readIORef streamStateRx
+    let len = BS.length dat
+    case off0 `compare` off of
+      LT -> do
+          let x = Reassemble dat off len
+          modifyIORef' streamReass (push x)
+          return ([], False)
+      EQ -> do
+          let off1 = off0 + len
+          xs0 <- readIORef streamReass
+          let (dats,xs,off2) = split off1 xs0
+          writeIORef streamStateRx si0 { streamOffset = off2 }
+          writeIORef streamReass xs
+          let fin1 = null xs && fin0
+          return (dat:dats, fin1)
+      GT ->
+          return ([], False)  -- ignoring
+isFragmentTop Stream{..} off dat True = do
+    si0@(StreamState off0 fin0) <- readIORef streamStateRx
+    let len = BS.length dat
+        si1 = si0 { streamFin = True }
+    if fin0 then do
+        putStrLn "Illegal Fin" -- fixme
+        return ([], False)
+      else case off0 `compare` off of
+        LT -> do
+            writeIORef streamStateRx si1
+            let x = Reassemble dat off len
+            modifyIORef' streamReass (push x)
             return ([], False)
+        EQ -> do
+            let off1 = off0 + len
+            writeIORef streamStateRx si1 { streamOffset = off1 }
+            return ([dat], True) -- would ignore succeeding fragments
+        GT ->
+            return ([], False)  -- ignoring
 
 push :: Reassemble -> [Reassemble] -> [Reassemble]
 push x0@(Reassemble _ off0 len0) xs0 = loop xs0
