@@ -152,9 +152,9 @@ takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
                   let len = BS.length b
                   case len `compare` siz of
                     LT -> tryRead (siz - len) (build . (b :))
-                    EQ -> return $ BS.concat $ build []
+                    EQ -> return $ BS.concat $ build [b]
                     GT -> do
-                        let (b1,b2) = BS.splitAt siz0 b
+                        let (b1,b2) = BS.splitAt siz b
                         writeIORef pendingData $ Just b2
                         return $ BS.concat $ build [b1]
 
@@ -166,12 +166,10 @@ putStreamData s off dat fin = do
     loop fin1 dats
   where
     put = atomically . writeTQueue (streamInputQ $ streamQ s)
-    loop _    []     = return ()
-    loop fin1 [d]    = do
-        put d
-        when fin1 $ put ""
+    loop False []    = return ()
+    loop True  []    = put ""
     loop fin1 (d:ds) = do
-        put d
+        when (d /= "") $ put d
         loop fin1 ds
 
 isFragmentTop :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
@@ -196,8 +194,9 @@ isFragmentTop Stream{..} off dat fin = do
             return (dat:dats, fin1)
           else do
             writeIORef streamStateRx si1
-            let x = Reassemble dat off len
-            modifyIORef' streamReass (push x)
+            when (dat /= "") $ do
+                let x = Reassemble dat off len
+                modifyIORef' streamReass (push x)
             return ([], False)
 
 push :: Reassemble -> [Reassemble] -> [Reassemble]
