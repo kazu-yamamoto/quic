@@ -35,6 +35,9 @@ recvCompleted :: IORef HndState -> IO Int
 recvCompleted hsr = atomicModifyIORef' hsr $ \hs ->
     let cnt = hsRecvCnt hs in (hs { hsRecvCnt = cnt + 1 }, cnt)
 
+rxLevelChanged :: IORef HndState -> IO ()
+rxLevelChanged = sendCompleted
+
 ----------------------------------------------------------------
 
 sendCryptoData :: Connection -> Output -> IO ()
@@ -88,7 +91,7 @@ recvTLS conn hsr level =
                                 sendCryptoData conn $ OutControl InitialLevel []
                         HandshakeLevel | isClient conn ->
                             -- Sending ACKs for three times rule
-                            when ((n `mod` 3) == 0) $
+                            when ((n `mod` 3) == 1) $
                                 sendCryptoData conn $ OutControl HandshakeLevel []
                         _ -> return ()
                     return (Right bs)
@@ -117,7 +120,7 @@ handshakeClient conf conn = do
     let sendEarlyData = isJust $ ccEarlyData conf
         qc = QUICCallbacks { quicSend = sendTLS conn hsr
                            , quicRecv = recvTLS conn hsr
-                           , quicInstallKeys = installKeysClient
+                           , quicInstallKeys = installKeysClient hsr
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
@@ -133,17 +136,19 @@ handshakeClient conf conn = do
         _ -> E.throwIO $ HandshakeFailed $ "handshakeClient: unexpected " ++ show state
 
   where
-    installKeysClient (InstallEarlyKeys mEarlySecInf) = do
+    installKeysClient _ (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
         case ccEarlyData conf of
           Nothing        -> return ()
           Just earlyData -> sendCryptoData conn $ OutEarlyData earlyData
-    installKeysClient (InstallHandshakeKeys hndSecInf) = do
+    installKeysClient hsr (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         setEncryptionLevel conn HandshakeLevel
-    installKeysClient (InstallApplicationKeys appSecInf) = do
+        rxLevelChanged hsr
+    installKeysClient hsr (InstallApplicationKeys appSecInf) = do
         setApplicationSecretInfo conn appSecInf
         setEncryptionLevel conn RTT1Level
+        rxLevelChanged hsr
 
 -- second half the the TLS handshake, executed out of the main thread
 handshakeClientAsync :: Connection -> ClientController -> IO ()
@@ -164,7 +169,7 @@ handshakeServer conf origCID conn = do
     hsr <- newHndStateRef
     let qc = QUICCallbacks { quicSend = sendTLS conn hsr
                            , quicRecv = recvTLS conn hsr
-                           , quicInstallKeys = installKeysServer
+                           , quicInstallKeys = installKeysServer hsr
                            , quicNotifyExtensions = setPeerParams conn
                            }
     control <- serverController qc conf ver origCID
@@ -176,12 +181,13 @@ handshakeServer conf origCID conn = do
         _ -> E.throwIO $ HandshakeFailed $ "handshakeServer: unexpected " ++ show state
 
   where
-    installKeysServer (InstallEarlyKeys mEarlySecInf) =
+    installKeysServer _ (InstallEarlyKeys mEarlySecInf) =
         setEarlySecretInfo conn mEarlySecInf
-    installKeysServer (InstallHandshakeKeys hndSecInf) = do
+    installKeysServer hsr (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         setEncryptionLevel conn HandshakeLevel
-    installKeysServer (InstallApplicationKeys appSecInf) =
+        rxLevelChanged hsr
+    installKeysServer _ (InstallApplicationKeys appSecInf) =
         setApplicationSecretInfo conn appSecInf
         -- will switch to RTT1Level after client Finished
         -- is received and verified
