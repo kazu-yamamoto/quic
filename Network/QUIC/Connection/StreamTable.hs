@@ -21,11 +21,11 @@ putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin -> IO ()
 putInputStream conn sid off dat fin = do
     ms <- findStream conn sid
     case ms of
-      Just s -> reassembleStream s off dat fin
+      Just s -> putStreamData s off dat fin
       Nothing -> do
           s <- insertStream conn sid
           putInput conn $ InpNewStream s
-          reassembleStream s off dat fin
+          putStreamData s off dat fin
 
 findStream :: Connection -> StreamId -> IO (Maybe Stream)
 findStream Connection{..} sid = do

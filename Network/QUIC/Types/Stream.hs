@@ -7,12 +7,11 @@ module Network.QUIC.Types.Stream (
   , Output(..)
   , Stream(streamId, streamOutputQ)
   , newStream
-  , putStreamData
-  , takeStreamData
   , getStreamOffset
   , getStreamFin
   , setStreamFin
-  , reassembleStream
+  , takeStreamData
+  , putStreamData
   , isFragmentTop
   ) where
 
@@ -114,9 +113,6 @@ data Reassemble = Reassemble StreamData Offset Int deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
-putStreamData :: Stream -> ByteString -> IO ()
-putStreamData Stream{..} = atomically . writeTQueue (streamInputQ streamQ)
-
 takeStreamData :: Stream -> Int -> IO ByteString
 takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
     fin <- readIORef finReceived
@@ -164,17 +160,18 @@ takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
 
 ----------------------------------------------------------------
 
-reassembleStream :: Stream -> Offset -> StreamData -> Bool -> IO ()
-reassembleStream s off dat fin = do
+putStreamData :: Stream -> Offset -> StreamData -> Bool -> IO ()
+putStreamData s off dat fin = do
     (dats,fin1) <- isFragmentTop s off dat fin
     loop fin1 dats
   where
+    put = atomically . writeTQueue (streamInputQ $ streamQ s)
     loop _    []     = return ()
     loop fin1 [d]    = do
-        putStreamData s d
-        when fin1 $ putStreamData s ""
+        put d
+        when fin1 $ put ""
     loop fin1 (d:ds) = do
-        putStreamData s d
+        put d
         loop fin1 ds
 
 isFragmentTop :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
