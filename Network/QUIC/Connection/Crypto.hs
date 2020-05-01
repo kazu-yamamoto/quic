@@ -77,13 +77,13 @@ getCipher Connection{..} _ = do
 
 setEarlySecretInfo :: Connection -> Maybe EarlySecretInfo -> IO ()
 setEarlySecretInfo _ Nothing = return ()
-setEarlySecretInfo Connection{..} (Just info) = writeIORef elySecInfo info
+setEarlySecretInfo Connection{..} (Just info) = atomicWriteIORef elySecInfo info
 
 setHandshakeSecretInfo :: Connection -> HandshakeSecretInfo -> IO ()
-setHandshakeSecretInfo Connection{..} info = writeIORef hndSecInfo info
+setHandshakeSecretInfo Connection{..} = atomicWriteIORef hndSecInfo
 
 setApplicationSecretInfo :: Connection -> ApplicationSecretInfo -> IO ()
-setApplicationSecretInfo Connection{..} info = writeIORef appSecInfo info
+setApplicationSecretInfo Connection{..} = atomicWriteIORef appSecInfo
 
 getEarlySecretInfo :: Connection -> IO EarlySecretInfo
 getEarlySecretInfo Connection{..} = readIORef elySecInfo
@@ -100,9 +100,8 @@ getPeerParameters :: Connection -> IO Parameters
 getPeerParameters Connection{..} = readIORef peerParams
 
 setPeerParameters :: Connection -> ParametersList -> IO ()
-setPeerParameters Connection{..} plist = do
-    def <- readIORef peerParams
-    writeIORef peerParams $ updateParameters def plist
+setPeerParameters Connection{..} plist =
+    modifyIORef peerParams $ \def -> updateParameters def plist
 
 ----------------------------------------------------------------
 
@@ -193,6 +192,6 @@ xApplicationSecret Connection{..} = do
 dropSecrets :: Connection -> IO ()
 dropSecrets Connection{..} = do
     writeIORef iniSecrets defaultTrafficSecrets
-    writeIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
-    HandshakeSecretInfo cipher _ <- readIORef hndSecInfo
-    writeIORef hndSecInfo (HandshakeSecretInfo cipher defaultTrafficSecrets)
+    atomicWriteIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
+    atomicModifyIORef' hndSecInfo $ \(HandshakeSecretInfo cipher _) ->
+        (HandshakeSecretInfo cipher defaultTrafficSecrets, ())
