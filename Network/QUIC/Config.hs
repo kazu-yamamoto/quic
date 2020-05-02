@@ -5,7 +5,7 @@ module Network.QUIC.Config where
 import Data.IP
 import Network.Socket
 import Network.TLS hiding (Version, HostName)
-import Network.TLS.Extra.Cipher
+import Network.TLS.QUIC
 
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
@@ -29,11 +29,8 @@ defaultConfig :: Config
 defaultConfig = Config {
     confVersions       = [Draft27]
                          -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
-  , confCiphers        = [ cipher_TLS13_AES256GCM_SHA384
-                         , cipher_TLS13_AES128GCM_SHA256
-                         , cipher_TLS13_AES128CCM_SHA256
-                         ]
-  , confGroups         = [X25519,X448,P256,P384,P521]
+  , confCiphers        = supportedCiphers defaultSupported
+  , confGroups         = supportedGroups defaultSupported
   , confParameters     = defaultParameters
   , confKeyLog         = \_ -> return ()
   , confDebugLog       = \_ _ -> return ()

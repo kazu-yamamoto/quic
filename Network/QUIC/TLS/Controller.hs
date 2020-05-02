@@ -51,9 +51,8 @@ clientController callbacks ClientConfig{..} ver establish sendEarlyData =
     hook = def {
         onSuggestALPN = ccALPN ver
       }
-    supported = def {
-        supportedVersions = [TLS13]
-      , supportedCiphers  = confCiphers ccConfig
+    supported = defaultSupported {
+        supportedCiphers  = confCiphers ccConfig
       , supportedGroups   = confGroups  ccConfig
       }
     debug = def {
