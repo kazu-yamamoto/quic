@@ -22,7 +22,6 @@ executable server
   build-depends:        base >= 4.0 && < 5
                       , base16-bytestring
                       , bytestring
-                      , data-default-class
                       , filepath
                       , http2
                       , quic
@@ -39,7 +38,6 @@ executable client
   build-depends:        base >= 4.0 && < 5
                       , base16-bytestring
                       , bytestring
-                      , data-default-class
                       , filepath
                       , http2
                       , quic
