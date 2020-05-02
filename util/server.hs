@@ -12,7 +12,6 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.List as L
-import Network.TLS.Extra.Cipher
 import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
 import System.Environment (getArgs)
@@ -129,10 +128,6 @@ main = do
                     }
               , confKeyLog     = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
-              , confCiphers    = [ cipher_TLS13_AES256GCM_SHA384
-                                 , cipher_TLS13_AES128GCM_SHA256
-                                 , cipher_TLS13_AES128CCM_SHA256
-                                 ]
               , confDebugLog   = getDirLogger optDebugLogDir ".txt"
               , confQLog       = getDirLogger optQLogDir ".qlog"
               }

@@ -28,8 +28,12 @@ data Config = Config {
 defaultConfig :: Config
 defaultConfig = Config {
     confVersions       = [Draft27]
-  , confCiphers        = ciphersuite_strong
-  , confGroups         = [X25519,P256,P384,P521]
+                         -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
+  , confCiphers        = [ cipher_TLS13_AES256GCM_SHA384
+                         , cipher_TLS13_AES128GCM_SHA256
+                         , cipher_TLS13_AES128CCM_SHA256
+                         ]
+  , confGroups         = [X25519,X448,P256,P384,P521]
   , confParameters     = defaultParameters
   , confKeyLog         = \_ -> return ()
   , confDebugLog       = \_ _ -> return ()
