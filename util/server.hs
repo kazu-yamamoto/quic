@@ -117,15 +117,7 @@ main = do
           , scSessionManager = smgr
           , scEarlyDataSize  = 1024
           , scConfig     = defaultConfig {
-                confParameters = defaultParameters {
-                      maxStreamDataBidiLocal  =  262144
-                    , maxStreamDataBidiRemote =  262144
-                    , maxStreamDataUni        =  262144
-                    , maxData                 = 1048576
-                    , maxStreamsBidi          =     100
-                    , maxStreamsUni           =       3
-                    , idleTimeout             =   30000
-                    }
+                confParameters = exampleParameters
               , confKeyLog     = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
               , confDebugLog   = getDirLogger optDebugLogDir ".txt"
