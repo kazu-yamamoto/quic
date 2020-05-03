@@ -98,6 +98,7 @@ module Network.QUIC.Connection (
   , takeCrypto
   , putCrypto
   , takeOutput
+  , tryPeekOutput
   , putOutput
   , putOutput'
   , putOutputPP

@@ -160,21 +160,28 @@ sendStreamFragment conn send s dats0 fin0 = do
     if closed then
         connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
       else do
-        loop dats0
-        when fin0 $ setStreamFin s
+        mx <- tryPeekOutput conn
+        fin <- case mx of
+          Just (OutShutdown s1)
+            | streamId s == streamId s1 -> do
+                  _ <- takeOutput conn
+                  return True
+          _ -> return fin0
+        loop fin dats0
+        when fin $ setStreamFin s
   where
     sid = streamId s
-    loop :: [ByteString] -> IO ()
-    loop [] = return ()
-    loop dats = do
+    loop :: Bool -> [ByteString] -> IO ()
+    loop _ [] = return ()
+    loop fin dats = do
         let (dats1,dats2) = splitChunks dats
             len = sum $ map B.length dats1
         off <- getStreamOffset s len
-        let fin = fin0 && null dats2
-            frame = StreamF sid off dats1 fin
+        let fin1 = fin && null dats2
+            frame = StreamF sid off dats1 fin1
         bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
         send bss
-        loop dats2
+        loop fin dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]
 splitChunks :: [ByteString] -> ([ByteString],[ByteString])
