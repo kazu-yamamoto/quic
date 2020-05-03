@@ -198,8 +198,15 @@ sendStreamSmall conn send frame0 total0 = do
     send bss
     readIORef ref >>= mapM_ setStreamFin
   where
-    loop ref build total = do
+    tryPeekOutput' = do
         mx <- tryPeekOutput conn
+        case mx of
+          Nothing -> do
+              yield
+              tryPeekOutput conn
+          Just _ -> return mx
+    loop ref build total = do
+        mx <- tryPeekOutput'
         case mx of
           Just (OutStream s dats fin0) -> do
               closed <- getStreamFin s
