@@ -36,8 +36,7 @@ data Input = InpNewStream Stream
            | InpError QUICError
            deriving Show
 
-data Output = OutStream Stream [StreamData]
-            | OutShutdown Stream
+data Output = OutStream Stream [StreamData] Fin
             | OutControl EncryptionLevel [Frame]
             | OutEarlyData ByteString
             | OutHandshake [(EncryptionLevel,ByteString)]

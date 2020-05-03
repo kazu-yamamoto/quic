@@ -36,11 +36,11 @@ sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
     open <- isStreamOpen s
     unless open $ E.throwIO StreamIsClosed
-    putOutput' (streamOutputQ s) $ OutStream s dats
+    putOutput' (streamOutputQ s) $ OutStream s dats False
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
-shutdownStream s = putOutput' (streamOutputQ s) $ OutShutdown s
+shutdownStream s = putOutput' (streamOutputQ s) $ OutStream s [] True
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO (Either QUICError Stream)
