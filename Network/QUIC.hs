@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 -- | This main module provides APIs for QUIC.
 module Network.QUIC (
   -- * Running a QUIC client and server

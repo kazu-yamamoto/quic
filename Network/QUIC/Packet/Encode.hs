@@ -208,7 +208,7 @@ protectHeader headerBeg pnBeg epnLen cipher secret ctxttag0 = do
     -- We assume that clen (the size of ciphertext) is larger than
     -- or equal to sample length (16 bytes) in many cases.
     sample | clen >= slen = Sample $ B.take slen ctxt
-           | otherwise    = Sample $ (ctxt `B.append` B.take (slen - clen) tag0)
+           | otherwise    = Sample (ctxt `B.append` B.take (slen - clen) tag0)
     hpKey = headerProtectionKey cipher secret
     Mask mask = protectionMask cipher hpKey sample
     shuffle n = do

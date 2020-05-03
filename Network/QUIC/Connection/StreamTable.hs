@@ -80,4 +80,4 @@ putInputCrypto conn lvl off cdat = do
     let sid = toCryptoStreamId lvl
     Just s <- findStream conn sid
     (dats, _) <- isFragmentTop s off cdat False
-    mapM_ (\d -> putCrypto conn $ InpHandshake lvl d) dats
+    mapM_ (putCrypto conn . InpHandshake lvl) dats
