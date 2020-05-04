@@ -89,7 +89,8 @@ createClientConnection conf@ClientConfig{..} ver = do
     debugLog $ "Original CID: " ++ show peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
     insertCryptoStreams conn -- fixme: cleanup
-    void $ forkIO $ readerClient (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
+    mytid <- myThreadId
+    void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
     let recv = recvClient q
     return (conn,send,recv,cls,qlogger)
 

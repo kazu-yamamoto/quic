@@ -32,7 +32,6 @@ data Input = InpNewStream Stream
            | InpHandshake EncryptionLevel ByteString
            | InpTransportError TransportError FrameType ReasonPhrase
            | InpApplicationError ApplicationError ReasonPhrase
-           | InpVersion (Maybe Version)
            | InpError QUICError
            deriving Show
 

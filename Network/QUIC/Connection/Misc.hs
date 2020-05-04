@@ -8,8 +8,6 @@ module Network.QUIC.Connection.Misc (
   , clearThreads
   , getSockInfo
   , setSockInfo
-  , getNextVersion
-  , setNextVersion
   ) where
 
 import Control.Concurrent
@@ -59,11 +57,3 @@ getSockInfo Connection{..} = readIORef sockInfo
 
 setSockInfo :: Connection -> (Socket, RecvQ) -> IO ()
 setSockInfo Connection{..} si = writeIORef sockInfo si
-
-----------------------------------------------------------------
-
-getNextVersion :: Connection -> IO (Maybe Version)
-getNextVersion Connection{..} = readIORef nextVersion
-
-setNextVersion :: Connection -> Version -> IO ()
-setNextVersion Connection{..} ver = writeIORef nextVersion $ Just ver

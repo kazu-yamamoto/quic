@@ -7,6 +7,7 @@ module Network.QUIC.Client (
   , migration
   ) where
 
+import qualified Control.Exception as E
 import Control.Concurrent
 import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
@@ -21,8 +22,8 @@ import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
-readerClient :: [Version] -> Socket -> RecvQ -> Connection -> IO ()
-readerClient myVers s q conn = handleLog logAction $ forever $ do
+readerClient :: ThreadId -> [Version] -> Socket -> RecvQ -> Connection -> IO ()
+readerClient tid myVers s q conn = handleLog logAction $ forever $ do
     pkts <- NSB.recv s 2048 >>= decodePackets
     mapM_ putQ pkts
   where
@@ -35,10 +36,12 @@ readerClient myVers s q conn = handleLog logAction $ forever $ do
                   ver:_ -> do
                       ok <- checkCIDs conn dCID (Left sCID)
                       return $ if ok then Just ver else Nothing
+        control <- getClientController conn
+        control
+        clearClientController conn
         case mver of
-          Nothing  -> return ()
-          Just ver -> setNextVersion conn ver
-        putCrypto conn $ InpVersion mver
+          Nothing  -> E.throwTo tid VersionNegotiationFailed
+          Just ver -> E.throwTo tid $ NextVersion ver
     putQ (PacketIC pkt) = writeRecvQ q pkt
     putQ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt
@@ -115,5 +118,6 @@ rebind conn microseconds = do
     s1 <- getPeerName s0 >>= udpNATRebindingSocket
     setSockInfo conn (s1,q)
     v <- getVersion conn
-    void $ forkIO $ readerClient [v] s1 q conn -- versions are dummy
+    mytid <- myThreadId
+    void $ forkIO $ readerClient mytid [v] s1 q conn -- versions are dummy
     fire microseconds $ close s0

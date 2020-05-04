@@ -56,10 +56,6 @@ recvCryptoData conn = do
               let msg | bs == ""  = "received transport error during TLS handshake: " ++ show err
                       | otherwise = "received transport error during TLS handshake: " ++ show err ++ ", reason=" ++ show bs
                in return $ Left $ unexpectedMessage msg
-      -- When QUICError values have no TLS counterpart: we throw them as is.
-      -- TLS will transform into TLS.Error_Misc, this is quite unfortunate.
-      InpVersion (Just ver)      -> E.throwIO $ NextVersion ver
-      InpVersion Nothing         -> E.throwIO   VersionNegotiationFailed
       InpError e                 -> E.throwIO e
       InpApplicationError err bs -> E.throwIO $ ApplicationErrorOccurs err bs
       InpNewStream{}             -> E.throwIO   MustNotReached
