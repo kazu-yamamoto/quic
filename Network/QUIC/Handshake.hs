@@ -124,11 +124,14 @@ handshakeClient conf conn = do
                            , quicInstallKeys = installKeysClient hsr
                            , quicNotifyExtensions = setPeerParams conn
                            }
-    -- fixme: error handling
-    tid <- forkIO $ clientController qc conf ver (setResumptionSession conn) sendEarlyData
+        handshaker = clientController qc conf ver (setResumptionSession conn) sendEarlyData
+    mytid <- myThreadId
+    tid <- forkIO (handshaker `E.catch` tell mytid)
     setClientController conn (killThread tid)
     wait1RTTReady conn
   where
+    tell :: ThreadId -> TLS.TLSException -> IO ()
+    tell = E.throwTo
     installKeysClient _ (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
         case ccEarlyData conf of

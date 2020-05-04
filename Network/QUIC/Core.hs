@@ -62,8 +62,9 @@ connect conf = do
         handshakeClientConnection conf conn send recv qlogger `E.onException` cls
         return conn
     check se
-      | Just (NextVersion ver) <- E.fromException se = Right ver
-      | Just (e :: QUICError)  <- E.fromException se = Left e
+      | Just (NextVersion ver)   <- E.fromException se = Right ver
+      | Just (e :: QUICError)    <- E.fromException se = Left e
+      | Just (e :: TLSException) <- E.fromException se = Left (HandshakeFailed $ show e)
       | otherwise = Left $ BadThingHappen se
 
 createClientConnection :: ClientConfig -> Version
