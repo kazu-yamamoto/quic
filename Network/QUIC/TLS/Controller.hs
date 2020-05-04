@@ -2,8 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.TLS.Controller (
-    nullClientController
-  , clientController
+    clientController
   , nullServerController
   , serverController
   ) where
@@ -16,9 +15,6 @@ import Network.QUIC.Config
 import Network.QUIC.Parameters hiding (diff)
 import Network.QUIC.Types
 
-nullClientController :: ClientController
-nullClientController _ = return ClientHandshakeDone
-
 sessionManager :: SessionEstablish -> SessionManager
 sessionManager establish = SessionManager {
     sessionEstablish      = establish
@@ -27,7 +23,7 @@ sessionManager establish = SessionManager {
   , sessionInvalidate     = \_ -> return ()
   }
 
-clientController:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ClientController
+clientController:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ()
 clientController callbacks ClientConfig{..} ver establish sendEarlyData =
     newQUICClient cparams callbacks
   where

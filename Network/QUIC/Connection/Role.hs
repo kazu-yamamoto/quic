@@ -34,15 +34,15 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-setClientController :: Connection -> ClientController -> IO ()
+setClientController :: Connection -> IO () -> IO ()
 setClientController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
   ci { connClientCntrl = ctl }
 
-getClientController :: Connection -> IO ClientController
+getClientController :: Connection -> IO (IO ())
 getClientController Connection{..} = connClientCntrl <$> readIORef roleInfo
 
 clearClientController :: Connection -> IO ()
-clearClientController conn = setClientController conn nullClientController
+clearClientController conn = setClientController conn (return ())
 
 
 ----------------------------------------------------------------

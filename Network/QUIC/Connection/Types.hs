@@ -31,12 +31,17 @@ data Role = Client | Server deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
-data ConnectionState = Handshaking | Established | Closing CloseState deriving (Eq, Show)
+data ConnectionState = Handshaking
+                     | ReadyFor0RTT
+                     | ReadyFor1RTT
+                     | Established
+                     | Closing CloseState
+                     deriving (Eq, Ord, Show)
 
 data CloseState = CloseState {
     closeSent     :: Bool
   , closeReceived :: Bool
-  } deriving (Eq, Show)
+  } deriving (Eq, Ord, Show)
 
 ----------------------------------------------------------------
 
@@ -69,7 +74,7 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
+data RoleInfo = ClientInfo { connClientCntrl    :: IO ()
                            , clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
                            }
@@ -83,7 +88,7 @@ data RoleInfo = ClientInfo { connClientCntrl    :: ClientController
 
 defaultClientRoleInfo :: RoleInfo
 defaultClientRoleInfo = ClientInfo {
-    connClientCntrl = nullClientController
+    connClientCntrl = return ()
   , clientInitialToken = emptyToken
   , resumptionInfo = defaultResumptionInfo
   }

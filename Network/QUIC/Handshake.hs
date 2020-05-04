@@ -2,6 +2,7 @@
 
 module Network.QUIC.Handshake where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 import Data.ByteString
 import Data.IORef
@@ -123,24 +124,17 @@ handshakeClient conf conn = do
                            , quicInstallKeys = installKeysClient hsr
                            , quicNotifyExtensions = setPeerParams conn
                            }
-    control <- clientController qc conf ver (setResumptionSession conn) sendEarlyData
-    setClientController conn control
-    state <- control EnterClient
-    case state of
-        ClientHandshakeComplete -> return ()
-        ClientHandshakeFailed e -> do
-            mnver <- getNextVersion conn
-            case mnver of
-              Nothing   -> notifyPeer conn e >>= E.throwIO
-              Just nver -> E.throwIO $ NextVersion nver
-        _ -> E.throwIO $ HandshakeFailed $ "handshakeClient: unexpected " ++ show state
-
+    -- fixme: error handling
+    tid <- forkIO $ clientController qc conf ver (setResumptionSession conn) sendEarlyData
+    setClientController conn (killThread tid)
+    wait1RTTReady conn
   where
     installKeysClient _ (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
         case ccEarlyData conf of
           Nothing        -> return ()
           Just earlyData -> sendCryptoData conn $ OutEarlyData earlyData
+        setConnection0RTTReady conn
     installKeysClient hsr (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         setEncryptionLevel conn HandshakeLevel
@@ -149,17 +143,7 @@ handshakeClient conf conn = do
         setApplicationSecretInfo conn appSecInf
         setEncryptionLevel conn RTT1Level
         rxLevelChanged hsr
-
--- second half the the TLS handshake, executed out of the main thread
-handshakeClientAsync :: Connection -> ClientController -> IO ()
-handshakeClientAsync conn control = handleLog logAction $ do
-    state <- control RecvSessionTickets
-    case state of
-        ClientRecvSessionTicket -> return ()
-        ClientHandshakeFailed e -> notifyPeerAsync conn e >>= E.throwIO
-        _ -> E.throwIO $ HandshakeFailed $ "unexpected " ++ show state
-  where
-    logAction msg = connDebugLog conn ("client handshake: " ++ msg)
+        setConnection1RTTReady conn
 
 ----------------------------------------------------------------
 

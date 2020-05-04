@@ -75,10 +75,14 @@ module Network.QUIC.Connection (
   -- * State
   , isConnectionOpen
   , isConnectionEstablished
+  , setConnection0RTTReady
+  , setConnection1RTTReady
   , setConnectionEstablished
   , setCloseSent
   , setCloseReceived
   , isCloseSent
+  , wait0RTTReady
+  , wait1RTTReady
   , waitEstablished
   , waitClosed
   -- * Stream

@@ -5,8 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Network.TLS.QUIC hiding (RTT0)
-
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
@@ -144,7 +142,7 @@ processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
     fire 2000000 $ do
         control <- getClientController conn
-        ClientHandshakeDone <- control ExitClient
+        control
         clearClientController conn
         dropSecrets conn
 processFrame conn _ _frame        = do
