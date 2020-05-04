@@ -152,7 +152,7 @@ handshakeClient conf conn = do
 
 -- second half the the TLS handshake, executed out of the main thread
 handshakeClientAsync :: Connection -> ClientController -> IO ()
-handshakeClientAsync conn control = handleLog logAction $ forever $ do
+handshakeClientAsync conn control = handleLog logAction $ do
     state <- control RecvSessionTickets
     case state of
         ClientRecvSessionTicket -> return ()
