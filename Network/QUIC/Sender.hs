@@ -11,7 +11,6 @@ import Data.IORef
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
-import Network.QUIC.IO
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Types
@@ -106,12 +105,6 @@ sender conn send = handleLog logAction $ forever
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
 sendOutput :: Connection -> SendMany -> Output ->IO ()
-sendOutput conn send (OutEarlyData earlyData) = do
-    s <- stream conn
-    let sid = streamId s
-    off <- getStreamOffset s $ B.length earlyData
-    bss1 <- construct conn RTT0Level [StreamF sid off [earlyData] True] [] $ Just maximumQUICPacketSize
-    send bss1
 sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
@@ -194,7 +187,10 @@ sendStreamSmall conn send frame0 total0 = do
     ref <- newIORef []
     build <- loop ref (frame0 :) total0
     let frames = build []
-    bss <- construct conn RTT1Level frames [] $ Just maximumQUICPacketSize
+    ready <- isConnection1RTTReady conn
+    let lvl | ready     = RTT1Level
+            | otherwise = RTT0Level
+    bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
     readIORef ref >>= mapM_ setStreamFin
   where
@@ -240,7 +236,10 @@ sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
         off <- getStreamOffset s len
         let fin1 = fin && null dats2
             frame = StreamF sid off dats1 fin1
-        bss <- construct conn RTT1Level [frame] [] $ Just maximumQUICPacketSize
+        ready <- isConnection1RTTReady conn
+        let lvl | ready     = RTT1Level
+                | otherwise = RTT0Level
+        bss <- construct conn lvl [frame] [] $ Just maximumQUICPacketSize
         send bss
         loop fin dats2
 

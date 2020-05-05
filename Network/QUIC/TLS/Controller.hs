@@ -24,7 +24,7 @@ sessionManager establish = SessionManager {
   }
 
 clientController:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ()
-clientController callbacks ClientConfig{..} ver establish sendEarlyData =
+clientController callbacks ClientConfig{..} ver establish use0RTT =
     newQUICClient cparams callbacks
   where
     cparams = (defaultParamsClient ccServerName "") {
@@ -33,7 +33,7 @@ clientController callbacks ClientConfig{..} ver establish sendEarlyData =
       , clientSupported         = supported
       , clientDebug             = debug
       , clientWantSessionResume = resumptionSession ccResumption
-      , clientEarlyData         = if sendEarlyData then Just "" else Nothing
+      , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
     eQparams = encodeParametersList $ diffParameters $ confParameters ccConfig
     cshared = def {

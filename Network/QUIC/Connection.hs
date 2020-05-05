@@ -73,6 +73,7 @@ module Network.QUIC.Connection (
   -- * State
   , isConnectionOpen
   , isConnectionEstablished
+  , isConnection1RTTReady
   , setConnection0RTTReady
   , setConnection1RTTReady
   , setConnectionEstablished

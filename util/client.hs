@@ -254,25 +254,21 @@ runClient2 conf Options{..} cmd addr debug res = do
         info <- getConnectionInfo conn
         if rtt0 then do
             debug "------------------------ Response for early data"
-            es0 <- acceptStream conn
-            case es0 of
-              Right s0 -> do
-                  bs <- recvStream s0 1024
-                  debug $ "SID: " ++ show (streamId s0)
-                  debug $ show $ BS.unpack bs
-                  debug "------------------------ Response for early data"
-              _ -> return ()
+            clientHQ cmd conn debug
+            debug "------------------------ Response for early data"
+            waitEstablished conn
+            getConnectionInfo conn
           else do
             let client = case alpn info of
                   Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
                   _                                       -> clientH3 addr
             void $ client conn debug
-        return info
+            getConnectionInfo conn
   where
     rtt0 = opt0RTT && is0RTTPossible res
     conf' | rtt0 = conf {
                 ccResumption = res
-              , ccEarlyData  = Just cmd
+              , ccUse0RTT    = True
               }
           | otherwise = conf { ccResumption = res }
 

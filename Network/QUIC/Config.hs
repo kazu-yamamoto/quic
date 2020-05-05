@@ -46,7 +46,7 @@ data ClientConfig = ClientConfig {
   , ccALPN       :: Version -> IO (Maybe [ByteString])
   , ccValidate   :: Bool
   , ccResumption :: ResumptionInfo
-  , ccEarlyData  :: Maybe ByteString
+  , ccUse0RTT    :: Bool
   , ccConfig     :: Config
   }
 
@@ -58,7 +58,7 @@ defaultClientConfig = ClientConfig {
   , ccALPN       = \_ -> return Nothing
   , ccValidate   = False
   , ccResumption = defaultResumptionInfo
-  , ccEarlyData  = Nothing
+  , ccUse0RTT    = False
   , ccConfig     = defaultConfig
   }
 

@@ -5,7 +5,6 @@ module HandshakeSpec where
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
-import Data.ByteString
 import Data.IORef
 import Network.TLS
 import Test.Hspec
@@ -40,7 +39,7 @@ spec = do
                 sc = defaultServerConfig {
                        scSessionManager = smgr
                      }
-            testHandshake2 cc sc (FullHandshake, PreSharedKey) Nothing
+            testHandshake2 cc sc (FullHandshake, PreSharedKey) False
         it "can handshake in the case of 0-RTT" $ do
             smgr <- newSessionManager
             let cc = defaultClientConfig
@@ -48,7 +47,7 @@ spec = do
                        scSessionManager = smgr
                      , scEarlyDataSize  = 1024
                      }
-            testHandshake2 cc sc (FullHandshake, RTT0) (Just "early data")
+            testHandshake2 cc sc (FullHandshake, RTT0) True
 
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
 testHandshake cc sc mode = void $ concurrently client server
@@ -66,24 +65,24 @@ testHandshake cc sc mode = void $ concurrently client server
         getTLSMode conn `shouldReturn` mode
         stopQUICServer conn
 
-testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Maybe ByteString -> IO ()
-testHandshake2 cc1 sc (mode1, mode2) mEarlyData = void $ concurrently client server
+testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
+testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
   where
     sc' = sc {
             scKey  = "test/serverkey.pem"
           , scCert = "test/servercert.pem"
           }
     runClient cc mode = runQUICClient cc $ \conn -> do
+        wait1RTTReady conn
         isConnectionOpen conn `shouldReturn` True
+        waitEstablished conn
         getTLSMode conn `shouldReturn` mode
         threadDelay 100000 -- waiting for NST
         getResumptionInfo conn
     client = do
         res <- runClient cc1 mode1
         let cc2 = cc1 { ccResumption = res
-                      , ccEarlyData = case mEarlyData of
-                          Nothing -> Nothing
-                          Just bs -> Just bs
+                      , ccUse0RTT    = use0RTT
                       }
         void $ runClient cc2 mode2
     server = do

@@ -114,25 +114,25 @@ handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
     hsr <- newHndStateRef
-    let sendEarlyData = isJust $ ccEarlyData conf
+    let use0RTT = ccUse0RTT conf
         qc = QUICCallbacks { quicSend = sendTLS conn hsr
                            , quicRecv = recvTLS conn hsr
                            , quicInstallKeys = installKeysClient hsr
                            , quicNotifyExtensions = setPeerParams conn
                            }
-        handshaker = clientController qc conf ver (setResumptionSession conn) sendEarlyData
+        handshaker = clientController qc conf ver (setResumptionSession conn) use0RTT
     mytid <- myThreadId
     tid <- forkIO (handshaker `E.catch` tell mytid)
     setClientController conn (killThread tid)
-    wait1RTTReady conn
+    if use0RTT then
+       wait0RTTReady conn
+     else
+       wait1RTTReady conn
   where
     tell :: ThreadId -> TLS.TLSException -> IO ()
     tell = E.throwTo
     installKeysClient _ (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
-        case ccEarlyData conf of
-          Nothing        -> return ()
-          Just earlyData -> sendCryptoData conn $ OutEarlyData earlyData
         setConnection0RTTReady conn
     installKeysClient hsr (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
