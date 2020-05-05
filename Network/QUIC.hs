@@ -52,6 +52,9 @@ module Network.QUIC (
   , is0RTTPossible
   -- * Errors
   , QUICError(..)
+  -- * Synchronization
+  , wait1RTTReady
+  , waitEstablished
   ) where
 
 import Network.QUIC.Client
