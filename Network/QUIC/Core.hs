@@ -107,9 +107,6 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger = do
     case statelessResetToken params of
       Nothing  -> return ()
       Just srt -> setPeerStatelessResetToken conn srt
-    cidInfo <- getNewMyCID conn
-    let ncid = NewConnectionID cidInfo 0
-    putOutput conn $ OutControl RTT1Level [ncid]
     info <- getConnectionInfo conn
     connDebugLog conn $ show info
 

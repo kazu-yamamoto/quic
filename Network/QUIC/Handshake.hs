@@ -143,6 +143,9 @@ handshakeClient conf conn = do
         setEncryptionLevel conn RTT1Level
         rxLevelChanged hsr
         setConnection1RTTReady conn
+        cidInfo <- getNewMyCID conn
+        let ncid = NewConnectionID cidInfo 0
+        putOutput conn $ OutControl RTT1Level [ncid]
 
 ----------------------------------------------------------------
 
