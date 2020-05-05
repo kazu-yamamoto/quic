@@ -54,7 +54,7 @@ data ClientConfig = ClientConfig {
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
     ccServerName = "127.0.0.1"
-  , ccPortName   = "13443"
+  , ccPortName   = "4433"
   , ccALPN       = \_ -> return Nothing
   , ccValidate   = False
   , ccResumption = defaultResumptionInfo
@@ -79,7 +79,7 @@ data ServerConfig = ServerConfig {
 -- | The default value for server configuration.
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scAddresses      = [("127.0.0.1",13443)]
+    scAddresses      = [("127.0.0.1",4433)]
   , scKey            = "serverkey.pem"
   , scCert           = "servercert.pem"
   , scALPN           = Nothing
