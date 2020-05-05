@@ -2,7 +2,6 @@
 
 module HandshakeSpec where
 
-import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
 import Data.IORef
@@ -10,7 +9,6 @@ import Network.TLS
 import Test.Hspec
 
 import Network.QUIC
-import Network.QUIC.Connection
 
 spec :: Spec
 spec = do
@@ -58,11 +56,12 @@ testHandshake cc sc mode = void $ concurrently client server
           }
     client = runQUICClient cc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
-        getTLSMode conn `shouldReturn` mode
+        waitEstablished conn
+        handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
     server = runQUICServer sc' $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
-        threadDelay 100000 -- waiting for CF
-        getTLSMode conn `shouldReturn` mode
+        waitEstablished conn
+        handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         stopQUICServer conn
 
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
@@ -73,11 +72,9 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
           , scCert = "test/servercert.pem"
           }
     runClient cc mode = runQUICClient cc $ \conn -> do
-        wait1RTTReady conn
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
-        getTLSMode conn `shouldReturn` mode
-        threadDelay 100000 -- waiting for NST
+        handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         getResumptionInfo conn
     client = do
         res <- runClient cc1 mode1
@@ -89,7 +86,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
         ref <- newIORef (0 :: Int)
         runQUICServer sc' $ \conn -> do
             isConnectionOpen conn `shouldReturn` True
-            threadDelay 100000 -- waiting for CF
+            waitEstablished conn
             n <- readIORef ref
             if n >= 1 then stopQUICServer conn else writeIORef ref (n + 1)
 
