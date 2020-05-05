@@ -112,16 +112,18 @@ processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     putInput conn $ InpTransportError err ftyp reason
-    -- to cancel handshake
-    putCrypto conn $ InpTransportError err ftyp reason
+    when (isClient conn) $ do
+        control <- getClientController conn
+        control
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
 processFrame conn _ (ConnectionCloseApp err reason) = do
     connDebugLog conn $ "processFrame: ConnectionCloseApp " ++ show err
     putInput conn $ InpApplicationError err reason
-    -- to cancel handshake
-    putCrypto conn $ InpApplicationError err reason
+    when (isClient conn) $ do
+        control <- getClientController conn
+        control
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
