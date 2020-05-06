@@ -1,13 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Role (
-    getClientController
-  , setClientController
-  , clearClientController
-  , getServerController
-  , setServerController
-  , clearServerController
-  , setToken
+    setToken
   , getToken
   , getResumptionInfo
   , setRetried
@@ -30,31 +24,6 @@ import Data.IORef
 import Network.QUIC.Connection.Types
 import Network.QUIC.TLS
 import Network.QUIC.Types
-
-----------------------------------------------------------------
-
-setClientController :: Connection -> IO () -> IO ()
-setClientController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
-  ci { connClientCntrl = ctl }
-
-getClientController :: Connection -> IO (IO ())
-getClientController Connection{..} = connClientCntrl <$> readIORef roleInfo
-
-clearClientController :: Connection -> IO ()
-clearClientController conn = setClientController conn (return ())
-
-
-----------------------------------------------------------------
-
-setServerController :: Connection -> IO () -> IO ()
-setServerController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
-  ci {connServerCntrl = ctl }
-
-getServerController :: Connection -> IO (IO ())
-getServerController Connection{..} = connServerCntrl <$> readIORef roleInfo
-
-clearServerController :: Connection -> IO ()
-clearServerController conn = setServerController conn (return ())
 
 ----------------------------------------------------------------
 

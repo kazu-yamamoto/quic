@@ -63,6 +63,9 @@ module Network.QUIC.Connection (
   , clearThreads
   , getSockInfo
   , setSockInfo
+  , killHandshaker
+  , setKillHandshaker
+  , clearKillHandshaker
   -- * Transmit
   , keepPlainPacket
   , releasePlainPacket
@@ -106,12 +109,6 @@ module Network.QUIC.Connection (
   , putOutput'
   , putOutputPP
   -- * Role
-  , getClientController
-  , setClientController
-  , clearClientController
-  , getServerController
-  , setServerController
-  , clearServerController
   , setToken
   , getToken
   , getResumptionInfo

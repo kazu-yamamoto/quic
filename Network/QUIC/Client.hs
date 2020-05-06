@@ -36,9 +36,7 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
                   ver:_ -> do
                       ok <- checkCIDs conn dCID (Left sCID)
                       return $ if ok then Just ver else Nothing
-        control <- getClientController conn
-        control
-        clearClientController conn
+        killHandshaker conn
         case mver of
           Nothing  -> E.throwTo tid VersionNegotiationFailed
           Just ver -> E.throwTo tid $ NextVersion ver

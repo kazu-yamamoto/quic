@@ -120,10 +120,10 @@ handshakeClient conf conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = return ()
                            }
-        handshaker = clientController qc conf ver (setResumptionSession conn) use0RTT
+        handshaker = clientHandshaker qc conf ver (setResumptionSession conn) use0RTT
     mytid <- myThreadId
     tid <- forkIO (handshaker `E.catch` tell mytid)
-    setClientController conn (killThread tid)
+    setKillHandshaker conn tid
     if use0RTT then
        wait0RTTReady conn
      else
@@ -159,10 +159,10 @@ handshakeServer conf origCID conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = done
                            }
-        handshaker = serverController qc conf ver origCID
+        handshaker = serverHandshaker qc conf ver origCID
     mytid <- myThreadId
     tid <- forkIO (handshaker `E.catch` tell mytid)
-    setServerController conn (killThread tid)
+    setKillHandshaker conn tid
     wait1RTTReady conn
   where
     tell :: ThreadId -> TLS.TLSException -> IO ()
@@ -179,7 +179,7 @@ handshakeServer conf origCID conn = do
         -- is received and verified
     done = do
         setEncryptionLevel conn RTT1Level
-        clearServerController conn
+        clearKillHandshaker conn
         --
         setConnectionEstablished conn
         fire 2000000 $ dropSecrets conn

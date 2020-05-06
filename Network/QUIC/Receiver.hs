@@ -112,18 +112,14 @@ processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     putInput conn $ InpTransportError err ftyp reason
-    when (isClient conn) $ do
-        control <- getClientController conn
-        control
+    when (isClient conn) $ killHandshaker conn
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
 processFrame conn _ (ConnectionCloseApp err reason) = do
     connDebugLog conn $ "processFrame: ConnectionCloseApp " ++ show err
     putInput conn $ InpApplicationError err reason
-    when (isClient conn) $ do
-        control <- getClientController conn
-        control
+    when (isClient conn) $ killHandshaker conn
     setCloseSent conn
     setCloseReceived conn
     clearThreads conn
@@ -143,9 +139,7 @@ processFrame conn lvl Ping = do
 processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
     fire 2000000 $ do
-        control <- getClientController conn
-        control
-        clearClientController conn
+        killHandshaker conn
         dropSecrets conn
 processFrame conn _ _frame        = do
     connDebugLog conn $ "processFrame: " ++ show _frame

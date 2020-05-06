@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.QUIC.TLS.Controller (
-    clientController
-  , serverController
+module Network.QUIC.TLS.Handshaker (
+    clientHandshaker
+  , serverHandshaker
   ) where
 
 import Data.Default.Class
@@ -22,8 +22,8 @@ sessionManager establish = SessionManager {
   , sessionInvalidate     = \_ -> return ()
   }
 
-clientController:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ()
-clientController callbacks ClientConfig{..} ver establish use0RTT =
+clientHandshaker:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ()
+clientHandshaker callbacks ClientConfig{..} ver establish use0RTT =
     newQUICClient cparams callbacks
   where
     cparams = (defaultParamsClient ccServerName "") {
@@ -54,12 +54,12 @@ clientController callbacks ClientConfig{..} ver establish use0RTT =
         debugKeyLogger = confKeyLog ccConfig
       }
 
-serverController :: QUICCallbacks
+serverHandshaker :: QUICCallbacks
                  -> ServerConfig
                  -> Version
                  -> OrigCID
                  -> IO ()
-serverController callbacks ServerConfig{..} ver origCID = do
+serverHandshaker callbacks ServerConfig{..} ver origCID = do
     Right cred <- credentialLoadX509 scCert scKey
     let qparams = case origCID of
           OCFirst _    -> confParameters scConfig

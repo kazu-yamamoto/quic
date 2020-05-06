@@ -74,12 +74,10 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-data RoleInfo = ClientInfo { connClientCntrl    :: IO ()
-                           , clientInitialToken :: Token -- new or retry token
+data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
                            }
-              | ServerInfo { connServerCntrl :: IO ()
-                           , tokenManager    :: ~CT.TokenManager
+              | ServerInfo { tokenManager    :: ~CT.TokenManager
                            , registerCID     :: CID -> Connection -> IO ()
                            , unregisterCID   :: CID -> IO ()
                            , askRetry        :: Bool
@@ -88,15 +86,13 @@ data RoleInfo = ClientInfo { connClientCntrl    :: IO ()
 
 defaultClientRoleInfo :: RoleInfo
 defaultClientRoleInfo = ClientInfo {
-    connClientCntrl = return ()
-  , clientInitialToken = emptyToken
+    clientInitialToken = emptyToken
   , resumptionInfo = defaultResumptionInfo
   }
 
 defaultServerRoleInfo :: RoleInfo
 defaultServerRoleInfo = ServerInfo {
-    connServerCntrl = return ()
-  , tokenManager = undefined
+    tokenManager = undefined
   , registerCID = \_ _ -> return ()
   , unregisterCID = \_ -> return ()
   , askRetry = False
@@ -139,6 +135,7 @@ data Connection = Connection {
   , connQLog          :: QlogMsg -> IO ()
   -- Manage
   , threadIds         :: IORef [Weak ThreadId]
+  , killHandshakerAct :: IORef (IO ())
   , sockInfo          :: IORef (Socket,RecvQ)
   -- Mine
   , myCIDDB           :: IORef CIDDB
@@ -189,6 +186,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> return qLog
         -- Manage
         <*> newIORef []
+        <*> newIORef (return ())
         <*> return sref
         -- Mine
         <*> newIORef (newCIDDB myCID)
