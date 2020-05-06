@@ -78,7 +78,7 @@ data RoleInfo = ClientInfo { connClientCntrl    :: IO ()
                            , clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
                            }
-              | ServerInfo { connServerCntrl :: ServerController
+              | ServerInfo { connServerCntrl :: IO ()
                            , tokenManager    :: ~CT.TokenManager
                            , registerCID     :: CID -> Connection -> IO ()
                            , unregisterCID   :: CID -> IO ()
@@ -95,7 +95,7 @@ defaultClientRoleInfo = ClientInfo {
 
 defaultServerRoleInfo :: RoleInfo
 defaultServerRoleInfo = ServerInfo {
-    connServerCntrl = nullServerController
+    connServerCntrl = return ()
   , tokenManager = undefined
   , registerCID = \_ _ -> return ()
   , unregisterCID = \_ -> return ()

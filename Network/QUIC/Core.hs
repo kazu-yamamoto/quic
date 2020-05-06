@@ -170,8 +170,6 @@ createServerConnection conf dispatch acc mainThreadId = do
             setThreadIds conn [tid0,tid1,tid2,tid3]
             setMainThreadId conn mainThreadId
             handshakeServer conf oCID conn `E.onException` clearThreads conn
-            tid4 <- forkIO $ getServerController conn >>= handshakeServerAsync conn
-            addThreadIds conn [tid4]
             setRegister conn register unregister
             register myCID conn
             info <- getConnectionInfo conn

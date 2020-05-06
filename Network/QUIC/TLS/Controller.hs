@@ -3,7 +3,6 @@
 
 module Network.QUIC.TLS.Controller (
     clientController
-  , nullServerController
   , serverController
   ) where
 
@@ -55,14 +54,11 @@ clientController callbacks ClientConfig{..} ver establish use0RTT =
         debugKeyLogger = confKeyLog ccConfig
       }
 
-nullServerController :: ServerController
-nullServerController _ = return ServerHandshakeDone
-
 serverController :: QUICCallbacks
                  -> ServerConfig
                  -> Version
                  -> OrigCID
-                 -> IO ServerController
+                 -> IO ()
 serverController callbacks ServerConfig{..} ver origCID = do
     Right cred <- credentialLoadX509 scCert scKey
     let qparams = case origCID of

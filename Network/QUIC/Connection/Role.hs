@@ -26,7 +26,6 @@ module Network.QUIC.Connection.Role (
 import Control.Concurrent
 import qualified Crypto.Token as CT
 import Data.IORef
-import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.TLS
@@ -47,15 +46,15 @@ clearClientController conn = setClientController conn (return ())
 
 ----------------------------------------------------------------
 
-setServerController :: Connection -> ServerController -> IO ()
+setServerController :: Connection -> IO () -> IO ()
 setServerController Connection{..} ctl = modifyIORef' roleInfo $ \ci ->
   ci {connServerCntrl = ctl }
 
-getServerController :: Connection -> IO ServerController
+getServerController :: Connection -> IO (IO ())
 getServerController Connection{..} = connServerCntrl <$> readIORef roleInfo
 
 clearServerController :: Connection -> IO ()
-clearServerController conn = setServerController conn nullServerController
+clearServerController conn = setServerController conn (return ())
 
 ----------------------------------------------------------------
 
