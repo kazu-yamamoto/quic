@@ -266,8 +266,8 @@ splitChunks bs0 = loop bs0 0 id
                             in (curr,bs')
       | otherwise         = let curr = build [] in (curr, bbs)
       where
-        siz = len + siz0
         len = B.length b
+        siz = siz0 + len
 
 ----------------------------------------------------------------
 
