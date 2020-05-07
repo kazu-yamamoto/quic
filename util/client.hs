@@ -159,7 +159,7 @@ main = do
 runClient :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> IO ()
 runClient conf opts@Options{..} cmd addr debug = do
     debug "------------------------"
-    (info1,info2,res,mig) <- runQUICClient conf $ \conn -> do
+    (info1,info2,res,mig, client') <- runQUICClient conf $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
@@ -174,7 +174,7 @@ runClient conf opts@Options{..} cmd addr debug = do
         debug "\n------------------------"
         i2 <- getConnectionInfo conn
         r <- getResumptionInfo conn
-        return (i1, i2, r, m)
+        return (i1, i2, r, m, client)
     if optVerNego then do
         putStrLn "Result: (V) version negotiation  ... OK"
         exitSuccess
@@ -183,7 +183,7 @@ runClient conf opts@Options{..} cmd addr debug = do
         exitSuccess
       else if optResumption then do
         if isResumptionPossible res then do
-            info3 <- runClient2 conf opts cmd addr debug res
+            info3 <- runClient2 conf opts debug res client'
             if handshakeMode info3 == PreSharedKey then do
                 putStrLn "Result: (R) TLS resumption ... OK"
                 exitSuccess
@@ -195,7 +195,7 @@ runClient conf opts@Options{..} cmd addr debug = do
             exitFailure
       else if opt0RTT then do
         if is0RTTPossible res then do
-            info3 <- runClient2 conf opts cmd addr debug res
+            info3 <- runClient2 conf opts debug res client'
             if handshakeMode info3 == RTT0 then do
                 putStrLn "Result: (Z) 0-RTT ... OK"
                 exitSuccess
@@ -245,23 +245,19 @@ runClient conf opts@Options{..} cmd addr debug = do
                  putStrLn "Result: (D) stream data ... OK"
                  exitSuccess
 
-runClient2 :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> ResumptionInfo -> IO ConnectionInfo
-runClient2 conf Options{..} cmd addr debug res = do
+runClient2 :: ClientConfig -> Options -> (String -> IO ()) -> ResumptionInfo -> (Connection -> (String -> IO ()) -> IO ()) -> IO ConnectionInfo
+runClient2 conf Options{..} debug res client = do
     threadDelay 100000
     debug "<<<< next connection >>>>"
     debug "------------------------"
     runQUICClient conf' $ \conn -> do
-        info <- getConnectionInfo conn
         if rtt0 then do
             debug "------------------------ Response for early data"
-            clientHQ cmd conn debug
+            void $ client conn debug
             debug "------------------------ Response for early data"
             waitEstablished conn
             getConnectionInfo conn
           else do
-            let client = case alpn info of
-                  Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
-                  _                                       -> clientH3 addr
             void $ client conn debug
             getConnectionInfo conn
   where
