@@ -159,6 +159,7 @@ data Connection = Connection {
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingHandshake  :: TVar [CryptPacket]
+  , pendingRTT0       :: TVar [CryptPacket]
   , pendingRTT1       :: TVar [CryptPacket]
   , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
   , elySecInfo        :: IORef EarlySecretInfo
@@ -209,6 +210,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef (if isclient then 1 else 0)
         -- TLS
         <*> newTVarIO InitialLevel
+        <*> newTVarIO []
         <*> newTVarIO []
         <*> newTVarIO []
         <*> newIORef isecs
