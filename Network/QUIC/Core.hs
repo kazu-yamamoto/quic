@@ -21,6 +21,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
+import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Receiver
@@ -157,7 +158,8 @@ createServerConnection conf dispatch acc mainThreadId = do
             when retried $ do
                 qlogRecvInitial conn
                 qlogSentRetry conn
-            setTokenManager conn $ tokenMgr dispatch
+            let mgr = tokenMgr dispatch
+            setTokenManager conn mgr
             setRetried conn retried
             let send bss = void $ do
                     (s,_) <- readIORef sref
@@ -172,6 +174,15 @@ createServerConnection conf dispatch acc mainThreadId = do
             handshakeServer conf oCID conn `E.onException` clearThreads conn
             setRegister conn register unregister
             register myCID conn
+            --
+            cryptoToken <- generateToken =<< getVersion conn
+            token <- encryptToken mgr cryptoToken
+            cidInfo <- getNewMyCID conn
+            register (cidInfoCID cidInfo) conn
+            let ncid = NewConnectionID cidInfo 0
+            let frames = [NewToken token,ncid]
+            putOutput conn $ OutControl RTT1Level frames
+            --
             info <- getConnectionInfo conn
             debugLog $ show info
             return conn

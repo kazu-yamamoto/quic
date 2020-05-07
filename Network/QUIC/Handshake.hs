@@ -12,7 +12,6 @@ import Network.TLS.QUIC
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Imports
-import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Timeout
@@ -178,21 +177,11 @@ handshakeServer conf origCID conn = do
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done = do
-        setEncryptionLevel conn RTT1Level
         clearKillHandshaker conn
-        --
-        setConnectionEstablished conn
+        setEncryptionLevel conn RTT1Level
         fire 2000000 $ dropSecrets conn
-        --
-        cryptoToken <- generateToken =<< getVersion conn
-        mgr <- getTokenManager conn
-        token <- encryptToken mgr cryptoToken
-        cidInfo <- getNewMyCID conn
-        register <- getRegister conn
-        register (cidInfoCID cidInfo) conn
-        let ncid = NewConnectionID cidInfo 0
-        let frames = [HandshakeDone,NewToken token,ncid]
-        putOutput conn $ OutControl RTT1Level frames
+        putOutput conn $ OutControl RTT1Level [HandshakeDone]
+        setConnectionEstablished conn
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]
