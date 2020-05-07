@@ -5,6 +5,9 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import Control.Concurrent
+import qualified Control.Exception as E
+
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
@@ -17,13 +20,25 @@ receiver conn recv = handleLog logAction $ do
     loopHandshake
     loopEstablished
   where
+    recvTimeout = do
+        mx <- timeout 10000000 recv
+        case mx of
+          Nothing -> do
+              lvl <- getEncryptionLevel conn
+              let frames = [ConnectionCloseQUIC InternalError 0 ""]
+              putOutput conn $ OutControl lvl frames
+              threadDelay 100000
+              killHandshaker conn
+              clearThreads conn -- kill myself
+              E.throwIO NeverReached
+          Just x  -> return x
     loopHandshake = do
-        cpkt <- recv
+        cpkt <- recvTimeout
         processCryptPacketHandshake conn cpkt
         established <- isConnectionEstablished conn
         unless established loopHandshake
     loopEstablished = forever $ do
-        CryptPacket hdr crypt <- recv
+        CryptPacket hdr crypt <- recvTimeout
         let cid = headerMyCID hdr
         included <- myCIDsInclude conn cid
         if included then do

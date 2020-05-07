@@ -21,6 +21,7 @@ instance E.Exception QUICError
 
 data InternalControl = NextVersion Version
                      | MustNotReached
+                     | NeverReached
                      deriving (Eq, Show)
 
 instance E.Exception InternalControl
