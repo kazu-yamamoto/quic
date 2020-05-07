@@ -117,31 +117,40 @@ sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
     bss <- construct conn lvl frames pns $ Just maximumQUICPacketSize
     send bss
 
+limitationC :: Int
+limitationC = 1024
+
+thresholdC :: Int
+thresholdC = 200
+
 sendCryptoFragments :: Connection -> SendMany -> [(EncryptionLevel, CryptoData)] ->IO ()
-sendCryptoFragments conn send = loop 1024 maximumQUICPacketSize id
+sendCryptoFragments conn send = loop limitationC maximumQUICPacketSize id
   where
-    loop _ _ pre0 [] =
-        let bss0 = pre0 []
-         in unless (null bss0) (send bss0)
-    loop len0 sz0 pre0 ((lvl, bs) : xs)
-        | B.length bs > len0 = do
-            let (target, rest) = B.splitAt len0 bs
-            frame1 <- cryptoFrame conn target lvl
-            bss1 <- construct conn lvl [frame1] [] (Just sz0)
-            send (pre0 bss1)
-            loop 1024 maximumQUICPacketSize id ((lvl, rest) : xs)
-        | otherwise = do
-            frame1 <- cryptoFrame conn bs lvl
-            let mTargetSize = if null xs then Just sz0 else Nothing
-            bss1 <- construct conn lvl [frame1] [] mTargetSize
-            let len1 = len0 - B.length bs
-                sz1  = sz0  - sum (map B.length bss1)
-            if sz1 >= 48
-                then loop len1 sz1 (pre0 . (bss1 ++)) xs
-                else do
-                    bss1' <- construct conn lvl [frame1] [] (Just sz0)
-                    send (pre0 bss1')
-                    loop 1024 maximumQUICPacketSize id xs
+    loop _ _ build0 [] = do
+        let bss0 = build0 []
+        unless (null bss0) $ send bss0
+    loop len0 siz0 build0 ((lvl, bs) : xs) | B.length bs > len0 = do
+        let (target, rest) = B.splitAt len0 bs
+        frame1 <- cryptoFrame conn target lvl
+        bss1 <- construct conn lvl [frame1] [] $ Just siz0
+        send $ build0 bss1
+        loop limitationC maximumQUICPacketSize id ((lvl, rest) : xs)
+    loop _ siz0 build0 ((lvl, bs) : []) = do
+        frame1 <- cryptoFrame conn bs lvl
+        bss1 <- construct conn lvl [frame1] [] $ Just siz0
+        send $ build0 bss1
+    loop len0 siz0 build0 ((lvl, bs) : xs) | len0 - B.length bs < thresholdC = do
+        frame1 <- cryptoFrame conn bs lvl
+        bss1 <- construct conn lvl [frame1] [] $ Just siz0
+        send $ build0 bss1
+        loop limitationC maximumQUICPacketSize id xs
+    loop len0 siz0 build0 ((lvl, bs) : xs) = do
+        frame1 <- cryptoFrame conn bs lvl
+        bss1 <- construct conn lvl [frame1] [] Nothing
+        let len1 = len0 - B.length bs
+            siz1 = siz0 - sum (map B.length bss1)
+            build1 = build0 . (bss1 ++)
+        loop len1 siz1 build1 xs
 
 ----------------------------------------------------------------
 
