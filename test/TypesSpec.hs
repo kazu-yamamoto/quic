@@ -4,7 +4,7 @@ import Data.List
 import Test.Hspec
 import Test.QuickCheck
 
-import Network.QUIC.Types
+import Network.QUIC.Internal
 
 spec :: Spec
 spec = do

@@ -8,9 +8,7 @@ module TLSSpec where
 import qualified Data.ByteString as B
 import Test.Hspec
 
-import Network.QUIC.TLS
-import Network.QUIC.Types
-import Network.QUIC.Utils
+import Network.QUIC.Internal
 
 ----------------------------------------------------------------
 

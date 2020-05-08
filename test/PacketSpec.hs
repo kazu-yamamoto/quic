@@ -9,10 +9,7 @@ import qualified Network.Socket as NS
 import Test.Hspec
 
 import Network.QUIC
-import Network.QUIC.Connection
-import Network.QUIC.Packet
-import Network.QUIC.Types
-import Network.QUIC.Utils
+import Network.QUIC.Internal
 
 spec :: Spec
 spec = do

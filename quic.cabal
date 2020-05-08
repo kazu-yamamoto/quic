@@ -14,23 +14,47 @@ cabal-version:       >= 1.10
 
 library
   exposed-modules:     Network.QUIC
+                       Network.QUIC.Internal
+  other-modules:
                        Network.QUIC.Client
                        Network.QUIC.Config
                        Network.QUIC.Connection
+                       Network.QUIC.Connection.Crypto
+                       Network.QUIC.Connection.Migration
+                       Network.QUIC.Connection.Misc
+                       Network.QUIC.Connection.PacketNumber
+                       Network.QUIC.Connection.Qlog
+                       Network.QUIC.Connection.Queue
+                       Network.QUIC.Connection.Role
+                       Network.QUIC.Connection.State
+                       Network.QUIC.Connection.Stream
+                       Network.QUIC.Connection.StreamTable
+                       Network.QUIC.Connection.Transmit
+                       Network.QUIC.Connection.Types
                        Network.QUIC.Core
+                       Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.IO
+                       Network.QUIC.Imports
                        Network.QUIC.Packet
+                       Network.QUIC.Packet.Decode
+                       Network.QUIC.Packet.Decrypt
+                       Network.QUIC.Packet.Encode
+                       Network.QUIC.Packet.Frame
+                       Network.QUIC.Packet.Header
+                       Network.QUIC.Packet.Number
+                       Network.QUIC.Packet.Token
+                       Network.QUIC.Packet.Version
                        Network.QUIC.Parameters
-                       Network.QUIC.Receiver
                        Network.QUIC.Qlog
+                       Network.QUIC.Receiver
                        Network.QUIC.Sender
                        Network.QUIC.Server
                        Network.QUIC.Socket
-                       Network.QUIC.Timeout
                        Network.QUIC.TLS
                        Network.QUIC.TLS.Crypto
                        Network.QUIC.TLS.Handshaker
+                       Network.QUIC.Timeout
                        Network.QUIC.Types
                        Network.QUIC.Types.Ack
                        Network.QUIC.Types.CID
@@ -43,29 +67,6 @@ library
                        Network.QUIC.Types.Stream
                        Network.QUIC.Types.UserError
                        Network.QUIC.Utils
-  other-modules:
-                       Network.QUIC.Connection.Crypto
-                       Network.QUIC.Connection.Migration
-                       Network.QUIC.Connection.Misc
-                       Network.QUIC.Connection.PacketNumber
-                       Network.QUIC.Connection.Queue
-                       Network.QUIC.Connection.Role
-                       Network.QUIC.Connection.State
-                       Network.QUIC.Connection.Stream
-                       Network.QUIC.Connection.StreamTable
-                       Network.QUIC.Connection.Transmit
-                       Network.QUIC.Connection.Types
-                       Network.QUIC.Connection.Qlog
-                       Network.QUIC.Exception
-                       Network.QUIC.Imports
-                       Network.QUIC.Packet.Decode
-                       Network.QUIC.Packet.Decrypt
-                       Network.QUIC.Packet.Encode
-                       Network.QUIC.Packet.Frame
-                       Network.QUIC.Packet.Header
-                       Network.QUIC.Packet.Number
-                       Network.QUIC.Packet.Token
-                       Network.QUIC.Packet.Version
   -- other-extensions:
   build-depends:       base >= 4.7 && < 5
                      , base16-bytestring
