@@ -61,8 +61,8 @@ module Network.QUIC (
 import Network.QUIC.Client
 import Network.QUIC.Config
 import Network.QUIC.Connection
-import Network.QUIC.Core
 import Network.QUIC.IO
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.Run
 import Network.QUIC.Types

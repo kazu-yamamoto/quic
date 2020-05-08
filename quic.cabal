@@ -31,7 +31,6 @@ library
                        Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Transmit
                        Network.QUIC.Connection.Types
-                       Network.QUIC.Core
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.IO
@@ -48,6 +47,7 @@ library
                        Network.QUIC.Parameters
                        Network.QUIC.Qlog
                        Network.QUIC.Receiver
+                       Network.QUIC.Run
                        Network.QUIC.Sender
                        Network.QUIC.Server
                        Network.QUIC.Socket

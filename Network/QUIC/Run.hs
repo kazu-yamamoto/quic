@@ -3,7 +3,7 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Network.QUIC.Core where
+module Network.QUIC.Run where
 
 import Control.Concurrent
 import qualified Control.Exception as E
