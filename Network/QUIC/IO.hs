@@ -47,12 +47,12 @@ acceptStream :: Connection -> IO (Either QUICError Stream)
 acceptStream conn = do
     mi <- takeInput conn
     case mi of
-      InpNewStream s          -> return $ Right s
-      InpError e              -> return $ Left e
-      InpApplicationError e r -> return $ Left $ ApplicationErrorOccurs e r
+      InpNewStream        s         -> return $ Right s
+      InpError e                    -> return $ Left e
+      InpApplicationError e r       -> return $ Left $ ApplicationErrorOccurs e r
       InpTransportError NoError _ _ -> return $ Left ConnectionIsClosed
-      InpTransportError e _ r -> return $ Left $ TransportErrorOccurs e r
-      _                       -> E.throwIO MustNotReached
+      InpTransportError e _ r       -> return $ Left $ TransportErrorOccurs e r
+      _                             -> E.throwIO MustNotReached
 
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned.
