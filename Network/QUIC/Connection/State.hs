@@ -2,14 +2,15 @@
 
 module Network.QUIC.Connection.State (
     isConnectionOpen
-  , isConnectionEstablished
   , setConnection0RTTReady
   , isConnection1RTTReady
   , setConnection1RTTReady
+  , isConnectionEstablished
   , setConnectionEstablished
-  , setCloseSent
-  , setCloseReceived
   , isCloseSent
+  , setCloseSent
+  , isCloseReceived
+  , setCloseReceived
   , wait0RTTReady
   , wait1RTTReady
   , waitEstablished
@@ -77,6 +78,12 @@ isCloseSent :: Connection -> IO Bool
 isCloseSent Connection{..} = atomically (chk <$> readTVar connectionState)
   where
     chk (Closing cs) = closeSent cs
+    chk _            = False
+
+isCloseReceived :: Connection -> IO Bool
+isCloseReceived Connection{..} = atomically (chk <$> readTVar connectionState)
+  where
+    chk (Closing cs) = closeReceived cs
     chk _            = False
 
 wait0RTTReady :: Connection -> IO ()

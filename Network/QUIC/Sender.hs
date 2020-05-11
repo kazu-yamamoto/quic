@@ -176,7 +176,7 @@ packFin conn s False = do
 
 sendStreamFragment :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
 sendStreamFragment conn send s dats fin0 = do
-    closed <- getStreamFin s
+    closed <- getStreamTxFin s
     let sid = streamId s
     if closed then
         connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
@@ -189,7 +189,7 @@ sendStreamFragment conn send s dats fin0 = do
             sendStreamSmall conn send frame len
           else
             sendStreamLarge conn send s dats fin
-        when fin $ setStreamFin s
+        when fin $ setStreamTxFin s
 
 sendStreamSmall :: Connection -> SendMany -> Frame -> Int -> IO ()
 sendStreamSmall conn send frame0 total0 = do
@@ -201,7 +201,7 @@ sendStreamSmall conn send frame0 total0 = do
             | otherwise = RTT0Level
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
-    readIORef ref >>= mapM_ setStreamFin
+    readIORef ref >>= mapM_ setStreamTxFin
   where
     tryPeekOutput' = do
         mx <- tryPeekOutput conn
@@ -214,7 +214,7 @@ sendStreamSmall conn send frame0 total0 = do
         mx <- tryPeekOutput'
         case mx of
           Just (OutStream s dats fin0) -> do
-              closed <- getStreamFin s
+              closed <- getStreamTxFin s
               let sid = streamId s
               if closed then do
                   connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."

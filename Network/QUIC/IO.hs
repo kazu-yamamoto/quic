@@ -12,19 +12,23 @@ import Network.QUIC.Types
 -- | Creating a bidirectional stream.
 stream :: Connection -> IO Stream
 stream conn = do
+    openC <- isConnectionOpen conn
+    unless openC $ E.throwIO ConnectionIsClosed
     sid <- getMyNewStreamId conn
     insertStream conn sid
 
 -- | Creating a unidirectional stream.
 unidirectionalStream :: Connection -> IO Stream
 unidirectionalStream conn = do
+    openC <- isConnectionOpen conn
+    unless openC $ E.throwIO ConnectionIsClosed
     sid <- getMyNewUniStreamId conn
     insertStream conn sid
 
 -- | Checking if the stream is open.
-isStreamOpen :: Stream -> IO Bool
-isStreamOpen s = do
-    fin <- getStreamFin s
+isStreamTxOpen :: Stream -> IO Bool
+isStreamTxOpen s = do
+    fin <- getStreamTxFin s
     return (not fin)
 
 -- | Sending data in the stream.
@@ -34,17 +38,24 @@ sendStream s dat = sendStreamMany s [dat]
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
-    open <- isStreamOpen s
+--    sent <- isCloseSent conn
+--    when sent $ E.throwIO ConnectionIsClosed
+    open <- isStreamTxOpen s
     unless open $ E.throwIO StreamIsClosed
     putOutput' (streamOutputQ s) $ OutStream s dats False
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
-shutdownStream s = putOutput' (streamOutputQ s) $ OutStream s [] True
+shutdownStream s = do
+--    sent <- isCloseSent conn
+--    when sent $ E.throwIO ConnectionIsClosed
+    putOutput' (streamOutputQ s) $ OutStream s [] True
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO (Either QUICError Stream)
 acceptStream conn = do
+    openC <- isConnectionOpen conn
+    unless openC $ E.throwIO ConnectionIsClosed
     mi <- takeInput conn
     case mi of
       InpNewStream        s         -> return $ Right s
@@ -57,7 +68,10 @@ acceptStream conn = do
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned.
 recvStream :: Stream -> Int -> IO ByteString
-recvStream = takeStreamData
+recvStream s = do
+--    received <- isCloseReceived conn
+--    when received $ E.throwIO ConnectionIsClosed
+    takeStreamData s
 
 isClientInitiatedBidirectional :: StreamId -> Bool
 isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0

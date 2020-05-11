@@ -8,8 +8,8 @@ module Network.QUIC.Types.Stream (
   , Stream(streamId, streamOutputQ)
   , newStream
   , getStreamOffset
-  , getStreamFin
-  , setStreamFin
+  , getStreamTxFin
+  , setStreamTxFin
   , takeStreamData
   , putStreamData
   , isFragmentTop
@@ -94,13 +94,13 @@ getStreamOffset Stream{..} len = do
     writeIORef streamStateTx $ StreamState (off + len) fin
     return off
 
-getStreamFin :: Stream -> IO Fin
-getStreamFin Stream{..} = do
+getStreamTxFin :: Stream -> IO Fin
+getStreamTxFin Stream{..} = do
     StreamState _ fin <- readIORef streamStateTx
     return fin
 
-setStreamFin :: Stream -> IO ()
-setStreamFin Stream{..} = do
+setStreamTxFin :: Stream -> IO ()
+setStreamTxFin Stream{..} = do
     StreamState off _ <- readIORef streamStateTx
     writeIORef streamStateTx $ StreamState off True
 

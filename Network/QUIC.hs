@@ -10,7 +10,6 @@ module Network.QUIC (
   , Stream
   , stream
   , unidirectionalStream
-  , isStreamOpen
   , streamId
   , StreamId
   -- * IO
