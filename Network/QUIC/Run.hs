@@ -204,9 +204,14 @@ close conn = do
     putOutput conn $ OutControl RTT1Level frames
     setCloseSent conn
     void $ timeout 100000 $ waitClosed conn -- fixme: timeout
+    when (isServer conn) $ do
+        unregister <- getUnregister conn
+        myCIDs <- getMyCIDs conn
+        mapM_ unregister myCIDs
+    killHandshaker conn
     clearThreads conn
     -- close the socket after threads reading/writing the socket die.
-    connClose conn
+    closeSockets conn
     free $ headerBuffer conn
     free $ payloadBuffer conn
 

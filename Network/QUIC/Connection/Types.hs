@@ -130,7 +130,7 @@ data Connection = Connection {
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
   -- Actions
-  , connClose         :: Close
+  , closeSockets      :: Close
   , connDebugLog      :: LogAction
   , connQLog          :: QlogMsg -> IO ()
   -- Manage

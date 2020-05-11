@@ -5,7 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Control.Concurrent
 import qualified Control.Exception as E
 
 import Network.QUIC.Connection
@@ -24,13 +23,8 @@ receiver conn recv = handleLog logAction $ do
         mx <- timeout 10000000 recv
         case mx of
           Nothing -> do
-              lvl <- getEncryptionLevel conn
-              let frames = [ConnectionCloseQUIC InternalError 0 ""]
-              putOutput conn $ OutControl lvl frames
-              threadDelay 100000
-              killHandshaker conn
-              clearThreads conn -- kill myself
-              E.throwIO NeverReached
+              putInput conn $ InpError ConnectionIsTimeout
+              E.throwIO Break
           Just x  -> return x
     loopHandshake = do
         cpkt <- recvTimeout
@@ -81,7 +75,7 @@ processCryptPacket conn hdr crypt = do
               qlogReceived conn StatelessReset
               connDebugLog conn "Connection is reset statelessly"
               setCloseReceived conn
-              clearThreads conn
+              putInput conn $ InpError ConnectionIsReset
             else do
               qlogDropped conn hdr
               connDebugLog conn $ "Cannot decrypt: " ++ show level
@@ -127,17 +121,10 @@ processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
     putInput conn $ InpTransportError err ftyp reason
-    when (isClient conn) $ killHandshaker conn
-    setCloseSent conn
     setCloseReceived conn
-    clearThreads conn
 processFrame conn _ (ConnectionCloseApp err reason) = do
-    connDebugLog conn $ "processFrame: ConnectionCloseApp " ++ show err
     putInput conn $ InpApplicationError err reason
-    when (isClient conn) $ killHandshaker conn
-    setCloseSent conn
     setCloseReceived conn
-    clearThreads conn
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     putInputStream conn sid off dat fin
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) =
