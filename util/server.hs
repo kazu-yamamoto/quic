@@ -17,7 +17,6 @@ import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit
 import System.IO
-import System.Timeout
 
 import Network.QUIC
 
@@ -138,11 +137,10 @@ serverHQ :: Connection -> IO ()
 serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
   where
     loop = do
-        mbs <- timeout 5000000 $ acceptStream conn
-        case mbs of
-          Nothing -> connDebugLog conn "Connection timeout"
-          Just (Left e)  -> print e
-          Just (Right s) -> do
+        es <- acceptStream conn
+        case es of
+          Left  e -> print e
+          Right s -> do
               bs <- recvStream s 1024
               sendStream s html
               shutdownStream s
@@ -169,11 +167,10 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     loop hdrbdy
   where
     loop hdrbdy = do
-        mx <- timeout 5000000 $ acceptStream conn
-        case mx of
-          Nothing -> connDebugLog conn "Connection timeout"
-          Just (Left e) -> print e
-          Just (Right s) -> do -- forkIO
+        es <- acceptStream conn
+        case es of
+          Left  e -> print e
+          Right s -> do -- forkIO
               bs <- recvStream s 1024
               let sid = streamId s
               putStrLn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
