@@ -50,6 +50,7 @@ module Network.QUIC (
   , getResumptionInfo
   , isResumptionPossible
   , is0RTTPossible
+  , clientCertificateChain
   -- * Errors
   , QUICError(..)
   -- * Synchronization

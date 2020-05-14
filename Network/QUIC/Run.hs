@@ -9,6 +9,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
+import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc (free)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
@@ -269,3 +270,8 @@ instance Show ConnectionInfo where
                            ++ "Local SockAddr: " ++ show localSockAddr ++ "\n"
                            ++ "Remote SockAddr: " ++ show remoteSockAddr ++
                            if retry then "\nQUIC retry" else ""
+
+clientCertificateChain :: Connection -> IO (Maybe CertificateChain)
+clientCertificateChain conn
+  | isClient conn = return Nothing
+  | otherwise     = getCertificateChain conn
