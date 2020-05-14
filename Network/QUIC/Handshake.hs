@@ -117,7 +117,7 @@ handshakeClient conf conn = do
                            , quicRecv = recvTLS conn hsr
                            , quicInstallKeys = installKeysClient hsr
                            , quicNotifyExtensions = setPeerParams conn
-                           , quicDone = return ()
+                           , quicDone = \_ -> return ()
                            }
         handshaker = clientHandshaker qc conf ver (setResumptionSession conn) use0RTT
     mytid <- myThreadId
@@ -176,7 +176,8 @@ handshakeServer conf origCID conn = do
         setApplicationSecretInfo conn appSecInf
         -- will switch to RTT1Level after client Finished
         -- is received and verified
-    done = do
+    done ctx = do
+        TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
         setEncryptionLevel conn RTT1Level
         fire 2000000 $ dropSecrets conn

@@ -123,6 +123,8 @@ module Network.QUIC.Connection (
   , getTokenManager
   , setMainThreadId
   , getMainThreadId
+  , setCertificateChain
+  , getCertificateChain
   -- Qlog
   , qlogReceived
   , qlogSent

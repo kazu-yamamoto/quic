@@ -13,6 +13,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc (mallocBytes)
 import Network.Socket (Socket)
 import Network.TLS.QUIC
@@ -82,6 +83,7 @@ data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , unregisterCID   :: CID -> IO ()
                            , askRetry        :: Bool
                            , mainThreadId    :: ~ThreadId
+                           , certChain       :: Maybe CertificateChain
                            }
 
 defaultClientRoleInfo :: RoleInfo
@@ -97,6 +99,7 @@ defaultServerRoleInfo = ServerInfo {
   , unregisterCID = \_ -> return ()
   , askRetry = False
   , mainThreadId = undefined
+  , certChain = Nothing
   }
 
 -- fixme: limitation

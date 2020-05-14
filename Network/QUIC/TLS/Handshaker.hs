@@ -24,7 +24,7 @@ sessionManager establish = SessionManager {
 
 clientHandshaker:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ()
 clientHandshaker callbacks ClientConfig{..} ver establish use0RTT =
-    newQUICClient cparams callbacks
+    tlsQUICClient cparams callbacks
   where
     cparams = (defaultParamsClient ccServerName "") {
         clientShared            = cshared
@@ -77,7 +77,7 @@ serverHandshaker callbacks ServerConfig{..} ver origCID = do
       , serverDebug     = debug
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
-    newQUICServer sparams callbacks
+    tlsQUICServer sparams callbacks
   where
     hook = def {
         onALPNClientSuggest = case scALPN of

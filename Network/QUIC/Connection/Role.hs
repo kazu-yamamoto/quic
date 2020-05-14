@@ -15,11 +15,14 @@ module Network.QUIC.Connection.Role (
   , getTokenManager
   , setMainThreadId
   , getMainThreadId
+  , setCertificateChain
+  , getCertificateChain
   ) where
 
 import Control.Concurrent
 import qualified Crypto.Token as CT
 import Data.IORef
+import Data.X509 (CertificateChain)
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.TLS
@@ -100,3 +103,13 @@ setMainThreadId Connection{..} tid = modifyIORef' roleInfo $ \si -> si {
 
 getMainThreadId :: Connection -> IO ThreadId
 getMainThreadId Connection{..} = mainThreadId <$> readIORef roleInfo
+
+----------------------------------------------------------------
+
+setCertificateChain :: Connection -> Maybe CertificateChain -> IO ()
+setCertificateChain Connection{..} mcc = modifyIORef' roleInfo $ \si -> si {
+    certChain = mcc
+  }
+
+getCertificateChain :: Connection -> IO (Maybe CertificateChain)
+getCertificateChain Connection{..} = certChain <$> readIORef roleInfo
