@@ -160,21 +160,24 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
           _               -> error "dispatcher"
     setSocketOption s opt 1
     forever $ do
-        (peersa, bs0, _cmsgs, _) <- recv
+--        (peersa, bs0, _cmsgs, _) <- recv
+        (bs0, peersa) <- recv
         -- macOS overrides the local address of the socket
         -- if in_pktinfo is used.
-#if defined(darwin_HOST_OS)
-        let cmsgs' = []
-#else
-        let cmsgs' = filterCmsg _cmsgid _cmsgs
-#endif
+-- #if defined(darwin_HOST_OS)
+--         let cmsgs' = []
+-- #else
+--         let cmsgs' = filterCmsg _cmsgid _cmsgs
+-- #endif
         (pkt, bs0RTT) <- decodePacket bs0
-        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
+--        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
+        let send bs = void $ NSB.sendTo s bs peersa
         dispatch d conf pkt mysa peersa send bs0RTT
   where
     logAction msg = putStrLn ("dispatcher: " ++ msg)
     recv = do
-        ex <- E.try $ NSB.recvMsg s 2048 64 0
+--        ex <- E.try $ NSB.recvMsg s 2048 64 0
+        ex <- E.try $ NSB.recvFrom s 2048
         case ex of
            Right x -> return x
            Left se
