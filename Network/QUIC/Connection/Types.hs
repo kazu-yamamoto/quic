@@ -221,7 +221,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef isecs
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
-        <*> newIORef (ApplicationSecretInfo Nothing defaultTrafficSecrets)
+        <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
         <*> newIORef FullHandshake
         <*> newIORef Nothing
         <*> mallocBytes 256

@@ -197,7 +197,7 @@ rxApplicationSecret conn = do
 
 xApplicationSecret :: Connection -> IO (Secret, Secret)
 xApplicationSecret Connection{..} = do
-    ApplicationSecretInfo _ (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef appSecInfo
+    ApplicationSecretInfo (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef appSecInfo
     return (Secret c, Secret s)
 
 ----------------------------------------------------------------
