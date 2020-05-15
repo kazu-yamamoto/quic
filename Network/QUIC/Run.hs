@@ -246,7 +246,7 @@ getConnectionInfo conn = do
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
     mode <- getTLSMode conn
-    ApplicationSecretInfo _ mproto _ <- getApplicationSecretInfo conn
+    ApplicationSecretInfo mproto _ <- getApplicationSecretInfo conn
     r <- getRetried conn
     v <- getVersion conn
     return ConnectionInfo {
