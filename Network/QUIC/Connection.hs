@@ -26,6 +26,7 @@ module Network.QUIC.Connection (
   , setPeerParameters
   , getCipher
   , getTLSMode
+  , setTLSMode
   , getTxSecret
   , getRxSecret
   , setInitialSecrets

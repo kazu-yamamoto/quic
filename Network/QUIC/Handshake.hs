@@ -117,7 +117,7 @@ handshakeClient conf conn = do
                            , quicRecv = recvTLS conn hsr
                            , quicInstallKeys = installKeysClient hsr
                            , quicNotifyExtensions = setPeerParams conn
-                           , quicDone = \_ -> return ()
+                           , quicDone = done
                            }
         handshaker = clientHandshaker qc conf ver (setResumptionSession conn) use0RTT
     mytid <- myThreadId
@@ -145,6 +145,10 @@ handshakeClient conf conn = do
         cidInfo <- getNewMyCID conn
         let ncid = NewConnectionID cidInfo 0
         putOutput conn $ OutControl RTT1Level [ncid]
+    done ctx = do
+        minfo <- TLS.contextGetInformation ctx
+        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
+            setTLSMode conn mode
 
 ----------------------------------------------------------------
 
@@ -177,6 +181,9 @@ handshakeServer conf origCID conn = do
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do
+        minfo <- TLS.contextGetInformation ctx
+        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
+            setTLSMode conn mode
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
         setEncryptionLevel conn RTT1Level

@@ -11,6 +11,7 @@ module Network.QUIC.Connection.Crypto (
   --
   , getCipher
   , getTLSMode
+  , setTLSMode
   --
   , getTxSecret
   , getRxSecret
@@ -109,9 +110,10 @@ setPeerParameters Connection{..} plist =
 ----------------------------------------------------------------
 
 getTLSMode :: Connection -> IO HandshakeMode13
-getTLSMode Connection{..} = do
-    (ApplicationSecretInfo mode _ _) <- readIORef appSecInfo
-    return mode
+getTLSMode Connection{..} = readIORef hndMode
+
+setTLSMode :: Connection -> HandshakeMode13 -> IO ()
+setTLSMode Connection{..} = writeIORef hndMode
 
 ----------------------------------------------------------------
 
