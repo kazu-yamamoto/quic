@@ -169,6 +169,7 @@ data Connection = Connection {
   , hndSecInfo        :: IORef HandshakeSecretInfo
   , appSecInfo        :: IORef ApplicationSecretInfo
   , hndMode           :: IORef HandshakeMode13
+  , appProto          :: IORef (Maybe NegotiatedProtocol)
   -- WriteBuffer
   , headerBuffer      :: Buffer
   , headerBufferSize  :: BufferSize
@@ -222,6 +223,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
         <*> newIORef (ApplicationSecretInfo Nothing defaultTrafficSecrets)
         <*> newIORef FullHandshake
+        <*> newIORef Nothing
         <*> mallocBytes 256
         <*> return 256
         <*> mallocBytes 1280

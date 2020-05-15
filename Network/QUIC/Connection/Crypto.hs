@@ -12,6 +12,8 @@ module Network.QUIC.Connection.Crypto (
   , getCipher
   , getTLSMode
   , setTLSMode
+  , getApplicationProtocol
+  , setApplicationProtocol
   --
   , getTxSecret
   , getRxSecret
@@ -114,6 +116,12 @@ getTLSMode Connection{..} = readIORef hndMode
 
 setTLSMode :: Connection -> HandshakeMode13 -> IO ()
 setTLSMode Connection{..} = writeIORef hndMode
+
+getApplicationProtocol :: Connection -> IO (Maybe NegotiatedProtocol)
+getApplicationProtocol Connection{..} = readIORef appProto
+
+setApplicationProtocol :: Connection -> Maybe NegotiatedProtocol -> IO ()
+setApplicationProtocol Connection{..} = writeIORef appProto
 
 ----------------------------------------------------------------
 
