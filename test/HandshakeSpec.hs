@@ -5,7 +5,8 @@ module HandshakeSpec where
 import Control.Concurrent.Async
 import Control.Monad
 import Data.IORef
-import Network.TLS
+import Data.List
+import Network.TLS hiding (TLSException(..))
 import Test.Hspec
 
 import Network.QUIC
@@ -46,6 +47,30 @@ spec = do
                      , scEarlyDataSize  = 1024
                      }
             testHandshake2 cc sc (FullHandshake, RTT0) True
+        it "fails with unknown server certificate" $ do
+            let cc1 = defaultClientConfig {
+                        ccValidate = True  -- ouch, default should be reversed
+                      }
+                cc2 = defaultClientConfig
+                sc  = defaultServerConfig
+                certificateRejected e
+                    | HandshakeFailed m <- e = "certificate rejected" `isInfixOf` m
+                    | otherwise = False
+            testHandshake3 cc1 cc2 sc certificateRejected
+        it "fails with no group in common" $ do
+            let cc1 = defaultClientConfig {
+                        ccConfig = defaultConfig { confGroups = [X25519] }
+                      }
+                cc2 = defaultClientConfig {
+                        ccConfig = defaultConfig { confGroups = [P256] }
+                      }
+                sc  = defaultServerConfig {
+                        scConfig = defaultConfig { confGroups = [P256] }
+                      }
+                handshakeFailure e
+                    | HandshakeFailed m <- e = "HandshakeFailure" `isInfixOf` m
+                    | otherwise = False
+            testHandshake3 cc1 cc2 sc handshakeFailure
 
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
 testHandshake cc sc mode = void $ concurrently client server
@@ -89,6 +114,28 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
             waitEstablished conn
             n <- readIORef ref
             if n >= 1 then stopQUICServer conn else writeIORef ref (n + 1)
+
+testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICError -> Bool) -> IO ()
+testHandshake3 cc1 cc2 sc selector = void $ concurrently clients server
+  where
+    sc' = sc {
+            scKey  = "test/serverkey.pem"
+          , scCert = "test/servercert.pem"
+          }
+    clients = do
+        let query content conn = do
+                isConnectionOpen conn `shouldReturn` True
+                waitEstablished conn
+                s <- stream conn
+                sendStream s content
+        runQUICClient cc1 (query "first") `shouldThrow` selector
+        runQUICClient cc2 (query "second") `shouldReturn` ()
+    server = runQUICServer sc' $ \conn -> do
+        isConnectionOpen conn `shouldReturn` True
+        waitEstablished conn
+        Right s <- acceptStream conn
+        recvStream s 1024 `shouldReturn` "second"
+        stopQUICServer conn
 
 newSessionManager :: IO SessionManager
 newSessionManager = sessionManager <$> newIORef Nothing
