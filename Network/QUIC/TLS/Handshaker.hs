@@ -40,7 +40,7 @@ clientHandshaker callbacks ClientConfig{..} ver establish use0RTT =
                                   def
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
-      , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+      , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
       , sharedSessionManager = sessionManager establish
       }
     hook = def {
@@ -67,7 +67,7 @@ serverHandshaker callbacks ServerConfig{..} ver origCID = do
         eQparams = encodeParametersList $ diffParameters qparams
     let sshared = def {
             sharedCredentials = Credentials [cred]
-          , sharedExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+          , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
           , sharedSessionManager = scSessionManager
           }
     let sparams = def {
