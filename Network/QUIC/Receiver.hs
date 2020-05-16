@@ -122,7 +122,9 @@ processFrame conn RTT1Level (PathChallenge dat) =
     putOutput conn $ OutControl RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
-processFrame conn _ (ConnectionCloseQUIC err ftyp reason) = do
+processFrame conn lvl (ConnectionCloseQUIC err ftyp reason) = do
+    when (lvl `elem` [InitialLevel, HandshakeLevel]) $
+        putCrypto conn $ InpTransportError err ftyp reason
     putInput conn $ InpTransportError err ftyp reason
     setCloseReceived conn
 processFrame conn _ (ConnectionCloseApp err reason) = do
