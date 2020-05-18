@@ -14,7 +14,6 @@ import Foreign.Marshal.Alloc (free)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import Network.TLS hiding (Version, HandshakeFailed)
-import Network.TLS.QUIC
 
 import Network.QUIC.Client
 import Network.QUIC.Config
@@ -245,7 +244,8 @@ getConnectionInfo conn = do
     mycid   <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
-    ApplicationSecretInfo mode mproto _ <- getApplicationSecretInfo conn
+    mproto <- getApplicationProtocol conn
+    mode <- getTLSMode conn
     r <- getRetried conn
     v <- getVersion conn
     return ConnectionInfo {

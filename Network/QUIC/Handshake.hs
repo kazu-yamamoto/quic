@@ -117,7 +117,7 @@ handshakeClient conf conn = do
                            , quicRecv = recvTLS conn hsr
                            , quicInstallKeys = installKeysClient hsr
                            , quicNotifyExtensions = setPeerParams conn
-                           , quicDone = \_ -> return ()
+                           , quicDone = done
                            }
         handshaker = clientHandshaker qc conf ver (setResumptionSession conn) use0RTT
     mytid <- myThreadId
@@ -128,8 +128,7 @@ handshakeClient conf conn = do
      else
        wait1RTTReady conn
   where
-    tell :: ThreadId -> TLS.TLSException -> IO ()
-    tell = E.throwTo
+    tell tid e = notifyPeer conn (getErrorCause e) >>= E.throwTo tid
     installKeysClient _ (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
         setConnection0RTTReady conn
@@ -145,6 +144,11 @@ handshakeClient conf conn = do
         cidInfo <- getNewMyCID conn
         let ncid = NewConnectionID cidInfo 0
         putOutput conn $ OutControl RTT1Level [ncid]
+    done ctx = do
+        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
+        minfo <- TLS.contextGetInformation ctx
+        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
+            setTLSMode conn mode
 
 ----------------------------------------------------------------
 
@@ -164,8 +168,7 @@ handshakeServer conf origCID conn = do
     setKillHandshaker conn tid
     wait1RTTReady conn
   where
-    tell :: ThreadId -> TLS.TLSException -> IO ()
-    tell = E.throwTo
+    tell tid e = notifyPeer conn (getErrorCause e) >>= E.throwTo tid
     installKeysServer _ (InstallEarlyKeys mEarlySecInf) =
         setEarlySecretInfo conn mEarlySecInf
     installKeysServer hsr (InstallHandshakeKeys hndSecInf) = do
@@ -177,6 +180,10 @@ handshakeServer conf origCID conn = do
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do
+        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
+        minfo <- TLS.contextGetInformation ctx
+        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
+            setTLSMode conn mode
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
         setEncryptionLevel conn RTT1Level
@@ -193,12 +200,20 @@ setPeerParams conn [ExtensionRaw extid params]
           Just plist -> setPeerParameters conn plist
 setPeerParams _ _ = return ()
 
+getErrorCause :: TLS.TLSException -> TLS.TLSError
+getErrorCause (TLS.HandshakeFailed e) = e
+getErrorCause (TLS.Terminated _ _ e) = e
+getErrorCause e =
+    let msg = "unexpected TLS exception: " ++ show e
+     in TLS.Error_Protocol (msg, True, TLS.InternalError)
+
 notifyPeer :: Connection -> TLS.TLSError -> IO QUICError
 notifyPeer conn err = do
     let ad = errorToAlertDescription err
         frames = [ConnectionCloseQUIC (CryptoError ad) 0 ""]
     level <- getEncryptionLevel conn
     putOutput conn $ OutControl level frames
+    setCloseSent conn
     return $ HandshakeFailed $ errorToAlertMessage err
 
 notifyPeerAsync :: Connection -> TLS.TLSError -> IO QUICError
