@@ -60,15 +60,14 @@ serverHandshaker :: QUICCallbacks
                  -> OrigCID
                  -> IO ()
 serverHandshaker callbacks ServerConfig{..} ver origCID = do
-    Right cred <- credentialLoadX509 scCert scKey
     let qparams = case origCID of
           OCFirst _    -> confParameters scConfig
           OCRetry oCID -> (confParameters scConfig) { originalConnectionId = Just oCID }
         eQparams = encodeParametersList $ diffParameters qparams
     let sshared = def {
-            sharedCredentials = Credentials [cred]
+            sharedCredentials     = confCredentials scConfig
           , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
-          , sharedSessionManager = scSessionManager
+          , sharedSessionManager  = scSessionManager
           }
     let sparams = def {
         serverShared    = sshared

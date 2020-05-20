@@ -22,6 +22,7 @@ data Config = Config {
   , confKeyLog         :: String -> IO ()
   , confDebugLog       :: CID -> String -> IO ()
   , confQLog           :: CID -> String -> IO ()
+  , confCredentials    :: Credentials
   }
 
 -- | The default value for common configuration.
@@ -35,6 +36,7 @@ defaultConfig = Config {
   , confKeyLog         = \_ -> return ()
   , confDebugLog       = \_ _ -> return ()
   , confQLog           = \_ _ -> return ()
+  , confCredentials    = mempty
   }
 
 ----------------------------------------------------------------
@@ -67,8 +69,6 @@ defaultClientConfig = ClientConfig {
 -- | Server configuration.
 data ServerConfig = ServerConfig {
     scAddresses      :: [(IP,PortNumber)]
-  , scKey            :: FilePath
-  , scCert           :: FilePath
   , scALPN           :: Maybe (Version -> [ByteString] -> IO ByteString)
   , scRequireRetry   :: Bool
   , scSessionManager :: SessionManager
@@ -80,8 +80,6 @@ data ServerConfig = ServerConfig {
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
     scAddresses      = [("127.0.0.1",4433)]
-  , scKey            = "serverkey.pem"
-  , scCert           = "servercert.pem"
   , scALPN           = Nothing
   , scRequireRetry   = False
   , scSessionManager = noSessionManager

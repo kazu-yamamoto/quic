@@ -12,6 +12,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.List as L
+import Network.TLS (credentialLoadX509, Credentials(..))
 import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
 import System.Environment (getArgs)
@@ -107,20 +108,20 @@ main = do
         addrs = read <$> init ips
         aps = (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
+    Right cred <- credentialLoadX509 optCertFile optKeyFile
     let conf = defaultServerConfig {
-            scAddresses    = aps
-          , scKey          = optKeyFile
-          , scCert         = optCertFile
-          , scALPN         = Just chooseALPN
-          , scRequireRetry = optRetry
+            scAddresses      = aps
+          , scALPN           = Just chooseALPN
+          , scRequireRetry   = optRetry
           , scSessionManager = smgr
           , scEarlyDataSize  = 1024
-          , scConfig     = defaultConfig {
-                confParameters = exampleParameters
-              , confKeyLog     = getLogger optKeyLogFile
-              , confGroups     = getGroups optGroups
-              , confDebugLog   = getDirLogger optDebugLogDir ".txt"
-              , confQLog       = getDirLogger optQLogDir ".qlog"
+          , scConfig         = defaultConfig {
+                confParameters  = exampleParameters
+              , confKeyLog      = getLogger optKeyLogFile
+              , confGroups      = getGroups optGroups
+              , confDebugLog    = getDirLogger optDebugLogDir ".txt"
+              , confQLog        = getDirLogger optQLogDir ".qlog"
+              , confCredentials = Credentials [cred]
               }
           }
     runQUICServer conf $ \conn -> do
