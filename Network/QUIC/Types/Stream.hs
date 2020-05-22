@@ -32,7 +32,7 @@ data Input = InpNewStream Stream
            | InpHandshake EncryptionLevel ByteString
            | InpTransportError TransportError FrameType ReasonPhrase
            | InpApplicationError ApplicationError ReasonPhrase
-          | InpError QUICError
+           | InpError QUICError
            deriving Show
 
 data Output = OutStream Stream [StreamData] Fin
