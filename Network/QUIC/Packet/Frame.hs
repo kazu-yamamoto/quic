@@ -120,7 +120,7 @@ decodeFrame rbuf = do
       0x00 -> decodePaddingFrames rbuf
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
-      0x04 -> decodeResetFrame rbuf
+      0x04 -> decodeResetStreamFrame rbuf
       0x05 -> decodeStopSending rbuf
       0x06 -> decodeCryptoFrame rbuf
       0x07 -> decodeNewToken rbuf
@@ -180,8 +180,8 @@ decodeAckFrame rbuf = do
         let n' = n - 1 :: Int
         getRanges n' (build . ((gap, range) :))
 
-decodeResetFrame :: ReadBuffer -> IO Frame
-decodeResetFrame _ = return ResetStream -- fixme
+decodeResetStreamFrame :: ReadBuffer -> IO Frame
+decodeResetStreamFrame _ = return ResetStream -- fixme
 
 decodeStopSending :: ReadBuffer -> IO Frame
 decodeStopSending rbuf = do

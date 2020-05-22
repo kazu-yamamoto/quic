@@ -86,9 +86,20 @@ processCryptPacket conn hdr crypt = do
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
+processFrame conn lvl Ping = do
+    -- An implementation sends:
+    --   Handshake PN=2
+    --   Handshake PN=3 Ping
+    --   Handshake PN=0
+    --   Handshake PN=1
+    -- If ACK 2-3 sends immediately, the peer misunderstand that
+    -- 0 and 1 are dropped.
+    when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
 processFrame conn _ (Ack ackInfo _) = do
     let pns = fromAckInfo ackInfo
     mapM_ (releasePlainPacketRemoveAcks conn) pns
+processFrame _ _ ResetStream{} = return ()
+processFrame _ _ StopSending{} = return ()
 processFrame conn lvl (Crypto off cdat) = do
     case lvl of
       InitialLevel   -> do
@@ -105,6 +116,16 @@ processFrame conn lvl (Crypto off cdat) = do
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connDebugLog conn "processFrame: NewToken"
+processFrame conn RTT0Level (StreamF sid off (dat:_) fin) =
+    putInputStream conn sid off dat fin
+processFrame conn RTT1Level (StreamF sid off (dat:_) fin) =
+    putInputStream conn sid off dat fin
+processFrame _ _ MaxData{} = return ()
+processFrame _ _ MaxStreamData{} = return ()
+processFrame _ _ MaxStreams{} = return ()
+processFrame _ _ DataBlocked{} = return ()
+processFrame _ _ StreamDataBlocked{} = return ()
+processFrame _ _ StreamsBlocked{} = return ()
 processFrame conn _ (NewConnectionID cidInfo rpt) = do
     addPeerCID conn cidInfo
     when (rpt >= 1) $ do
@@ -130,26 +151,14 @@ processFrame conn lvl (ConnectionCloseQUIC err ftyp reason) = do
 processFrame conn _ (ConnectionCloseApp err reason) = do
     putInput conn $ InpApplicationError err reason
     setCloseReceived conn
-processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
-    putInputStream conn sid off dat fin
-processFrame conn RTT1Level (StreamF sid off (dat:_) fin) =
-    putInputStream conn sid off dat fin
-processFrame conn lvl Ping = do
-    -- An implementation sends:
-    --   Handshake PN=2
-    --   Handshake PN=3 Ping
-    --   Handshake PN=0
-    --   Handshake PN=1
-    -- If ACK 2-3 sends immediately, the peer misunderstand that
-    -- 0 and 1 are dropped.
-    when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
 processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
     fire 2000000 $ do
         killHandshaker conn
         dropSecrets conn
-processFrame conn _ _frame        = do
-    connDebugLog conn $ "processFrame: " ++ show _frame
+processFrame conn _ (UnknownFrame _n)       = do
+    connDebugLog conn $ "processFrame: " ++ show _n
+processFrame _ _ _ = return () -- error
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.
