@@ -120,7 +120,7 @@ handshakeClient conf conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = done
                            }
-        authCIDs = AuthCIDs (Just myCID) Nothing Nothing
+        authCIDs = defaultAuthCIDs { initSrcCID = Just myCID }
         setter = setResumptionSession conn
         handshaker = clientHandshaker qc conf ver authCIDs setter use0RTT
     mytid <- myThreadId

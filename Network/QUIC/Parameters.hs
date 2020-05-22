@@ -194,6 +194,10 @@ diffParameters p = catMaybes [
   , diff p disableMigration        ParametersDisableMigration        (const "")
   , diff p preferredAddress        ParametersPreferredAddress        fromJust
   , diff p activeConnectionIdLimit ParametersActiveConnectionIdLimit encInt
+  , diff p initialSourceConnectionId
+         ParametersInitialSourceConnectionId    (fromCID . fromJust)
+  , diff p retrySourceConnectionId
+         ParametersRetrySourceConnectionId      (fromCID . fromJust)
   , diff p greaseParameter         ParametersGrease                  fromJust
   ]
 
@@ -263,3 +267,6 @@ getCIDsToParameters Parameters{..} = AuthCIDs {
   , initSrcCID = initialSourceConnectionId
   , retrySrcID = retrySourceConnectionId
   }
+
+defaultAuthCIDs :: AuthCIDs
+defaultAuthCIDs = AuthCIDs Nothing Nothing Nothing
