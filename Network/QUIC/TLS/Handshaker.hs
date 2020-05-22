@@ -62,7 +62,7 @@ serverHandshaker :: QUICCallbacks
 serverHandshaker callbacks ServerConfig{..} ver origCID = do
     let qparams = case origCID of
           OCFirst _    -> confParameters scConfig
-          OCRetry oCID -> (confParameters scConfig) { originalConnectionId = Just oCID }
+          OCRetry oCID -> (confParameters scConfig) { originalDestinationConnectionId = Just oCID }
         eQparams = encodeParametersList $ diffParameters qparams
     let sshared = def {
             sharedCredentials     = confCredentials scConfig
