@@ -138,22 +138,24 @@ runQUICServer conf server = handleLog debugLog $ do
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId -> IO Connection
 createServerConnection conf dispatch acc mainThreadId = do
-    let Accept ver myCID peerCID oCID mysa peersa0 q register unregister retried = acc
+    let Accept ver peerCID authCIDs mysa peersa0 q register unregister = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
     qq <- newQlogQ
-    let ocid = originalCID oCID
+    let Just myCID = initSrcCID authCIDs
+        Just ocid  = origDstCID authCIDs
         sconf = scConfig conf
         debugLog msg = confDebugLog sconf ocid (msg ++ "\n") `E.catch` ignore
         qLog msg = writeQlogQ qq msg
         qlogger = newQlogger qq "server" (show ocid) $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
+    let retried = isJust $ retrySrcID authCIDs
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
         setup = do
-            conn <- serverConnection conf ver myCID peerCID oCID debugLog qLog cls sref
+            conn <- serverConnection conf ver myCID peerCID authCIDs debugLog qLog cls sref
             insertCryptoStreams conn -- fixme: cleanup
             when retried $ do
                 qlogRecvInitial conn
@@ -171,7 +173,7 @@ createServerConnection conf dispatch acc mainThreadId = do
             tid3 <- forkIO qlogger
             setThreadIds conn [tid0,tid1,tid2,tid3]
             setMainThreadId conn mainThreadId
-            handshakeServer conf oCID conn `E.onException` clearThreads conn
+            handshakeServer conf authCIDs conn `E.onException` clearThreads conn
             setRegister conn register unregister
             register myCID conn
             --

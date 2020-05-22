@@ -39,6 +39,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Parameters hiding (diff)
 import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Timeout
@@ -117,7 +118,7 @@ insertRecvQDict ref dcid q = do
 
 ----------------------------------------------------------------
 
-data Accept = Accept Version CID CID OrigCID SockAddr SockAddr RecvQ (CID -> Connection -> IO ()) (CID -> IO ()) Bool -- retried
+data Accept = Accept Version CID AuthCIDs SockAddr SockAddr RecvQ (CID -> Connection -> IO ()) (CID -> IO ())
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
 
@@ -226,28 +227,57 @@ dispatch Dispatch{..} ServerConfig{..}
                     _       -> putStrLn "dispatch: Just (2)"
           _ -> sendRetry
   where
-    pushToAcceptQ d s o wrap retried = do
-        mq <- lookupRecvQDict srcTable o
+    pushToAcceptQ s authCIDs key = do
+        mq <- lookupRecvQDict srcTable key
         case mq of
           Just q -> writeRecvQ q cpkt
           Nothing -> do
               q <- newRecvQ
-              insertRecvQDict srcTable o q
+              insertRecvQDict srcTable key q
               writeRecvQ q cpkt
-              let oc = wrap o
-                  reg = registerConnectionDict dstTable
+              let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
-                  ent = Accept ver d s oc mysa peersa q reg unreg retried
+                  ent = Accept ver s authCIDs mysa peersa q reg unreg
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
                   (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
                   writeRecvQ q cpktRTT0
+    -- Initial: DCID=S1, SCID=C1 ->
+    --                                     <- Initial: DCID=C1, SCID=S2
+    --                               ...
+    -- 1-RTT: DCID=S2 ->
+    --                                                <- 1-RTT: DCID=C1
+    --
+    -- initial_source_connection_id       = S2   (newdCID)
+    -- original_destination_connection_id = S1   (dCID)
+    -- retry_source_connection_id         = Nothing
     pushToAcceptFirst = do
         newdCID <- newCID
-        pushToAcceptQ newdCID sCID dCID OCFirst False
-    pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) =
-        pushToAcceptQ dCID sCID  o OCRetry True
+        let authCIDs = AuthCIDs {
+                initSrcCID = Just newdCID
+              , origDstCID = Just dCID
+              , retrySrcID = Nothing
+              }
+        pushToAcceptQ sCID authCIDs dCID
+    -- Initial: DCID=S1, SCID=C1 ->
+    --                                       <- Retry: DCID=C1, SCID=S2
+    -- Initial: DCID=S2, SCID=C1 ->
+    --                                     <- Initial: DCID=C1, SCID=S2
+    --                               ...
+    -- 1-RTT: DCID=S3 ->
+    --                                                <- 1-RTT: DCID=C1
+    --
+    -- initial_source_connection_id       = S2   (dCID)
+    -- original_destination_connection_id = S1   (o)
+    -- retry_source_connection_id         = S2   (dCID)
+    pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) = do
+        let authCIDs = AuthCIDs {
+                initSrcCID = Just dCID
+              , origDstCID = Just o
+              , retrySrcID = Just dCID
+              }
+        pushToAcceptQ sCID authCIDs o
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
         tim0 <- timeCurrent

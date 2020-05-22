@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Parameters where
 
@@ -241,4 +242,24 @@ exampleParameters = defaultParameters {
   , idleTimeout             =   30000
   , maxUdpPayloadSize       =    1280
   , activeConnectionIdLimit =       3
+  }
+
+data AuthCIDs = AuthCIDs {
+    initSrcCID :: Maybe CID
+  , origDstCID :: Maybe CID
+  , retrySrcID :: Maybe CID
+  }
+
+setCIDsToParameters :: AuthCIDs -> Parameters -> Parameters
+setCIDsToParameters AuthCIDs{..} params = params {
+    originalDestinationConnectionId = origDstCID
+  , initialSourceConnectionId       = initSrcCID
+  , retrySourceConnectionId         = retrySrcID
+  }
+
+getCIDsToParameters :: Parameters -> AuthCIDs
+getCIDsToParameters Parameters{..} = AuthCIDs {
+    origDstCID = originalDestinationConnectionId
+  , initSrcCID = initialSourceConnectionId
+  , retrySrcID = retrySourceConnectionId
   }

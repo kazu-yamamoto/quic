@@ -22,8 +22,14 @@ sessionManager establish = SessionManager {
   , sessionInvalidate     = \_ -> return ()
   }
 
-clientHandshaker:: QUICCallbacks -> ClientConfig -> Version -> SessionEstablish -> Bool ->IO ()
-clientHandshaker callbacks ClientConfig{..} ver establish use0RTT =
+clientHandshaker :: QUICCallbacks
+                 -> ClientConfig
+                 -> Version
+                 -> AuthCIDs
+                 -> SessionEstablish
+                 -> Bool
+                 -> IO ()
+clientHandshaker callbacks ClientConfig{..} ver authCIDs establish use0RTT =
     tlsQUICClient cparams callbacks
   where
     cparams = (defaultParamsClient ccServerName "") {
@@ -34,7 +40,8 @@ clientHandshaker callbacks ClientConfig{..} ver establish use0RTT =
       , clientWantSessionResume = resumptionSession ccResumption
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
-    eQparams = encodeParametersList $ diffParameters $ confParameters ccConfig
+    qparams = setCIDsToParameters authCIDs $ confParameters ccConfig
+    eQparams = encodeParametersList $ diffParameters qparams
     cshared = def {
         sharedValidationCache = if ccValidate then
                                   def
@@ -57,27 +64,25 @@ clientHandshaker callbacks ClientConfig{..} ver establish use0RTT =
 serverHandshaker :: QUICCallbacks
                  -> ServerConfig
                  -> Version
-                 -> OrigCID
+                 -> AuthCIDs
                  -> IO ()
-serverHandshaker callbacks ServerConfig{..} ver origCID = do
-    let qparams = case origCID of
-          OCFirst _    -> confParameters scConfig
-          OCRetry oCID -> (confParameters scConfig) { originalDestinationConnectionId = Just oCID }
-        eQparams = encodeParametersList $ diffParameters qparams
-    let sshared = def {
-            sharedCredentials     = confCredentials scConfig
-          , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
-          , sharedSessionManager  = scSessionManager
-          }
-    let sparams = def {
+serverHandshaker callbacks ServerConfig{..} ver authCIDs =
+    tlsQUICServer sparams callbacks
+  where
+    sparams = def {
         serverShared    = sshared
       , serverHooks     = hook
       , serverSupported = supported
       , serverDebug     = debug
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
-    tlsQUICServer sparams callbacks
-  where
+    qparams = setCIDsToParameters authCIDs $ confParameters scConfig
+    eQparams = encodeParametersList $ diffParameters qparams
+    sshared = def {
+            sharedCredentials     = confCredentials scConfig
+          , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+          , sharedSessionManager  = scSessionManager
+          }
     hook = def {
         onALPNClientSuggest = case scALPN of
           Nothing -> Nothing

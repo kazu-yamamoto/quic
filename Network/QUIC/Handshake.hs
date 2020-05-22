@@ -112,6 +112,7 @@ handshakeClient :: ClientConfig -> Connection -> IO ()
 handshakeClient conf conn = do
     ver <- getVersion conn
     hsr <- newHndStateRef
+    myCID <- getMyCID conn
     let use0RTT = ccUse0RTT conf
         qc = QUICCallbacks { quicSend = sendTLS conn hsr
                            , quicRecv = recvTLS conn hsr
@@ -119,7 +120,9 @@ handshakeClient conf conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = done
                            }
-        handshaker = clientHandshaker qc conf ver (setResumptionSession conn) use0RTT
+        authCIDs = AuthCIDs (Just myCID) Nothing Nothing
+        setter = setResumptionSession conn
+        handshaker = clientHandshaker qc conf ver authCIDs setter use0RTT
     mytid <- myThreadId
     tid <- forkIO (handshaker `E.catch` tell mytid)
     setKillHandshaker conn tid
@@ -152,8 +155,8 @@ handshakeClient conf conn = do
 
 ----------------------------------------------------------------
 
-handshakeServer :: ServerConfig -> OrigCID -> Connection -> IO ()
-handshakeServer conf origCID conn = do
+handshakeServer :: ServerConfig -> AuthCIDs -> Connection -> IO ()
+handshakeServer conf authCIDs conn = do
     ver <- getVersion conn
     hsr <- newHndStateRef
     let qc = QUICCallbacks { quicSend = sendTLS conn hsr
@@ -162,7 +165,7 @@ handshakeServer conf origCID conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = done
                            }
-        handshaker = serverHandshaker qc conf ver origCID
+        handshaker = serverHandshaker qc conf ver authCIDs
     mytid <- myThreadId
     tid <- forkIO (handshaker `E.catch` tell mytid)
     setKillHandshaker conn tid

@@ -247,14 +247,15 @@ clientConnection ClientConfig{..} ver myCID peerCID debugLog qLog cls sref = do
     let isecs = initialSecrets ver peerCID
     newConnection Client ver myCID peerCID debugLog qLog cls sref isecs
 
-serverConnection :: ServerConfig -> Version -> CID -> CID -> OrigCID
+serverConnection :: ServerConfig -> Version -> CID -> CID -> AuthCIDs
                  -> LogAction -> (QlogMsg -> IO ()) -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID origCID debugLog qLog cls sref = do
-    let isecs = case origCID of
-          OCFirst oCID -> initialSecrets ver oCID
-          OCRetry _    -> initialSecrets ver myCID
+serverConnection ServerConfig{..} ver myCID peerCID authCIDs debugLog qLog cls sref = do
+    let Just cid = case retrySrcID authCIDs of
+                     Nothing -> origDstCID authCIDs
+                     Just _  -> initSrcCID authCIDs
+        isecs = initialSecrets ver cid
     newConnection Server ver myCID peerCID debugLog qLog cls sref isecs
 
 ----------------------------------------------------------------

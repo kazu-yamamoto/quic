@@ -6,8 +6,6 @@ module Network.QUIC.Types.CID (
   , toCID
   , makeCID
   , unpackCID
-  , OrigCID(..)
-  , originalCID
   , StatelessResetToken(..)
   , newStatelessResetToken
   , PathData(..)
@@ -46,12 +44,6 @@ unpackCID :: CID -> (ShortByteString, Word8)
 unpackCID (CID sbs) = (sbs, len)
   where
     len = fromIntegral $ Short.length sbs
-
-data OrigCID = OCFirst CID | OCRetry CID deriving (Eq, Show)
-
-originalCID :: OrigCID -> CID
-originalCID (OCFirst cid) = cid
-originalCID (OCRetry cid) = cid
 
 -- 16 bytes
 newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq,Ord,Show)
