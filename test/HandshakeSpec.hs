@@ -6,45 +6,49 @@ import Control.Concurrent.Async
 import Control.Monad
 import Data.IORef
 import Data.List
-import Network.TLS hiding (TLSException(..))
+import Network.TLS (HandshakeMode13(..), SessionManager(..), SessionData, SessionID, Credentials(..), credentialLoadX509, Group(..))
 import Test.Hspec
 
 import Network.QUIC
 
 spec :: Spec
 spec = do
+    cred <- runIO $ either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
+    smgr <- runIO $ newSessionManager
+    let credentials = Credentials [cred]
+        sc0 = defaultServerConfig {
+               scSessionManager = smgr
+             , scConfig = defaultConfig {
+                   confCredentials = credentials
+                 }
+             }
     describe "handshake" $ do
         it "can handshake in the normal case" $ do
             let cc = defaultClientConfig
-                sc = defaultServerConfig
+                sc = sc0
             testHandshake cc sc FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
             let cc = defaultClientConfig
-                sc = defaultServerConfig {
-                       scConfig = defaultConfig {
+                sc = sc0 {
+                       scConfig = (scConfig sc0) {
                                     confGroups = [P256]
                                   }
                      }
             testHandshake cc sc HelloRetryRequest
         it "can handshake in the case of QUIC retry" $ do
             let cc = defaultClientConfig
-                sc = defaultServerConfig {
+                sc = sc0 {
                        scRequireRetry = True
                      }
             testHandshake cc sc FullHandshake
         it "can handshake in the case of resumption" $ do
-            smgr <- newSessionManager
             let cc = defaultClientConfig
-                sc = defaultServerConfig {
-                       scSessionManager = smgr
-                     }
+                sc = sc0
             testHandshake2 cc sc (FullHandshake, PreSharedKey) False
         it "can handshake in the case of 0-RTT" $ do
-            smgr <- newSessionManager
             let cc = defaultClientConfig
-                sc = defaultServerConfig {
-                       scSessionManager = smgr
-                     , scEarlyDataSize  = 1024
+                sc = sc0 {
+                       scEarlyDataSize  = 1024
                      }
             testHandshake2 cc sc (FullHandshake, RTT0) True
         it "fails with unknown server certificate" $ do
@@ -52,7 +56,7 @@ spec = do
                         ccValidate = True  -- ouch, default should be reversed
                       }
                 cc2 = defaultClientConfig
-                sc  = defaultServerConfig
+                sc  = sc0
                 certificateRejected e
                     | HandshakeFailed m <- e = "certificate rejected" `isInfixOf` m
                     | otherwise = False
@@ -64,8 +68,10 @@ spec = do
                 cc2 = defaultClientConfig {
                         ccConfig = defaultConfig { confGroups = [P256] }
                       }
-                sc  = defaultServerConfig {
-                        scConfig = defaultConfig { confGroups = [P256] }
+                sc  = sc0 {
+                        scConfig = (scConfig sc0) {
+                              confGroups = [P256]
+                            }
                       }
                 handshakeFailure e
                     | HandshakeFailed m <- e = "HandshakeFailure" `isInfixOf` m
@@ -75,15 +81,11 @@ spec = do
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
 testHandshake cc sc mode = void $ concurrently client server
   where
-    sc' = sc {
-            scKey  = "test/serverkey.pem"
-          , scCert = "test/servercert.pem"
-          }
     client = runQUICClient cc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-    server = runQUICServer sc' $ \conn -> do
+    server = runQUICServer sc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
@@ -92,10 +94,6 @@ testHandshake cc sc mode = void $ concurrently client server
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
 testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
   where
-    sc' = sc {
-            scKey  = "test/serverkey.pem"
-          , scCert = "test/servercert.pem"
-          }
     runClient cc mode = runQUICClient cc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
@@ -109,7 +107,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
         void $ runClient cc2 mode2
     server = do
         ref <- newIORef (0 :: Int)
-        runQUICServer sc' $ \conn -> do
+        runQUICServer sc $ \conn -> do
             isConnectionOpen conn `shouldReturn` True
             waitEstablished conn
             n <- readIORef ref
@@ -118,10 +116,6 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICError -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc selector = void $ concurrently clients server
   where
-    sc' = sc {
-            scKey  = "test/serverkey.pem"
-          , scCert = "test/servercert.pem"
-          }
     clients = do
         let query content conn = do
                 isConnectionOpen conn `shouldReturn` True
@@ -130,7 +124,7 @@ testHandshake3 cc1 cc2 sc selector = void $ concurrently clients server
                 sendStream s content
         runQUICClient cc1 (query "first") `shouldThrow` selector
         runQUICClient cc2 (query "second") `shouldReturn` ()
-    server = runQUICServer sc' $ \conn -> do
+    server = runQUICServer sc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
         Right s <- acceptStream conn
