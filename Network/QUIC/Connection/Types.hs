@@ -170,6 +170,7 @@ data Connection = Connection {
   , appSecInfo        :: IORef ApplicationSecretInfo
   , hndMode           :: IORef HandshakeMode13
   , appProto          :: IORef (Maybe NegotiatedProtocol)
+  , handshakeCIDs     :: IORef AuthCIDs
   -- WriteBuffer
   , headerBuffer      :: Buffer
   , headerBufferSize  :: BufferSize
@@ -224,6 +225,8 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
         <*> newIORef FullHandshake
         <*> newIORef Nothing
+        <*> newIORef peerCIDs
+        -- WriteBuffer
         <*> mallocBytes 256
         <*> return 256
         <*> mallocBytes 1280
@@ -233,6 +236,9 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
     initialRoleInfo
       | isclient  = defaultClientRoleInfo
       | otherwise = defaultServerRoleInfo
+    peerCIDs
+      | isclient  = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
+      | otherwise = defaultAuthCIDs { initSrcCID = Just peerCID }
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")

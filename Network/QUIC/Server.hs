@@ -263,12 +263,12 @@ dispatch Dispatch{..} ServerConfig{..}
     -- Initial: DCID=S1, SCID=C1 ->
     --                                       <- Retry: DCID=C1, SCID=S2
     -- Initial: DCID=S2, SCID=C1 ->
-    --                                     <- Initial: DCID=C1, SCID=S2
+    --                                     <- Initial: DCID=C1, SCID=S3
     --                               ...
     -- 1-RTT: DCID=S3 ->
     --                                                <- 1-RTT: DCID=C1
     --
-    -- initial_source_connection_id       = S2   (dCID)
+    -- initial_source_connection_id       = S3   (dCID)  S2 in our server
     -- original_destination_connection_id = S1   (o)
     -- retry_source_connection_id         = S2   (dCID)
     pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) = do

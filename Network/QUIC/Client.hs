@@ -16,6 +16,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Parameters
 import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Timeout
@@ -46,6 +47,9 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
         ok <- checkCIDs conn dCID ex
         when ok $ do
             resetPeerCID conn sCID
+            setAuthCIDs conn $ \auth -> auth { initSrcCID = Just sCID
+                                             , retrySrcID = initSrcCID auth
+                                             }
             setInitialSecrets conn $ initialSecrets ver sCID
             setToken conn token
             setRetried conn True

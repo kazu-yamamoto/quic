@@ -11,6 +11,8 @@ module Network.QUIC.Connection.Misc (
   , killHandshaker
   , setKillHandshaker
   , clearKillHandshaker
+  , getAuthCIDs
+  , setAuthCIDs
   ) where
 
 import Control.Concurrent
@@ -20,6 +22,7 @@ import System.Mem.Weak
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -81,3 +84,12 @@ setKillHandshaker Connection{..} tid = do
         case mtid of
           Nothing  -> return ()
           Just tid' -> killThread tid'
+
+----------------------------------------------------------------
+
+getAuthCIDs :: Connection -> IO AuthCIDs
+getAuthCIDs Connection{..} = readIORef handshakeCIDs
+
+
+setAuthCIDs :: Connection -> (AuthCIDs -> AuthCIDs) -> IO ()
+setAuthCIDs Connection{..} f = modifyIORef' handshakeCIDs f

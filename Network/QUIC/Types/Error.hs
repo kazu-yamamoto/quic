@@ -1,5 +1,8 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module Network.QUIC.Types.Error where
 
+import Control.Exception as E
+import Data.Typeable
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
@@ -24,7 +27,9 @@ data TransportError = NoError
                     | CryptoBufferExceeded
                     | CryptoError TLS.AlertDescription
                     | UnknownError Int
-                    deriving (Eq,Show)
+                    deriving (Eq,Show,Typeable)
+
+instance Exception TransportError
 
 fromTransportError :: TransportError -> ErrorCode
 fromTransportError NoError                 = 0x0

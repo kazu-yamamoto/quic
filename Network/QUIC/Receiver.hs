@@ -11,6 +11,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Parameters
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 
@@ -56,7 +57,9 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
         when (isClient conn
            && level == HandshakeLevel
            && peercid /= headerPeerCID hdr) $ do
-            resetPeerCID conn $ headerPeerCID hdr
+            let newPeerCID = headerPeerCID hdr
+            resetPeerCID conn newPeerCID
+            setAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
         processCryptPacket conn hdr crypt
 
 processCryptPacket :: Connection -> Header -> Crypt -> IO ()

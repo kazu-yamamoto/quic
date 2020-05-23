@@ -196,11 +196,22 @@ handshakeServer conf authCIDs conn = do
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]
-  | extid == extensionID_QuicTransportParameters = do
-        let mplist = decodeParametersList params
-        case mplist of
-          Nothing    -> connDebugLog conn "cannot decode parameters"
-          Just plist -> setPeerParameters conn plist
+  | extid == extensionID_QuicTransportParameters = checkAndSet $ decodeParametersList params
+  where
+    err = E.throwIO TransportParameterError
+    checkAndSet Nothing = err
+    checkAndSet (Just plist) = do
+        ver <- getVersion conn
+        when (ver >= Draft28) $ do
+            authCIDs <- getAuthCIDs conn
+            check plist ParametersInitialSourceConnectionId $ initSrcCID authCIDs
+            when (isClient conn) $ do
+                check plist ParametersOriginalDestinationConnectionId $ origDstCID authCIDs
+    --            check plist ParametersRetrySourceConnectionId $ retrySrcID authCIDs
+        setPeerParameters conn plist
+    check plist key val
+      | (toCID <$> lookup key plist) == val = return ()
+      | otherwise                           = err
 setPeerParams _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError

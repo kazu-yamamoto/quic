@@ -69,6 +69,8 @@ module Network.QUIC.Connection (
   , killHandshaker
   , setKillHandshaker
   , clearKillHandshaker
+  , getAuthCIDs
+  , setAuthCIDs
   -- * Transmit
   , keepPlainPacket
   , releasePlainPacket
