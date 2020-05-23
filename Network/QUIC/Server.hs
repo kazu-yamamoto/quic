@@ -255,9 +255,9 @@ dispatch Dispatch{..} ServerConfig{..}
     pushToAcceptFirst = do
         newdCID <- newCID
         let authCIDs = AuthCIDs {
-                initSrcCID = Just newdCID
-              , origDstCID = Just dCID
-              , retrySrcID = Nothing
+                initSrcCID  = Just newdCID
+              , origDstCID  = Just dCID
+              , retrySrcCID = Nothing
               }
         pushToAcceptQ sCID authCIDs dCID
     -- Initial: DCID=S1, SCID=C1 ->
@@ -273,9 +273,9 @@ dispatch Dispatch{..} ServerConfig{..}
     -- retry_source_connection_id         = S2   (dCID)
     pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) = do
         let authCIDs = AuthCIDs {
-                initSrcCID = Just dCID
-              , origDstCID = Just o
-              , retrySrcID = Just dCID
+                initSrcCID  = Just dCID
+              , origDstCID  = Just o
+              , retrySrcCID = Just dCID
               }
         pushToAcceptQ sCID authCIDs o
     pushToAcceptRetried _ = return ()

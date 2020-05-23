@@ -47,8 +47,8 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
         ok <- checkCIDs conn dCID ex
         when ok $ do
             resetPeerCID conn sCID
-            setAuthCIDs conn $ \auth -> auth { initSrcCID = Just sCID
-                                             , retrySrcID = initSrcCID auth
+            setAuthCIDs conn $ \auth -> auth { initSrcCID  = Just sCID
+                                             , retrySrcCID = initSrcCID auth
                                              }
             setInitialSecrets conn $ initialSecrets ver sCID
             setToken conn token

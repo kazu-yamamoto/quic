@@ -258,9 +258,9 @@ serverConnection :: ServerConfig -> Version -> CID -> CID -> AuthCIDs
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
 serverConnection ServerConfig{..} ver myCID peerCID authCIDs debugLog qLog cls sref = do
-    let Just cid = case retrySrcID authCIDs of
+    let Just cid = case retrySrcCID authCIDs of
                      Nothing -> origDstCID authCIDs
-                     Just _  -> initSrcCID authCIDs
+                     Just _  -> retrySrcCID authCIDs
         isecs = initialSecrets ver cid
     newConnection Server ver myCID peerCID debugLog qLog cls sref isecs
 

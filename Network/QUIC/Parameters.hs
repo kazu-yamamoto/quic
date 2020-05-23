@@ -249,23 +249,23 @@ exampleParameters = defaultParameters {
   }
 
 data AuthCIDs = AuthCIDs {
-    initSrcCID :: Maybe CID
-  , origDstCID :: Maybe CID
-  , retrySrcID :: Maybe CID
+    initSrcCID  :: Maybe CID
+  , origDstCID  :: Maybe CID
+  , retrySrcCID :: Maybe CID
   }
 
 setCIDsToParameters :: AuthCIDs -> Parameters -> Parameters
 setCIDsToParameters AuthCIDs{..} params = params {
     originalDestinationConnectionId = origDstCID
   , initialSourceConnectionId       = initSrcCID
-  , retrySourceConnectionId         = retrySrcID
+  , retrySourceConnectionId         = retrySrcCID
   }
 
 getCIDsToParameters :: Parameters -> AuthCIDs
 getCIDsToParameters Parameters{..} = AuthCIDs {
-    origDstCID = originalDestinationConnectionId
-  , initSrcCID = initialSourceConnectionId
-  , retrySrcID = retrySourceConnectionId
+    origDstCID  = originalDestinationConnectionId
+  , initSrcCID  = initialSourceConnectionId
+  , retrySrcCID = retrySourceConnectionId
   }
 
 defaultAuthCIDs :: AuthCIDs

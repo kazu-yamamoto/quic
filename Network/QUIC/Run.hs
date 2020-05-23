@@ -150,7 +150,7 @@ createServerConnection conf dispatch acc mainThreadId = do
         qlogger = newQlogger qq "server" (show ocid) $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
-    let retried = isJust $ retrySrcID authCIDs
+    let retried = isJust $ retrySrcCID authCIDs
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
