@@ -89,13 +89,14 @@ createClientConnection conf@ClientConfig{..} ver = do
         qLog msg = writeQlogQ qq msg
         qlogger = newQlogger qq "client" (show peerCID) $ confQLog ccConfig peerCID
     debugLog $ "Original CID: " ++ show peerCID
-    conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
+    let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
+        peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
+    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
     insertCryptoStreams conn -- fixme: cleanup
     --
     mytid <- myThreadId
     --
     void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
-    let myAuthCIDs = defaultAuthCIDs { initSrcCID = Just myCID }
     return (conn,send,recv,cls,qlogger, myAuthCIDs)
 
 handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
@@ -145,7 +146,7 @@ runQUICServer conf server = handleLog debugLog $ do
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO (Connection, SendMany, Receive, Close, IO (), AuthCIDs)
 createServerConnection conf dispatch acc mainThreadId = do
-    let Accept ver peerCID myAuthCIDs mysa peersa0 q register unregister = acc
+    let Accept ver myAuthCIDs peerAuthCIDs mysa peersa0 q register unregister = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
     let cls = do
@@ -163,7 +164,7 @@ createServerConnection conf dispatch acc mainThreadId = do
         qLog msg = writeQlogQ qq msg
         qlogger = newQlogger qq "server" (show ocid) $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
-    conn <- serverConnection conf ver myCID peerCID myAuthCIDs debugLog qLog cls sref
+    conn <- serverConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
     insertCryptoStreams conn -- fixme: cleanup
     --
     let retried = isJust $ retrySrcCID myAuthCIDs

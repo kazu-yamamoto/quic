@@ -22,6 +22,10 @@ spec = do
             let noLog _ = return ()
             let serverCID = makeCID $ dec16s "8394c8f03e515708"
                 clientCID = makeCID ""
+                serverAuthCIDs = defaultAuthCIDs { initSrcCID = Just serverCID
+                                                 , origDstCID = Just serverCID
+                                                 }
+                clientAuthCIDs = defaultAuthCIDs { initSrcCID = Just clientCID }
                 -- dummy
                 cls = return ()
             let clientConf = defaultClientConfig
@@ -29,13 +33,13 @@ spec = do
             s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
             q <- newRecvQ
             sref <- newIORef (s,q)
-            clientConn <- clientConnection clientConf ver clientCID serverCID noLog noLog cls sref
+            clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog cls sref
             let serverConf = defaultServerConfig {
                        scConfig = defaultConfig {
                            confCredentials = credentials
                          }
                      }
-            serverConn <- serverConnection serverConf Draft24 serverCID clientCID (AuthCIDs (Just serverCID) (Just serverCID) Nothing) noLog noLog cls sref
+            serverConn <- serverConnection serverConf Draft24 serverAuthCIDs clientAuthCIDs noLog noLog cls sref
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain

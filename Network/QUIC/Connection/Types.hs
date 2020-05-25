@@ -180,12 +180,12 @@ data Connection = Connection {
   , payloadBufferSize :: BufferSize
   }
 
-newConnection :: Role -> Version -> CID -> CID
+newConnection :: Role -> Version -> AuthCIDs -> AuthCIDs
               -> LogAction -> (QlogMsg -> IO ()) -> Close
               -> IORef (Socket,RecvQ)
               -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
+newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
     Connection rl
         <$> newIORef initialRoleInfo
         <*> newIORef ver
@@ -229,7 +229,7 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
         <*> newIORef FullHandshake
         <*> newIORef Nothing
-        <*> newIORef peerCIDs
+        <*> newIORef peerAuthCIDs
         -- WriteBuffer
         <*> mallocBytes 256
         <*> return 256
@@ -240,33 +240,33 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
     initialRoleInfo
       | isclient  = defaultClientRoleInfo
       | otherwise = defaultServerRoleInfo
-    peerCIDs
-      | isclient  = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
-      | otherwise = defaultAuthCIDs { initSrcCID = Just peerCID }
+    Just myCID   = initSrcCID myAuthCIDs
+    Just peerCID = initSrcCID peerAuthCIDs
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-clientConnection :: ClientConfig -> Version -> CID -> CID
+clientConnection :: ClientConfig -> Version -> AuthCIDs -> AuthCIDs
                  -> LogAction -> (QlogMsg -> IO ()) -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-clientConnection ClientConfig{..} ver myCID peerCID debugLog qLog cls sref = do
-    let isecs = initialSecrets ver peerCID
-    newConnection Client ver myCID peerCID debugLog qLog cls sref isecs
+clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref = do
+    let Just cid = initSrcCID peerAuthCIDs
+        isecs = initialSecrets ver cid
+    newConnection Client ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
 
-serverConnection :: ServerConfig -> Version -> CID -> CID -> AuthCIDs
+serverConnection :: ServerConfig -> Version -> AuthCIDs -> AuthCIDs
                  -> LogAction -> (QlogMsg -> IO ()) -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID myAuthCIDs debugLog qLog cls sref = do
+serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref = do
     let Just cid = case retrySrcCID myAuthCIDs of
                      Nothing -> origDstCID myAuthCIDs
                      Just _  -> retrySrcCID myAuthCIDs
         isecs = initialSecrets ver cid
-    newConnection Server ver myCID peerCID debugLog qLog cls sref isecs
+    newConnection Server ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
 
 ----------------------------------------------------------------
 
