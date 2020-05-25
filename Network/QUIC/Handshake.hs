@@ -120,9 +120,9 @@ handshakeClient conf conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = done
                            }
-        authCIDs = defaultAuthCIDs { initSrcCID = Just myCID }
+        myAuthCIDs = defaultAuthCIDs { initSrcCID = Just myCID }
         setter = setResumptionSession conn
-        handshaker = clientHandshaker qc conf ver authCIDs setter use0RTT
+        handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT
     mytid <- myThreadId
     tid <- forkIO (handshaker `E.catch` tell mytid)
     setKillHandshaker conn tid
@@ -156,7 +156,7 @@ handshakeClient conf conn = do
 ----------------------------------------------------------------
 
 handshakeServer :: ServerConfig -> AuthCIDs -> Connection -> IO ()
-handshakeServer conf authCIDs conn = do
+handshakeServer conf myAuthCIDs conn = do
     ver <- getVersion conn
     hsr <- newHndStateRef
     let qc = QUICCallbacks { quicSend = sendTLS conn hsr
@@ -165,7 +165,7 @@ handshakeServer conf authCIDs conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = done
                            }
-        handshaker = serverHandshaker qc conf ver authCIDs
+        handshaker = serverHandshaker qc conf ver myAuthCIDs
     mytid <- myThreadId
     tid <- forkIO (handshaker `E.catch` tell mytid)
     setKillHandshaker conn tid
@@ -203,11 +203,11 @@ setPeerParams conn [ExtensionRaw extid params]
     checkAndSet (Just plist) = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do
-            authCIDs <- getAuthCIDs conn
-            check plist ParametersInitialSourceConnectionId $ initSrcCID authCIDs
+            peerAuthCIDs <- getPeerAuthCIDs conn
+            check plist ParametersInitialSourceConnectionId $ initSrcCID peerAuthCIDs
             when (isClient conn) $ do
-                check plist ParametersOriginalDestinationConnectionId $ origDstCID authCIDs
-    --            check plist ParametersRetrySourceConnectionId $ retrySrcID authCIDs
+                check plist ParametersOriginalDestinationConnectionId $ origDstCID peerAuthCIDs
+--                check plist ParametersRetrySourceConnectionId $ retrySrcCID peerAuthCIDs
         setPeerParameters conn plist
     check plist key val
       | (toCID <$> lookup key plist) == val = return ()

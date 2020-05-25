@@ -59,7 +59,7 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
            && peercid /= headerPeerCID hdr) $ do
             let newPeerCID = headerPeerCID hdr
             resetPeerCID conn newPeerCID
-            setAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
+            setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
         processCryptPacket conn hdr crypt
 
 processCryptPacket :: Connection -> Header -> Crypt -> IO ()

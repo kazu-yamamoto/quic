@@ -29,7 +29,7 @@ clientHandshaker :: QUICCallbacks
                  -> SessionEstablish
                  -> Bool
                  -> IO ()
-clientHandshaker callbacks ClientConfig{..} ver authCIDs establish use0RTT =
+clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
     tlsQUICClient cparams callbacks
   where
     cparams = (defaultParamsClient ccServerName "") {
@@ -40,7 +40,7 @@ clientHandshaker callbacks ClientConfig{..} ver authCIDs establish use0RTT =
       , clientWantSessionResume = resumptionSession ccResumption
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
-    qparams = setCIDsToParameters authCIDs $ confParameters ccConfig
+    qparams = setCIDsToParameters myAuthCIDs $ confParameters ccConfig
     eQparams = encodeParametersList $ diffParameters qparams
     cshared = def {
         sharedValidationCache = if ccValidate then
@@ -66,7 +66,7 @@ serverHandshaker :: QUICCallbacks
                  -> Version
                  -> AuthCIDs
                  -> IO ()
-serverHandshaker callbacks ServerConfig{..} ver authCIDs =
+serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
     tlsQUICServer sparams callbacks
   where
     sparams = def {
@@ -76,7 +76,7 @@ serverHandshaker callbacks ServerConfig{..} ver authCIDs =
       , serverDebug     = debug
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
-    qparams = setCIDsToParameters authCIDs $ confParameters scConfig
+    qparams = setCIDsToParameters myAuthCIDs $ confParameters scConfig
     eQparams = encodeParametersList $ diffParameters qparams
     sshared = def {
             sharedCredentials     = confCredentials scConfig

@@ -261,10 +261,10 @@ serverConnection :: ServerConfig -> Version -> CID -> CID -> AuthCIDs
                  -> LogAction -> (QlogMsg -> IO ()) -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-serverConnection ServerConfig{..} ver myCID peerCID authCIDs debugLog qLog cls sref = do
-    let Just cid = case retrySrcCID authCIDs of
-                     Nothing -> origDstCID authCIDs
-                     Just _  -> retrySrcCID authCIDs
+serverConnection ServerConfig{..} ver myCID peerCID myAuthCIDs debugLog qLog cls sref = do
+    let Just cid = case retrySrcCID myAuthCIDs of
+                     Nothing -> origDstCID myAuthCIDs
+                     Just _  -> retrySrcCID myAuthCIDs
         isecs = initialSecrets ver cid
     newConnection Server ver myCID peerCID debugLog qLog cls sref isecs
 

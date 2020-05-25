@@ -227,7 +227,7 @@ dispatch Dispatch{..} ServerConfig{..}
                     _       -> putStrLn "dispatch: Just (2)"
           _ -> sendRetry
   where
-    pushToAcceptQ s authCIDs key = do
+    pushToAcceptQ s myAuthCIDs key = do
         mq <- lookupRecvQDict srcTable key
         case mq of
           Just q -> writeRecvQ q cpkt
@@ -237,7 +237,7 @@ dispatch Dispatch{..} ServerConfig{..}
               writeRecvQ q cpkt
               let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
-                  ent = Accept ver s authCIDs mysa peersa q reg unreg
+                  ent = Accept ver s myAuthCIDs mysa peersa q reg unreg
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
@@ -254,12 +254,12 @@ dispatch Dispatch{..} ServerConfig{..}
     -- retry_source_connection_id         = Nothing
     pushToAcceptFirst = do
         newdCID <- newCID
-        let authCIDs = AuthCIDs {
+        let myAuthCIDs = AuthCIDs {
                 initSrcCID  = Just newdCID
               , origDstCID  = Just dCID
               , retrySrcCID = Nothing
               }
-        pushToAcceptQ sCID authCIDs dCID
+        pushToAcceptQ sCID myAuthCIDs dCID
     -- Initial: DCID=S1, SCID=C1 ->
     --                                       <- Retry: DCID=C1, SCID=S2
     -- Initial: DCID=S2, SCID=C1 ->
@@ -272,12 +272,12 @@ dispatch Dispatch{..} ServerConfig{..}
     -- original_destination_connection_id = S1   (o)
     -- retry_source_connection_id         = S2   (dCID)
     pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) = do
-        let authCIDs = AuthCIDs {
+        let myAuthCIDs = AuthCIDs {
                 initSrcCID  = Just dCID
               , origDstCID  = Just o
               , retrySrcCID = Just dCID
               }
-        pushToAcceptQ sCID authCIDs o
+        pushToAcceptQ sCID myAuthCIDs o
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
         tim0 <- timeCurrent

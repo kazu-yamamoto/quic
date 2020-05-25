@@ -80,6 +80,7 @@ createClientConnection conf@ClientConfig{..} ver = do
         send bss = do
             (s,_) <- readIORef sref
             void $ NSB.sendMany s bss
+        recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
     qq <- newQlogQ
@@ -90,9 +91,10 @@ createClientConnection conf@ClientConfig{..} ver = do
     debugLog $ "Original CID: " ++ show peerCID
     conn <- clientConnection conf ver myCID peerCID debugLog qLog cls sref
     insertCryptoStreams conn -- fixme: cleanup
+    --
     mytid <- myThreadId
+    --
     void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
-    let recv = recvClient q
     return (conn,send,recv,cls,qlogger)
 
 handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> IO ()
@@ -121,7 +123,10 @@ runQUICServer conf server = handleLog debugLog $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
-        let create = createServerConnection conf dispatch acc mainThreadId
+        let create = do
+                (conn,send,recv,cls,qlogger, myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
+                handshakeServerConnection conf conn send recv qlogger myAuthCIDs `E.onException` cls
+                return conn
         void $ forkIO $ E.bracket create close server
   where
     debugLog msg = putStrLn ("runQUICServer: " ++ msg)
@@ -136,59 +141,68 @@ runQUICServer conf server = handleLog debugLog $ do
         clearDispatch dispatch
         mapM_ killThread tids
 
-createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId -> IO Connection
+createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
+                       -> IO (Connection, SendMany, Receive, Close, IO (), AuthCIDs)
 createServerConnection conf dispatch acc mainThreadId = do
-    let Accept ver peerCID authCIDs mysa peersa0 q register unregister = acc
+    let Accept ver peerCID myAuthCIDs mysa peersa0 q register unregister = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
+    let cls = do
+            (s,_) <- readIORef sref
+            NS.close s
+        send bss = void $ do
+            (s,_) <- readIORef sref
+            NSB.sendMany s bss
+        recv = recvServer q
+    let Just myCID = initSrcCID myAuthCIDs
+        Just ocid  = origDstCID myAuthCIDs
     qq <- newQlogQ
-    let Just myCID = initSrcCID authCIDs
-        Just ocid  = origDstCID authCIDs
-        sconf = scConfig conf
+    let sconf = scConfig conf
         debugLog msg = confDebugLog sconf ocid (msg ++ "\n") `E.catch` ignore
         qLog msg = writeQlogQ qq msg
         qlogger = newQlogger qq "server" (show ocid) $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
+    conn <- serverConnection conf ver myCID peerCID myAuthCIDs debugLog qLog cls sref
+    insertCryptoStreams conn -- fixme: cleanup
+    --
+    let retried = isJust $ retrySrcCID myAuthCIDs
+    when retried $ do
+        qlogRecvInitial conn
+        qlogSentRetry conn
+    --
+    let mgr = tokenMgr dispatch
+    setTokenManager conn mgr
+    --
+    setMainThreadId conn mainThreadId
+    --
+    setRegister conn register unregister
+    register myCID conn
+    --
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
-    let retried = isJust $ retrySrcCID authCIDs
-    let cls = do
-            (s,_) <- readIORef sref
-            NS.close s
-        setup = do
-            conn <- serverConnection conf ver myCID peerCID authCIDs debugLog qLog cls sref
-            insertCryptoStreams conn -- fixme: cleanup
-            when retried $ do
-                qlogRecvInitial conn
-                qlogSentRetry conn
-            let mgr = tokenMgr dispatch
-            setTokenManager conn mgr
-            setRetried conn retried
-            let send bss = void $ do
-                    (s,_) <- readIORef sref
-                    NSB.sendMany s bss
-            tid0 <- forkIO $ sender conn send
-            let recv = recvServer q
-            tid1 <- forkIO $ receiver conn recv
-            tid2 <- forkIO $ resender conn
-            tid3 <- forkIO qlogger
-            setThreadIds conn [tid0,tid1,tid2,tid3]
-            setMainThreadId conn mainThreadId
-            handshakeServer conf authCIDs conn `E.onException` clearThreads conn
-            setRegister conn register unregister
-            register myCID conn
-            --
-            cryptoToken <- generateToken =<< getVersion conn
-            token <- encryptToken mgr cryptoToken
-            cidInfo <- getNewMyCID conn
-            register (cidInfoCID cidInfo) conn
-            let ncid = NewConnectionID cidInfo 0
-            let frames = [NewToken token,ncid]
-            putOutput conn $ OutControl RTT1Level frames
-            --
-            info <- getConnectionInfo conn
-            debugLog $ show info
-            return conn
-    setup `E.onException` cls
+    return (conn, send, recv, cls, qlogger, myAuthCIDs)
+
+handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
+handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCIDs = do
+    tid0 <- forkIO $ sender conn send
+    tid1 <- forkIO $ receiver conn recv
+    tid2 <- forkIO $ resender conn
+    tid3 <- forkIO qlogger
+    setThreadIds conn [tid0,tid1,tid2,tid3]
+    handshakeServer conf myAuthCIDs conn `E.onException` clearThreads conn
+    --
+    cidInfo <- getNewMyCID conn
+    register <- getRegister conn
+    register (cidInfoCID cidInfo) conn
+    --
+    cryptoToken <- generateToken =<< getVersion conn
+    mgr <- getTokenManager conn
+    token <- encryptToken mgr cryptoToken
+    let ncid = NewConnectionID cidInfo 0
+    let frames = [NewToken token,ncid]
+    putOutput conn $ OutControl RTT1Level frames
+    --
+    info <- getConnectionInfo conn
+    connDebugLog conn $ show info
 
 -- | Stopping the main thread of the server.
 stopQUICServer :: Connection -> IO ()
