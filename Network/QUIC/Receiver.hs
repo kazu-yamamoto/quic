@@ -53,7 +53,7 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
     let level = packetEncryptionLevel hdr
     decryptable <- checkEncryptionLevel conn level cpkt
     when decryptable $ do
-        when (isClient conn && level == HandshakeLevel) $ do
+        when (isClient conn && level == InitialLevel) $ do
             peercid <- getPeerCID conn
             let newPeerCID = headerPeerCID hdr
             when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
