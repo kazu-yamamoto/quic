@@ -108,11 +108,10 @@ unexpectedMessage msg = TLS.Error_Protocol (msg, True, TLS.UnexpectedMessage)
 
 ----------------------------------------------------------------
 
-handshakeClient :: ClientConfig -> Connection -> IO ()
-handshakeClient conf conn = do
+handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO ()
+handshakeClient conf conn myAuthCIDs = do
     ver <- getVersion conn
     hsr <- newHndStateRef
-    myCID <- getMyCID conn
     let use0RTT = ccUse0RTT conf
         qc = QUICCallbacks { quicSend = sendTLS conn hsr
                            , quicRecv = recvTLS conn hsr
@@ -120,7 +119,6 @@ handshakeClient conf conn = do
                            , quicNotifyExtensions = setPeerParams conn
                            , quicDone = done
                            }
-        myAuthCIDs = defaultAuthCIDs { initSrcCID = Just myCID }
         setter = setResumptionSession conn
         handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT
     mytid <- myThreadId
@@ -155,8 +153,8 @@ handshakeClient conf conn = do
 
 ----------------------------------------------------------------
 
-handshakeServer :: ServerConfig -> AuthCIDs -> Connection -> IO ()
-handshakeServer conf myAuthCIDs conn = do
+handshakeServer :: ServerConfig -> Connection -> AuthCIDs -> IO ()
+handshakeServer conf conn myAuthCIDs = do
     ver <- getVersion conn
     hsr <- newHndStateRef
     let qc = QUICCallbacks { quicSend = sendTLS conn hsr

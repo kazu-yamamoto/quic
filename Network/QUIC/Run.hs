@@ -59,8 +59,8 @@ connect conf = do
                 Right _    -> E.throwIO VersionNegotiationFailed
   where
     connect' ver = do
-        (conn,send,recv,cls,qlogger) <- createClientConnection conf ver
-        handshakeClientConnection conf conn send recv qlogger `E.onException` cls
+        (conn,send,recv,cls,qlogger,myAuthCIDs) <- createClientConnection conf ver
+        handshakeClientConnection conf conn send recv qlogger myAuthCIDs `E.onException` cls
         return conn
     check se
       | Just (NextVersion ver)   <- E.fromException se = Right ver
@@ -69,7 +69,7 @@ connect conf = do
       | otherwise = Left $ BadThingHappen se
 
 createClientConnection :: ClientConfig -> Version
-                       -> IO (Connection, SendMany, Receive, Close, IO ())
+                       -> IO (Connection, SendMany, Receive, Close, IO (), AuthCIDs)
 createClientConnection conf@ClientConfig{..} ver = do
     s0 <- udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
@@ -95,17 +95,18 @@ createClientConnection conf@ClientConfig{..} ver = do
     mytid <- myThreadId
     --
     void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
-    return (conn,send,recv,cls,qlogger)
+    let myAuthCIDs = defaultAuthCIDs { initSrcCID = Just myCID }
+    return (conn,send,recv,cls,qlogger, myAuthCIDs)
 
-handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> IO ()
-handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger = do
+handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
+handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger myAuthCIDs = do
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender conn
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
-    handshakeClient conf conn `E.onException` clearThreads conn
+    handshakeClient conf conn myAuthCIDs `E.onException` clearThreads conn
     params <- getPeerParameters conn
     case statelessResetToken params of
       Nothing  -> return ()
@@ -188,7 +189,7 @@ handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCID
     tid2 <- forkIO $ resender conn
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
-    handshakeServer conf myAuthCIDs conn `E.onException` clearThreads conn
+    handshakeServer conf conn myAuthCIDs `E.onException` clearThreads conn
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn
