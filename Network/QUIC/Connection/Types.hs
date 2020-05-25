@@ -159,6 +159,8 @@ data Connection = Connection {
   , myStreamId        :: IORef StreamId
   , myUniStreamId     :: IORef StreamId
   , peerStreamId      :: IORef StreamId
+  , flowTx            :: TVar Flow
+  , flowRx            :: TVar Flow
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingHandshake  :: TVar [CryptPacket]
@@ -214,6 +216,8 @@ newConnection rl ver myCID peerCID debugLog qLog close sref isecs =
         <*> newIORef (if isclient then 0 else 1)
         <*> newIORef (if isclient then 2 else 3)
         <*> newIORef (if isclient then 1 else 0)
+        <*> newTVarIO defaultFlow
+        <*> newTVarIO defaultFlow
         -- TLS
         <*> newTVarIO InitialLevel
         <*> newTVarIO []
@@ -271,3 +275,13 @@ isClient Connection{..} = role == Client
 
 isServer :: Connection -> Bool
 isServer Connection{..} = role == Server
+
+----------------------------------------------------------------
+
+data Flow = Flow {
+    flowData :: Int
+  , flowMaxData :: Int
+  }
+
+defaultFlow :: Flow
+defaultFlow = Flow 0 0

@@ -92,6 +92,14 @@ module Network.QUIC.Connection (
   , wait1RTTReady
   , waitEstablished
   , waitClosed
+  , addTxData
+  , getTxData
+  , setTxMaxData
+  , getTxMaxData
+  , addRxData
+  , getRxData
+  , setRxMaxData
+  , getRxMaxData
   -- * Stream
   , getMyNewStreamId
   , getMyNewUniStreamId
