@@ -252,7 +252,7 @@ data AuthCIDs = AuthCIDs {
     initSrcCID  :: Maybe CID
   , origDstCID  :: Maybe CID
   , retrySrcCID :: Maybe CID
-  }
+  } deriving (Eq, Show)
 
 setCIDsToParameters :: AuthCIDs -> Parameters -> Parameters
 setCIDsToParameters AuthCIDs{..} params = params {

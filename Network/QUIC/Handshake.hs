@@ -205,8 +205,9 @@ setPeerParams conn [ExtensionRaw extid params]
             check plist ParametersInitialSourceConnectionId $ initSrcCID peerAuthCIDs
             when (isClient conn) $ do
                 check plist ParametersOriginalDestinationConnectionId $ origDstCID peerAuthCIDs
---                check plist ParametersRetrySourceConnectionId $ retrySrcCID peerAuthCIDs
+                check plist ParametersRetrySourceConnectionId $ retrySrcCID peerAuthCIDs
         setPeerParameters conn plist
+    check _ _ Nothing = return ()
     check plist key val
       | (toCID <$> lookup key plist) == val = return ()
       | otherwise                           = err
