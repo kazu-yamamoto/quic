@@ -17,18 +17,18 @@ type ParametersValue = ByteString
 
 data ParametersKeyId =
     ParametersOriginalDestinationConnectionId
-  | ParametersIdleTimeout
+  | ParametersMaxIdleTimeout
   | ParametersStateLessResetToken
   | ParametersMaxUdpPayloadSize
-  | ParametersMaxData
-  | ParametersMaxStreamDataBidiLocal
-  | ParametersMaxStreamDataBidiRemote
-  | ParametersMaxStreamDataUni
-  | ParametersMaxStreamsBidi
-  | ParametersMaxStreamsUni
+  | ParametersInitialMaxData
+  | ParametersInitialMaxStreamDataBidiLocal
+  | ParametersInitialMaxStreamDataBidiRemote
+  | ParametersInitialMaxStreamDataUni
+  | ParametersInitialMaxStreamsBidi
+  | ParametersInitialMaxStreamsUni
   | ParametersAckDelayExponent
   | ParametersMaxAckDelay
-  | ParametersDisableMigration
+  | ParametersDisableActiveMigration
   | ParametersPreferredAddress
   | ParametersActiveConnectionIdLimit
   | ParametersInitialSourceConnectionId
@@ -38,18 +38,18 @@ data ParametersKeyId =
 
 fromParametersKeyId :: ParametersKeyId -> Word16
 fromParametersKeyId ParametersOriginalDestinationConnectionId = 0x00
-fromParametersKeyId ParametersIdleTimeout                     = 0x01
+fromParametersKeyId ParametersMaxIdleTimeout                  = 0x01
 fromParametersKeyId ParametersStateLessResetToken             = 0x02
 fromParametersKeyId ParametersMaxUdpPayloadSize               = 0x03
-fromParametersKeyId ParametersMaxData                         = 0x04
-fromParametersKeyId ParametersMaxStreamDataBidiLocal          = 0x05
-fromParametersKeyId ParametersMaxStreamDataBidiRemote         = 0x06
-fromParametersKeyId ParametersMaxStreamDataUni                = 0x07
-fromParametersKeyId ParametersMaxStreamsBidi                  = 0x08
-fromParametersKeyId ParametersMaxStreamsUni                   = 0x09
+fromParametersKeyId ParametersInitialMaxData                  = 0x04
+fromParametersKeyId ParametersInitialMaxStreamDataBidiLocal   = 0x05
+fromParametersKeyId ParametersInitialMaxStreamDataBidiRemote  = 0x06
+fromParametersKeyId ParametersInitialMaxStreamDataUni         = 0x07
+fromParametersKeyId ParametersInitialMaxStreamsBidi           = 0x08
+fromParametersKeyId ParametersInitialMaxStreamsUni            = 0x09
 fromParametersKeyId ParametersAckDelayExponent                = 0x0a
 fromParametersKeyId ParametersMaxAckDelay                     = 0x0b
-fromParametersKeyId ParametersDisableMigration                = 0x0c
+fromParametersKeyId ParametersDisableActiveMigration          = 0x0c
 fromParametersKeyId ParametersPreferredAddress                = 0x0d
 fromParametersKeyId ParametersActiveConnectionIdLimit         = 0x0e
 fromParametersKeyId ParametersInitialSourceConnectionId       = 0x0f
@@ -58,18 +58,18 @@ fromParametersKeyId ParametersGrease                          = 0xff
 
 toParametersKeyId :: Word16 -> Maybe ParametersKeyId
 toParametersKeyId 0x00 = Just ParametersOriginalDestinationConnectionId
-toParametersKeyId 0x01 = Just ParametersIdleTimeout
+toParametersKeyId 0x01 = Just ParametersMaxIdleTimeout
 toParametersKeyId 0x02 = Just ParametersStateLessResetToken
 toParametersKeyId 0x03 = Just ParametersMaxUdpPayloadSize
-toParametersKeyId 0x04 = Just ParametersMaxData
-toParametersKeyId 0x05 = Just ParametersMaxStreamDataBidiLocal
-toParametersKeyId 0x06 = Just ParametersMaxStreamDataBidiRemote
-toParametersKeyId 0x07 = Just ParametersMaxStreamDataUni
-toParametersKeyId 0x08 = Just ParametersMaxStreamsBidi
-toParametersKeyId 0x09 = Just ParametersMaxStreamsUni
+toParametersKeyId 0x04 = Just ParametersInitialMaxData
+toParametersKeyId 0x05 = Just ParametersInitialMaxStreamDataBidiLocal
+toParametersKeyId 0x06 = Just ParametersInitialMaxStreamDataBidiRemote
+toParametersKeyId 0x07 = Just ParametersInitialMaxStreamDataUni
+toParametersKeyId 0x08 = Just ParametersInitialMaxStreamsBidi
+toParametersKeyId 0x09 = Just ParametersInitialMaxStreamsUni
 toParametersKeyId 0x0a = Just ParametersAckDelayExponent
 toParametersKeyId 0x0b = Just ParametersMaxAckDelay
-toParametersKeyId 0x0c = Just ParametersDisableMigration
+toParametersKeyId 0x0c = Just ParametersDisableActiveMigration
 toParametersKeyId 0x0d = Just ParametersPreferredAddress
 toParametersKeyId 0x0e = Just ParametersActiveConnectionIdLimit
 toParametersKeyId 0x0f = Just ParametersInitialSourceConnectionId
@@ -80,18 +80,18 @@ toParametersKeyId _    = Nothing
 -- | QUIC transport parameters.
 data Parameters = Parameters {
     originalDestinationConnectionId :: Maybe CID
-  , idleTimeout                     :: Int -- Milliseconds
+  , maxIdleTimeout                  :: Int -- Milliseconds
   , statelessResetToken             :: Maybe StatelessResetToken -- 16 bytes
   , maxUdpPayloadSize               :: Int
-  , maxData                         :: Int
-  , maxStreamDataBidiLocal          :: Int
-  , maxStreamDataBidiRemote         :: Int
-  , maxStreamDataUni                :: Int
-  , maxStreamsBidi                  :: Int
-  , maxStreamsUni                   :: Int
+  , initialMaxData                  :: Int
+  , initialMaxStreamDataBidiLocal   :: Int
+  , initialMaxStreamDataBidiRemote  :: Int
+  , initialMaxStreamDataUni         :: Int
+  , initialMaxStreamsBidi           :: Int
+  , initialMaxStreamsUni            :: Int
   , ackDelayExponent                :: Int
   , maxAckDelay                     :: Int -- Millisenconds
-  , disableMigration                :: Bool
+  , disableActiveMigration          :: Bool
   , preferredAddress                :: Maybe ByteString -- fixme
   , activeConnectionIdLimit         :: Int
   , greaseParameter                 :: Maybe ByteString
@@ -103,18 +103,18 @@ data Parameters = Parameters {
 defaultParameters :: Parameters
 defaultParameters = Parameters {
     originalDestinationConnectionId    = Nothing
-  , idleTimeout                        = 0 -- disabled
+  , maxIdleTimeout                     = 0 -- disabled
   , statelessResetToken                = Nothing
   , maxUdpPayloadSize                  = 65527
-  , maxData                            = -1
-  , maxStreamDataBidiLocal             = -1
-  , maxStreamDataBidiRemote            = -1
-  , maxStreamDataUni                   = -1
-  , maxStreamsBidi                     = -1
-  , maxStreamsUni                      = -1
+  , initialMaxData                     = -1
+  , initialMaxStreamDataBidiLocal      = -1
+  , initialMaxStreamDataBidiRemote     = -1
+  , initialMaxStreamDataUni            = -1
+  , initialMaxStreamsBidi              = -1
+  , initialMaxStreamsUni               = -1
   , ackDelayExponent                   = 8
   , maxAckDelay                        = 25
-  , disableMigration                   = False
+  , disableActiveMigration             = False
   , preferredAddress                   = Nothing
   , activeConnectionIdLimit            = 2
   , greaseParameter                    = Nothing
@@ -133,30 +133,30 @@ updateParameters params kvs = foldl' update params kvs
   where
     update x (ParametersOriginalDestinationConnectionId,v)
         = x { originalDestinationConnectionId = Just (toCID v) }
-    update x (ParametersIdleTimeout,v)
-        = x { idleTimeout = decInt v }
+    update x (ParametersMaxIdleTimeout,v)
+        = x { maxIdleTimeout = decInt v }
     update x (ParametersStateLessResetToken,v)
         = x { statelessResetToken = Just (StatelessResetToken $ Short.toShort v) }
     update x (ParametersMaxUdpPayloadSize,v)
         = x { maxUdpPayloadSize = decInt v }
-    update x (ParametersMaxData,v)
-        = x { maxData = decInt v }
-    update x (ParametersMaxStreamDataBidiLocal,v)
-        = x { maxStreamDataBidiLocal = decInt v }
-    update x (ParametersMaxStreamDataBidiRemote,v)
-        = x { maxStreamDataBidiRemote = decInt v }
-    update x (ParametersMaxStreamDataUni,v)
-        = x { maxStreamDataUni = decInt v }
-    update x (ParametersMaxStreamsBidi,v)
-        = x { maxStreamsBidi = decInt v }
-    update x (ParametersMaxStreamsUni,v)
-        = x { maxStreamsUni = decInt v }
+    update x (ParametersInitialMaxData,v)
+        = x { initialMaxData = decInt v }
+    update x (ParametersInitialMaxStreamDataBidiLocal,v)
+        = x { initialMaxStreamDataBidiLocal = decInt v }
+    update x (ParametersInitialMaxStreamDataBidiRemote,v)
+        = x { initialMaxStreamDataBidiRemote = decInt v }
+    update x (ParametersInitialMaxStreamDataUni,v)
+        = x { initialMaxStreamDataUni = decInt v }
+    update x (ParametersInitialMaxStreamsBidi,v)
+        = x { initialMaxStreamsBidi = decInt v }
+    update x (ParametersInitialMaxStreamsUni,v)
+        = x { initialMaxStreamsUni = decInt v }
     update x (ParametersAckDelayExponent,v)
         = x { ackDelayExponent = decInt v }
     update x (ParametersMaxAckDelay,v)
         = x { maxAckDelay = decInt v }
-    update x (ParametersDisableMigration,_)
-        = x { disableMigration = True }
+    update x (ParametersDisableActiveMigration,_)
+        = x { disableActiveMigration = True }
     update x (ParametersPreferredAddress,v)
         = x { preferredAddress = Just v }
     update x (ParametersActiveConnectionIdLimit,v)
@@ -180,18 +180,18 @@ diffParameters :: Parameters -> ParametersList
 diffParameters p = catMaybes [
     diff p originalDestinationConnectionId
          ParametersOriginalDestinationConnectionId    (fromCID . fromJust)
-  , diff p idleTimeout             ParametersIdleTimeout             encInt
+  , diff p maxIdleTimeout          ParametersMaxIdleTimeout          encInt
   , diff p statelessResetToken     ParametersStateLessResetToken     encSRT
   , diff p maxUdpPayloadSize       ParametersMaxUdpPayloadSize       encInt
-  , diff p maxData                 ParametersMaxData                 encInt
-  , diff p maxStreamDataBidiLocal  ParametersMaxStreamDataBidiLocal  encInt
-  , diff p maxStreamDataBidiRemote ParametersMaxStreamDataBidiRemote encInt
-  , diff p maxStreamDataUni        ParametersMaxStreamDataUni        encInt
-  , diff p maxStreamsBidi          ParametersMaxStreamsBidi          encInt
-  , diff p maxStreamsUni           ParametersMaxStreamsUni           encInt
+  , diff p initialMaxData          ParametersInitialMaxData          encInt
+  , diff p initialMaxStreamDataBidiLocal  ParametersInitialMaxStreamDataBidiLocal  encInt
+  , diff p initialMaxStreamDataBidiRemote ParametersInitialMaxStreamDataBidiRemote encInt
+  , diff p initialMaxStreamDataUni ParametersInitialMaxStreamDataUni encInt
+  , diff p initialMaxStreamsBidi   ParametersInitialMaxStreamsBidi   encInt
+  , diff p initialMaxStreamsUni    ParametersInitialMaxStreamsUni    encInt
   , diff p ackDelayExponent        ParametersAckDelayExponent        encInt
   , diff p maxAckDelay             ParametersMaxAckDelay             encInt
-  , diff p disableMigration        ParametersDisableMigration        (const "")
+  , diff p disableActiveMigration  ParametersDisableActiveMigration  (const "")
   , diff p preferredAddress        ParametersPreferredAddress        fromJust
   , diff p activeConnectionIdLimit ParametersActiveConnectionIdLimit encInt
   , diff p initialSourceConnectionId
@@ -237,15 +237,15 @@ decodeParametersList bs = unsafeDupablePerformIO
 -- | An example parameters obsoleted in the near future.
 exampleParameters :: Parameters
 exampleParameters = defaultParameters {
-    maxStreamDataBidiLocal  =  262144
-  , maxStreamDataBidiRemote =  262144
-  , maxStreamDataUni        =  262144
-  , maxData                 = 1048576
-  , maxStreamsBidi          =     100
-  , maxStreamsUni           =       3
-  , idleTimeout             =   30000
-  , maxUdpPayloadSize       =    1280
-  , activeConnectionIdLimit =       3
+    maxIdleTimeout                 =   30000
+  , maxUdpPayloadSize              =    1280
+  , initialMaxData                 = 1048576
+  , initialMaxStreamDataBidiLocal  =  262144
+  , initialMaxStreamDataBidiRemote =  262144
+  , initialMaxStreamDataUni        =  262144
+  , initialMaxStreamsBidi          =     100
+  , initialMaxStreamsUni           =       3
+  , activeConnectionIdLimit        =       3
   }
 
 data AuthCIDs = AuthCIDs {
