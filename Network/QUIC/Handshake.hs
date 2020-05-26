@@ -9,9 +9,11 @@ import Data.IORef
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
+
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Imports
+import Network.QUIC.Info
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Timeout
@@ -150,6 +152,8 @@ handshakeClient conf conn myAuthCIDs = do
         minfo <- TLS.contextGetInformation ctx
         forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
             setTLSMode conn mode
+        info <- getConnectionInfo conn
+        connDebugLog conn $ show info
 
 ----------------------------------------------------------------
 
@@ -191,6 +195,9 @@ handshakeServer conf conn myAuthCIDs = do
         fire 2000000 $ dropSecrets conn
         putOutput conn $ OutControl RTT1Level [HandshakeDone]
         setConnectionEstablished conn
+        --
+        info <- getConnectionInfo conn
+        connDebugLog conn $ show info
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid params]

@@ -6,6 +6,7 @@ module Network.QUIC.Receiver (
   ) where
 
 import qualified Control.Exception as E
+import qualified Data.ByteString as BS
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
@@ -117,9 +118,11 @@ processFrame conn lvl (Crypto off cdat) = do
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connDebugLog conn "processFrame: NewToken"
-processFrame conn RTT0Level (StreamF sid off (dat:_) fin) =
+processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
+    addRxData conn $ BS.length dat
     putInputStream conn sid off dat fin
-processFrame conn RTT1Level (StreamF sid off (dat:_) fin) =
+processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
+    addRxData conn $ BS.length dat
     putInputStream conn sid off dat fin
 processFrame _ _ MaxData{} = return ()
 processFrame _ _ MaxStreamData{} = return ()

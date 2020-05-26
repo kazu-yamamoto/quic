@@ -277,8 +277,9 @@ clientHQ cmd conn debug = do
   where
     loop s = do
         bs <- recvStream s 1024
-        if bs == "" then
+        if bs == "" then do
             debug "Connection finished"
+            getConnectionStats conn >>= print
           else do
             debug $ C8.unpack bs
             loop s
@@ -303,8 +304,9 @@ clientH3 authority conn debug = do
     loop s0 = do
         bs <- recvStream s0 1024
         debug $ "SID: " ++ show (streamId s0)
-        if bs == "" then
+        if bs == "" then do
             debug "Connection finished"
+            getConnectionStats conn >>= print
           else do
             debug $ show $ BS.unpack bs
             loop s0

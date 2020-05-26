@@ -33,6 +33,7 @@ library
                        Network.QUIC.Connection.Types
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
+                       Network.QUIC.Info
                        Network.QUIC.IO
                        Network.QUIC.Imports
                        Network.QUIC.Packet

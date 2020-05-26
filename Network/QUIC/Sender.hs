@@ -110,6 +110,7 @@ sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
 sendOutput conn send (OutStream s dats fin) = do
+    addTxData conn $ sum $ map B.length dats
     sendStreamFragment conn send s dats fin
 sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
     let lvl = packetEncryptionLevel hdr0

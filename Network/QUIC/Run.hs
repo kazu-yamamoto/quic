@@ -7,7 +7,6 @@ module Network.QUIC.Run where
 
 import Control.Concurrent
 import qualified Control.Exception as E
-import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc (free)
@@ -112,8 +111,6 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger myAuthCID
     case statelessResetToken params of
       Nothing  -> return ()
       Just srt -> setPeerStatelessResetToken conn srt
-    info <- getConnectionInfo conn
-    connDebugLog conn $ show info
 
 ----------------------------------------------------------------
 
@@ -202,9 +199,6 @@ handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCID
     let ncid = NewConnectionID cidInfo 0
     let frames = [NewToken token,ncid]
     putOutput conn $ OutControl RTT1Level frames
-    --
-    info <- getConnectionInfo conn
-    connDebugLog conn $ show info
 
 -- | Stopping the main thread of the server.
 stopQUICServer :: Connection -> IO ()
@@ -237,57 +231,6 @@ close conn = do
 
 ignore :: E.SomeException -> IO ()
 ignore _ = return ()
-
-----------------------------------------------------------------
-
--- | Information about a connection.
-data ConnectionInfo = ConnectionInfo {
-    version :: Version
-  , cipher :: Cipher
-  , alpn :: Maybe ByteString
-  , handshakeMode :: HandshakeMode13
-  , retry :: Bool
-  , localSockAddr :: NS.SockAddr
-  , remoteSockAddr :: NS.SockAddr
-  , localCID :: CID
-  , remoteCID :: CID
-  }
-
--- | Getting information about a connection.
-getConnectionInfo :: Connection -> IO ConnectionInfo
-getConnectionInfo conn = do
-    (s,_) <- getSockInfo conn
-    mysa   <- NS.getSocketName s
-    peersa <- NS.getPeerName s
-    mycid   <- getMyCID conn
-    peercid <- getPeerCID conn
-    c <- getCipher conn RTT1Level
-    mproto <- getApplicationProtocol conn
-    mode <- getTLSMode conn
-    r <- getRetried conn
-    v <- getVersion conn
-    return ConnectionInfo {
-        version = v
-      , cipher = c
-      , alpn = mproto
-      , handshakeMode = mode
-      , retry = r
-      , localSockAddr  = mysa
-      , remoteSockAddr = peersa
-      , localCID  = mycid
-      , remoteCID = peercid
-      }
-
-instance Show ConnectionInfo where
-    show ConnectionInfo{..} = "Version: " ++ show version ++ "\n"
-                           ++ "Cipher: " ++ show cipher ++ "\n"
-                           ++ "ALPN: " ++ maybe "none" C8.unpack alpn ++ "\n"
-                           ++ "Mode: " ++ show handshakeMode ++ "\n"
-                           ++ "Local CID: " ++ show localCID ++ "\n"
-                           ++ "Remote CID: " ++ show remoteCID ++ "\n"
-                           ++ "Local SockAddr: " ++ show localSockAddr ++ "\n"
-                           ++ "Remote SockAddr: " ++ show remoteSockAddr ++
-                           if retry then "\nQUIC retry" else ""
 
 clientCertificateChain :: Connection -> IO (Maybe CertificateChain)
 clientCertificateChain conn
