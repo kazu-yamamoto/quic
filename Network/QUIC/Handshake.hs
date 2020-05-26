@@ -228,6 +228,7 @@ setPeerParams conn [ExtensionRaw extid bs]
             case statelessResetToken params of
               Nothing  -> return ()
               Just srt -> setPeerStatelessResetToken conn srt
+        setTxMaxData conn $ initialMaxData params
 setPeerParams _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError

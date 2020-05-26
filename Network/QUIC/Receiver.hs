@@ -124,7 +124,8 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     addRxData conn $ BS.length dat
     putInputStream conn sid off dat fin
-processFrame _ _ MaxData{} = return ()
+processFrame conn _ (MaxData n) =
+    setTxMaxData conn n
 processFrame _ _ MaxStreamData{} = return ()
 processFrame _ _ MaxStreams{} = return ()
 processFrame _ _ DataBlocked{} = return ()
