@@ -145,7 +145,6 @@ data Connection = Connection {
   , migrationStatus   :: TVar MigrationStatus
   -- Peer
   , peerCIDDB         :: TVar CIDDB
-  , peerParams        :: IORef Parameters
   -- Queues
   , inputQ            :: InputQ
   , cryptoQ           :: InputQ
@@ -202,7 +201,6 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
         <*> newTVarIO NonMigration
         -- Peer
         <*> newTVarIO (newCIDDB peerCID)
-        <*> newIORef defaultParameters
         -- Queues
         <*> newTQueueIO
         <*> newTQueueIO

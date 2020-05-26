@@ -6,9 +6,6 @@ module Network.QUIC.Connection.Crypto (
   , getEncryptionLevel
   , checkEncryptionLevel
   --
-  , getPeerParameters
-  , setPeerParameters
-  --
   , getCipher
   , getTLSMode
   , setTLSMode
@@ -35,7 +32,6 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connection.Misc
-import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
@@ -99,15 +95,6 @@ getHandshakeSecretInfo Connection{..} = readIORef hndSecInfo
 
 getApplicationSecretInfo :: Connection -> IO ApplicationSecretInfo
 getApplicationSecretInfo Connection{..} = readIORef appSecInfo
-
-----------------------------------------------------------------
-
-getPeerParameters :: Connection -> IO Parameters
-getPeerParameters Connection{..} = readIORef peerParams
-
-setPeerParameters :: Connection -> ParametersList -> IO ()
-setPeerParameters Connection{..} plist =
-    modifyIORef peerParams $ \def -> updateParameters def plist
 
 ----------------------------------------------------------------
 

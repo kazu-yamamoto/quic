@@ -22,8 +22,6 @@ module Network.QUIC.Connection (
   , getEncryptionLevel
   , setEncryptionLevel
   , checkEncryptionLevel
-  , getPeerParameters
-  , setPeerParameters
   , getCipher
   , getApplicationProtocol
   , setApplicationProtocol

@@ -200,24 +200,34 @@ handshakeServer conf conn myAuthCIDs = do
         connDebugLog conn $ show info
 
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
-setPeerParams conn [ExtensionRaw extid params]
-  | extid == extensionID_QuicTransportParameters = checkAndSet $ decodeParametersList params
+setPeerParams conn [ExtensionRaw extid bs]
+  | extid == extensionID_QuicTransportParameters = do
+        let mplist = decodeParametersList bs
+        case mplist of
+          Nothing    -> err
+          Just plist -> do
+              let params = updateParameters defaultParameters plist
+              checkAuthCIDs params
+              setParams params
   where
     err = E.throwIO TransportParameterError
-    checkAndSet Nothing = err
-    checkAndSet (Just plist) = do
+    checkAuthCIDs params = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do
             peerAuthCIDs <- getPeerAuthCIDs conn
-            check plist ParametersInitialSourceConnectionId $ initSrcCID peerAuthCIDs
+            check (initialSourceConnectionId params) $ initSrcCID peerAuthCIDs
             when (isClient conn) $ do
-                check plist ParametersOriginalDestinationConnectionId $ origDstCID peerAuthCIDs
-                check plist ParametersRetrySourceConnectionId $ retrySrcCID peerAuthCIDs
-        setPeerParameters conn plist
-    check _ _ Nothing = return ()
-    check plist key val
-      | (toCID <$> lookup key plist) == val = return ()
-      | otherwise                           = err
+                check (originalDestinationConnectionId params) $ origDstCID peerAuthCIDs
+                check (retrySourceConnectionId params) $ retrySrcCID peerAuthCIDs
+    check _ Nothing = return ()
+    check v0 v1
+      | v0 == v1  = return ()
+      | otherwise = err
+    setParams params = do
+        when (isClient conn) $ do
+            case statelessResetToken params of
+              Nothing  -> return ()
+              Just srt -> setPeerStatelessResetToken conn srt
 setPeerParams _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError

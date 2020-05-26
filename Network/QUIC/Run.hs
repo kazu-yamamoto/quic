@@ -107,10 +107,6 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger myAuthCID
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
     handshakeClient conf conn myAuthCIDs `E.onException` clearThreads conn
-    params <- getPeerParameters conn
-    case statelessResetToken params of
-      Nothing  -> return ()
-      Just srt -> setPeerStatelessResetToken conn srt
 
 ----------------------------------------------------------------
 
