@@ -9,8 +9,6 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.X509 (CertificateChain)
@@ -23,6 +21,7 @@ import Network.QUIC.Config
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
+import Network.QUIC.Stream
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
@@ -43,13 +42,6 @@ data CloseState = CloseState {
     closeSent     :: Bool
   , closeReceived :: Bool
   } deriving (Eq, Ord, Show)
-
-----------------------------------------------------------------
-
-newtype StreamTable = StreamTable (IntMap Stream)
-
-emptyStreamTable :: StreamTable
-emptyStreamTable = StreamTable Map.empty
 
 ----------------------------------------------------------------
 
@@ -149,6 +141,7 @@ data Connection = Connection {
   , inputQ            :: InputQ
   , cryptoQ           :: InputQ
   , outputQ           :: OutputQ
+  , chunkQ            :: ChunkQ
   , retransDB         :: IORef RetransDB
   -- State
   , connectionState   :: TVar ConnectionState
@@ -202,6 +195,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
         -- Peer
         <*> newTVarIO (newCIDDB peerCID)
         -- Queues
+        <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
@@ -283,3 +277,17 @@ data Flow = Flow {
 
 defaultFlow :: Flow
 defaultFlow = Flow 0 0
+
+----------------------------------------------------------------
+
+data Input = InpNewStream Stream
+           | InpHandshake EncryptionLevel ByteString
+           | InpTransportError TransportError FrameType ReasonPhrase
+           | InpApplicationError ApplicationError ReasonPhrase
+           | InpError QUICError
+           deriving Show
+
+data Output = OutControl EncryptionLevel [Frame]
+            | OutHandshake [(EncryptionLevel,ByteString)]
+            | OutPlainPacket PlainPacket [PacketNumber]
+            deriving Show

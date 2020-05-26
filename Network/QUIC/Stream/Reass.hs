@@ -1,18 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StrictData #-}
 
-module Network.QUIC.Types.Stream (
-    Input(..)
-  , Output(..)
-  , Stream(streamId, streamOutputQ)
-  , newStream
-  , getStreamOffset
-  , getStreamTxFin
-  , setStreamTxFin
-  , takeStreamData
+module Network.QUIC.Stream.Reass (
+    takeStreamData
   , putStreamData
-  , isFragmentTop
+  , getStreamData
   ) where
 
 import qualified Data.ByteString as BS
@@ -20,93 +12,8 @@ import Control.Concurrent.STM
 import Data.IORef
 
 import Network.QUIC.Imports
-import Network.QUIC.Types.Ack
-import Network.QUIC.Types.Error
-import Network.QUIC.Types.Frame
-import Network.QUIC.Types.Packet
-import Network.QUIC.Types.UserError
-
-----------------------------------------------------------------
-
-data Input = InpNewStream Stream
-           | InpHandshake EncryptionLevel ByteString
-           | InpTransportError TransportError FrameType ReasonPhrase
-           | InpApplicationError ApplicationError ReasonPhrase
-           | InpError QUICError
-           deriving Show
-
-data Output = OutStream Stream [StreamData] Fin
-            | OutControl EncryptionLevel [Frame]
-            | OutHandshake [(EncryptionLevel,ByteString)]
-            | OutPlainPacket PlainPacket [PacketNumber]
-            deriving Show
-
-----------------------------------------------------------------
-
-type WindowSize = Int
-
-data Stream = Stream {
-    streamId      :: StreamId -- ^ Getting stream identifier.
-  , streamOutputQ :: TQueue Output
-  , streamQ       :: StreamQ
-  , streamWindow  :: TVar WindowSize
-  , streamStateTx :: IORef StreamState
-  , streamStateRx :: IORef StreamState
-  , streamReass   :: IORef [Reassemble]
-  }
-
-instance Show Stream where
-    show s = show $ streamId s
-
-newStream :: StreamId -> TQueue Output -> IO Stream
-newStream sid outQ = Stream sid outQ <$> newStreamQ
-                                     <*> newTVarIO 65536 -- fixme
-                                     <*> newIORef emptyStreamState
-                                     <*> newIORef emptyStreamState
-                                     <*> newIORef []
-
-----------------------------------------------------------------
-
-data StreamQ = StreamQ {
-    streamInputQ :: TQueue ByteString
-  , pendingData  :: IORef (Maybe ByteString)
-  , finReceived  :: IORef Bool
-  }
-
-newStreamQ :: IO StreamQ
-newStreamQ = StreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
-
-----------------------------------------------------------------
-
-data StreamState = StreamState {
-    streamOffset :: Offset
-  , streamFin :: Fin
-  } deriving (Eq, Show)
-
-emptyStreamState :: StreamState
-emptyStreamState = StreamState 0 False
-
-----------------------------------------------------------------
-
-getStreamOffset :: Stream -> Int -> IO Offset
-getStreamOffset Stream{..} len = do
-    StreamState off fin <- readIORef streamStateTx
-    writeIORef streamStateTx $ StreamState (off + len) fin
-    return off
-
-getStreamTxFin :: Stream -> IO Fin
-getStreamTxFin Stream{..} = do
-    StreamState _ fin <- readIORef streamStateTx
-    return fin
-
-setStreamTxFin :: Stream -> IO ()
-setStreamTxFin Stream{..} = do
-    StreamState off _ <- readIORef streamStateTx
-    writeIORef streamStateTx $ StreamState off True
-
-----------------------------------------------------------------
-
-data Reassemble = Reassemble StreamData Offset Int deriving (Eq, Show)
+import Network.QUIC.Stream.Types
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
@@ -159,7 +66,7 @@ takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
 
 putStreamData :: Stream -> Offset -> StreamData -> Bool -> IO ()
 putStreamData s off dat fin = do
-    (dats,fin1) <- isFragmentTop s off dat fin
+    (dats,fin1) <- getStreamData s off dat fin
     loop fin1 dats
   where
     put = atomically . writeTQueue (streamInputQ $ streamQ s)
@@ -169,9 +76,9 @@ putStreamData s off dat fin = do
         when (d /= "") $ put d
         loop fin1 ds
 
-isFragmentTop :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
-isFragmentTop Stream{..} _   "" False = return ([], False)
-isFragmentTop Stream{..} off "" True  = do
+getStreamData :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
+getStreamData Stream{..} _   "" False = return ([], False)
+getStreamData Stream{..} off "" True  = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     if fin0 then do
         putStrLn "Illegal Fin" -- fixme
@@ -183,7 +90,7 @@ isFragmentTop Stream{..} off "" True  = do
             return   ([], False)
         EQ -> return ([], True)  -- would ignore succeeding fragments
         GT -> return ([], False) -- ignoring ""
-isFragmentTop Stream{..} off dat False = do
+getStreamData Stream{..} off dat False = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let len = BS.length dat
     case off0 `compare` off of
@@ -201,7 +108,7 @@ isFragmentTop Stream{..} off dat False = do
           return (dat:dats, fin1)
       GT ->
           return ([], False)  -- ignoring
-isFragmentTop Stream{..} off dat True = do
+getStreamData Stream{..} off dat True = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let len = BS.length dat
         si1 = si0 { streamFin = True }

@@ -6,6 +6,7 @@ module Network.QUIC.Sender (
   ) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Data.ByteString as B
 import Data.IORef
 
@@ -13,6 +14,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Stream
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -99,8 +101,12 @@ construct conn lvl frames pns mTargetSize = do
 ----------------------------------------------------------------
 
 sender :: Connection -> SendMany -> IO ()
-sender conn send = handleLog logAction $ forever
-    (takeOutput conn >>= sendOutput conn send)
+sender conn send = handleLog logAction $ forever $ do
+    ex <- atomically ((Left  <$> takeOutputSTM conn)
+             `orElse` (Right <$> takeChunkSTM  conn))
+    case ex of
+      Left  out -> sendOutput conn send out
+      Right chk -> sendChunk  conn send chk
   where
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
@@ -109,14 +115,16 @@ sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
     send bss
-sendOutput conn send (OutStream s dats fin) = do
-    addTxData conn $ sum $ map B.length dats
-    sendStreamFragment conn send s dats fin
 sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
     let lvl = packetEncryptionLevel hdr0
     let frames = filter retransmittable $ plainFrames plain0
     bss <- construct conn lvl frames pns $ Just maximumQUICPacketSize
     send bss
+
+sendChunk :: Connection -> SendMany -> Chunk -> IO ()
+sendChunk conn send (Chunk s dats fin) = do
+    addTxData conn $ sum $ map B.length dats
+    sendStreamFragment conn send s dats fin
 
 limitationC :: Int
 limitationC = 1024
@@ -164,14 +172,14 @@ limitation = 1040
 totalLen :: [ByteString] -> Int
 totalLen = sum . map B.length
 
-packFin :: Connection -> Stream -> Bool -> IO Bool
-packFin _    _ True  = return True
-packFin conn s False = do
-    mx <- tryPeekOutput conn
+packFin :: Stream -> Bool -> IO Bool
+packFin _ True  = return True
+packFin s False = do
+    mx <- tryPeekChunk s
     case mx of
-      Just (OutStream s1 [] True)
+      Just (Chunk s1 [] True)
           | streamId s == streamId s1 -> do
-                _ <- takeOutput conn
+                _ <- takeChunk s
                 return True
       _ -> return False
 
@@ -182,18 +190,18 @@ sendStreamFragment conn send s dats fin0 = do
     if closed then
         connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
       else do
-        fin <- packFin conn s fin0
+        fin <- packFin s fin0
         let len = totalLen dats
         if len < limitation then do
             off <- getStreamOffset s len
             let frame = StreamF sid off dats fin
-            sendStreamSmall conn send frame len
+            sendStreamSmall conn send s frame len
           else
             sendStreamLarge conn send s dats fin
         when fin $ setStreamTxFin s
 
-sendStreamSmall :: Connection -> SendMany -> Frame -> Int -> IO ()
-sendStreamSmall conn send frame0 total0 = do
+sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> IO ()
+sendStreamSmall conn send s0 frame0 total0 = do
     ref <- newIORef []
     build <- loop ref (frame0 :) total0
     let frames = build []
@@ -204,17 +212,18 @@ sendStreamSmall conn send frame0 total0 = do
     send bss
     readIORef ref >>= mapM_ setStreamTxFin
   where
-    tryPeekOutput' = do
-        mx <- tryPeekOutput conn
+    tryPeek = do
+        mx <- tryPeekChunk s0
         case mx of
           Nothing -> do
               yield
-              tryPeekOutput conn
+              tryPeekChunk s0
           Just _ -> return mx
     loop ref build total = do
-        mx <- tryPeekOutput'
+        mx <- tryPeek
         case mx of
-          Just (OutStream s dats fin0) -> do
+          Nothing -> return build
+          Just (Chunk s dats fin0) -> do
               closed <- getStreamTxFin s
               let sid = streamId s
               if closed then do
@@ -224,8 +233,8 @@ sendStreamSmall conn send frame0 total0 = do
                   let len = totalLen dats
                       total' = len + total
                   if total' < limitation then do
-                      _ <- takeOutput conn
-                      fin <- packFin conn s fin0 -- must be after takeOutput
+                      _ <- takeChunk s0 -- cf tryPeek
+                      fin <- packFin s fin0 -- must be after takeChunk
                       off <- getStreamOffset s len
                       let frame = StreamF sid off dats fin
                           build' = build . (frame :)
@@ -233,7 +242,6 @@ sendStreamSmall conn send frame0 total0 = do
                       loop ref build' total'
                     else
                       return build
-          _ -> return build
 
 sendStreamLarge :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
 sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0

@@ -7,6 +7,7 @@ import qualified Control.Exception as E
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
+import Network.QUIC.Stream
 import Network.QUIC.Types
 
 -- | Creating a bidirectional stream.
@@ -15,7 +16,7 @@ stream conn = do
     openC <- isConnectionOpen conn
     unless openC $ E.throwIO ConnectionIsClosed
     sid <- getMyNewStreamId conn
-    insertStream conn sid
+    addStream conn sid
 
 -- | Creating a unidirectional stream.
 unidirectionalStream :: Connection -> IO Stream
@@ -23,7 +24,7 @@ unidirectionalStream conn = do
     openC <- isConnectionOpen conn
     unless openC $ E.throwIO ConnectionIsClosed
     sid <- getMyNewUniStreamId conn
-    insertStream conn sid
+    addStream conn sid
 
 -- | Checking if the stream is open.
 isStreamTxOpen :: Stream -> IO Bool
@@ -42,14 +43,14 @@ sendStreamMany s dats = do
 --    when sent $ E.throwIO ConnectionIsClosed
     open <- isStreamTxOpen s
     unless open $ E.throwIO StreamIsClosed
-    putOutput' (streamOutputQ s) $ OutStream s dats False
+    putChunk s $ Chunk s dats False
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
 shutdownStream s = do
 --    sent <- isCloseSent conn
 --    when sent $ E.throwIO ConnectionIsClosed
-    putOutput' (streamOutputQ s) $ OutStream s [] True
+    putChunk s $ Chunk s [] True
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO (Either QUICError Stream)

@@ -69,4 +69,5 @@ import Network.QUIC.Info
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Run
+import Network.QUIC.Stream
 import Network.QUIC.Types

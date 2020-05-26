@@ -106,19 +106,22 @@ module Network.QUIC.Connection (
   -- * StreamTable
   , putInputStream
   , putInputCrypto
-  , insertStream
-  , insertCryptoStreams
+  , addStream
+  , setupCryptoStreams
   , getCryptoOffset
   -- * Queue
   , takeInput
   , putInput
   , takeCrypto
   , putCrypto
-  , takeOutput
+  , takeOutputSTM
   , tryPeekOutput
   , putOutput
-  , putOutput'
   , putOutputPP
+  , takeChunk
+  , takeChunkSTM
+  , tryPeekChunk
+  , putChunk
   -- * Role
   , setToken
   , getToken
@@ -147,6 +150,8 @@ module Network.QUIC.Connection (
   , headerBufferSize
   , payloadBuffer
   , payloadBufferSize
+  , Input(..)
+  , Output(..)
   ) where
 
 import Network.QUIC.Connection.Crypto
