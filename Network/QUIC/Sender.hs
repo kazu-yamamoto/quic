@@ -104,7 +104,7 @@ sender conn send = handleLog logAction $ forever
   where
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
-sendOutput :: Connection -> SendMany -> Output ->IO ()
+sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
     bss <- construct conn lvl frames [] $ Just maximumQUICPacketSize
