@@ -96,7 +96,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     mytid <- myThreadId
     --
     void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
-    return (conn,send,recv,cls,qlogger, myAuthCIDs)
+    return (conn,send,recv,cls,qlogger,myAuthCIDs)
 
 handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
 handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger myAuthCIDs = do
