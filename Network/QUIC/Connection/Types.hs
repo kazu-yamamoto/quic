@@ -270,16 +270,6 @@ isServer Connection{..} = role == Server
 
 ----------------------------------------------------------------
 
-data Flow = Flow {
-    flowData :: Int
-  , flowMaxData :: Int
-  }
-
-defaultFlow :: Flow
-defaultFlow = Flow 0 0
-
-----------------------------------------------------------------
-
 data Input = InpNewStream Stream
            | InpHandshake EncryptionLevel ByteString
            | InpTransportError TransportError FrameType ReasonPhrase

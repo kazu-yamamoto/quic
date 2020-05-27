@@ -1,6 +1,19 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.QUIC.Stream.Types where
+module Network.QUIC.Stream.Types (
+    Chunk(..)
+  , ChunkQ
+  , Stream(..)
+  , newStream
+  , StreamQ(..)
+  , StreamState(..)
+  , Reassemble(..)
+  , Flow(..)
+  , defaultFlow
+  , getStreamOffset
+  , getStreamTxFin
+  , setStreamTxFin
+  ) where
 
 import Control.Concurrent.STM
 import Data.IORef
@@ -80,3 +93,13 @@ setStreamTxFin Stream{..} = do
 ----------------------------------------------------------------
 
 data Reassemble = Reassemble StreamData Offset Int deriving (Eq, Show)
+
+----------------------------------------------------------------
+
+data Flow = Flow {
+    flowData :: Int
+  , flowMaxData :: Int
+  }
+
+defaultFlow :: Flow
+defaultFlow = Flow 0 0

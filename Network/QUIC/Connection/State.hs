@@ -28,6 +28,7 @@ module Network.QUIC.Connection.State (
 import Control.Concurrent.STM
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Stream
 
 ----------------------------------------------------------------
 
