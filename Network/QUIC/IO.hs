@@ -39,8 +39,8 @@ sendStream s dat = sendStreamMany s [dat]
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
---    sent <- isCloseSent conn
---    when sent $ E.throwIO ConnectionIsClosed
+    closed <- isTxClosed s
+    when closed $ E.throwIO ConnectionIsClosed
     open <- isStreamTxOpen s
     unless open $ E.throwIO StreamIsClosed
     putChunk s $ Chunk s dats False
@@ -48,8 +48,8 @@ sendStreamMany s dats = do
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
 shutdownStream s = do
---    sent <- isCloseSent conn
---    when sent $ E.throwIO ConnectionIsClosed
+    closed <- isTxClosed s
+    when closed $ E.throwIO ConnectionIsClosed
     putChunk s $ Chunk s [] True
 
 -- | Accepting a stream initiated by the peer.
@@ -69,10 +69,10 @@ acceptStream conn = do
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned.
 recvStream :: Stream -> Int -> IO ByteString
-recvStream s = do
---    received <- isCloseReceived conn
---    when received $ E.throwIO ConnectionIsClosed
-    takeStreamData s
+recvStream s n = do
+    closed <- isRxClosed s
+    when closed $ E.throwIO ConnectionIsClosed
+    takeStreamData s n
 
 isClientInitiatedBidirectional :: StreamId -> Bool
 isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0

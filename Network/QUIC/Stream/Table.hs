@@ -15,8 +15,9 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as Map
 
 import Network.QUIC.Imports
-import Network.QUIC.Stream.Types
+import Network.QUIC.Stream.Misc
 import Network.QUIC.Stream.Reass
+import Network.QUIC.Stream.Types
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -49,11 +50,11 @@ toCryptoStreamId RTT1Level      = rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 
-insertCryptoStreams :: StreamTable -> ChunkQ -> IO StreamTable
-insertCryptoStreams stbl q = do
-    strm1 <- newStream initialCryptoStreamId   q
-    strm2 <- newStream handshakeCryptoStreamId q
-    strm3 <- newStream rtt1CryptoStreamId      q
+insertCryptoStreams :: StreamTable -> Shared -> IO StreamTable
+insertCryptoStreams stbl shrd = do
+    strm1 <- newStream initialCryptoStreamId   shrd
+    strm2 <- newStream handshakeCryptoStreamId shrd
+    strm3 <- newStream rtt1CryptoStreamId      shrd
     return $ insertStream initialCryptoStreamId   strm1
            $ insertStream handshakeCryptoStreamId strm2
            $ insertStream rtt1CryptoStreamId      strm3 stbl

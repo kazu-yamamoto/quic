@@ -32,7 +32,7 @@ findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
 
 addStream :: Connection -> StreamId -> IO Stream
 addStream Connection{..} sid = do
-    strm <- newStream sid chunkQ
+    strm <- newStream sid shared
     atomicModifyIORef' streamTable $ \tbl -> (insertStream sid strm tbl, ())
     return strm
 
@@ -41,7 +41,7 @@ addStream Connection{..} sid = do
 setupCryptoStreams :: Connection -> IO ()
 setupCryptoStreams Connection{..} = do
     stbl0 <- readIORef streamTable
-    stbl <- insertCryptoStreams stbl0 chunkQ
+    stbl <- insertCryptoStreams stbl0 shared
     writeIORef streamTable stbl
 
 -- FIXME:: deleteCryptoStreams

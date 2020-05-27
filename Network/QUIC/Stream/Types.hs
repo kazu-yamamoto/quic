@@ -1,8 +1,8 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Network.QUIC.Stream.Types (
     Chunk(..)
   , ChunkQ
+  , Shared(..)
+  , newShared
   , Stream(..)
   , newStream
   , StreamQ(..)
@@ -10,9 +10,6 @@ module Network.QUIC.Stream.Types (
   , Reassemble(..)
   , Flow(..)
   , defaultFlow
-  , getStreamOffset
-  , getStreamTxFin
-  , setStreamTxFin
   ) where
 
 import Control.Concurrent.STM
@@ -27,11 +24,20 @@ data Chunk = Chunk Stream [StreamData] Fin
 
 type ChunkQ = TQueue Chunk
 
+data Shared = Shared {
+    sharedCloseSent     :: IORef Bool
+  , sharedCloseReceived :: IORef Bool
+  , sharedChunkQ        :: ChunkQ
+  }
+
+newShared :: IO Shared
+newShared = Shared <$> newIORef False <*> newIORef False <*> newTQueueIO
+
 ----------------------------------------------------------------
 
 data Stream = Stream {
     streamId      :: StreamId -- ^ Getting stream identifier.
-  , streamChunkQ  :: ChunkQ
+  , streamShared  :: Shared
   , streamQ       :: StreamQ
   , streamFlowTx  :: TVar Flow
   , streamFlowRx  :: TVar Flow
@@ -43,8 +49,8 @@ data Stream = Stream {
 instance Show Stream where
     show s = show $ streamId s
 
-newStream :: StreamId -> ChunkQ -> IO Stream
-newStream sid outQ = Stream sid outQ <$> newStreamQ
+newStream :: StreamId -> Shared -> IO Stream
+newStream sid shrd = Stream sid shrd <$> newStreamQ
                                      <*> newTVarIO defaultFlow
                                      <*> newTVarIO defaultFlow
                                      <*> newIORef emptyStreamState
@@ -71,24 +77,6 @@ data StreamState = StreamState {
 
 emptyStreamState :: StreamState
 emptyStreamState = StreamState 0 False
-
-----------------------------------------------------------------
-
-getStreamOffset :: Stream -> Int -> IO Offset
-getStreamOffset Stream{..} len = do
-    StreamState off fin <- readIORef streamStateTx
-    writeIORef streamStateTx $ StreamState (off + len) fin
-    return off
-
-getStreamTxFin :: Stream -> IO Fin
-getStreamTxFin Stream{..} = do
-    StreamState _ fin <- readIORef streamStateTx
-    return fin
-
-setStreamTxFin :: Stream -> IO ()
-setStreamTxFin Stream{..} = do
-    StreamState off _ <- readIORef streamStateTx
-    writeIORef streamStateTx $ StreamState off True
 
 ----------------------------------------------------------------
 

@@ -141,7 +141,7 @@ data Connection = Connection {
   , inputQ            :: InputQ
   , cryptoQ           :: InputQ
   , outputQ           :: OutputQ
-  , chunkQ            :: ChunkQ
+  , shared            :: Shared
   , retransDB         :: IORef RetransDB
   -- State
   , connectionState   :: TVar ConnectionState
@@ -198,7 +198,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
-        <*> newTQueueIO
+        <*> newShared
         <*> newIORef []
         -- State
         <*> newTVarIO Handshaking

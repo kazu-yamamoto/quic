@@ -26,6 +26,7 @@ module Network.QUIC.Connection.State (
   ) where
 
 import Control.Concurrent.STM
+import Data.IORef
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Stream
@@ -70,14 +71,18 @@ isConnection1RTTReady Connection{..} = atomically $ do
 ----------------------------------------------------------------
 
 setCloseSent :: Connection -> IO ()
-setCloseSent Connection{..} = atomically $ modifyTVar connectionState modify
+setCloseSent Connection{..} = do
+    atomically $ modifyTVar connectionState modify
+    writeIORef (sharedCloseSent shared) True
   where
     modify (Closing cs) = Closing $ cs { closeSent = True }
     modify _            = Closing $ CloseState { closeSent = True
                                                , closeReceived = False }
 
 setCloseReceived :: Connection -> IO ()
-setCloseReceived Connection{..} = atomically $ modifyTVar connectionState modify
+setCloseReceived Connection{..} = do
+    atomically $ modifyTVar connectionState modify
+    writeIORef (sharedCloseReceived shared) True
   where
     modify (Closing cs) = Closing $ cs { closeReceived = True }
     modify _            = Closing $ CloseState { closeSent = False
