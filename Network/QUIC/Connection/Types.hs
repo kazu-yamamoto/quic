@@ -178,7 +178,8 @@ newConnection :: Role -> Version -> AuthCIDs -> AuthCIDs
               -> IORef (Socket,RecvQ)
               -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
+newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
+    tvarFlowTx <- newTVarIO defaultFlow
     Connection rl
         <$> newIORef initialRoleInfo
         <*> newIORef ver
@@ -199,7 +200,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
-        <*> newShared
+        <*> newShared tvarFlowTx
         <*> newIORef []
         -- State
         <*> newTVarIO Handshaking
@@ -209,7 +210,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
         <*> newIORef (if isclient then 0 else 1)
         <*> newIORef (if isclient then 2 else 3)
         <*> newIORef (if isclient then 1 else 0)
-        <*> newTVarIO defaultFlow
+        <*> return tvarFlowTx
         <*> newTVarIO defaultFlow
         <*> newIORef defaultParameters
         -- TLS

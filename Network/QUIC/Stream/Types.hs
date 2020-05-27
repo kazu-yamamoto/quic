@@ -28,10 +28,11 @@ data Shared = Shared {
     sharedCloseSent     :: IORef Bool
   , sharedCloseReceived :: IORef Bool
   , sharedChunkQ        :: ChunkQ
+  , sharedConnFlowTx    :: TVar Flow
   }
 
-newShared :: IO Shared
-newShared = Shared <$> newIORef False <*> newIORef False <*> newTQueueIO
+newShared :: TVar Flow -> IO Shared
+newShared tvar = Shared <$> newIORef False <*> newIORef False <*> newTQueueIO <*> return tvar
 
 ----------------------------------------------------------------
 
@@ -87,7 +88,7 @@ data Reassemble = Reassemble StreamData Offset Int deriving (Eq, Show)
 data Flow = Flow {
     flowData :: Int
   , flowMaxData :: Int
-  }
+  } deriving (Eq, Show)
 
 defaultFlow :: Flow
 defaultFlow = Flow 0 0

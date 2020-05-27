@@ -123,7 +123,9 @@ sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
 
 sendChunk :: Connection -> SendMany -> Chunk -> IO ()
 sendChunk conn send (Chunk s dats fin) = do
-    addTxData conn $ sum $ map B.length dats
+    let n = sum $ map B.length dats
+    addTxData conn n
+    addTxStreamData s n
     sendStreamFragment conn send s dats fin
 
 limitationC :: Int

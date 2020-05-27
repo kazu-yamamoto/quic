@@ -3,6 +3,7 @@
 module Network.QUIC.IO where
 
 import qualified Control.Exception as E
+import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
@@ -42,6 +43,8 @@ sendStreamMany s dats = do
     when closed $ E.throwIO ConnectionIsClosed
     open <- isStreamTxOpen s
     unless open $ E.throwIO StreamIsClosed
+    let n = sum $ map B.length dats
+    waitWindowIsOpen s n
     putChunk s $ Chunk s dats False
 
 -- | Sending a FIN in the stream.

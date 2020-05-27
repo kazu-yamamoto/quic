@@ -6,7 +6,9 @@ module Network.QUIC.Stream.Misc (
   , setStreamTxFin
   , isTxClosed
   , isRxClosed
+  , addTxStreamData
   , setTxMaxStreamData
+  , waitWindowIsOpen
   ) where
 
 import Control.Concurrent.STM
@@ -42,6 +44,31 @@ isTxClosed Stream{..} = readIORef $ sharedCloseSent streamShared
 isRxClosed :: Stream -> IO Bool
 isRxClosed Stream{..} = readIORef $ sharedCloseReceived streamShared
 
+addTxStreamData :: Stream -> Int -> IO ()
+addTxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx add
+  where
+    add flow = flow { flowData = flowData flow + n }
+
 setTxMaxStreamData :: Stream -> Int -> IO ()
 setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx
-    $ \flow -> flow { flowMaxData = flowMaxData flow + n }
+    $ \flow -> flow { flowMaxData = n }
+
+----------------------------------------------------------------
+
+window :: Flow -> Int
+window Flow{..} = flowMaxData - flowData
+
+waitWindowIsOpen :: Stream -> Int -> IO ()
+waitWindowIsOpen Stream{..} n = do
+{-
+  xy <- atomically $ do
+      x <- readTVar streamFlowTx
+      y <- readTVar (sharedConnFlowTx streamShared)
+      return (x,y)
+  print xy
+-}
+  atomically $ do
+    strmWindow <- window <$> readTVar streamFlowTx
+    check (strmWindow >= n)
+    connWindow <- window <$> readTVar (sharedConnFlowTx streamShared)
+    check (connWindow >= n)
