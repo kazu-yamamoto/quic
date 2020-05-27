@@ -69,6 +69,8 @@ module Network.QUIC.Connection (
   , clearKillHandshaker
   , getPeerAuthCIDs
   , setPeerAuthCIDs
+  , getPeerParameters
+  , setPeerParameters
   -- * Transmit
   , keepPlainPacket
   , releasePlainPacket
@@ -106,6 +108,7 @@ module Network.QUIC.Connection (
   -- * StreamTable
   , putInputStream
   , putInputCrypto
+  , findStream
   , addStream
   , setupCryptoStreams
   , getCryptoOffset

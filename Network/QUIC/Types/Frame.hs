@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Types.Frame where
@@ -41,6 +42,19 @@ data Frame = Padding Int
 --   This should be 62-bit interger.
 --   On 32-bit machines, the total number of stream identifiers is limited.
 type StreamId = Int
+
+isClientInitiatedBidirectional :: StreamId -> Bool
+isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0
+
+isServerInitiatedBidirectional :: StreamId -> Bool
+isServerInitiatedBidirectional  sid = (0b11 .&. sid) == 1
+
+isClientInitiatedUnidirectional :: StreamId -> Bool
+isClientInitiatedUnidirectional sid = (0b11 .&. sid) == 2
+
+isServerInitiatedUnidirectional :: StreamId -> Bool
+isServerInitiatedUnidirectional sid = (0b11 .&. sid) == 3
+
 type Delay = Int
 
 type Fin = Bool

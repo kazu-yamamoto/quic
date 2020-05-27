@@ -17,6 +17,7 @@ module Network.QUIC.Stream (
   , setStreamTxFin
   , isTxClosed
   , isRxClosed
+  , setTxMaxStreamData
   -- * Reass
   , takeStreamData
   , putStreamData

@@ -4,6 +4,7 @@
 module Network.QUIC.Connection.StreamTable (
     putInputStream
   , putInputCrypto
+  , findStream
   , addStream
   , setupCryptoStreams
   , getCryptoOffset
@@ -11,11 +12,13 @@ module Network.QUIC.Connection.StreamTable (
 
 import Data.IORef
 
+import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
-import Network.QUIC.Types
+import Network.QUIC.Parameters
 import Network.QUIC.Stream
+import Network.QUIC.Types
 
 putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin -> IO ()
 putInputStream conn sid off dat fin = do
@@ -31,10 +34,28 @@ findStream :: Connection -> StreamId -> IO (Maybe Stream)
 findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
 
 addStream :: Connection -> StreamId -> IO Stream
-addStream Connection{..} sid = do
+addStream conn@Connection{..} sid = do
     strm <- newStream sid shared
+    params <- getPeerParameters conn
+    let maxStreamData | isClient conn = clientInitial sid params
+                      | otherwise     = serverInitial sid params
+    setTxMaxStreamData strm maxStreamData
     atomicModifyIORef' streamTable $ \tbl -> (insertStream sid strm tbl, ())
     return strm
+
+clientInitial :: StreamId -> Parameters -> Int
+clientInitial sid params
+  | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiRemote params
+  | isClientInitiatedUnidirectional sid = initialMaxStreamDataUni        params
+  | isServerInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal  params
+  | otherwise                           = 0
+
+serverInitial :: StreamId -> Parameters -> Int
+serverInitial sid params
+  | isServerInitiatedBidirectional  sid = initialMaxStreamDataBidiRemote params
+  | isServerInitiatedUnidirectional sid = initialMaxStreamDataUni        params
+  | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal params
+  | otherwise                           = 0
 
 ----------------------------------------------------------------
 

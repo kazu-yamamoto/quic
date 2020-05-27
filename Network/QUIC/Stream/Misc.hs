@@ -6,8 +6,10 @@ module Network.QUIC.Stream.Misc (
   , setStreamTxFin
   , isTxClosed
   , isRxClosed
+  , setTxMaxStreamData
   ) where
 
+import Control.Concurrent.STM
 import Data.IORef
 
 import Network.QUIC.Imports
@@ -40,3 +42,6 @@ isTxClosed Stream{..} = readIORef $ sharedCloseSent streamShared
 isRxClosed :: Stream -> IO Bool
 isRxClosed Stream{..} = readIORef $ sharedCloseReceived streamShared
 
+setTxMaxStreamData :: Stream -> Int -> IO ()
+setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx
+    $ \flow -> flow { flowMaxData = flowMaxData flow + n }

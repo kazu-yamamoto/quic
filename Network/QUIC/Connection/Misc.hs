@@ -13,6 +13,8 @@ module Network.QUIC.Connection.Misc (
   , clearKillHandshaker
   , getPeerAuthCIDs
   , setPeerAuthCIDs
+  , getPeerParameters
+  , setPeerParameters
   ) where
 
 import Control.Concurrent
@@ -92,3 +94,11 @@ getPeerAuthCIDs Connection{..} = readIORef handshakeCIDs
 
 setPeerAuthCIDs :: Connection -> (AuthCIDs -> AuthCIDs) -> IO ()
 setPeerAuthCIDs Connection{..} f = modifyIORef' handshakeCIDs f
+
+----------------------------------------------------------------
+
+getPeerParameters :: Connection -> IO Parameters
+getPeerParameters Connection{..} = readIORef peerParameters
+
+setPeerParameters :: Connection -> Parameters -> IO ()
+setPeerParameters Connection{..} params = writeIORef peerParameters params

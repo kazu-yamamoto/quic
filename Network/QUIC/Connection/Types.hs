@@ -153,6 +153,7 @@ data Connection = Connection {
   , peerStreamId      :: IORef StreamId
   , flowTx            :: TVar Flow
   , flowRx            :: TVar Flow
+  , peerParameters    :: IORef Parameters
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingHandshake  :: TVar [CryptPacket]
@@ -210,6 +211,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs =
         <*> newIORef (if isclient then 1 else 0)
         <*> newTVarIO defaultFlow
         <*> newTVarIO defaultFlow
+        <*> newIORef defaultParameters
         -- TLS
         <*> newTVarIO InitialLevel
         <*> newTVarIO []

@@ -13,6 +13,7 @@ import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.Stream
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 
@@ -126,7 +127,11 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     putInputStream conn sid off dat fin
 processFrame conn _ (MaxData n) =
     setTxMaxData conn n
-processFrame _ _ MaxStreamData{} = return ()
+processFrame conn _ (MaxStreamData sid n) = do
+    mstrm <- findStream conn sid
+    case mstrm of
+      Nothing   -> return ()
+      Just strm -> setTxMaxStreamData strm n
 processFrame _ _ MaxStreams{} = return ()
 processFrame _ _ DataBlocked{} = return ()
 processFrame _ _ StreamDataBlocked{} = return ()

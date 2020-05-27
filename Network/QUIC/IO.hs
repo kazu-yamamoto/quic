@@ -1,4 +1,3 @@
-{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.IO where
@@ -73,15 +72,3 @@ recvStream s n = do
     closed <- isRxClosed s
     when closed $ E.throwIO ConnectionIsClosed
     takeStreamData s n
-
-isClientInitiatedBidirectional :: StreamId -> Bool
-isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0
-
-isServerInitiatedBidirectional :: StreamId -> Bool
-isServerInitiatedBidirectional  sid = (0b11 .&. sid) == 1
-
-isClientInitiatedUnidirectional :: StreamId -> Bool
-isClientInitiatedUnidirectional sid = (0b11 .&. sid) == 2
-
-isServerInitiatedUnidirectional :: StreamId -> Bool
-isServerInitiatedUnidirectional sid = (0b11 .&. sid) == 3

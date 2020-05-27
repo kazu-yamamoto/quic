@@ -224,6 +224,7 @@ setPeerParams conn [ExtensionRaw extid bs]
       | v0 == v1  = return ()
       | otherwise = err
     setParams params = do
+        setPeerParameters conn params
         when (isClient conn) $ do
             case statelessResetToken params of
               Nothing  -> return ()
