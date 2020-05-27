@@ -29,13 +29,12 @@ type ChunkQ = TQueue Chunk
 
 ----------------------------------------------------------------
 
-type WindowSize = Int
-
 data Stream = Stream {
     streamId      :: StreamId -- ^ Getting stream identifier.
   , streamChunkQ  :: ChunkQ
   , streamQ       :: StreamQ
-  , streamWindow  :: TVar WindowSize
+  , streamFlowTx  :: TVar Flow
+  , streamFlowRx  :: TVar Flow
   , streamStateTx :: IORef StreamState
   , streamStateRx :: IORef StreamState
   , streamReass   :: IORef [Reassemble]
@@ -46,7 +45,8 @@ instance Show Stream where
 
 newStream :: StreamId -> ChunkQ -> IO Stream
 newStream sid outQ = Stream sid outQ <$> newStreamQ
-                                     <*> newTVarIO 65536 -- fixme
+                                     <*> newTVarIO defaultFlow
+                                     <*> newTVarIO defaultFlow
                                      <*> newIORef emptyStreamState
                                      <*> newIORef emptyStreamState
                                      <*> newIORef []

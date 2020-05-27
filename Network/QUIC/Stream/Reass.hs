@@ -18,7 +18,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 takeStreamData :: Stream -> Int -> IO ByteString
-takeStreamData (Stream _ _ StreamQ{..} _ _ _ _) siz0 = do
+takeStreamData (Stream _ _ StreamQ{..} _ _ _ _ _) siz0 = do
     fin <- readIORef finReceived
     if fin then
         return ""
