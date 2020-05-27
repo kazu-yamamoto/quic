@@ -99,7 +99,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     return (conn,send,recv,cls,qlogger,myAuthCIDs)
 
 handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
-handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger myAuthCIDs = do
+handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger myAuthCIDs = E.handle handler $ do
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
@@ -107,6 +107,10 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv qlogger myAuthCID
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
     handshakeClient conf conn myAuthCIDs `E.onException` clearThreads conn
+  where
+    handler (E.SomeException e) = do
+        connDebugLog conn $ "handshakeClientConnection: " ++ show e
+        E.throwIO e
 
 ----------------------------------------------------------------
 
@@ -177,7 +181,7 @@ createServerConnection conf dispatch acc mainThreadId = do
     return (conn, send, recv, cls, qlogger, myAuthCIDs)
 
 handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
-handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCIDs = do
+handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCIDs = E.handle handler $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender conn
@@ -195,6 +199,10 @@ handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCID
     let ncid = NewConnectionID cidInfo 0
     let frames = [NewToken token,ncid]
     putOutput conn $ OutControl RTT1Level frames
+  where
+    handler (E.SomeException e) = do
+        connDebugLog conn $ "handshakeServerConnection: " ++ show e
+        E.throwIO e
 
 -- | Stopping the main thread of the server.
 stopQUICServer :: Connection -> IO ()

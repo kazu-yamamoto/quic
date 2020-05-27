@@ -127,8 +127,10 @@ testHandshake3 cc1 cc2 sc selector = void $ concurrently clients server
     server = runQUICServer sc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
-        Right s <- acceptStream conn
-        recvStream s 1024 `shouldReturn` "second"
+        es <- acceptStream conn
+        case es of
+          Right s -> recvStream s 1024 `shouldReturn` "second"
+          Left  _ -> return ()
         stopQUICServer conn
 
 newSessionManager :: IO SessionManager
