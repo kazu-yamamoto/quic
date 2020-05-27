@@ -15,42 +15,43 @@ anySockAddr (SockAddrInet6 p f _ s) = SockAddrInet6 p f (0,0,0,0) s
 anySockAddr _                       = error "anySockAddr"
 
 udpServerListenSocket :: (IP, PortNumber) -> IO (Socket, SockAddr)
-udpServerListenSocket ip = do
-    let sa = toSockAddr ip
-        family = sockAddrFamily sa
-    s <- socket family Datagram defaultProtocol
-    do { setSocketOption s ReuseAddr 1
-       ; withFdSocket s setCloseOnExecIfNeeded
- --      ; setSocketOption s IPv6Only 1 -- fixme
-       ; bind s sa
-       } `E.onException` close s
+udpServerListenSocket ip = E.bracketOnError open close $ \s -> do
+    setSocketOption s ReuseAddr 1
+    withFdSocket s setCloseOnExecIfNeeded
+    -- setSocketOption s IPv6Only 1 -- fixme
+    bind s sa
     return (s,sa)
+  where
+    sa     = toSockAddr ip
+    family = sockAddrFamily sa
+    open   = socket family Datagram defaultProtocol
 
 udpServerConnectedSocket :: SockAddr -> SockAddr -> IO Socket
-udpServerConnectedSocket mysa peersa = do
-    let family = sockAddrFamily mysa
-        anysa  = anySockAddr mysa
-    s <- socket family Datagram defaultProtocol
-    do { setSocketOption s ReuseAddr 1
-       ; withFdSocket s setCloseOnExecIfNeeded
-       ; bind s anysa      -- (UDP, *:13443, *:*)
-       ; connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
-       } `E.onException` close s
+udpServerConnectedSocket mysa peersa = E.bracketOnError open close $ \s -> do
+    setSocketOption s ReuseAddr 1
+    withFdSocket s setCloseOnExecIfNeeded
+    bind s anysa      -- (UDP, *:13443, *:*)
+    connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
     return s
+  where
+    anysa  = anySockAddr mysa
+    family = sockAddrFamily mysa
+    open   = socket family Datagram defaultProtocol
 
 udpClientConnectedSocket :: HostName -> ServiceName -> IO Socket
 udpClientConnectedSocket host port = do
-    let hints = defaultHints {
-              addrSocketType = Datagram
-            }
     addr <- head <$> getAddrInfo (Just hints) (Just host) (Just port)
-    s <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-    connect s (addrAddress addr) `E.onException` close s
-    return s
+    E.bracketOnError (open addr) close $ \s -> do
+        connect s $ addrAddress addr
+        return s
+ where
+    hints = defaultHints { addrSocketType = Datagram }
+    open addr = socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
 
 udpNATRebindingSocket :: SockAddr -> IO Socket
-udpNATRebindingSocket peersa = do
-    let family = sockAddrFamily peersa
-    s <- socket family Datagram defaultProtocol
-    connect s peersa `E.onException` close s
+udpNATRebindingSocket peersa = E.bracketOnError open close $ \s -> do
+    connect s peersa
     return s
+  where
+    family = sockAddrFamily peersa
+    open = socket family Datagram defaultProtocol
