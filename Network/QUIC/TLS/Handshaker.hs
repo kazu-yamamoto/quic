@@ -11,7 +11,7 @@ import Network.TLS hiding (Version)
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
-import Network.QUIC.Parameters hiding (diff)
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 sessionManager :: SessionEstablish -> SessionManager
@@ -41,7 +41,7 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
     qparams = setCIDsToParameters myAuthCIDs $ confParameters ccConfig
-    eQparams = encodeParametersList $ diffParameters qparams
+    eQparams = encodeParameters qparams
     cshared = def {
         sharedValidationCache = if ccValidate then
                                   def
@@ -77,7 +77,7 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
     qparams = setCIDsToParameters myAuthCIDs $ confParameters scConfig
-    eQparams = encodeParametersList $ diffParameters qparams
+    eQparams = encodeParameters qparams
     sshared = def {
             sharedCredentials     = confCredentials scConfig
           , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]

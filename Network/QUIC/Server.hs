@@ -39,7 +39,7 @@ import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
-import Network.QUIC.Parameters hiding (diff)
+import Network.QUIC.Parameters
 import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Timeout

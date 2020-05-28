@@ -202,11 +202,10 @@ handshakeServer conf conn myAuthCIDs = do
 setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
 setPeerParams conn [ExtensionRaw extid bs]
   | extid == extensionID_QuicTransportParameters = do
-        let mplist = decodeParametersList bs
-        case mplist of
+        let mparams = decodeParameters bs
+        case mparams of
           Nothing    -> err
-          Just plist -> do
-              let params = updateParameters baseParameters plist
+          Just params -> do
               checkAuthCIDs params
               setParams params
   where
