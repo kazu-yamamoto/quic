@@ -43,7 +43,7 @@ construct conn lvl frames pns mTargetSize = do
         constructTargetPacket ver mycid peercid mTargetSize token
       else do
         bss0 <- constructLowerAckPacket lvl ver mycid peercid token
-        let total = sum (map B.length bss0)
+        let total = totalLen bss0
             mTargetSize' = subtract total <$> mTargetSize
         bss1 <- constructTargetPacket ver mycid peercid mTargetSize' token
         return (bss0 ++ bss1)
@@ -123,9 +123,8 @@ sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
 
 sendChunk :: Connection -> SendMany -> Chunk -> IO ()
 sendChunk conn send (Chunk s dats fin) = do
-    let n = sum $ map B.length dats
+    let n = totalLen dats
     addTxData conn n
-    addTxStreamData s n
     sendStreamFragment conn send s dats fin
 
 limitationC :: Int
@@ -159,7 +158,7 @@ sendCryptoFragments conn send = loop limitationC maximumQUICPacketSize id
         frame1 <- cryptoFrame conn bs lvl
         bss1 <- construct conn lvl [frame1] [] Nothing
         let len1 = len0 - B.length bs
-            siz1 = siz0 - sum (map B.length bss1)
+            siz1 = siz0 - totalLen bss1
             build1 = build0 . (bss1 ++)
         loop len1 siz1 build1 xs
 
@@ -236,6 +235,7 @@ sendStreamSmall conn send s0 frame0 total0 = do
                       total' = len + total
                   if total' < limitation then do
                       _ <- takeChunk s0 -- cf tryPeek
+                      addTxData conn len
                       fin <- packFin s fin0 -- must be after takeChunk
                       off <- getStreamOffset s len
                       let frame = StreamF sid off dats fin

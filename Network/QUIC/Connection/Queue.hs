@@ -31,13 +31,13 @@ putOutputPP :: Connection -> (PlainPacket,[PacketNumber]) -> IO ()
 putOutputPP conn (ppkt,pns) = atomically $ writeTQueue (outputQ conn) $ OutPlainPacket ppkt pns
 
 takeChunk :: Stream -> IO Chunk
-takeChunk strm = atomically $ readTQueue $ sharedChunkQ $ streamShared strm
+takeChunk strm = atomically $ readTBQueue $ sharedChunkQ $ streamShared strm
 
 takeChunkSTM :: Connection -> STM Chunk
-takeChunkSTM conn = readTQueue $ sharedChunkQ $ shared conn
+takeChunkSTM conn = readTBQueue $ sharedChunkQ $ shared conn
 
 tryPeekChunk :: Stream -> IO (Maybe Chunk)
-tryPeekChunk strm = atomically $ tryPeekTQueue $ sharedChunkQ $ streamShared strm
+tryPeekChunk strm = atomically $ tryPeekTBQueue $ sharedChunkQ $ streamShared strm
 
 putChunk :: Stream -> Chunk -> IO ()
-putChunk strm out = atomically $ writeTQueue (sharedChunkQ $ streamShared strm) out
+putChunk strm out = atomically $ writeTBQueue (sharedChunkQ $ streamShared strm) out

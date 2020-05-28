@@ -45,6 +45,7 @@ sendStreamMany s dats = do
     unless open $ E.throwIO StreamIsClosed
     let n = sum $ map B.length dats
     waitWindowIsOpen s n
+    addTxStreamData s n
     putChunk s $ Chunk s dats False
 
 -- | Sending a FIN in the stream.
