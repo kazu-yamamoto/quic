@@ -155,11 +155,11 @@ runDispatcher d conf ssa@(s,_) =
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
 dispatcher d conf (s,mysa) = handleLog logAction $ do
-    let (opt,_cmsgid) = case mysa of
-          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
-          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
-          _               -> error "dispatcher"
-    setSocketOption s opt 1
+--    let (opt,_cmsgid) = case mysa of
+--          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
+--          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
+--          _               -> error "dispatcher"
+--    setSocketOption s opt 1
     forever $ do
 --        (peersa, bs0, _cmsgs, _) <- recv
         (bs0, peersa) <- recv
