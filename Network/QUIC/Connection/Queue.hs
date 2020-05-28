@@ -27,8 +27,8 @@ tryPeekOutput conn = atomically $ tryPeekTQueue (outputQ conn)
 putOutput :: Connection -> Output -> IO ()
 putOutput conn out = atomically $ writeTQueue (outputQ conn) out
 
-putOutputPP :: Connection -> (PlainPacket,MyPacketNumbers) -> IO ()
-putOutputPP conn (ppkt,pns) = atomically $ writeTQueue (outputQ conn) $ OutPlainPacket ppkt pns
+putOutputPP :: Connection -> PlainPacket -> IO ()
+putOutputPP conn ppkt = atomically $ writeTQueue (outputQ conn) $ OutPlainPacket ppkt
 
 takeChunk :: Stream -> IO Chunk
 takeChunk strm = atomically $ readTBQueue $ sharedChunkQ $ streamShared strm

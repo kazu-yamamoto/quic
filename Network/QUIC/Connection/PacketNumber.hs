@@ -5,8 +5,6 @@ module Network.QUIC.Connection.PacketNumber (
   , getPacketNumber
   , setPeerPacketNumber
   , getPeerPacketNumber
-  , isMyPacketNumber
-  , addMyPacketNumber
   , getPeerPacketNumbers
   , addPeerPacketNumbers
   , updatePeerPacketNumbers
@@ -42,15 +40,6 @@ setPeerPacketNumber :: Connection -> PacketNumber -> IO ()
 setPeerPacketNumber Connection{..} n = modifyIORef' peerPacketNumber set
   where
     set m = max m n
-
-----------------------------------------------------------------
--- My packet numbers
-
-isMyPacketNumber :: PacketNumber -> MyPacketNumbers -> Bool
-isMyPacketNumber pn (MyPacketNumbers mypns) = Set.member pn mypns
-
-addMyPacketNumber :: PacketNumber -> MyPacketNumbers -> MyPacketNumbers
-addMyPacketNumber pn (MyPacketNumbers mypns) = MyPacketNumbers $ Set.insert pn mypns
 
 ----------------------------------------------------------------
 -- Peer's packet numbers

@@ -9,6 +9,8 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Hourglass
 import Data.IORef
+import Data.IntPSQ (IntPSQ)
+import qualified Data.IntPSQ as IntPSQ
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.X509 (CertificateChain)
@@ -45,12 +47,6 @@ data CloseState = CloseState {
 
 ----------------------------------------------------------------
 
-newtype MyPacketNumbers = MyPacketNumbers (Set PacketNumber)
-                          deriving (Eq, Show)
-
-emptyMyPacketNumbers :: MyPacketNumbers
-emptyMyPacketNumbers = MyPacketNumbers Set.empty
-
 newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
                           deriving (Eq, Show)
 
@@ -59,13 +55,17 @@ emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 
 type InputQ  = TQueue Input
 type OutputQ = TQueue Output
-type RetransDB = [Retrans]
+
+newtype RetransDB = RetransDB (IntPSQ ElapsedP Retrans)
+
+emptyRetransDB :: RetransDB
+emptyRetransDB = RetransDB IntPSQ.empty
+
 data Retrans = Retrans {
-    retransTime          :: ElapsedP
-  , retransLevel         :: EncryptionLevel
-  , retransPacketNumbers :: MyPacketNumbers
-  , retransPlainPacket   :: PlainPacket
-  , retransACKs          :: PeerPacketNumbers
+    retransPacketNumber :: PacketNumber
+  , retransLevel        :: EncryptionLevel
+  , retransPlainPacket  :: PlainPacket
+  , retransACKs         :: PeerPacketNumbers
   }
 
 dummySecrets :: TrafficSecrets a
@@ -208,7 +208,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newShared tvarFlowTx
-        <*> newIORef []
+        <*> newIORef emptyRetransDB
         -- State
         <*> newTVarIO Handshaking
         <*> newIORef 0
@@ -290,5 +290,5 @@ data Input = InpNewStream Stream
 
 data Output = OutControl EncryptionLevel [Frame]
             | OutHandshake [(EncryptionLevel,ByteString)]
-            | OutPlainPacket PlainPacket MyPacketNumbers
+            | OutPlainPacket PlainPacket
             deriving Show

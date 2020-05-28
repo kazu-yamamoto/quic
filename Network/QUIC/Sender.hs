@@ -30,10 +30,9 @@ cryptoFrame conn crypto lvl = do
 construct :: Connection
           -> EncryptionLevel
           -> [Frame]
-          -> MyPacketNumbers -- Packet number history
           -> Maybe Int       -- Packet size
           -> IO [ByteString]
-construct conn lvl frames pns mTargetSize = do
+construct conn lvl frames mTargetSize = do
     ver <- getVersion conn
     token <- getToken conn
     mycid <- getMyCID conn
@@ -92,8 +91,7 @@ construct conn lvl frames pns mTargetSize = do
               HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames'')
               RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames'')
         if any ackEliciting frames then do
-            let pns' = addMyPacketNumber mypn pns
-            keepPlainPacket conn pns' ppkt lvl ppns
+            keepPlainPacket conn mypn ppkt lvl ppns
           else
             clearPeerPacketNumbers conn lvl
         qlogSent conn ppkt
@@ -114,12 +112,12 @@ sender conn send = handleLog logAction $ forever $ do
 sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
 sendOutput conn send (OutControl lvl frames) = do
-    bss <- construct conn lvl frames emptyMyPacketNumbers $ Just maximumQUICPacketSize
+    bss <- construct conn lvl frames $ Just maximumQUICPacketSize
     send bss
-sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0) pns) = do
+sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0)) = do
     let lvl = packetEncryptionLevel hdr0
     let frames = filter retransmittable $ plainFrames plain0
-    bss <- construct conn lvl frames pns $ Just maximumQUICPacketSize
+    bss <- construct conn lvl frames $ Just maximumQUICPacketSize
     send bss
 
 sendChunk :: Connection -> SendMany -> Chunk -> IO ()
@@ -143,21 +141,21 @@ sendCryptoFragments conn send = loop limitationC maximumQUICPacketSize id
     loop len0 siz0 build0 ((lvl, bs) : xs) | B.length bs > len0 = do
         let (target, rest) = B.splitAt len0 bs
         frame1 <- cryptoFrame conn target lvl
-        bss1 <- construct conn lvl [frame1] emptyMyPacketNumbers $ Just siz0
+        bss1 <- construct conn lvl [frame1] $ Just siz0
         send $ build0 bss1
         loop limitationC maximumQUICPacketSize id ((lvl, rest) : xs)
     loop _ siz0 build0 ((lvl, bs) : []) = do
         frame1 <- cryptoFrame conn bs lvl
-        bss1 <- construct conn lvl [frame1] emptyMyPacketNumbers $ Just siz0
+        bss1 <- construct conn lvl [frame1] $ Just siz0
         send $ build0 bss1
     loop len0 siz0 build0 ((lvl, bs) : xs) | len0 - B.length bs < thresholdC = do
         frame1 <- cryptoFrame conn bs lvl
-        bss1 <- construct conn lvl [frame1] emptyMyPacketNumbers $ Just siz0
+        bss1 <- construct conn lvl [frame1] $ Just siz0
         send $ build0 bss1
         loop limitationC maximumQUICPacketSize id xs
     loop len0 siz0 build0 ((lvl, bs) : xs) = do
         frame1 <- cryptoFrame conn bs lvl
-        bss1 <- construct conn lvl [frame1] emptyMyPacketNumbers Nothing
+        bss1 <- construct conn lvl [frame1] Nothing
         let len1 = len0 - B.length bs
             siz1 = siz0 - totalLen bss1
             build1 = build0 . (bss1 ++)
@@ -210,7 +208,7 @@ sendStreamSmall conn send s0 frame0 total0 = do
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
-    bss <- construct conn lvl frames emptyMyPacketNumbers $ Just maximumQUICPacketSize
+    bss <- construct conn lvl frames $ Just maximumQUICPacketSize
     send bss
     readIORef ref >>= mapM_ setStreamTxFin
   where
@@ -260,7 +258,7 @@ sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
         ready <- isConnection1RTTReady conn
         let lvl | ready     = RTT1Level
                 | otherwise = RTT0Level
-        bss <- construct conn lvl [frame] emptyMyPacketNumbers $ Just maximumQUICPacketSize
+        bss <- construct conn lvl [frame] $ Just maximumQUICPacketSize
         send bss
         loop fin dats2
 
@@ -286,14 +284,14 @@ splitChunks bs0 = loop bs0 0 id
 resender :: Connection -> IO ()
 resender conn = handleIOLog cleanupAction logAction $ forever $ do
     threadDelay 100000
-    ppktpns <- getRetransmissions conn (MilliSeconds 600)
+    ppkts <- getRetransmissions conn (MilliSeconds 600)
     established <- isConnectionEstablished conn
     -- Some implementations do not return Ack for Initial and Handshake
     -- correctly. We should consider that the success of handshake
     -- implicitly acknowledge them.
     let ppktpns'
-         | established = filter isRTTxLevel ppktpns
-         | otherwise   = ppktpns
+         | established = filter isRTTxLevel ppkts
+         | otherwise   = ppkts
     mapM_ put ppktpns'
     ppns <- getPeerPacketNumbers conn RTT1Level
     when (ppns /= emptyPeerPacketNumbers) $ do
@@ -302,9 +300,9 @@ resender conn = handleIOLog cleanupAction logAction $ forever $ do
   where
     cleanupAction = putInput conn $ InpError ConnectionIsClosed
     logAction msg = connDebugLog conn ("resender: " ++ msg)
-    put (ppkt,pns) = putOutput conn $ OutPlainPacket ppkt pns
+    put ppkt = putOutput conn $ OutPlainPacket ppkt
 
-isRTTxLevel :: (PlainPacket,MyPacketNumbers) -> Bool
-isRTTxLevel (PlainPacket hdr _,_) = lvl == RTT1Level || lvl == RTT0Level
+isRTTxLevel :: PlainPacket -> Bool
+isRTTxLevel (PlainPacket hdr _) = lvl == RTT1Level || lvl == RTT0Level
   where
     lvl = packetEncryptionLevel hdr
