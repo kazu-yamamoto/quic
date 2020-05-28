@@ -77,7 +77,6 @@ module Network.QUIC.Connection (
   , setPeerParameters
   -- * Transmit
   , keepPlainPacket
-  , releasePlainPacket
   , releaseAllPlainPackets
   , releasePlainPacketRemoveAcks
   , getRetransmissions

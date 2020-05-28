@@ -2,7 +2,6 @@
 
 module Network.QUIC.Connection.Transmit (
     keepPlainPacket
-  , releasePlainPacket
   , releaseAllPlainPackets
   , releasePlainPacketRemoveAcks
   , getRetransmissions
@@ -30,13 +29,6 @@ releaseAllPlainPackets :: Connection -> IO [PlainPacket]
 releaseAllPlainPackets Connection{..} = atomicModifyIORef' retransDB rm
   where
     rm db = ([], reverse $ map retransPlainPacket db)
-
-releasePlainPacket :: Connection -> PacketNumber -> IO (Maybe PlainPacket)
-releasePlainPacket conn pn = do
-    mx <- deleteRetrans conn pn
-    case mx of
-      Nothing -> return Nothing
-      Just x  -> return $ Just $ retransPlainPacket x
 
 releasePlainPacketRemoveAcks :: Connection -> PacketNumber -> IO ()
 releasePlainPacketRemoveAcks conn pn = do
