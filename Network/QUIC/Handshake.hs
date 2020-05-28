@@ -206,7 +206,7 @@ setPeerParams conn [ExtensionRaw extid bs]
         case mplist of
           Nothing    -> err
           Just plist -> do
-              let params = updateParameters defaultParameters plist
+              let params = updateParameters baseParameters plist
               checkAuthCIDs params
               setParams params
   where

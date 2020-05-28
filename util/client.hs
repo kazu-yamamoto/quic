@@ -141,11 +141,11 @@ main = do
                                  else
                                    confVersions defaultConfig
               , confParameters = if optQuantum then
-                                   exampleParameters {
+                                   defaultParameters {
                                        greaseParameter = Just (BS.pack (replicate 1200 0))
                                      }
                                  else
-                                   exampleParameters
+                                   defaultParameters
               , confKeyLog     = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
               , confDebugLog   = getStdoutLogger optDebugLog

@@ -100,8 +100,8 @@ data Parameters = Parameters {
   } deriving (Eq,Show)
 
 -- | The default value for QUIC transport parameters.
-defaultParameters :: Parameters
-defaultParameters = Parameters {
+baseParameters :: Parameters
+baseParameters = Parameters {
     originalDestinationConnectionId    = Nothing
   , maxIdleTimeout                     = 0 -- disabled
   , statelessResetToken                = Nothing
@@ -174,7 +174,7 @@ diff params label key enc
   | otherwise   = Just (key, enc val)
   where
     val = label params
-    val0 = label defaultParameters
+    val0 = label baseParameters
 
 diffParameters :: Parameters -> ParametersList
 diffParameters p = catMaybes [
@@ -235,8 +235,8 @@ decodeParametersList bs = unsafeDupablePerformIO
                go rbuf (build . ((keyid,val):))
 
 -- | An example parameters obsoleted in the near future.
-exampleParameters :: Parameters
-exampleParameters = defaultParameters {
+defaultParameters :: Parameters
+defaultParameters = baseParameters {
     maxIdleTimeout                 =   30000
   , maxUdpPayloadSize              =    1280
   , initialMaxData                 = 1048576

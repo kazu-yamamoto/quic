@@ -42,7 +42,6 @@ module Network.QUIC (
   -- ** Parameters
   , Parameters(..)
   , defaultParameters
-  , exampleParameters
   -- * Information
   , ConnectionInfo(..)
   , getConnectionInfo

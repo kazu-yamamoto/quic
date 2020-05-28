@@ -212,7 +212,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newIORef (if isclient then 1 else 0)
         <*> return tvarFlowTx
         <*> newTVarIO defaultFlow
-        <*> newIORef defaultParameters
+        <*> newIORef baseParameters
         -- TLS
         <*> newTVarIO InitialLevel
         <*> newTVarIO []
