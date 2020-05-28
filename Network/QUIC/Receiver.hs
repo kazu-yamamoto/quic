@@ -70,8 +70,8 @@ processCryptPacket conn hdr crypt = do
       Just plain@(Plain _ pn frames) -> do
           -- For Ping, record PPN first, then send an ACK.
           -- fixme: need to check Sec 13.1
-          when (any ackEliciting frames) $
-              addPeerPacketNumbers conn level pn
+          when (any ackEliciting frames) $ addPeerPacketNumbers conn level pn
+          when (level == RTT1Level) $ setPeerPacketNumber conn pn
           unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain
           mapM_ (processFrame conn level) frames

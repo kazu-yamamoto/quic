@@ -3,6 +3,8 @@
 module Network.QUIC.Connection.PacketNumber (
     setPacketNumber
   , getPacketNumber
+  , setPeerPacketNumber
+  , getPeerPacketNumber
   , getPeerPacketNumbers
   , addPeerPacketNumbers
   , updatePeerPacketNumbers
@@ -27,6 +29,18 @@ getPacketNumber Connection{..} = atomicModifyIORef' packetNumber inc
 
 setPacketNumber :: Connection -> PacketNumber -> IO ()
 setPacketNumber Connection{..} n = writeIORef packetNumber n
+
+
+----------------------------------------------------------------
+-- Peer's max packet number for RTT1
+
+getPeerPacketNumber :: Connection -> IO PacketNumber
+getPeerPacketNumber Connection{..} = readIORef peerPacketNumber
+
+setPeerPacketNumber :: Connection -> PacketNumber -> IO ()
+setPeerPacketNumber Connection{..} n = modifyIORef' peerPacketNumber set
+  where
+    set m = max m n
 
 ----------------------------------------------------------------
 -- Peer's packet numbers

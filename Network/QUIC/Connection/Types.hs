@@ -146,6 +146,7 @@ data Connection = Connection {
   -- State
   , connectionState   :: TVar ConnectionState
   , packetNumber      :: IORef PacketNumber      -- squeezing three to one
+  , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
   , streamTable       :: IORef StreamTable
   , myStreamId        :: IORef StreamId
@@ -204,6 +205,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newIORef []
         -- State
         <*> newTVarIO Handshaking
+        <*> newIORef 0
         <*> newIORef 0
         <*> newIORef (PeerPacketNumbers Set.empty)
         <*> newIORef emptyStreamTable

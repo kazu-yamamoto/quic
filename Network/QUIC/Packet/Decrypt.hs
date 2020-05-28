@@ -35,9 +35,10 @@ decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
         epnLen = decodePktNumLength rawFlags
         epn = B.take epnLen $ B.drop cryptPktNumOffset cryptPacket
         bytePN = bsXOR mask2 epn
-        pn = decodePacketNumber 0 (toEncodedPacketNumber bytePN) epnLen
         headerSize = cryptPktNumOffset + epnLen
         (proHeader, ciphertext) = B.splitAt headerSize cryptPacket
+    peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
+    let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
     header <- B.create headerSize $ \p -> do
         void $ copy p proHeader
         poke8 flags p 0
