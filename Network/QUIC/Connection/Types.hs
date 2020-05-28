@@ -45,6 +45,12 @@ data CloseState = CloseState {
 
 ----------------------------------------------------------------
 
+newtype MyPacketNumbers = MyPacketNumbers (Set PacketNumber)
+                          deriving (Eq, Show)
+
+emptyMyPacketNumbers :: MyPacketNumbers
+emptyMyPacketNumbers = MyPacketNumbers Set.empty
+
 newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
                           deriving (Eq, Show)
 
@@ -57,7 +63,7 @@ type RetransDB = [Retrans]
 data Retrans = Retrans {
     retransTime          :: ElapsedP
   , retransLevel         :: EncryptionLevel
-  , retransPacketNumbers :: [PacketNumber]
+  , retransPacketNumbers :: MyPacketNumbers
   , retransPlainPacket   :: PlainPacket
   , retransACKs          :: PeerPacketNumbers
   }
@@ -284,5 +290,5 @@ data Input = InpNewStream Stream
 
 data Output = OutControl EncryptionLevel [Frame]
             | OutHandshake [(EncryptionLevel,ByteString)]
-            | OutPlainPacket PlainPacket [PacketNumber]
+            | OutPlainPacket PlainPacket MyPacketNumbers
             deriving Show

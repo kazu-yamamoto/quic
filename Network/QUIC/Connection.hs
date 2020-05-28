@@ -9,11 +9,13 @@ module Network.QUIC.Connection (
   , connDebugLog
   , connQLog
   -- * Packet numbers
+  , MyPacketNumbers
+  , PeerPacketNumbers
   , setPacketNumber
   , getPacketNumber
   , setPeerPacketNumber
   , getPeerPacketNumber
-  , PeerPacketNumbers
+  , addMyPacketNumber
   , emptyPeerPacketNumbers
   , getPeerPacketNumbers
   , addPeerPacketNumbers
@@ -157,6 +159,7 @@ module Network.QUIC.Connection (
   , payloadBufferSize
   , Input(..)
   , Output(..)
+  , emptyMyPacketNumbers
   ) where
 
 import Network.QUIC.Connection.Crypto

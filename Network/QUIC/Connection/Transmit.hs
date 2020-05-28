@@ -20,7 +20,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-keepPlainPacket :: Connection -> [PacketNumber] -> PlainPacket -> EncryptionLevel -> PeerPacketNumbers -> IO ()
+keepPlainPacket :: Connection -> MyPacketNumbers -> PlainPacket -> EncryptionLevel -> PeerPacketNumbers -> IO ()
 keepPlainPacket Connection{..} pns out lvl ppns = do
     tm <- timeCurrentP
     let ent = Retrans tm lvl pns out ppns
@@ -49,11 +49,11 @@ deleteRetrans :: Connection -> PacketNumber -> IO (Maybe Retrans)
 deleteRetrans Connection{..} pn = do
     atomicModifyIORef' retransDB del
   where
-    del []                               = ([], Nothing)
+    del []                                           = ([], Nothing)
     del (x:xs)
-      | pn `elem` retransPacketNumbers x = (xs, Just x)
-      | otherwise                        = x |> del xs
-    a |> (as, b) = (a:as, b)
+      | isMyPacketNumber pn (retransPacketNumbers x) = (xs, Just x)
+      | otherwise                                    = x |> del xs
+    a |> (as, b) = let aas = a:as in (aas, b)
 
 ----------------------------------------------------------------
 
@@ -68,7 +68,7 @@ timeDel (ElapsedP sec nano) milli
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
 
-getRetransmissions :: Connection -> MilliSeconds -> IO [(PlainPacket,[PacketNumber])]
+getRetransmissions :: Connection -> MilliSeconds -> IO [(PlainPacket,MyPacketNumbers)]
 getRetransmissions Connection{..} milli = do
     tm <- timeCurrentP
     let tm' = tm `timeDel` milli
