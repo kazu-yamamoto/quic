@@ -21,6 +21,12 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+-- PucketNumber is increased linearly.
+-- System time is also increased linearly.
+-- If we use PucketNumber as key, key and priority are essentially
+-- the same. This results in non-balanced PSQ.
+-- It is believed that reversing bits could be a pseudo random
+-- at this moment.
 reverseBits :: Word16 -> Word16
 reverseBits w0 = w4
   where

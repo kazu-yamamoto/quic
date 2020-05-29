@@ -180,6 +180,7 @@ cipherDecrypt cipher
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chacha20poly1305Decrypt
   | otherwise                                      = error "cipherDecrypt"
 
+-- IMPORTANT: Using 'let' so that parameters can be memorized.
 aes128gcmEncrypt :: Key -> (Nonce -> PlainText -> AddDat -> [CipherText])
 aes128gcmEncrypt (Key key) =
     let aes = throwCryptoError (cipherInit key) :: AES128
