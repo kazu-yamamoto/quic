@@ -48,7 +48,7 @@ import qualified Crypto.Cipher.ChaChaPoly1305 as ChaChaPoly
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError, maybeCryptoError)
 import qualified Crypto.MAC.Poly1305 as Poly1305
-import Data.ByteArray (convert)
+import Data.ByteArray as Byte (convert, xor)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
@@ -242,7 +242,6 @@ makeNonce (IV iv) pn = Nonce nonce
   where
     nonce = bsXORpad iv pn
 
-
 ----------------------------------------------------------------
 
 encryptPayload :: Cipher -> Key -> IV
@@ -325,14 +324,13 @@ sampleLength cipher
   | otherwise                                      = error "sampleLength"
 
 bsXOR :: ByteString -> ByteString -> ByteString
-bsXOR bs1 bs2 = B.pack $ B.zipWith xor bs1 bs2
+bsXOR = Byte.xor
 
 bsXORpad :: ByteString -> ByteString -> ByteString
-bsXORpad iv pn = B.pack $ zipWith xor ivl pnl
+bsXORpad iv pn = Byte.xor iv pnl
   where
-    ivl = B.unpack iv
     diff = B.length iv - B.length pn
-    pnl = replicate diff 0 ++ B.unpack pn
+    pnl =  B.replicate diff 0 `B.append` pn
 
 ----------------------------------------------------------------
 
