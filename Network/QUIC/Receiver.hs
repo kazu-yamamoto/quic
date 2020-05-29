@@ -98,9 +98,8 @@ processFrame conn lvl Ping = do
     -- If ACK 2-3 sends immediately, the peer misunderstand that
     -- 0 and 1 are dropped.
     when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
-processFrame conn _ (Ack ackInfo _) = do
-    let pns = fromAckInfo ackInfo
-    releaseByAcks conn pns
+processFrame conn _ (Ack ackInfo _) =
+    releaseByAcks conn ackInfo
 processFrame _ _ ResetStream{} = return ()
 processFrame _ _ StopSending{} = return ()
 processFrame conn lvl (Crypto off cdat) = do

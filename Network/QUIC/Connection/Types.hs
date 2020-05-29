@@ -56,10 +56,15 @@ emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 type InputQ  = TQueue Input
 type OutputQ = TQueue Output
 
-newtype RetransDB = RetransDB (IntPSQ ElapsedP Retrans)
+data RetransDB = RetransDB {
+    minPN :: PacketNumber -- ^ If 'keptPackets' is 'IntPSQ.empty',
+                          -- 'maxPN' is copied and 1 is added.
+  , maxPN :: PacketNumber
+  , keptPackets :: IntPSQ ElapsedP Retrans
+  }
 
 emptyRetransDB :: RetransDB
-emptyRetransDB = RetransDB IntPSQ.empty
+emptyRetransDB = RetransDB 0 0 IntPSQ.empty
 
 data Retrans = Retrans {
     retransPacketNumber :: PacketNumber

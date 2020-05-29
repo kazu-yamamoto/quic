@@ -37,21 +37,67 @@ third (_,_,x) = x
 
 ----------------------------------------------------------------
 
+{-# INLINE add #-}
+add :: PacketNumber -> ElapsedP -> Retrans -> RetransDB -> RetransDB
+add pn tm ent rdb = RetransDB minpn maxpn kept
+  where
+    minpn = min pn $ minPN rdb
+    maxpn = max pn $ maxPN rdb
+    key = toKey pn
+    kept = PSQ.insert key tm ent $ keptPackets rdb
+
+{-# INLINE getdel #-}
+getdel :: PacketNumber -> RetransDB -> (RetransDB, Maybe Retrans)
+getdel pn rdb = case PSQ.lookup key $ keptPackets rdb of
+    Nothing    -> (rdb, Nothing)
+    Just (_,v) -> let kept = PSQ.delete key $ keptPackets rdb
+                      newrdb = adjust rdb kept
+                  in (newrdb, Just v)
+  where
+    key = toKey pn
+
+{-# INLINE clear #-}
+clear :: RetransDB -> RetransDB
+clear rdb = case PSQ.findMin $ keptPackets rdb of
+  Nothing -> rdb -- don't moidfy minPN
+  Just _  -> nextEmpty rdb
+
+{-# INLINE split #-}
+split :: ElapsedP -> RetransDB -> (RetransDB, [(Int, ElapsedP, Retrans)])
+split tm rdb = case PSQ.findMin $ keptPackets rdb of
+  Nothing -> (rdb, [])
+  Just _  -> let (xs,kept) = PSQ.atMostView tm $ keptPackets rdb
+                 newrdb = adjust rdb kept
+             in (newrdb, xs)
+
+{-# INLINE adjust #-}
+adjust :: RetransDB -> PSQ.IntPSQ ElapsedP Retrans -> RetransDB
+adjust oldrdb newkept = case PSQ.findMin newkept of
+  Nothing -> nextEmpty oldrdb
+  Just x  -> let minpn = retransPacketNumber $ third x
+                 newrdb = oldrdb { minPN = minpn, keptPackets = newkept }
+             in newrdb
+
+{-# INLINE nextEmpty #-}
+nextEmpty :: RetransDB -> RetransDB
+nextEmpty rdb = emptyRetransDB { minPN = minpn, maxPN = minpn }
+  where
+   minpn = maxPN rdb + 1
+
+----------------------------------------------------------------
+
 keepPlainPacket :: Connection -> PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> IO ()
 keepPlainPacket Connection{..} pn lvl out ppns = do
     tm <- timeCurrentP
     let ent = Retrans pn lvl out ppns
-        key = toKey pn
-    atomicModifyIORef' retransDB $ ins key tm ent
-  where
-    ins key tm ent (RetransDB db) = (RetransDB $ PSQ.insert key tm ent db, ())
+    atomicModifyIORef' retransDB $ \rdb -> (add pn tm ent rdb, ())
 
 ----------------------------------------------------------------
 
 releaseByRetry :: Connection -> IO [PlainPacket]
-releaseByRetry Connection{..} = atomicModifyIORef' retransDB rm
+releaseByRetry Connection{..} =
+    atomicModifyIORef' retransDB $ \rdb -> (clear rdb, getAll (keptPackets rdb))
   where
-    rm (RetransDB db) = (emptyRetransDB, getAll db)
     getAll = map retransPlainPacket
            . sortBy (compare `on` retransPacketNumber)
            . map third
@@ -59,38 +105,27 @@ releaseByRetry Connection{..} = atomicModifyIORef' retransDB rm
 
 ----------------------------------------------------------------
 
-releaseByAcks :: Connection -> [PacketNumber] -> IO ()
-releaseByAcks conn@Connection{..} pns0 = do
-    msmallest <- getSmallest <$> readIORef retransDB
-    let pns = case msmallest of
-          Nothing       -> pns0
-          Just smallest -> dropWhile (< smallest) pns0
-    mapM_ (releaseByAck conn) pns
-  where
-    getSmallest (RetransDB db) = case PSQ.findMin db of
-      Just x  -> Just $ retransPacketNumber $ third x
-      Nothing -> Nothing
+releaseByAcks :: Connection -> AckInfo -> IO ()
+releaseByAcks conn@Connection{..} ackinfo@(AckInfo largest _ _) = do
+    RetransDB{..} <- readIORef retransDB
+    when (largest >= minPN) $ do
+        let pns = dropWhile (< minPN) $ fromAckInfo ackinfo
+        mapM_ (releaseByAck conn) pns
 
 releaseByAck :: Connection -> PacketNumber -> IO ()
 releaseByAck conn@Connection{..} pn = do
-    mx <- atomicModifyIORef' retransDB get
+    mx <- atomicModifyIORef' retransDB $ getdel pn
     case mx of
       Nothing -> return ()
       Just x  -> updatePeerPacketNumbers conn (retransLevel x) (retransACKs x)
-  where
-    key = toKey pn
-    get (RetransDB db) = (RetransDB $ PSQ.delete key db
-                         ,snd <$> PSQ.lookup key db)
 
 ----------------------------------------------------------------
 
 releaseByTimeout :: Connection -> MilliSeconds -> IO [PlainPacket]
 releaseByTimeout Connection{..} milli = do
     tm <- (`timeDel` milli) <$> timeCurrentP
-    atomicModifyIORef' retransDB $ split tm
-  where
-    split tm (RetransDB db) = let (xs, db') = PSQ.atMostView tm db
-                              in (RetransDB db', map (retransPlainPacket . third) xs)
+    xs <- atomicModifyIORef' retransDB $ split tm
+    return $ map (retransPlainPacket . third) xs
 
 newtype MilliSeconds = MilliSeconds Int64 deriving (Eq, Show)
 
