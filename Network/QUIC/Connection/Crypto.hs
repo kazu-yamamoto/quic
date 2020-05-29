@@ -25,11 +25,8 @@ module Network.QUIC.Connection.Crypto (
   --
   , dropSecrets
   --
-  , initializeKeys
-  , getTxPayloadKeyIV
-  , getRxPayloadKeyIV
-  , getTxHeaderProtectionKey
-  , getRxHeaderProtectionKey
+  , initializeCoder
+  , getCoder
   ) where
 
 import Control.Concurrent.STM
@@ -204,35 +201,29 @@ dropSecrets Connection{..} = do
 
 ----------------------------------------------------------------
 
-initializeKeys :: Connection -> EncryptionLevel -> IO ()
-initializeKeys conn lvl = do
+initializeCoder :: Connection -> EncryptionLevel -> IO ()
+initializeCoder conn lvl = do
     cipher <- getCipher conn lvl
     txSecret <- getTxSecret conn lvl
     rxSecret <- getRxSecret conn lvl
     let txPayloadKey = aeadKey cipher txSecret
         txPayloadIV  = initialVector cipher txSecret
         txHeaderKey = headerProtectionKey cipher txSecret
-        txKeys = Keys (txPayloadKey, txPayloadIV) txHeaderKey
+        enc = encryptPayload cipher txPayloadKey txPayloadIV
+        pro = protectionMask cipher txHeaderKey
     let rxPayloadKey = aeadKey cipher rxSecret
         rxPayloadIV  = initialVector cipher rxSecret
         rxHeaderKey = headerProtectionKey cipher rxSecret
-        rxKeys = Keys (rxPayloadKey, rxPayloadIV) rxHeaderKey
-    writeIORef (protectionRef conn lvl) (txKeys, rxKeys)
+        dec = decryptPayload cipher rxPayloadKey rxPayloadIV
+        unp = protectionMask cipher rxHeaderKey
+    let coder = Coder enc dec pro unp
+    writeIORef (protectionRef conn lvl) coder
 
-getTxPayloadKeyIV :: Connection -> EncryptionLevel -> IO (Key, IV)
-getTxPayloadKeyIV conn lvl = payloadKeyIV . fst <$> readIORef (protectionRef conn lvl)
+getCoder :: Connection -> EncryptionLevel -> IO Coder
+getCoder conn lvl = readIORef $ protectionRef conn lvl
 
-getRxPayloadKeyIV :: Connection -> EncryptionLevel -> IO (Key, IV)
-getRxPayloadKeyIV conn lvl = payloadKeyIV . snd <$> readIORef (protectionRef conn lvl)
-
-getTxHeaderProtectionKey :: Connection -> EncryptionLevel -> IO Key
-getTxHeaderProtectionKey conn lvl = headerKey . fst <$> readIORef (protectionRef conn lvl)
-
-getRxHeaderProtectionKey :: Connection -> EncryptionLevel -> IO Key
-getRxHeaderProtectionKey conn lvl = headerKey . snd <$> readIORef (protectionRef conn lvl)
-
-protectionRef :: Connection -> EncryptionLevel -> IORef (Keys, Keys)
-protectionRef conn InitialLevel   = iniKeys conn
-protectionRef conn RTT0Level      = elyKeys conn
-protectionRef conn HandshakeLevel = hndKeys conn
-protectionRef conn RTT1Level      = appKeys conn
+protectionRef :: Connection -> EncryptionLevel -> IORef Coder
+protectionRef conn InitialLevel   = iniCoder conn
+protectionRef conn RTT0Level      = elyCoder conn
+protectionRef conn HandshakeLevel = hndCoder conn
+protectionRef conn RTT1Level      = appCoder conn

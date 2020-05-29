@@ -123,13 +123,20 @@ data MigrationStatus = SendChallenge [PathData]
                      | NonMigration
                      deriving (Eq, Show)
 
-data Keys = Keys {
-    payloadKeyIV :: (Key, IV)
-  , headerKey    :: Key
+data Coder = Coder {
+    encrypt :: CipherText -> ByteString -> PacketNumber -> [CipherText]
+  , decrypt :: CipherText -> ByteString -> PacketNumber -> Maybe PlainText
+  , protect   :: Sample -> Mask
+  , unprotect :: Sample -> Mask
   }
 
-initialKeys :: Keys
-initialKeys = Keys (Key "", IV "") (Key "")
+initialCoder :: Coder
+initialCoder = Coder {
+    encrypt = \_ _ _ -> []
+  , decrypt = \_ _ _ -> Nothing
+  , protect   = \_ -> Mask ""
+  , unprotect = \_ -> Mask ""
+  }
 
 ----------------------------------------------------------------
 
@@ -178,10 +185,10 @@ data Connection = Connection {
   , elySecInfo        :: IORef EarlySecretInfo
   , hndSecInfo        :: IORef HandshakeSecretInfo
   , appSecInfo        :: IORef ApplicationSecretInfo
-  , iniKeys           :: IORef (Keys, Keys)
-  , elyKeys           :: IORef (Keys, Keys)
-  , hndKeys           :: IORef (Keys, Keys)
-  , appKeys           :: IORef (Keys, Keys)
+  , iniCoder          :: IORef Coder
+  , elyCoder          :: IORef Coder
+  , hndCoder          :: IORef Coder
+  , appCoder          :: IORef Coder
   , hndMode           :: IORef HandshakeMode13
   , appProto          :: IORef (Maybe NegotiatedProtocol)
   , handshakeCIDs     :: IORef AuthCIDs
@@ -242,10 +249,10 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
         <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
-        <*> newIORef (initialKeys, initialKeys)
-        <*> newIORef (initialKeys, initialKeys)
-        <*> newIORef (initialKeys, initialKeys)
-        <*> newIORef (initialKeys, initialKeys)
+        <*> newIORef initialCoder
+        <*> newIORef initialCoder
+        <*> newIORef initialCoder
+        <*> newIORef initialCoder
         <*> newIORef FullHandshake
         <*> newIORef Nothing
         <*> newIORef peerAuthCIDs

@@ -49,7 +49,7 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
             resetPeerCID conn sCID
             setPeerAuthCIDs conn $ \auth -> auth { retrySrcCID  = Just sCID }
             setInitialSecrets conn $ initialSecrets ver sCID
-            initializeKeys conn InitialLevel
+            initializeCoder conn InitialLevel
             setToken conn token
             setRetried conn True
             releaseByRetry conn >>= mapM_ put

@@ -23,12 +23,13 @@ import Network.QUIC.Types
 decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
 decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
     cipher <- getCipher conn lvl
-    hpKey <- getRxHeaderProtectionKey conn lvl
+    coder <- getCoder conn lvl
     let proFlags = Flags (cryptPacket `B.index` 0)
         sampleOffset = cryptPktNumOffset + 4
         sampleLen = sampleLength cipher
         sample = Sample $ B.take sampleLen $ B.drop sampleOffset cryptPacket
-        Mask mask = protectionMask cipher hpKey sample
+        makeMask = unprotect coder
+        Mask mask = makeMask sample
         Just (mask1,mask2) = B.uncons mask
         rawFlags@(Flags flags) = unprotectFlags proFlags mask1
         epnLen = decodePktNumLength rawFlags
@@ -42,8 +43,7 @@ decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
         void $ copy p proHeader
         poke8 flags p 0
         void $ copy (p `plusPtr` cryptPktNumOffset) $ B.take epnLen bytePN
-    (key,iv) <- getRxPayloadKeyIV conn lvl
-    let mpayload = decrypt cipher key iv ciphertext header pn
+    let mpayload = decrypt coder ciphertext header pn
     case mpayload of
       Nothing      -> return Nothing
       Just payload -> do
@@ -54,13 +54,3 @@ decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
-
-----------------------------------------------------------------
-
-decrypt :: Cipher -> Key -> IV -> CipherText -> ByteString -> PacketNumber
-        -> Maybe PlainText
-decrypt cipher key iv ciphertext header pn =
-    decryptPayload cipher key nonce ciphertext (AddDat header)
-  where
-    nonce  = makeNonce iv bytePN
-    bytePN = bytestring64 (fromIntegral pn)

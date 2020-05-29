@@ -12,7 +12,9 @@ module Network.QUIC.TLS.Crypto (
   , headerProtectionKey
   , makeNonce
   , encryptPayload
+  , encryptPayload'
   , decryptPayload
+  , decryptPayload'
   -- * Header Protection
   , protectionMask
   , tagLength
@@ -237,12 +239,33 @@ makeNonce (IV iv) pn = Nonce nonce
   where
     nonce = bsXORpad iv pn
 
-encryptPayload :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> [CipherText]
-encryptPayload cipher key nonce plaintext header =
+
+----------------------------------------------------------------
+
+encryptPayload :: Cipher -> Key -> IV -> PlainText -> ByteString -> PacketNumber
+        -> [CipherText]
+encryptPayload cipher key iv plaintext header pn =
+    encryptPayload' cipher key nonce plaintext (AddDat header)
+  where
+    nonce  = makeNonce iv bytePN
+    bytePN = bytestring64 (fromIntegral pn)
+
+encryptPayload' :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> [CipherText]
+encryptPayload' cipher key nonce plaintext header =
     cipherEncrypt cipher key nonce plaintext header
 
-decryptPayload :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
-decryptPayload cipher key nonce ciphertext header =
+----------------------------------------------------------------
+
+decryptPayload :: Cipher -> Key -> IV -> CipherText -> ByteString -> PacketNumber
+        -> Maybe PlainText
+decryptPayload cipher key iv ciphertext header pn =
+    decryptPayload' cipher key nonce ciphertext (AddDat header)
+  where
+    nonce  = makeNonce iv bytePN
+    bytePN = bytestring64 (fromIntegral pn)
+
+decryptPayload' :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
+decryptPayload' cipher key nonce ciphertext header =
     cipherDecrypt cipher key nonce ciphertext header
 
 ----------------------------------------------------------------

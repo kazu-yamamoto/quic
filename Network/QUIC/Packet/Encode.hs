@@ -177,19 +177,19 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     headerEnd <- currentOffset wbuf
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     -- payload
-    (key,iv) <- getTxPayloadKeyIV conn lvl
-    let ciphertext = encrypt cipher key iv plaintext header pn
+    coder <- getCoder conn lvl
+    let ciphertext = encrypt coder plaintext header pn
     -- protecting header
-    hpKey <- getTxHeaderProtectionKey conn lvl
-    protectHeader headerBeg pnBeg epnLen cipher hpKey ciphertext
+    let makeMask = protect coder
+    protectHeader headerBeg pnBeg epnLen cipher makeMask ciphertext
     hdr <- toByteString wbuf
     return (hdr:ciphertext)
 
 ----------------------------------------------------------------
 
 -- fixme
-protectHeader :: Buffer -> Buffer -> Int -> Cipher -> Key -> [CipherText] -> IO ()
-protectHeader headerBeg pnBeg epnLen cipher hpKey ctxttag0 = do
+protectHeader :: Buffer -> Buffer -> Int -> Cipher -> (Sample -> Mask) -> [CipherText] -> IO ()
+protectHeader headerBeg pnBeg epnLen cipher makeMask ctxttag0 = do
     flags <- Flags <$> peek8 headerBeg 0
     let Flags proFlags = protectFlags flags (mask `B.index` 0)
     poke8 proFlags headerBeg 0
@@ -210,18 +210,8 @@ protectHeader headerBeg pnBeg epnLen cipher hpKey ctxttag0 = do
     -- or equal to sample length (16 bytes) in many cases.
     sample | clen >= slen = Sample $ B.take slen ctxt
            | otherwise    = Sample (ctxt `B.append` B.take (slen - clen) tag0)
-    Mask mask = protectionMask cipher hpKey sample
+    Mask mask = makeMask sample
     shuffle n = do
         p0 <- peek8 pnBeg n
         let pp0 = p0 `xor` (mask `B.index` (n + 1))
         poke8 pp0 pnBeg n
-
-----------------------------------------------------------------
-
-encrypt :: Cipher -> Key -> IV -> PlainText -> ByteString -> PacketNumber
-        -> [CipherText]
-encrypt cipher key iv plaintext header pn =
-    encryptPayload cipher key nonce plaintext (AddDat header)
-  where
-    nonce  = makeNonce iv bytePN
-    bytePN = bytestring64 (fromIntegral pn)

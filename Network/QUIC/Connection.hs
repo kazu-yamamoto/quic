@@ -39,11 +39,9 @@ module Network.QUIC.Connection (
   , setHandshakeSecretInfo
   , setApplicationSecretInfo
   , dropSecrets
-  , initializeKeys
-  , getTxPayloadKeyIV
-  , getRxPayloadKeyIV
-  , getTxHeaderProtectionKey
-  , getRxHeaderProtectionKey
+  , Coder(..)
+  , initializeCoder
+  , getCoder
   -- * Migration
   , getMyCID
   , getMyCIDs
