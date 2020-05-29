@@ -281,22 +281,37 @@ splitChunks bs0 = loop bs0 0 id
 
 ----------------------------------------------------------------
 
+minRetransDelay :: Int64
+minRetransDelay = 400
+
+maxRetransDelay :: Int64
+maxRetransDelay = 1600
+
 resender :: Connection -> IO ()
-resender conn = handleIOLog cleanupAction logAction $ forever $ do
-    threadDelay 100000
-    ppkts <- releaseByTimeout conn (MilliSeconds 600)
-    established <- isConnectionEstablished conn
-    -- Some implementations do not return Ack for Initial and Handshake
-    -- correctly. We should consider that the success of handshake
-    -- implicitly acknowledge them.
-    let ppktpns'
-         | established = filter isRTTxLevel ppkts
-         | otherwise   = ppkts
-    mapM_ put ppktpns'
-    ppns <- getPeerPacketNumbers conn RTT1Level
-    when (ppns /= emptyPeerPacketNumbers) $ do
-        -- generating ACK
-        putOutput conn $ OutControl RTT1Level []
+resender conn = handleIOLog cleanupAction logAction $ do
+    ref <- newIORef minRetransDelay
+    forever $ do
+        threadDelay 100000
+        n <- readIORef ref
+        ppkts <- releaseByTimeout conn (MilliSeconds n)
+        established <- isConnectionEstablished conn
+        -- Some implementations do not return Ack for Initial and Handshake
+        -- correctly. We should consider that the success of handshake
+        -- implicitly acknowledge them.
+        let ppkt'
+             | established = filter isRTTxLevel ppkts
+             | otherwise   = ppkts
+        if null ppkt' then do
+            let n' = n - 100
+            when (n' >= minRetransDelay) $ writeIORef ref n'
+          else do
+            mapM_ put ppkt'
+            let n' = n + 200
+            when (n' <= maxRetransDelay) $ writeIORef ref n'
+        ppns <- getPeerPacketNumbers conn RTT1Level
+        when (ppns /= emptyPeerPacketNumbers) $ do
+            -- generating ACK
+            putOutput conn $ OutControl RTT1Level []
   where
     cleanupAction = putInput conn $ InpError ConnectionIsClosed
     logAction msg = connDebugLog conn ("resender: " ++ msg)
