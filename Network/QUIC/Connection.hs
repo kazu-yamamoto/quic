@@ -75,9 +75,9 @@ module Network.QUIC.Connection (
   , setPeerParameters
   -- * Transmit
   , keepPlainPacket
-  , releaseAllPlainPackets
-  , releasePlainPacketRemoveAcks
-  , getRetransmissions
+  , releaseByRetry
+  , releaseByAck
+  , releaseByTimeout
   , MilliSeconds(..)
   -- * State
   , isConnectionOpen

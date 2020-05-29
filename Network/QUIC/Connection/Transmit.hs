@@ -2,9 +2,9 @@
 
 module Network.QUIC.Connection.Transmit (
     keepPlainPacket
-  , releaseAllPlainPackets
-  , releasePlainPacketRemoveAcks
-  , getRetransmissions
+  , releaseByRetry
+  , releaseByAck
+  , releaseByTimeout
   , MilliSeconds(..)
   ) where
 
@@ -32,10 +32,13 @@ reverseBits w0 = w4
 toKey :: PacketNumber -> Int
 toKey = fromIntegral . reverseBits . fromIntegral
 
+third :: (a, b, c) -> c
+third (_,_,x) = x
+
 ----------------------------------------------------------------
 
-keepPlainPacket :: Connection -> PacketNumber -> PlainPacket -> EncryptionLevel -> PeerPacketNumbers -> IO ()
-keepPlainPacket Connection{..} pn out lvl ppns = do
+keepPlainPacket :: Connection -> PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> IO ()
+keepPlainPacket Connection{..} pn lvl out ppns = do
     tm <- timeCurrentP
     let ent = Retrans pn lvl out ppns
         key = toKey pn
@@ -43,11 +46,10 @@ keepPlainPacket Connection{..} pn out lvl ppns = do
   where
     ins key tm ent (RetransDB db) = (RetransDB $ PSQ.insert key tm ent db, ())
 
-third :: (a, b, c) -> c
-third (_,_,x) = x
+----------------------------------------------------------------
 
-releaseAllPlainPackets :: Connection -> IO [PlainPacket]
-releaseAllPlainPackets Connection{..} = atomicModifyIORef' retransDB rm
+releaseByRetry :: Connection -> IO [PlainPacket]
+releaseByRetry Connection{..} = atomicModifyIORef' retransDB rm
   where
     rm (RetransDB db) = (emptyRetransDB, getAll db)
     getAll = map retransPlainPacket
@@ -55,8 +57,10 @@ releaseAllPlainPackets Connection{..} = atomicModifyIORef' retransDB rm
            . map third
            . PSQ.toList
 
-releasePlainPacketRemoveAcks :: Connection -> PacketNumber -> IO ()
-releasePlainPacketRemoveAcks conn pn = do
+----------------------------------------------------------------
+
+releaseByAck :: Connection -> PacketNumber -> IO ()
+releaseByAck conn pn = do
     mx <- deleteRetrans conn pn
     case mx of
       Nothing -> return ()
@@ -74,6 +78,14 @@ deleteRetrans Connection{..} pn =
 
 ----------------------------------------------------------------
 
+releaseByTimeout :: Connection -> MilliSeconds -> IO [PlainPacket]
+releaseByTimeout Connection{..} milli = do
+    tm <- (`timeDel` milli) <$> timeCurrentP
+    atomicModifyIORef' retransDB $ split tm
+  where
+    split tm (RetransDB db) = let (xs, db') = PSQ.atMostView tm db
+                              in (RetransDB db', map (retransPlainPacket . third) xs)
+
 newtype MilliSeconds = MilliSeconds Int64 deriving (Eq, Show)
 
 timeDel :: ElapsedP -> MilliSeconds -> ElapsedP
@@ -84,13 +96,5 @@ timeDel (ElapsedP sec nano) milli
     milliToNano (MilliSeconds n) = NanoSeconds (n * 1000000)
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
-
-getRetransmissions :: Connection -> MilliSeconds -> IO [PlainPacket]
-getRetransmissions Connection{..} milli = do
-    tm <- (`timeDel` milli) <$> timeCurrentP
-    atomicModifyIORef' retransDB $ split tm
-  where
-    split tm (RetransDB db) = let (xs, db') = PSQ.atMostView tm db
-                              in (RetransDB db', map (retransPlainPacket . third) xs)
 
 ----------------------------------------------------------------

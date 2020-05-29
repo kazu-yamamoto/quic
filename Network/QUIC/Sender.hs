@@ -91,7 +91,7 @@ construct conn lvl frames mTargetSize = do
               HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames'')
               RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames'')
         if any ackEliciting frames then do
-            keepPlainPacket conn mypn ppkt lvl ppns
+            keepPlainPacket conn mypn lvl ppkt ppns
           else
             clearPeerPacketNumbers conn lvl
         qlogSent conn ppkt
@@ -284,7 +284,7 @@ splitChunks bs0 = loop bs0 0 id
 resender :: Connection -> IO ()
 resender conn = handleIOLog cleanupAction logAction $ forever $ do
     threadDelay 100000
-    ppkts <- getRetransmissions conn (MilliSeconds 600)
+    ppkts <- releaseByTimeout conn (MilliSeconds 600)
     established <- isConnectionEstablished conn
     -- Some implementations do not return Ack for Initial and Handshake
     -- correctly. We should consider that the success of handshake

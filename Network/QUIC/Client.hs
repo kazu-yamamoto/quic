@@ -51,7 +51,7 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
             setInitialSecrets conn $ initialSecrets ver sCID
             setToken conn token
             setRetried conn True
-            releaseAllPlainPackets conn >>= mapM_ put
+            releaseByRetry conn >>= mapM_ put
       where
         put ppkt = putOutput conn $ OutPlainPacket ppkt
 
