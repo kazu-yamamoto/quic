@@ -109,7 +109,7 @@ releaseByAcks :: Connection -> AckInfo -> IO ()
 releaseByAcks conn@Connection{..} ackinfo@(AckInfo largest _ _) = do
     RetransDB{..} <- readIORef retransDB
     when (largest >= minPN) $ do
-        let pns = dropWhile (< minPN) $ fromAckInfo ackinfo
+        let pns = fromAckInfoWithMin ackinfo minPN
         mapM_ (releaseByAck conn) pns
 
 releaseByAck :: Connection -> PacketNumber -> IO ()

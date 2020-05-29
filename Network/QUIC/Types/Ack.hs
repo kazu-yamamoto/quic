@@ -50,3 +50,27 @@ fromAckInfo (AckInfo lpn fr grs) = loop grs [stt .. lpn]
     loop ((g,r):xs) acc@(s:_) = loop xs ([z - fromIntegral r .. z] ++ acc)
       where
         z = s - fromIntegral g - 2
+
+-- |
+-- >>> fromAckInfoWithMin (AckInfo 9 0 []) 1
+-- [9]
+-- >>> fromAckInfoWithMin (AckInfo 9 2 []) 8
+-- [8,9]
+-- >>> fromAckInfoWithMin (AckInfo 8 1 [(2,1)]) 3
+-- [3,7,8]
+-- >>> fromAckInfoWithMin (AckInfo 9 2 [(0,1)]) 8
+-- [8,9]
+fromAckInfoWithMin :: AckInfo -> PacketNumber -> [PacketNumber]
+fromAckInfoWithMin (AckInfo lpn fr grs) lim
+  | stt < lim = [lim .. lpn]
+  | otherwise = loop grs [stt .. lpn]
+  where
+    stt = lpn - fromIntegral fr
+    loop _          []        = error "loop"
+    loop []         acc       = acc
+    loop ((g,r):xs) acc@(s:_)
+      | z < lim  = acc
+      |otherwise = loop xs ([r' .. z] ++ acc)
+      where
+        z = s - fromIntegral g - 2
+        r' = max lim (z - fromIntegral r)
