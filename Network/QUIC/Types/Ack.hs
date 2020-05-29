@@ -41,7 +41,7 @@ toAckInfo (l:ls)  = ack l ls 0
 -- [2,3,7,8]
 -- >>> fromAckInfo $ AckInfo 9 2 [(0,1)]
 -- [4,5,7,8,9]
-fromAckInfo :: AckInfo-> [PacketNumber]
+fromAckInfo :: AckInfo -> [PacketNumber]
 fromAckInfo (AckInfo lpn fr grs) = loop grs [stt .. lpn]
   where
     stt = lpn - fromIntegral fr
