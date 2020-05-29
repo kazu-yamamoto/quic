@@ -79,7 +79,7 @@ module Network.QUIC.Connection (
   -- * Transmit
   , keepPlainPacket
   , releaseByRetry
-  , releaseByAck
+  , releaseByAcks
   , releaseByTimeout
   , MilliSeconds(..)
   -- * State

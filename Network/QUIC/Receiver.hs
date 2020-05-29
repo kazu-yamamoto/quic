@@ -100,7 +100,7 @@ processFrame conn lvl Ping = do
     when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
 processFrame conn _ (Ack ackInfo _) = do
     let pns = fromAckInfo ackInfo
-    mapM_ (releaseByAck conn) pns
+    releaseByAcks conn pns
 processFrame _ _ ResetStream{} = return ()
 processFrame _ _ StopSending{} = return ()
 processFrame conn lvl (Crypto off cdat) = do

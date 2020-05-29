@@ -3,7 +3,7 @@
 module Network.QUIC.Connection.Transmit (
     keepPlainPacket
   , releaseByRetry
-  , releaseByAck
+  , releaseByAcks
   , releaseByTimeout
   , MilliSeconds(..)
   ) where
@@ -59,22 +59,28 @@ releaseByRetry Connection{..} = atomicModifyIORef' retransDB rm
 
 ----------------------------------------------------------------
 
+releaseByAcks :: Connection -> [PacketNumber] -> IO ()
+releaseByAcks conn@Connection{..} pns0 = do
+    msmallest <- getSmallest <$> readIORef retransDB
+    let pns = case msmallest of
+          Nothing       -> pns0
+          Just smallest -> dropWhile (< smallest) pns0
+    mapM_ (releaseByAck conn) pns
+  where
+    getSmallest (RetransDB db) = case PSQ.findMin db of
+      Just x  -> Just $ retransPacketNumber $ third x
+      Nothing -> Nothing
+
 releaseByAck :: Connection -> PacketNumber -> IO ()
-releaseByAck conn pn = do
-    mx <- deleteRetrans conn pn
+releaseByAck conn@Connection{..} pn = do
+    mx <- atomicModifyIORef' retransDB get
     case mx of
       Nothing -> return ()
       Just x  -> updatePeerPacketNumbers conn (retransLevel x) (retransACKs x)
-
-deleteRetrans :: Connection -> PacketNumber -> IO (Maybe Retrans)
-deleteRetrans Connection{..} pn =
-    atomicModifyIORef' retransDB get
   where
     key = toKey pn
-    get rdb@(RetransDB db) = case PSQ.findMin db of
-      Just x | retransPacketNumber (third x) <= pn
-          -> (RetransDB $ PSQ.delete key db, snd <$> PSQ.lookup key db)
-      _   -> (rdb, Nothing)
+    get (RetransDB db) = (RetransDB $ PSQ.delete key db
+                         ,snd <$> PSQ.lookup key db)
 
 ----------------------------------------------------------------
 
