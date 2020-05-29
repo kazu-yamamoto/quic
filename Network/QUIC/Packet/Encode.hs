@@ -148,7 +148,6 @@ encodeLongHeaderPP _conn wbuf pkttyp ver dCID sCID flags pn = do
 
 protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO [ByteString]
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
-    secret <- getTxSecret conn lvl
     cipher <- getCipher conn lvl
     (plaintext0,siz) <- encodeFramesWithPadding (payloadBuffer conn) (payloadBufferSize conn) frames
     here <- currentOffset wbuf
@@ -178,7 +177,8 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     headerEnd <- currentOffset wbuf
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     -- payload
-    let ciphertext = encrypt cipher secret plaintext header pn
+    (key,iv) <- getTxPayloadKeyIV conn lvl
+    let ciphertext = encrypt cipher key iv plaintext header pn
     -- protecting header
     hpKey <- getTxHeaderProtectionKey conn lvl
     protectHeader headerBeg pnBeg epnLen cipher hpKey ciphertext
@@ -218,12 +218,10 @@ protectHeader headerBeg pnBeg epnLen cipher hpKey ctxttag0 = do
 
 ----------------------------------------------------------------
 
-encrypt :: Cipher -> Secret -> PlainText -> ByteString -> PacketNumber
+encrypt :: Cipher -> Key -> IV -> PlainText -> ByteString -> PacketNumber
         -> [CipherText]
-encrypt cipher secret plaintext header pn =
+encrypt cipher key iv plaintext header pn =
     encryptPayload cipher key nonce plaintext (AddDat header)
   where
-    key    = aeadKey cipher secret
-    iv     = initialVector cipher secret
     nonce  = makeNonce iv bytePN
     bytePN = bytestring64 (fromIntegral pn)

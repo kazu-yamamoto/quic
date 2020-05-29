@@ -25,7 +25,9 @@ module Network.QUIC.Connection.Crypto (
   --
   , dropSecrets
   --
-  , setHeaderProtectionKey
+  , initializeKeys
+  , getTxPayloadKeyIV
+  , getRxPayloadKeyIV
   , getTxHeaderProtectionKey
   , getRxHeaderProtectionKey
   ) where
@@ -202,22 +204,35 @@ dropSecrets Connection{..} = do
 
 ----------------------------------------------------------------
 
-setHeaderProtectionKey :: Connection -> EncryptionLevel -> IO ()
-setHeaderProtectionKey conn lvl = do
+initializeKeys :: Connection -> EncryptionLevel -> IO ()
+initializeKeys conn lvl = do
     cipher <- getCipher conn lvl
-    secTx  <- headerProtectionKey cipher <$> getTxSecret conn lvl
-    secRx  <- headerProtectionKey cipher <$> getRxSecret conn lvl
-    let pkeys = (secTx, secRx)
-    writeIORef (protectionRef conn lvl) pkeys
+    txSecret <- getTxSecret conn lvl
+    rxSecret <- getRxSecret conn lvl
+    let txPayloadKey = aeadKey cipher txSecret
+        txPayloadIV  = initialVector cipher txSecret
+        txHeaderKey = headerProtectionKey cipher txSecret
+        txKeys = Keys (txPayloadKey, txPayloadIV) txHeaderKey
+    let rxPayloadKey = aeadKey cipher rxSecret
+        rxPayloadIV  = initialVector cipher rxSecret
+        rxHeaderKey = headerProtectionKey cipher rxSecret
+        rxKeys = Keys (rxPayloadKey, rxPayloadIV) rxHeaderKey
+    writeIORef (protectionRef conn lvl) (txKeys, rxKeys)
+
+getTxPayloadKeyIV :: Connection -> EncryptionLevel -> IO (Key, IV)
+getTxPayloadKeyIV conn lvl = payloadKeyIV . fst <$> readIORef (protectionRef conn lvl)
+
+getRxPayloadKeyIV :: Connection -> EncryptionLevel -> IO (Key, IV)
+getRxPayloadKeyIV conn lvl = payloadKeyIV . snd <$> readIORef (protectionRef conn lvl)
 
 getTxHeaderProtectionKey :: Connection -> EncryptionLevel -> IO Key
-getTxHeaderProtectionKey conn lvl = fst <$> readIORef (protectionRef conn lvl)
+getTxHeaderProtectionKey conn lvl = headerKey . fst <$> readIORef (protectionRef conn lvl)
 
 getRxHeaderProtectionKey :: Connection -> EncryptionLevel -> IO Key
-getRxHeaderProtectionKey conn lvl = snd <$> readIORef (protectionRef conn lvl)
+getRxHeaderProtectionKey conn lvl = headerKey . snd <$> readIORef (protectionRef conn lvl)
 
-protectionRef :: Connection -> EncryptionLevel -> IORef (Key, Key)
-protectionRef conn InitialLevel   = iniHdrProKeys conn
-protectionRef conn RTT0Level      = elyHdrProKeys conn
-protectionRef conn HandshakeLevel = hndHdrProKeys conn
-protectionRef conn RTT1Level      = appHdrProKeys conn
+protectionRef :: Connection -> EncryptionLevel -> IORef (Keys, Keys)
+protectionRef conn InitialLevel   = iniKeys conn
+protectionRef conn RTT0Level      = elyKeys conn
+protectionRef conn HandshakeLevel = hndKeys conn
+protectionRef conn RTT1Level      = appKeys conn
