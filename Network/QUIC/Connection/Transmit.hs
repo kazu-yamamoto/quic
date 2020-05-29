@@ -24,10 +24,10 @@ import Network.QUIC.Types
 reverseBits :: Word16 -> Word16
 reverseBits w0 = w4
   where
-    w1 = shiftL (w0 .&. 0x5555) 1 .|. (shiftR w0 1 .&. 0x5555)
-    w2 = shiftL (w1 .&. 0x3333) 2 .|. (shiftR w1 2 .&. 0x3333)
-    w3 = shiftL (w2 .&. 0x0f0f) 4 .|. (shiftR w2 4 .&. 0x0f0f)
-    w4 = shiftL (w3 .&. 0x00ff) 8 .|. (shiftR w3 8 .&. 0x00ff)
+    w1 = unsafeShiftL (w0 .&. 0x5555) 1 .|. (unsafeShiftR w0 1 .&. 0x5555)
+    w2 = unsafeShiftL (w1 .&. 0x3333) 2 .|. (unsafeShiftR w1 2 .&. 0x3333)
+    w3 = unsafeShiftL (w2 .&. 0x0f0f) 4 .|. (unsafeShiftR w2 4 .&. 0x0f0f)
+    w4 = unsafeShiftL (w3 .&. 0x00ff) 8 .|. (unsafeShiftR w3 8 .&. 0x00ff)
 
 toKey :: PacketNumber -> Int
 toKey = fromIntegral . reverseBits . fromIntegral
