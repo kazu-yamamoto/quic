@@ -24,6 +24,10 @@ module Network.QUIC.Connection.Crypto (
   , setApplicationSecretInfo
   --
   , dropSecrets
+  --
+  , setHeaderProtectionKey
+  , getTxHeaderProtectionKey
+  , getRxHeaderProtectionKey
   ) where
 
 import Control.Concurrent.STM
@@ -195,3 +199,25 @@ dropSecrets Connection{..} = do
     atomicWriteIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
     atomicModifyIORef' hndSecInfo $ \(HandshakeSecretInfo cipher _) ->
         (HandshakeSecretInfo cipher defaultTrafficSecrets, ())
+
+----------------------------------------------------------------
+
+setHeaderProtectionKey :: Connection -> EncryptionLevel -> IO ()
+setHeaderProtectionKey conn lvl = do
+    cipher <- getCipher conn lvl
+    secTx  <- headerProtectionKey cipher <$> getTxSecret conn lvl
+    secRx  <- headerProtectionKey cipher <$> getRxSecret conn lvl
+    let pkeys = (secTx, secRx)
+    writeIORef (protectionRef conn lvl) pkeys
+
+getTxHeaderProtectionKey :: Connection -> EncryptionLevel -> IO Key
+getTxHeaderProtectionKey conn lvl = fst <$> readIORef (protectionRef conn lvl)
+
+getRxHeaderProtectionKey :: Connection -> EncryptionLevel -> IO Key
+getRxHeaderProtectionKey conn lvl = snd <$> readIORef (protectionRef conn lvl)
+
+protectionRef :: Connection -> EncryptionLevel -> IORef (Key, Key)
+protectionRef conn InitialLevel   = iniHdrProKeys conn
+protectionRef conn RTT0Level      = elyHdrProKeys conn
+protectionRef conn HandshakeLevel = hndHdrProKeys conn
+protectionRef conn RTT1Level      = appHdrProKeys conn

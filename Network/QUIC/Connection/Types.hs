@@ -170,6 +170,10 @@ data Connection = Connection {
   , elySecInfo        :: IORef EarlySecretInfo
   , hndSecInfo        :: IORef HandshakeSecretInfo
   , appSecInfo        :: IORef ApplicationSecretInfo
+  , iniHdrProKeys     :: IORef (Key, Key)
+  , elyHdrProKeys     :: IORef (Key, Key)
+  , hndHdrProKeys     :: IORef (Key, Key)
+  , appHdrProKeys     :: IORef (Key, Key)
   , hndMode           :: IORef HandshakeMode13
   , appProto          :: IORef (Maybe NegotiatedProtocol)
   , handshakeCIDs     :: IORef AuthCIDs
@@ -230,6 +234,10 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
         <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
+        <*> newIORef (Key "", Key "")
+        <*> newIORef (Key "", Key "")
+        <*> newIORef (Key "", Key "")
+        <*> newIORef (Key "", Key "")
         <*> newIORef FullHandshake
         <*> newIORef Nothing
         <*> newIORef peerAuthCIDs

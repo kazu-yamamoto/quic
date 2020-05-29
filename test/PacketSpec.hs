@@ -34,12 +34,14 @@ spec = do
             q <- newRecvQ
             sref <- newIORef (s,q)
             clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog cls sref
+            setHeaderProtectionKey clientConn InitialLevel
             let serverConf = defaultServerConfig {
                        scConfig = defaultConfig {
                            confCredentials = credentials
                          }
                      }
             serverConn <- serverConnection serverConf Draft24 serverAuthCIDs clientAuthCIDs noLog noLog cls sref
+            setHeaderProtectionKey serverConn InitialLevel
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain

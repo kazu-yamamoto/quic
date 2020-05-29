@@ -180,15 +180,16 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     -- payload
     let ciphertext = encrypt cipher secret plaintext header pn
     -- protecting header
-    protectHeader headerBeg pnBeg epnLen cipher secret ciphertext
+    hpKey <- getTxHeaderProtectionKey conn lvl
+    protectHeader headerBeg pnBeg epnLen cipher hpKey ciphertext
     hdr <- toByteString wbuf
     return (hdr:ciphertext)
 
 ----------------------------------------------------------------
 
 -- fixme
-protectHeader :: Buffer -> Buffer -> Int -> Cipher -> Secret -> [CipherText] -> IO ()
-protectHeader headerBeg pnBeg epnLen cipher secret ctxttag0 = do
+protectHeader :: Buffer -> Buffer -> Int -> Cipher -> Key -> [CipherText] -> IO ()
+protectHeader headerBeg pnBeg epnLen cipher hpKey ctxttag0 = do
     flags <- Flags <$> peek8 headerBeg 0
     let Flags proFlags = protectFlags flags (mask `B.index` 0)
     poke8 proFlags headerBeg 0
@@ -209,7 +210,6 @@ protectHeader headerBeg pnBeg epnLen cipher secret ctxttag0 = do
     -- or equal to sample length (16 bytes) in many cases.
     sample | clen >= slen = Sample $ B.take slen ctxt
            | otherwise    = Sample (ctxt `B.append` B.take (slen - clen) tag0)
-    hpKey = headerProtectionKey cipher secret
     Mask mask = protectionMask cipher hpKey sample
     shuffle n = do
         p0 <- peek8 pnBeg n

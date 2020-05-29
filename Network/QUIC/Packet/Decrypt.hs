@@ -24,8 +24,8 @@ decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
 decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
     secret <- getRxSecret conn lvl
     cipher <- getCipher conn lvl
-    let hpKey = headerProtectionKey cipher secret
-        proFlags = Flags (cryptPacket `B.index` 0)
+    hpKey <- getRxHeaderProtectionKey conn lvl
+    let proFlags = Flags (cryptPacket `B.index` 0)
         sampleOffset = cryptPktNumOffset + 4
         sampleLen = sampleLength cipher
         sample = Sample $ B.take sampleLen $ B.drop sampleOffset cryptPacket

@@ -91,6 +91,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
+    setHeaderProtectionKey conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
     --
     mytid <- myThreadId
@@ -162,6 +163,7 @@ createServerConnection conf dispatch acc mainThreadId = do
         qlogger = newQlogger qq "server" (show ocid) $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
     conn <- serverConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
+    setHeaderProtectionKey conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
     --
     let retried = isJust $ retrySrcCID myAuthCIDs

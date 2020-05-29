@@ -134,13 +134,16 @@ handshakeClient conf conn myAuthCIDs = do
     tell tid e = notifyPeer conn (getErrorCause e) >>= E.throwTo tid
     installKeysClient _ (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
+        setHeaderProtectionKey conn RTT0Level
         setConnection0RTTReady conn
     installKeysClient hsr (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
+        setHeaderProtectionKey conn HandshakeLevel
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
     installKeysClient hsr (InstallApplicationKeys appSecInf) = do
         setApplicationSecretInfo conn appSecInf
+        setHeaderProtectionKey conn RTT1Level
         setEncryptionLevel conn RTT1Level
         rxLevelChanged hsr
         setConnection1RTTReady conn
@@ -174,14 +177,17 @@ handshakeServer conf conn myAuthCIDs = do
     wait1RTTReady conn
   where
     tell tid e = notifyPeer conn (getErrorCause e) >>= E.throwTo tid
-    installKeysServer _ (InstallEarlyKeys mEarlySecInf) =
+    installKeysServer _ (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
+        setHeaderProtectionKey conn RTT0Level
     installKeysServer hsr (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
+        setHeaderProtectionKey conn HandshakeLevel
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
-    installKeysServer _ (InstallApplicationKeys appSecInf) =
+    installKeysServer _ (InstallApplicationKeys appSecInf) = do
         setApplicationSecretInfo conn appSecInf
+        setHeaderProtectionKey conn RTT1Level
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do
