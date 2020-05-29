@@ -180,39 +180,41 @@ cipherDecrypt cipher
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chacha20poly1305Decrypt
   | otherwise                                      = error "cipherDecrypt"
 
-aes128gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
-aes128gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
-    [ciphertext,tag]
-  where
-    aes = throwCryptoError (cipherInit key) :: AES128
-    aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-    (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-    tag = convert tag0
+aes128gcmEncrypt :: Key -> (Nonce -> PlainText -> AddDat -> [CipherText])
+aes128gcmEncrypt (Key key) =
+    let aes = throwCryptoError (cipherInit key) :: AES128
+    in \(Nonce nonce) plaintext (AddDat ad) ->
+      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
+          (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+          tag = convert tag0
+      in [ciphertext,tag]
 
-aes128gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
-aes128gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
-    aes  <- maybeCryptoError $ cipherInit key :: Maybe AES128
-    aead <- maybeCryptoError $ aeadInit AEAD_GCM aes nonce
-    let (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
-        authtag = AuthTag $ convert tag
-    aeadSimpleDecrypt aead ad ciphertext authtag
+aes128gcmDecrypt :: Key -> (Nonce -> CipherText -> AddDat -> Maybe PlainText)
+aes128gcmDecrypt (Key key) =
+    let aes = throwCryptoError (cipherInit key) :: AES128
+    in \(Nonce nonce) ciphertag (AddDat ad) ->
+      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
+          (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+          authtag = AuthTag $ convert tag
+       in aeadSimpleDecrypt aead ad ciphertext authtag
 
-aes256gcmEncrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
-aes256gcmEncrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
-    [ciphertext, tag]
-  where
-    aes = throwCryptoError (cipherInit key) :: AES256
-    aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-    (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-    tag = convert tag0
+aes256gcmEncrypt :: Key -> (Nonce -> PlainText -> AddDat -> [CipherText])
+aes256gcmEncrypt (Key key) =
+    let aes = throwCryptoError (cipherInit key) :: AES256
+    in \(Nonce nonce) plaintext (AddDat ad) ->
+      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
+          (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+          tag = convert tag0
+      in [ciphertext, tag]
 
-aes256gcmDecrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
-aes256gcmDecrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
-    aes  <- maybeCryptoError $ cipherInit key :: Maybe AES256
-    aead <- maybeCryptoError $ aeadInit AEAD_GCM aes nonce
-    let (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
-        authtag = AuthTag $ convert tag
-    aeadSimpleDecrypt aead ad ciphertext authtag
+aes256gcmDecrypt :: Key -> (Nonce -> CipherText -> AddDat -> Maybe PlainText)
+aes256gcmDecrypt (Key key) =
+    let aes = throwCryptoError (cipherInit key) :: AES256
+    in \ (Nonce nonce) ciphertag (AddDat ad) ->
+      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
+          (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+          authtag = AuthTag $ convert tag
+      in aeadSimpleDecrypt aead ad ciphertext authtag
 
 chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
@@ -242,13 +244,14 @@ makeNonce (IV iv) pn = Nonce nonce
 
 ----------------------------------------------------------------
 
-encryptPayload :: Cipher -> Key -> IV -> PlainText -> ByteString -> PacketNumber
-        -> [CipherText]
-encryptPayload cipher key iv plaintext header pn =
-    encryptPayload' cipher key nonce plaintext (AddDat header)
-  where
-    nonce  = makeNonce iv bytePN
-    bytePN = bytestring64 (fromIntegral pn)
+encryptPayload :: Cipher -> Key -> IV
+               -> (PlainText -> ByteString -> PacketNumber -> [CipherText])
+encryptPayload cipher key iv =
+    let enc = cipherEncrypt cipher key
+        mk  = makeNonce iv
+    in \plaintext header pn -> let bytePN = bytestring64 $ fromIntegral pn
+                                   nonce  = mk bytePN
+                               in enc nonce plaintext (AddDat header)
 
 encryptPayload' :: Cipher -> Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 encryptPayload' cipher key nonce plaintext header =
@@ -256,13 +259,14 @@ encryptPayload' cipher key nonce plaintext header =
 
 ----------------------------------------------------------------
 
-decryptPayload :: Cipher -> Key -> IV -> CipherText -> ByteString -> PacketNumber
-        -> Maybe PlainText
-decryptPayload cipher key iv ciphertext header pn =
-    decryptPayload' cipher key nonce ciphertext (AddDat header)
-  where
-    nonce  = makeNonce iv bytePN
-    bytePN = bytestring64 (fromIntegral pn)
+decryptPayload :: Cipher -> Key -> IV
+               -> (CipherText -> ByteString -> PacketNumber -> Maybe PlainText)
+decryptPayload cipher key iv =
+    let dec = cipherDecrypt cipher key
+        mk  = makeNonce iv
+    in \ciphertext header pn -> let bytePN = bytestring64 (fromIntegral pn)
+                                    nonce = mk bytePN
+                                in dec nonce ciphertext (AddDat header)
 
 decryptPayload' :: Cipher -> Key -> Nonce -> CipherText -> AddDat -> Maybe PlainText
 decryptPayload' cipher key nonce ciphertext header =
@@ -270,8 +274,10 @@ decryptPayload' cipher key nonce ciphertext header =
 
 ----------------------------------------------------------------
 
-protectionMask :: Cipher -> Key -> Sample -> Mask
-protectionMask cipher key sample = cipherHeaderProtection cipher key sample
+protectionMask :: Cipher -> Key -> (Sample -> Mask)
+protectionMask cipher key =
+    let f = cipherHeaderProtection cipher key
+    in \sample -> f sample
 
 cipherHeaderProtection :: Cipher -> Key -> (Sample -> Mask)
 cipherHeaderProtection cipher key
@@ -281,17 +287,17 @@ cipherHeaderProtection cipher key
   | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chachaEncrypt key
   | otherwise                                      = error "cipherHeaderProtection"
 
-aes128ecbEncrypt :: Key -> Sample -> Mask
-aes128ecbEncrypt (Key key) (Sample sample) = Mask mask
-  where
-    encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES128)
-    mask = encrypt sample
+aes128ecbEncrypt :: Key -> (Sample -> Mask)
+aes128ecbEncrypt (Key key) =
+    let encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES128)
+    in \(Sample sample) -> let mask = encrypt sample
+                           in Mask mask
 
-aes256ecbEncrypt :: Key -> Sample -> Mask
-aes256ecbEncrypt (Key key) (Sample sample) = Mask mask
-  where
-    encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES256)
-    mask = encrypt sample
+aes256ecbEncrypt :: Key -> (Sample -> Mask)
+aes256ecbEncrypt (Key key) =
+    let encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES256)
+    in \(Sample sample) -> let mask = encrypt sample
+                           in Mask mask
 
 chachaEncrypt :: Key -> Sample -> Mask
 chachaEncrypt (Key key) (Sample sample0) = Mask mask
