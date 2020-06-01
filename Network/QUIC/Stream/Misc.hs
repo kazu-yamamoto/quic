@@ -9,6 +9,8 @@ module Network.QUIC.Stream.Misc (
   , addTxStreamData
   , setTxMaxStreamData
   , waitWindowIsOpen
+  , get1RTTReady
+  , set1RTTReady
   ) where
 
 import Control.Concurrent.STM
@@ -52,6 +54,14 @@ addTxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx add
 setTxMaxStreamData :: Stream -> Int -> IO ()
 setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx
     $ \flow -> flow { flowMaxData = n }
+
+----------------------------------------------------------------
+
+get1RTTReady :: Stream -> IO Bool
+get1RTTReady Stream{..} = readIORef $ shared1RTTReady streamShared
+
+set1RTTReady :: Stream -> IO ()
+set1RTTReady Stream{..} = writeIORef (shared1RTTReady streamShared) True
 
 ----------------------------------------------------------------
 

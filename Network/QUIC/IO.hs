@@ -44,7 +44,9 @@ sendStreamMany s dats = do
     open <- isStreamTxOpen s
     unless open $ E.throwIO StreamIsClosed
     let n = sum $ map B.length dats
-    waitWindowIsOpen s n
+    -- fixme: size check for 0RTT
+    ready <- get1RTTReady s
+    when ready $ waitWindowIsOpen s n
     addTxStreamData s n
     putChunk s $ Chunk s dats False
 

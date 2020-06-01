@@ -27,12 +27,13 @@ type ChunkQ = TBQueue Chunk
 data Shared = Shared {
     sharedCloseSent     :: IORef Bool
   , sharedCloseReceived :: IORef Bool
+  , shared1RTTReady     :: IORef Bool
   , sharedChunkQ        :: ChunkQ
   , sharedConnFlowTx    :: TVar Flow
   }
 
 newShared :: TVar Flow -> IO Shared
-newShared tvar = Shared <$> newIORef False <*> newIORef False <*> newTBQueueIO 6 <*> return tvar
+newShared tvar = Shared <$> newIORef False <*> newIORef False <*> newIORef False <*> newTBQueueIO 6 <*> return tvar
 
 ----------------------------------------------------------------
 

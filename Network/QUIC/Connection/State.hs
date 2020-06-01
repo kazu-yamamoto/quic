@@ -41,7 +41,9 @@ setConnection0RTTReady :: Connection -> IO ()
 setConnection0RTTReady conn = setConnectionState conn ReadyFor0RTT
 
 setConnection1RTTReady :: Connection -> IO ()
-setConnection1RTTReady conn = setConnectionState conn ReadyFor1RTT
+setConnection1RTTReady conn = do
+    setConnectionState conn ReadyFor1RTT
+    writeIORef (shared1RTTReady $ shared conn) True
 
 setConnectionEstablished :: Connection -> IO ()
 setConnectionEstablished conn = setConnectionState conn Established

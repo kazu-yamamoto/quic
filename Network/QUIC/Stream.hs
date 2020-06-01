@@ -20,6 +20,8 @@ module Network.QUIC.Stream (
   , addTxStreamData
   , setTxMaxStreamData
   , waitWindowIsOpen
+  , get1RTTReady
+  , set1RTTReady
   -- * Reass
   , takeStreamData
   , putStreamData
