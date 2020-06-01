@@ -150,11 +150,7 @@ handshakeClient conf conn myAuthCIDs = do
         cidInfo <- getNewMyCID conn
         let ncid = NewConnectionID cidInfo 0
         putOutput conn $ OutControl RTT1Level [ncid]
-    done ctx = do
-        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
-        minfo <- TLS.contextGetInformation ctx
-        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
-            setTLSMode conn mode
+    done _ctx = do
         info <- getConnectionInfo conn
         connDebugLog conn $ show info
 
@@ -191,10 +187,6 @@ handshakeServer conf conn myAuthCIDs = do
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do
-        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
-        minfo <- TLS.contextGetInformation ctx
-        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
-            setTLSMode conn mode
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
         setEncryptionLevel conn RTT1Level

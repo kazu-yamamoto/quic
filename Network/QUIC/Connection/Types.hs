@@ -194,8 +194,6 @@ data Connection = Connection {
   , elyCoder          :: IORef Coder
   , hndCoder          :: IORef Coder
   , appCoder          :: IORef Coder
-  , hndMode           :: IORef HandshakeMode13
-  , appProto          :: IORef (Maybe NegotiatedProtocol)
   , handshakeCIDs     :: IORef AuthCIDs
   -- WriteBuffer
   , headerBuffer      :: Buffer
@@ -253,13 +251,11 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newIORef isecs
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
-        <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
+        <*> newIORef (ApplicationSecretInfo FullHandshake Nothing defaultTrafficSecrets)
         <*> newIORef initialCoder
         <*> newIORef initialCoder
         <*> newIORef initialCoder
         <*> newIORef initialCoder
-        <*> newIORef FullHandshake
-        <*> newIORef Nothing
         <*> newIORef peerAuthCIDs
         -- WriteBuffer
         <*> mallocBytes 256
