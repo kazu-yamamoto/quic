@@ -54,7 +54,7 @@ serverInitial :: StreamId -> Parameters -> Int
 serverInitial sid params
   | isServerInitiatedBidirectional  sid = initialMaxStreamDataBidiRemote params
   | isServerInitiatedUnidirectional sid = initialMaxStreamDataUni        params
-  | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal params
+  | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal  params
   | otherwise                           = 0
 
 ----------------------------------------------------------------
