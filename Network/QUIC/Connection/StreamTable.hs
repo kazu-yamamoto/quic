@@ -10,6 +10,7 @@ module Network.QUIC.Connection.StreamTable (
   , getCryptoOffset
   ) where
 
+import qualified Data.ByteString as B
 import Data.IORef
 
 import Network.QUIC.Connection.Misc
@@ -20,15 +21,29 @@ import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin -> IO ()
+putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin
+               -> IO (Maybe Int)
 putInputStream conn sid off dat fin = do
-    mstrm <- findStream conn sid
-    case mstrm of
-      Just strm -> putStreamData strm off dat fin
+    mstrm0 <- findStream conn sid
+    strm <- case mstrm0 of
+      Just strm0 -> do
+          putStreamData strm0 off dat fin
+          return strm0
       Nothing -> do
-          strm <- addStream conn sid
-          putStreamData strm off dat fin
-          putInput conn $ InpNewStream strm
+          strm0 <- addStream conn sid
+          putStreamData strm0 off dat fin
+          putInput conn $ InpNewStream strm0
+          return strm0
+    addRxStreamData strm $ B.length dat
+    currentMax <- getRxMaxStreamData strm
+    currentData <- getRxStreamData strm
+    let initialWindow = initialRxMaxStreamData conn sid
+        window = currentMax - currentData
+    if window <= (initialWindow `div` 2) then do
+        addRxMaxStreamData strm initialWindow
+        Just <$> getRxMaxStreamData strm
+      else
+        return Nothing
 
 findStream :: Connection -> StreamId -> IO (Maybe Stream)
 findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
@@ -36,12 +51,21 @@ findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
 addStream :: Connection -> StreamId -> IO Stream
 addStream conn@Connection{..} sid = do
     strm <- newStream sid shared
-    params <- getPeerParameters conn
-    let maxStreamData | isClient conn = clientInitial sid params
-                      | otherwise     = serverInitial sid params
-    setTxMaxStreamData strm maxStreamData
+    peerParams <- getPeerParameters conn
+    let txMaxStreamData | isClient conn = clientInitial sid peerParams
+                        | otherwise     = serverInitial sid peerParams
+    setTxMaxStreamData strm txMaxStreamData
+    let rxMaxStreamData = initialRxMaxStreamData conn sid
+    setRxMaxStreamData strm rxMaxStreamData
     atomicModifyIORef' streamTable $ \tbl -> (insertStream sid strm tbl, ())
     return strm
+
+initialRxMaxStreamData :: Connection -> StreamId -> Int
+initialRxMaxStreamData conn sid
+    | isClient conn = clientInitial sid params
+    | otherwise     = serverInitial sid params
+  where
+    params = getMyParameters conn
 
 clientInitial :: StreamId -> Parameters -> Int
 clientInitial sid params

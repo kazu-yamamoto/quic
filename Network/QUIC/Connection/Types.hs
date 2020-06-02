@@ -180,7 +180,7 @@ data Connection = Connection {
   , myUniStreamId     :: IORef StreamId
   , peerStreamId      :: IORef StreamId
   , flowTx            :: TVar Flow
-  , flowRx            :: TVar Flow
+  , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
@@ -203,12 +203,13 @@ data Connection = Connection {
   , payloadBufferSize :: BufferSize
   }
 
-newConnection :: Role -> Version -> AuthCIDs -> AuthCIDs
+newConnection :: Role -> Version -> Parameters
+              -> AuthCIDs -> AuthCIDs
               -> LogAction -> (QlogMsg -> IO ()) -> Close
               -> IORef (Socket,RecvQ)
               -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
+newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
     tvarFlowTx <- newTVarIO defaultFlow
     Connection rl
         <$> newIORef initialRoleInfo
@@ -223,7 +224,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> return sref
         -- Mine
         <*> newIORef (newCIDDB myCID)
-        <*> return baseParameters -- fixme
+        <*> return myparams
         -- Peer
         <*> newTVarIO (newCIDDB peerCID)
         <*> newIORef baseParameters
@@ -243,7 +244,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newIORef (if isclient then 2 else 3)
         <*> newIORef (if isclient then 1 else 0)
         <*> return tvarFlowTx
-        <*> newTVarIO defaultFlow
+        <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration
         -- TLS
         <*> newTVarIO InitialLevel
@@ -284,7 +285,8 @@ clientConnection :: ClientConfig -> Version -> AuthCIDs -> AuthCIDs
 clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref = do
     let Just cid = initSrcCID peerAuthCIDs
         isecs = initialSecrets ver cid
-    newConnection Client ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
+        params = confParameters ccConfig
+    newConnection Client ver params myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
 
 serverConnection :: ServerConfig -> Version -> AuthCIDs -> AuthCIDs
                  -> LogAction -> (QlogMsg -> IO ()) -> Close
@@ -295,7 +297,8 @@ serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog cls 
                      Nothing -> origDstCID myAuthCIDs
                      Just _  -> retrySrcCID myAuthCIDs
         isecs = initialSecrets ver cid
-    newConnection Server ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
+        params = confParameters scConfig
+    newConnection Server ver params myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
 
 ----------------------------------------------------------------
 

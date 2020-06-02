@@ -8,6 +8,11 @@ module Network.QUIC.Stream.Misc (
   , isRxClosed
   , addTxStreamData
   , setTxMaxStreamData
+  , getRxStreamData
+  , addRxStreamData
+  , getRxMaxStreamData
+  , setRxMaxStreamData
+  , addRxMaxStreamData
   , waitWindowIsOpen
   , get1RTTReady
   , set1RTTReady
@@ -54,6 +59,27 @@ addTxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx add
 setTxMaxStreamData :: Stream -> Int -> IO ()
 setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx
     $ \flow -> flow { flowMaxData = n }
+
+----------------------------------------------------------------
+
+getRxStreamData :: Stream -> IO Int
+getRxStreamData Stream{..} = flowData <$> readIORef streamFlowRx
+
+addRxStreamData :: Stream -> Int -> IO ()
+addRxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add
+  where
+    add flow = (flow { flowData = flowData flow + n }, ())
+
+getRxMaxStreamData :: Stream -> IO Int
+getRxMaxStreamData Stream{..} = flowMaxData <$> readIORef streamFlowRx
+
+setRxMaxStreamData :: Stream -> Int -> IO ()
+setRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx
+    $ \flow -> (flow { flowMaxData = n }, ())
+
+addRxMaxStreamData :: Stream -> Int -> IO ()
+addRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx
+    $ \flow -> (flow { flowMaxData = flowMaxData flow + n }, ())
 
 ----------------------------------------------------------------
 

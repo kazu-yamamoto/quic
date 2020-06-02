@@ -42,7 +42,7 @@ data Stream = Stream {
   , streamShared  :: Shared
   , streamQ       :: StreamQ
   , streamFlowTx  :: TVar Flow
-  , streamFlowRx  :: TVar Flow
+  , streamFlowRx  :: IORef Flow
   , streamStateTx :: IORef StreamState
   , streamStateRx :: IORef StreamState
   , streamReass   :: IORef [Reassemble]
@@ -54,7 +54,7 @@ instance Show Stream where
 newStream :: StreamId -> Shared -> IO Stream
 newStream sid shrd = Stream sid shrd <$> newStreamQ
                                      <*> newTVarIO defaultFlow
-                                     <*> newTVarIO defaultFlow
+                                     <*> newIORef  defaultFlow
                                      <*> newIORef emptyStreamState
                                      <*> newIORef emptyStreamState
                                      <*> newIORef []

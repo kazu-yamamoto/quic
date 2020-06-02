@@ -71,6 +71,7 @@ module Network.QUIC.Connection (
   , clearKillHandshaker
   , getPeerAuthCIDs
   , setPeerAuthCIDs
+  , getMyParameters
   , getPeerParameters
   , setPeerParameters
   -- * Transmit
@@ -99,7 +100,7 @@ module Network.QUIC.Connection (
   , getTxMaxData
   , addRxData
   , getRxData
-  , setRxMaxData
+  , addRxMaxData
   , getRxMaxData
   -- * Stream
   , getMyNewStreamId

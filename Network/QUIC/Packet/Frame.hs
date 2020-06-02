@@ -62,6 +62,13 @@ encodeFrame wbuf (StreamF sid off dats fin) = do
     when (off /= 0) $ encodeInt' wbuf $ fromIntegral off
     encodeInt' wbuf $ fromIntegral $ sum $ map B.length dats
     mapM_ (copyByteString wbuf) dats
+encodeFrame wbuf (MaxData n) = do
+    write8 wbuf 0x10
+    encodeInt' wbuf $ fromIntegral n
+encodeFrame wbuf (MaxStreamData sid n) = do
+    write8 wbuf 0x11
+    encodeInt' wbuf $ fromIntegral sid
+    encodeInt' wbuf $ fromIntegral n
 encodeFrame wbuf (MaxStreams dir ms) = do
     case dir of
       Bidirectional  -> write8 wbuf 0x12
