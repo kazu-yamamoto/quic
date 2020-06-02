@@ -83,12 +83,12 @@ testHandshake cc sc mode = void $ concurrently client server
   where
     client = runQUICClient cc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
-        waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+        waitEstablished conn
     server = runQUICServer sc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
-        waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+        waitEstablished conn
         stopQUICServer conn
 
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
@@ -97,6 +97,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
     runClient cc mode = runQUICClient cc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
+        -- SH/EE is necessary to check 0RTT
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         getResumptionInfo conn
     client = do
