@@ -20,7 +20,7 @@ import Data.Word
 import Network.HPACK.Internal
 
 import Network.QUIC
-import Network.QUIC.Types
+import Network.QUIC.Internal
 
 name :: ByteString
 name = "HaskellQuic/0.0.0"
