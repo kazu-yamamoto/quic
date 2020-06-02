@@ -123,10 +123,10 @@ newCIDDB cid = CIDDB {
 
 ----------------------------------------------------------------
 
-data MigrationStatus = SendChallenge [PathData]
-                     | RecvResponse
-                     | NonMigration
-                     deriving (Eq, Show)
+data MigrationState = SendChallenge [PathData]
+                    | RecvResponse
+                    | NonMigration
+                    deriving (Eq, Show)
 
 data Coder = Coder {
     encrypt :: CipherText -> ByteString -> PacketNumber -> [CipherText]
@@ -160,9 +160,10 @@ data Connection = Connection {
   , sockInfo          :: IORef (Socket,RecvQ)
   -- Mine
   , myCIDDB           :: IORef CIDDB
-  , migrationStatus   :: TVar MigrationStatus
+  , myParameters      :: Parameters
   -- Peer
   , peerCIDDB         :: TVar CIDDB
+  , peerParameters    :: IORef Parameters
   -- Queues
   , inputQ            :: InputQ
   , cryptoQ           :: InputQ
@@ -180,7 +181,7 @@ data Connection = Connection {
   , peerStreamId      :: IORef StreamId
   , flowTx            :: TVar Flow
   , flowRx            :: TVar Flow
-  , peerParameters    :: IORef Parameters
+  , migrationState    :: TVar MigrationState
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingHandshake  :: TVar [CryptPacket]
@@ -222,9 +223,10 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> return sref
         -- Mine
         <*> newIORef (newCIDDB myCID)
-        <*> newTVarIO NonMigration
+        <*> return baseParameters -- fixme
         -- Peer
         <*> newTVarIO (newCIDDB peerCID)
+        <*> newIORef baseParameters
         -- Queues
         <*> newTQueueIO
         <*> newTQueueIO
@@ -242,7 +244,7 @@ newConnection rl ver myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
         <*> newIORef (if isclient then 1 else 0)
         <*> return tvarFlowTx
         <*> newTVarIO defaultFlow
-        <*> newIORef baseParameters
+        <*> newTVarIO NonMigration
         -- TLS
         <*> newTVarIO InitialLevel
         <*> newTVarIO []

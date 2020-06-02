@@ -236,18 +236,18 @@ validatePath conn (Just (CIDInfo retiredSeqNum _ _)) = do
 
 setChallenges :: Connection -> [PathData] -> IO ()
 setChallenges Connection{..} pdats =
-    atomically $ writeTVar migrationStatus $ SendChallenge pdats
+    atomically $ writeTVar migrationState $ SendChallenge pdats
 
 waitResponse :: Connection -> IO ()
 waitResponse Connection{..} = atomically $ do
-    state <- readTVar migrationStatus
+    state <- readTVar migrationState
     check (state == RecvResponse)
-    writeTVar migrationStatus NonMigration
+    writeTVar migrationState NonMigration
 
 checkResponse :: Connection -> PathData -> IO ()
 checkResponse Connection{..} pdat = do
-    state <- readTVarIO migrationStatus
+    state <- readTVarIO migrationState
     case state of
       SendChallenge pdats
-        | pdat `elem` pdats -> atomically $ writeTVar migrationStatus RecvResponse
+        | pdat `elem` pdats -> atomically $ writeTVar migrationState RecvResponse
       _ -> return ()
