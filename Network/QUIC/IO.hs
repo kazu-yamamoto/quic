@@ -37,12 +37,12 @@ sendStreamMany s dats = do
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isStreamTxClosed s
     when sclosed $ E.throwIO StreamIsClosed
-    let n = sum $ map B.length dats
+    let len = sum $ map B.length dats
     -- fixme: size check for 0RTT
     ready <- get1RTTReady s
-    when ready $ waitWindowIsOpen s n
-    addTxStreamData s n
-    putTxStreamData s $ TxStreamData s dats False
+    when ready $ waitWindowIsOpen s len
+    addTxStreamData s len
+    putTxStreamData s $ TxStreamData s dats len False
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
@@ -51,7 +51,7 @@ shutdownStream s = do
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isStreamTxClosed s
     when sclosed $ E.throwIO StreamIsClosed
-    putTxStreamData s $ TxStreamData s [] True
+    putTxStreamData s $ TxStreamData s [] 0 True
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO (Either QUICError Stream)

@@ -105,7 +105,7 @@ sender conn send = handleLog logAction $ forever $ do
              `orElse` (Right <$> takeTxStreamDataSTM  conn))
     case ex of
       Left  out -> sendOutput conn send out
-      Right chk -> sendTxStreamData  conn send chk
+      Right tx  -> sendTxStreamData conn send tx
   where
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
@@ -121,10 +121,9 @@ sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0)) = do
     send bss
 
 sendTxStreamData :: Connection -> SendMany -> TxStreamData -> IO ()
-sendTxStreamData conn send (TxStreamData s dats fin) = do
-    let n = totalLen dats
-    addTxData conn n
-    sendStreamFragment conn send s dats fin
+sendTxStreamData conn send tx@(TxStreamData _ _ len _) = do
+    addTxData conn len
+    sendStreamFragment conn send tx
 
 limitationC :: Int
 limitationC = 1024
@@ -177,17 +176,16 @@ packFin _ True  = return True
 packFin s False = do
     mx <- tryPeekTxStreamData s
     case mx of
-      Just (TxStreamData s1 [] True)
+      Just (TxStreamData s1 [] 0 True)
           | streamId s == streamId s1 -> do
                 _ <- takeTxStreamData s
                 return True
       _ -> return False
 
-sendStreamFragment :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
-sendStreamFragment conn send s dats fin0 = do
+sendStreamFragment :: Connection -> SendMany -> TxStreamData -> IO ()
+sendStreamFragment conn send (TxStreamData s dats len fin0) = do
     let sid = streamId s
     fin <- packFin s fin0
-    let len = totalLen dats
     if len < limitation then do
         off <- getStreamTxOffset s len
         let frame = StreamF sid off dats fin
@@ -219,9 +217,8 @@ sendStreamSmall conn send s0 frame0 total0 = do
         mx <- tryPeek
         case mx of
           Nothing -> return build
-          Just (TxStreamData s dats fin0) -> do
+          Just (TxStreamData s dats len fin0) -> do
               let sid = streamId s
-                  len = totalLen dats
                   total' = len + total
               if total' < limitation then do
                   _ <- takeTxStreamData s0 -- cf tryPeek
