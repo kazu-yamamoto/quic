@@ -119,13 +119,19 @@ processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connDebugLog conn "processFrame: NewToken"
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
-    void $ putInputStream conn sid off dat fin -- fixme: including 0RTT?
+    putInputStream conn sid off dat fin $ \_ -> return ()-- fixme: including 0RTT?
     addRxData conn $ BS.length dat             -- fixme: including 0RTT?
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
-    mx <- putInputStream conn sid off dat fin
-    case mx of
-      Nothing -> return ()
-      Just m  -> putOutput conn $ OutControl RTT1Level [MaxStreamData sid m]
+    putInputStream conn sid off dat fin $ \strm -> do
+        addRxStreamData strm $ BS.length dat
+        currentMax <- getRxMaxStreamData strm
+        currentData <- getRxStreamData strm
+        let initialWindow = initialRxMaxStreamData conn sid
+            window = currentMax - currentData
+        when (window <= (initialWindow `div` 2)) $ do
+            addRxMaxStreamData strm initialWindow
+            newMax <- getRxMaxStreamData strm
+            putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
     addRxData conn $ BS.length dat
     currentMax <- getRxMaxData conn
     currentData <- getRxData conn

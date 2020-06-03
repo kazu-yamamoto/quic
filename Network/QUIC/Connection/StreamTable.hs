@@ -8,9 +8,9 @@ module Network.QUIC.Connection.StreamTable (
   , addStream
   , setupCryptoStreams
   , getCryptoOffset
+  , initialRxMaxStreamData
   ) where
 
-import qualified Data.ByteString as B
 import Data.IORef
 
 import Network.QUIC.Connection.Misc
@@ -22,8 +22,9 @@ import Network.QUIC.Stream
 import Network.QUIC.Types
 
 putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin
-               -> IO (Maybe Int)
-putInputStream conn sid off dat fin = do
+               -> (Stream -> IO ())
+               -> IO ()
+putInputStream conn sid off dat fin action = do
     mstrm0 <- findStream conn sid
     strm <- case mstrm0 of
       Just strm0 -> do
@@ -34,16 +35,7 @@ putInputStream conn sid off dat fin = do
           putStreamData strm0 off dat fin
           putInput conn $ InpNewStream strm0
           return strm0
-    addRxStreamData strm $ B.length dat
-    currentMax <- getRxMaxStreamData strm
-    currentData <- getRxStreamData strm
-    let initialWindow = initialRxMaxStreamData conn sid
-        window = currentMax - currentData
-    if window <= (initialWindow `div` 2) then do
-        addRxMaxStreamData strm initialWindow
-        Just <$> getRxMaxStreamData strm
-      else
-        return Nothing
+    action strm
 
 findStream :: Connection -> StreamId -> IO (Maybe Stream)
 findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
