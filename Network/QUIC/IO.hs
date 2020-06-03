@@ -26,12 +26,6 @@ unidirectionalStream conn = do
     sid <- getMyNewUniStreamId conn
     addStream conn sid
 
--- | Checking if the stream is open.
-isStreamTxOpen :: Stream -> IO Bool
-isStreamTxOpen s = do
-    fin <- getStreamTxFin s
-    return (not fin)
-
 -- | Sending data in the stream.
 sendStream :: Stream -> ByteString -> IO ()
 sendStream s dat = sendStreamMany s [dat]
@@ -41,8 +35,8 @@ sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
     closed <- isTxClosed s
     when closed $ E.throwIO ConnectionIsClosed
-    open <- isStreamTxOpen s
-    unless open $ E.throwIO StreamIsClosed
+    sclosed <- isStreamTxClosed s
+    when sclosed $ E.throwIO StreamIsClosed
     let n = sum $ map B.length dats
     -- fixme: size check for 0RTT
     ready <- get1RTTReady s
@@ -55,6 +49,8 @@ shutdownStream :: Stream -> IO ()
 shutdownStream s = do
     closed <- isTxClosed s
     when closed $ E.throwIO ConnectionIsClosed
+    sclosed <- isStreamTxClosed s
+    when sclosed $ E.throwIO StreamIsClosed
     putChunk s $ Chunk s [] True
 
 -- | Accepting a stream initiated by the peer.

@@ -1,11 +1,16 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Misc (
-    getStreamOffset
-  , getStreamTxFin
+    getStreamTxOffset
+  , isStreamTxClosed
   , setStreamTxFin
+  , getStreamRxOffset
+  , isStreamRxClosed
+  , setStreamRxFin
+  --
   , isTxClosed
   , isRxClosed
+  --
   , addTxStreamData
   , setTxMaxStreamData
   , getRxStreamData
@@ -23,18 +28,17 @@ import Data.IORef
 
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Types
-import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-getStreamOffset :: Stream -> Int -> IO Offset
-getStreamOffset Stream{..} len = do
+getStreamTxOffset :: Stream -> Int -> IO Offset
+getStreamTxOffset Stream{..} len = do
     StreamState off fin <- readIORef streamStateTx
     writeIORef streamStateTx $ StreamState (off + len) fin
     return off
 
-getStreamTxFin :: Stream -> IO Fin
-getStreamTxFin Stream{..} = do
+isStreamTxClosed :: Stream -> IO Bool
+isStreamTxClosed Stream{..} = do
     StreamState _ fin <- readIORef streamStateTx
     return fin
 
@@ -42,6 +46,24 @@ setStreamTxFin :: Stream -> IO ()
 setStreamTxFin Stream{..} = do
     StreamState off _ <- readIORef streamStateTx
     writeIORef streamStateTx $ StreamState off True
+
+----------------------------------------------------------------
+
+getStreamRxOffset :: Stream -> Int -> IO Offset
+getStreamRxOffset Stream{..} len = do
+    StreamState off fin <- readIORef streamStateRx
+    writeIORef streamStateRx $ StreamState (off + len) fin
+    return off
+
+isStreamRxClosed :: Stream -> IO Bool
+isStreamRxClosed Stream{..} = do
+    StreamState _ fin <- readIORef streamStateRx
+    return fin
+
+setStreamRxFin :: Stream -> IO ()
+setStreamRxFin Stream{..} = do
+    StreamState off _ <- readIORef streamStateRx
+    writeIORef streamStateRx $ StreamState off True
 
 ----------------------------------------------------------------
 

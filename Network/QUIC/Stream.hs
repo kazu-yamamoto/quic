@@ -12,9 +12,12 @@ module Network.QUIC.Stream (
   , Flow(..)
   , defaultFlow
   -- * Misc
-  , getStreamOffset
-  , getStreamTxFin
+  , getStreamTxOffset
+  , isStreamTxClosed
   , setStreamTxFin
+  , getStreamRxOffset
+  , isStreamRxClosed
+  , setStreamRxFin
   , isTxClosed
   , isRxClosed
   , addTxStreamData
@@ -37,7 +40,7 @@ module Network.QUIC.Stream (
   , lookupStream
   , insertStream
   , insertCryptoStreams
-  , cryptoOffset
+  , cryptoTxOffset
   , getCryptoData
   ) where
 

@@ -22,7 +22,7 @@ import Network.QUIC.Types
 cryptoFrame :: Connection -> CryptoData -> EncryptionLevel -> IO Frame
 cryptoFrame conn crypto lvl = do
     let len = B.length crypto
-    off <- getCryptoOffset conn lvl len
+    off <- getCryptoTxOffset conn lvl len
     return $ Crypto off crypto
 
 ----------------------------------------------------------------
@@ -185,20 +185,16 @@ packFin s False = do
 
 sendStreamFragment :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
 sendStreamFragment conn send s dats fin0 = do
-    closed <- getStreamTxFin s
     let sid = streamId s
-    if closed then
-        connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
-      else do
-        fin <- packFin s fin0
-        let len = totalLen dats
-        if len < limitation then do
-            off <- getStreamOffset s len
-            let frame = StreamF sid off dats fin
-            sendStreamSmall conn send s frame len
-          else
-            sendStreamLarge conn send s dats fin
-        when fin $ setStreamTxFin s
+    fin <- packFin s fin0
+    let len = totalLen dats
+    if len < limitation then do
+        off <- getStreamTxOffset s len
+        let frame = StreamF sid off dats fin
+        sendStreamSmall conn send s frame len
+      else
+        sendStreamLarge conn send s dats fin
+    when fin $ setStreamTxFin s
 
 sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> IO ()
 sendStreamSmall conn send s0 frame0 total0 = do
@@ -224,25 +220,20 @@ sendStreamSmall conn send s0 frame0 total0 = do
         case mx of
           Nothing -> return build
           Just (Chunk s dats fin0) -> do
-              closed <- getStreamTxFin s
               let sid = streamId s
-              if closed then do
-                  connDebugLog conn $ "Stream " ++ show sid ++ " is already closed."
+                  len = totalLen dats
+                  total' = len + total
+              if total' < limitation then do
+                  _ <- takeChunk s0 -- cf tryPeek
+                  addTxData conn len
+                  fin <- packFin s fin0 -- must be after takeChunk
+                  off <- getStreamTxOffset s len
+                  let frame = StreamF sid off dats fin
+                      build' = build . (frame :)
+                  when fin $ modifyIORef' ref (s :)
+                  loop ref build' total'
+                else
                   return build
-                else do
-                  let len = totalLen dats
-                      total' = len + total
-                  if total' < limitation then do
-                      _ <- takeChunk s0 -- cf tryPeek
-                      addTxData conn len
-                      fin <- packFin s fin0 -- must be after takeChunk
-                      off <- getStreamOffset s len
-                      let frame = StreamF sid off dats fin
-                          build' = build . (frame :)
-                      when fin $ modifyIORef' ref (s :)
-                      loop ref build' total'
-                    else
-                      return build
 
 sendStreamLarge :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
 sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
@@ -252,7 +243,7 @@ sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
     loop fin dats = do
         let (dats1,dats2) = splitChunks dats
             len = totalLen dats1
-        off <- getStreamOffset s len
+        off <- getStreamTxOffset s len
         let fin1 = fin && null dats2
             frame = StreamF sid off dats1 fin1
         ready <- isConnection1RTTReady conn

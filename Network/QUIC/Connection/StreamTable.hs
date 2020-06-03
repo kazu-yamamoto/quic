@@ -7,7 +7,7 @@ module Network.QUIC.Connection.StreamTable (
   , findStream
   , addStream
   , setupCryptoStreams
-  , getCryptoOffset
+  , getCryptoTxOffset
   , initialRxMaxStreamData
   ) where
 
@@ -85,9 +85,9 @@ setupCryptoStreams Connection{..} = do
 
 ----------------------------------------------------------------
 
-getCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
-getCryptoOffset Connection{..} lvl len =
-    readIORef streamTable >>= cryptoOffset lvl len
+getCryptoTxOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
+getCryptoTxOffset Connection{..} lvl len =
+    readIORef streamTable >>= cryptoTxOffset lvl len
 
 putInputCrypto :: Connection -> EncryptionLevel -> Offset -> StreamData -> IO ()
 putInputCrypto conn@Connection{..} lvl off cdats = do
