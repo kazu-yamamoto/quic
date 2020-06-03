@@ -101,7 +101,7 @@ module Network.QUIC.Connection (
   , addRxData
   , getRxData
   , addRxMaxData
-  , getRxMaxData
+  , getRxDataWindow
   -- * Stream
   , getMyNewStreamId
   , getMyNewUniStreamId

@@ -124,22 +124,16 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     putInputStream conn sid off dat fin $ \strm -> do
         addRxStreamData strm $ BS.length dat
-        currentMax <- getRxMaxStreamData strm
-        currentData <- getRxStreamData strm
+        window <- getRxStreamWindow strm
         let initialWindow = initialRxMaxStreamData conn sid
-            window = currentMax - currentData
         when (window <= (initialWindow `div` 2)) $ do
-            addRxMaxStreamData strm initialWindow
-            newMax <- getRxMaxStreamData strm
+            newMax <- addRxMaxStreamData strm initialWindow
             putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
     addRxData conn $ BS.length dat
-    currentMax <- getRxMaxData conn
-    currentData <- getRxData conn
+    window <- getRxDataWindow conn
     let initialWindow = initialMaxData $ getMyParameters conn
-        window = currentMax - currentData
     when (window <= (initialWindow `div` 2)) $ do
-        addRxMaxData conn initialWindow
-        newMax <- getRxMaxData conn
+        newMax <- addRxMaxData conn initialWindow
         putOutput conn $ OutControl RTT1Level [MaxData newMax]
 processFrame conn _ (MaxData n) =
     setTxMaxData conn n

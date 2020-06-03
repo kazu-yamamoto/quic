@@ -8,19 +8,20 @@ module Network.QUIC.Stream.Misc (
   , isStreamRxClosed
   , setStreamRxFin
   --
-  , isTxClosed
-  , isRxClosed
-  --
   , addTxStreamData
   , setTxMaxStreamData
-  , getRxStreamData
   , addRxStreamData
-  , getRxMaxStreamData
   , setRxMaxStreamData
   , addRxMaxStreamData
-  , waitWindowIsOpen
+  , getRxStreamWindow
+  -- Shared
+  , isTxClosed
+  , isRxClosed
   , get1RTTReady
   , set1RTTReady
+  --
+  , waitWindowIsOpen
+  , flowWindow
   ) where
 
 import Control.Concurrent.STM
@@ -65,12 +66,6 @@ setStreamRxFin Stream{..} = atomicModifyIORef' streamStateRx set
 
 ----------------------------------------------------------------
 
-isTxClosed :: Stream -> IO Bool
-isTxClosed Stream{..} = readIORef $ sharedCloseSent streamShared
-
-isRxClosed :: Stream -> IO Bool
-isRxClosed Stream{..} = readIORef $ sharedCloseReceived streamShared
-
 addTxStreamData :: Stream -> Int -> IO ()
 addTxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx add
   where
@@ -82,24 +77,32 @@ setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx
 
 ----------------------------------------------------------------
 
-getRxStreamData :: Stream -> IO Int
-getRxStreamData Stream{..} = flowData <$> readIORef streamFlowRx
-
 addRxStreamData :: Stream -> Int -> IO ()
 addRxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add
   where
     add flow = (flow { flowData = flowData flow + n }, ())
 
-getRxMaxStreamData :: Stream -> IO Int
-getRxMaxStreamData Stream{..} = flowMaxData <$> readIORef streamFlowRx
-
 setRxMaxStreamData :: Stream -> Int -> IO ()
 setRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx
     $ \flow -> (flow { flowMaxData = n }, ())
 
-addRxMaxStreamData :: Stream -> Int -> IO ()
-addRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx
-    $ \flow -> (flow { flowMaxData = flowMaxData flow + n }, ())
+addRxMaxStreamData :: Stream -> Int -> IO Int
+addRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add
+  where
+    add flow = (flow { flowMaxData = m }, m)
+      where
+        m = flowMaxData flow + n
+
+getRxStreamWindow :: Stream -> IO Int
+getRxStreamWindow Stream{..} = flowWindow <$> readIORef streamFlowRx
+
+----------------------------------------------------------------
+
+isTxClosed :: Stream -> IO Bool
+isTxClosed Stream{..} = readIORef $ sharedCloseSent streamShared
+
+isRxClosed :: Stream -> IO Bool
+isRxClosed Stream{..} = readIORef $ sharedCloseReceived streamShared
 
 ----------------------------------------------------------------
 
@@ -111,20 +114,13 @@ set1RTTReady Stream{..} = atomicWriteIORef (shared1RTTReady streamShared) True
 
 ----------------------------------------------------------------
 
-window :: Flow -> Int
-window Flow{..} = flowMaxData - flowData
+flowWindow :: Flow -> Int
+flowWindow Flow{..} = flowMaxData - flowData
 
 waitWindowIsOpen :: Stream -> Int -> IO ()
 waitWindowIsOpen Stream{..} n = do
-{-
-  xy <- atomically $ do
-      x <- readTVar streamFlowTx
-      y <- readTVar (sharedConnFlowTx streamShared)
-      return (x,y)
-  print xy
--}
   atomically $ do
-    strmWindow <- window <$> readTVar streamFlowTx
+    strmWindow <- flowWindow <$> readTVar streamFlowTx
     check (strmWindow >= n)
-    connWindow <- window <$> readTVar (sharedConnFlowTx streamShared)
+    connWindow <- flowWindow <$> readTVar (sharedConnFlowTx streamShared)
     check (connWindow >= n)

@@ -18,18 +18,18 @@ module Network.QUIC.Stream (
   , getStreamRxOffset
   , isStreamRxClosed
   , setStreamRxFin
-  , isTxClosed
-  , isRxClosed
   , addTxStreamData
   , setTxMaxStreamData
-  , getRxStreamData
   , addRxStreamData
-  , getRxMaxStreamData
   , setRxMaxStreamData
   , addRxMaxStreamData
-  , waitWindowIsOpen
+  , getRxStreamWindow
+  , isTxClosed
+  , isRxClosed
   , get1RTTReady
   , set1RTTReady
+  , waitWindowIsOpen
+  , flowWindow
   -- * Reass
   , takeStreamData
   , putStreamData
