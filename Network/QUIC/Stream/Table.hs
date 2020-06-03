@@ -67,8 +67,8 @@ cryptoTxOffset lvl len stbl = getStreamTxOffset strm len
     sid = toCryptoStreamId lvl
     Just strm = lookupStream sid stbl
 
-getCryptoData :: EncryptionLevel -> Offset -> StreamData -> StreamTable -> IO [CryptoData]
-getCryptoData lvl off cdat stbl = fst <$> tryReassemble strm off cdat False
+getCryptoData :: EncryptionLevel -> RxStreamData -> StreamTable -> IO [CryptoData]
+getCryptoData lvl rx stbl = fst <$> tryReassemble strm rx
   where
     sid = toCryptoStreamId lvl
     Just strm = lookupStream sid stbl

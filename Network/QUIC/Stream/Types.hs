@@ -45,7 +45,7 @@ newStream sid shrd = Stream sid shrd <$> newTVarIO defaultFlow
 ----------------------------------------------------------------
 
 data TxStreamData = TxStreamData Stream [StreamData] Fin
-data RxStreamData = RxStreamData StreamData Offset Int deriving (Eq, Show)
+data RxStreamData = RxStreamData StreamData Offset Int Fin deriving (Eq, Show)
 
 type TxStreamDataQ = TBQueue TxStreamData
 

@@ -103,26 +103,32 @@ processFrame conn _ (Ack ackInfo _) =
 processFrame _ _ ResetStream{} = return ()
 processFrame _ _ StopSending{} = return ()
 processFrame conn lvl (Crypto off cdat) = do
+    let len = BS.length cdat
+        rx = RxStreamData cdat off len False
     case lvl of
       InitialLevel   -> do
-          putInputCrypto conn lvl off cdat
+          putRxCrypto conn lvl rx
       RTT0Level -> do
           connDebugLog conn $ "processFrame: invalid packet type " ++ show lvl
       HandshakeLevel ->
-          putInputCrypto conn lvl off cdat
+          putRxCrypto conn lvl rx
       RTT1Level
         | isClient conn ->
-              putInputCrypto conn lvl off cdat
+              putRxCrypto conn lvl rx
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connDebugLog conn "processFrame: NewToken"
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
-    putInputStream conn sid off dat fin $ \_ -> return ()-- fixme: including 0RTT?
+    let len = BS.length dat
+        rx = RxStreamData dat off len fin
+    putRxStream conn sid rx $ \_ -> return ()-- fixme: including 0RTT?
     addRxData conn $ BS.length dat             -- fixme: including 0RTT?
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
-    putInputStream conn sid off dat fin $ \strm -> do
+    let len = BS.length dat
+        rx = RxStreamData dat off len fin
+    putRxStream conn sid rx $ \strm -> do
         addRxStreamData strm $ BS.length dat
         window <- getRxStreamWindow strm
         let initialWindow = initialRxMaxStreamData conn sid

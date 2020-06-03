@@ -22,7 +22,7 @@ import Network.QUIC.Types
 cryptoFrame :: Connection -> CryptoData -> EncryptionLevel -> IO Frame
 cryptoFrame conn crypto lvl = do
     let len = B.length crypto
-    off <- getCryptoTxOffset conn lvl len
+    off <- getTxCryptoOffset conn lvl len
     return $ Crypto off crypto
 
 ----------------------------------------------------------------

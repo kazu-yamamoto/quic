@@ -2,12 +2,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.StreamTable (
-    putInputStream
-  , putInputCrypto
+    putRxStream
+  , putRxCrypto
   , findStream
   , addStream
   , setupCryptoStreams
-  , getCryptoTxOffset
+  , getTxCryptoOffset
   , initialRxMaxStreamData
   ) where
 
@@ -21,18 +21,18 @@ import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-putInputStream :: Connection -> StreamId -> Offset -> StreamData -> Fin
-               -> (Stream -> IO ())
-               -> IO ()
-putInputStream conn sid off dat fin action = do
+putRxStream :: Connection -> StreamId -> RxStreamData
+            -> (Stream -> IO ())
+            -> IO ()
+putRxStream conn sid rx action = do
     mstrm0 <- findStream conn sid
     strm <- case mstrm0 of
       Just strm0 -> do
-          putRxStreamData strm0 off dat fin
+          putRxStreamData strm0 rx
           return strm0
       Nothing -> do
           strm0 <- addStream conn sid
-          putRxStreamData strm0 off dat fin
+          putRxStreamData strm0 rx
           putInput conn $ InpNewStream strm0
           return strm0
     action strm
@@ -85,11 +85,11 @@ setupCryptoStreams Connection{..} = do
 
 ----------------------------------------------------------------
 
-getCryptoTxOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
-getCryptoTxOffset Connection{..} lvl len =
+getTxCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
+getTxCryptoOffset Connection{..} lvl len =
     readIORef streamTable >>= cryptoTxOffset lvl len
 
-putInputCrypto :: Connection -> EncryptionLevel -> Offset -> StreamData -> IO ()
-putInputCrypto conn@Connection{..} lvl off cdats = do
-    dats <- readIORef streamTable >>= getCryptoData lvl off cdats
+putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO ()
+putRxCrypto conn@Connection{..} lvl rx = do
+    dats <- readIORef streamTable >>= getCryptoData lvl rx
     mapM_ (putCrypto conn . InpHandshake lvl) dats

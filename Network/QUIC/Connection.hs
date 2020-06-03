@@ -108,12 +108,12 @@ module Network.QUIC.Connection (
   , getPeerStreamID
   , setPeerStreamID
   -- * StreamTable
-  , putInputStream
-  , putInputCrypto
+  , putRxStream
+  , putRxCrypto
   , findStream
   , addStream
   , setupCryptoStreams
-  , getCryptoTxOffset
+  , getTxCryptoOffset
   , initialRxMaxStreamData
   -- * Queue
   , takeInput

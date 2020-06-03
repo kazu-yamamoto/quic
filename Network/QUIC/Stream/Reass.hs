@@ -64,9 +64,9 @@ takeRxStreamData (Stream _ _ _ _ _ _ RxStreamQ{..} _) siz0 = do
 
 ----------------------------------------------------------------
 
-putRxStreamData :: Stream -> Offset -> StreamData -> Bool -> IO ()
-putRxStreamData s off dat fin = do
-    (dats,fin1) <- tryReassemble s off dat fin
+putRxStreamData :: Stream -> RxStreamData -> IO ()
+putRxStreamData s rx = do
+    (dats,fin1) <- tryReassemble s rx
     loop fin1 dats
   where
     put = atomically . writeTQueue (rxStreamQ $ streamRxQ s)
@@ -76,9 +76,9 @@ putRxStreamData s off dat fin = do
         when (d /= "") $ put d
         loop fin1 ds
 
-tryReassemble :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
-tryReassemble Stream{..} _   "" False = return ([], False)
-tryReassemble Stream{..} off "" True  = do
+tryReassemble :: Stream -> RxStreamData -> IO ([StreamData], Fin)
+tryReassemble Stream{..} (RxStreamData "" _  _ False) = return ([], False)
+tryReassemble Stream{..} (RxStreamData "" off _ True) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     if fin0 then do
         putStrLn "Illegal Fin" -- fixme
@@ -90,12 +90,10 @@ tryReassemble Stream{..} off "" True  = do
             return   ([], False)
         EQ -> return ([], True)  -- would ignore succeeding fragments
         GT -> return ([], False) -- ignoring ""
-tryReassemble Stream{..} off dat False = do
+tryReassemble Stream{..} x@(RxStreamData dat off len False) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
-    let len = BS.length dat
     case off0 `compare` off of
       LT -> do
-          let x = RxStreamData dat off len
           modifyIORef' streamReass (push x)
           return ([], False)
       EQ -> do
@@ -108,17 +106,15 @@ tryReassemble Stream{..} off dat False = do
           return (dat:dats, fin1)
       GT ->
           return ([], False)  -- ignoring
-tryReassemble Stream{..} off dat True = do
+tryReassemble Stream{..} x@(RxStreamData dat off len True) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
-    let len = BS.length dat
-        si1 = si0 { streamFin = True }
+    let si1 = si0 { streamFin = True }
     if fin0 then do
         putStrLn "Illegal Fin" -- fixme
         return ([], False)
       else case off0 `compare` off of
         LT -> do
             writeIORef streamStateRx si1
-            let x = RxStreamData dat off len
             modifyIORef' streamReass (push x)
             return ([], False)
         EQ -> do
@@ -129,10 +125,10 @@ tryReassemble Stream{..} off dat True = do
             return ([], False)  -- ignoring
 
 push :: RxStreamData -> [RxStreamData] -> [RxStreamData]
-push x0@(RxStreamData _ off0 len0) xs0 = loop xs0
+push x0@(RxStreamData _ off0 len0 _) xs0 = loop xs0
   where
     loop [] = [x0]
-    loop xxs@(x@(RxStreamData _ off len):xs)
+    loop xxs@(x@(RxStreamData _ off len _):xs)
       | off0 <  off && off0 + len0 <= off = x0 : xxs
       | off0 <  off                       = xxs -- ignoring
       | off0 == off                       = xxs -- ignoring
@@ -143,6 +139,6 @@ split :: Offset -> [RxStreamData] -> ([StreamData],[RxStreamData],Offset)
 split off0 xs0 = loop off0 xs0 id
   where
     loop off' [] build = (build [], [], off')
-    loop off' xxs@(RxStreamData dat off len : xs) build
+    loop off' xxs@(RxStreamData dat off len _ : xs) build
       | off' == off = loop (off + len) xs (build . (dat :))
       | otherwise   = (build [], xxs, off')
