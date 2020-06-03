@@ -1,16 +1,16 @@
 module Network.QUIC.Stream (
   -- * Types
-    Chunk(..)
-  , ChunkQ
+    Stream(..)
+  , newStream
+  , TxStreamData(..)
+  , TxStreamDataQ
   , Shared(..)
   , newShared
-  , Stream(..)
-  , newStream
-  , StreamQ
-  , StreamState
-  , Reassemble
   , Flow(..)
   , defaultFlow
+  , StreamState(..)
+  , RxStreamQ(..)
+  , RxStreamData(..)
   -- * Misc
   , getStreamTxOffset
   , isStreamTxClosed
@@ -31,9 +31,8 @@ module Network.QUIC.Stream (
   , waitWindowIsOpen
   , flowWindow
   -- * Reass
-  , takeStreamData
-  , putStreamData
-  , getStreamData
+  , takeRxStreamData
+  , putRxStreamData
   -- * Table
   , StreamTable
   , emptyStreamTable

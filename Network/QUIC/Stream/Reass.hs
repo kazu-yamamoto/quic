@@ -2,9 +2,9 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Reass (
-    takeStreamData
-  , putStreamData
-  , getStreamData
+    takeRxStreamData
+  , putRxStreamData
+  , tryReassemble
   ) where
 
 import qualified Data.ByteString as BS
@@ -17,8 +17,8 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-takeStreamData :: Stream -> Int -> IO ByteString
-takeStreamData (Stream _ _ StreamQ{..} _ _ _ _ _) siz0 = do
+takeRxStreamData :: Stream -> Int -> IO ByteString
+takeRxStreamData (Stream _ _ _ _ _ _ RxStreamQ{..} _) siz0 = do
     fin <- readIORef finReceived
     if fin then
         return ""
@@ -26,7 +26,7 @@ takeStreamData (Stream _ _ StreamQ{..} _ _ _ _ _) siz0 = do
         mb <- readIORef pendingData
         case mb of
           Nothing -> do
-              b0 <- atomically $ readTQueue streamInputQ
+              b0 <- atomically $ readTQueue rxStreamQ
               if b0 == "" then do
                   writeIORef finReceived True
                   return ""
@@ -45,7 +45,7 @@ takeStreamData (Stream _ _ StreamQ{..} _ _ _ _ _) siz0 = do
               tryRead (siz0 - len) (b0 :)
   where
     tryRead siz build = do
-        mb <- atomically $ tryReadTQueue streamInputQ
+        mb <- atomically $ tryReadTQueue rxStreamQ
         case mb of
           Nothing -> return $ BS.concat $ build []
           Just b  -> do
@@ -64,21 +64,21 @@ takeStreamData (Stream _ _ StreamQ{..} _ _ _ _ _) siz0 = do
 
 ----------------------------------------------------------------
 
-putStreamData :: Stream -> Offset -> StreamData -> Bool -> IO ()
-putStreamData s off dat fin = do
-    (dats,fin1) <- getStreamData s off dat fin
+putRxStreamData :: Stream -> Offset -> StreamData -> Bool -> IO ()
+putRxStreamData s off dat fin = do
+    (dats,fin1) <- tryReassemble s off dat fin
     loop fin1 dats
   where
-    put = atomically . writeTQueue (streamInputQ $ streamQ s)
+    put = atomically . writeTQueue (rxStreamQ $ streamRxQ s)
     loop False []    = return ()
     loop True  []    = put ""
     loop fin1 (d:ds) = do
         when (d /= "") $ put d
         loop fin1 ds
 
-getStreamData :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
-getStreamData Stream{..} _   "" False = return ([], False)
-getStreamData Stream{..} off "" True  = do
+tryReassemble :: Stream -> Offset -> StreamData -> Bool -> IO ([StreamData], Fin)
+tryReassemble Stream{..} _   "" False = return ([], False)
+tryReassemble Stream{..} off "" True  = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     if fin0 then do
         putStrLn "Illegal Fin" -- fixme
@@ -90,12 +90,12 @@ getStreamData Stream{..} off "" True  = do
             return   ([], False)
         EQ -> return ([], True)  -- would ignore succeeding fragments
         GT -> return ([], False) -- ignoring ""
-getStreamData Stream{..} off dat False = do
+tryReassemble Stream{..} off dat False = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let len = BS.length dat
     case off0 `compare` off of
       LT -> do
-          let x = Reassemble dat off len
+          let x = RxStreamData dat off len
           modifyIORef' streamReass (push x)
           return ([], False)
       EQ -> do
@@ -108,7 +108,7 @@ getStreamData Stream{..} off dat False = do
           return (dat:dats, fin1)
       GT ->
           return ([], False)  -- ignoring
-getStreamData Stream{..} off dat True = do
+tryReassemble Stream{..} off dat True = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let len = BS.length dat
         si1 = si0 { streamFin = True }
@@ -118,7 +118,7 @@ getStreamData Stream{..} off dat True = do
       else case off0 `compare` off of
         LT -> do
             writeIORef streamStateRx si1
-            let x = Reassemble dat off len
+            let x = RxStreamData dat off len
             modifyIORef' streamReass (push x)
             return ([], False)
         EQ -> do
@@ -128,21 +128,21 @@ getStreamData Stream{..} off dat True = do
         GT ->
             return ([], False)  -- ignoring
 
-push :: Reassemble -> [Reassemble] -> [Reassemble]
-push x0@(Reassemble _ off0 len0) xs0 = loop xs0
+push :: RxStreamData -> [RxStreamData] -> [RxStreamData]
+push x0@(RxStreamData _ off0 len0) xs0 = loop xs0
   where
     loop [] = [x0]
-    loop xxs@(x@(Reassemble _ off len):xs)
+    loop xxs@(x@(RxStreamData _ off len):xs)
       | off0 <  off && off0 + len0 <= off = x0 : xxs
       | off0 <  off                       = xxs -- ignoring
       | off0 == off                       = xxs -- ignoring
       |                off + len <= off0  = x : loop xs
       | otherwise                         = xxs -- ignoring
 
-split :: Offset -> [Reassemble] -> ([StreamData],[Reassemble],Offset)
+split :: Offset -> [RxStreamData] -> ([StreamData],[RxStreamData],Offset)
 split off0 xs0 = loop off0 xs0 id
   where
     loop off' [] build = (build [], [], off')
-    loop off' xxs@(Reassemble dat off len : xs) build
+    loop off' xxs@(RxStreamData dat off len : xs) build
       | off' == off = loop (off + len) xs (build . (dat :))
       | otherwise   = (build [], xxs, off')

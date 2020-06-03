@@ -28,11 +28,11 @@ putInputStream conn sid off dat fin action = do
     mstrm0 <- findStream conn sid
     strm <- case mstrm0 of
       Just strm0 -> do
-          putStreamData strm0 off dat fin
+          putRxStreamData strm0 off dat fin
           return strm0
       Nothing -> do
           strm0 <- addStream conn sid
-          putStreamData strm0 off dat fin
+          putRxStreamData strm0 off dat fin
           putInput conn $ InpNewStream strm0
           return strm0
     action strm

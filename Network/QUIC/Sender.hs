@@ -102,10 +102,10 @@ construct conn lvl frames mTargetSize = do
 sender :: Connection -> SendMany -> IO ()
 sender conn send = handleLog logAction $ forever $ do
     ex <- atomically ((Left  <$> takeOutputSTM conn)
-             `orElse` (Right <$> takeChunkSTM  conn))
+             `orElse` (Right <$> takeTxStreamDataSTM  conn))
     case ex of
       Left  out -> sendOutput conn send out
-      Right chk -> sendChunk  conn send chk
+      Right chk -> sendTxStreamData  conn send chk
   where
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
@@ -120,8 +120,8 @@ sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0)) = do
     bss <- construct conn lvl frames $ Just maximumQUICPacketSize
     send bss
 
-sendChunk :: Connection -> SendMany -> Chunk -> IO ()
-sendChunk conn send (Chunk s dats fin) = do
+sendTxStreamData :: Connection -> SendMany -> TxStreamData -> IO ()
+sendTxStreamData conn send (TxStreamData s dats fin) = do
     let n = totalLen dats
     addTxData conn n
     sendStreamFragment conn send s dats fin
@@ -175,11 +175,11 @@ totalLen = sum . map B.length
 packFin :: Stream -> Bool -> IO Bool
 packFin _ True  = return True
 packFin s False = do
-    mx <- tryPeekChunk s
+    mx <- tryPeekTxStreamData s
     case mx of
-      Just (Chunk s1 [] True)
+      Just (TxStreamData s1 [] True)
           | streamId s == streamId s1 -> do
-                _ <- takeChunk s
+                _ <- takeTxStreamData s
                 return True
       _ -> return False
 
@@ -209,24 +209,24 @@ sendStreamSmall conn send s0 frame0 total0 = do
     readIORef ref >>= mapM_ setStreamTxFin
   where
     tryPeek = do
-        mx <- tryPeekChunk s0
+        mx <- tryPeekTxStreamData s0
         case mx of
           Nothing -> do
               yield
-              tryPeekChunk s0
+              tryPeekTxStreamData s0
           Just _ -> return mx
     loop ref build total = do
         mx <- tryPeek
         case mx of
           Nothing -> return build
-          Just (Chunk s dats fin0) -> do
+          Just (TxStreamData s dats fin0) -> do
               let sid = streamId s
                   len = totalLen dats
                   total' = len + total
               if total' < limitation then do
-                  _ <- takeChunk s0 -- cf tryPeek
+                  _ <- takeTxStreamData s0 -- cf tryPeek
                   addTxData conn len
-                  fin <- packFin s fin0 -- must be after takeChunk
+                  fin <- packFin s fin0 -- must be after takeTxStreamData
                   off <- getStreamTxOffset s len
                   let frame = StreamF sid off dats fin
                       build' = build . (frame :)

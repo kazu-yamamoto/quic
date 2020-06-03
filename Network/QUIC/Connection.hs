@@ -124,10 +124,10 @@ module Network.QUIC.Connection (
   , tryPeekOutput
   , putOutput
   , putOutputPP
-  , takeChunk
-  , takeChunkSTM
-  , tryPeekChunk
-  , putChunk
+  , takeTxStreamData
+  , takeTxStreamDataSTM
+  , tryPeekTxStreamData
+  , putTxStreamData
   -- * Role
   , setToken
   , getToken
