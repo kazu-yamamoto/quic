@@ -12,12 +12,12 @@ module Network.QUIC.Stream (
   , RxStreamQ(..)
   , RxStreamData(..)
   -- * Misc
-  , getStreamTxOffset
-  , isStreamTxClosed
-  , setStreamTxFin
-  , getStreamRxOffset
-  , isStreamRxClosed
-  , setStreamRxFin
+  , getTxStreamOffset
+  , isTxStreamClosed
+  , setTxStreamFin
+  , getRxStreamOffset
+  , isRxStreamClosed
+  , setRxStreamFin
   , addTxStreamData
   , setTxMaxStreamData
   , addRxStreamData

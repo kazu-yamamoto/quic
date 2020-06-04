@@ -187,12 +187,12 @@ sendStreamFragment conn send (TxStreamData s dats len fin0) = do
     let sid = streamId s
     fin <- packFin s fin0
     if len < limitation then do
-        off <- getStreamTxOffset s len
+        off <- getTxStreamOffset s len
         let frame = StreamF sid off dats fin
         sendStreamSmall conn send s frame len
       else
         sendStreamLarge conn send s dats fin
-    when fin $ setStreamTxFin s
+    when fin $ setTxStreamFin s
 
 sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> IO ()
 sendStreamSmall conn send s0 frame0 total0 = do
@@ -204,7 +204,7 @@ sendStreamSmall conn send s0 frame0 total0 = do
             | otherwise = RTT0Level
     bss <- construct conn lvl frames $ Just maximumQUICPacketSize
     send bss
-    readIORef ref >>= mapM_ setStreamTxFin
+    readIORef ref >>= mapM_ setTxStreamFin
   where
     tryPeek = do
         mx <- tryPeekTxStreamData s0
@@ -224,7 +224,7 @@ sendStreamSmall conn send s0 frame0 total0 = do
                   _ <- takeTxStreamData s0 -- cf tryPeek
                   addTxData conn len
                   fin <- packFin s fin0 -- must be after takeTxStreamData
-                  off <- getStreamTxOffset s len
+                  off <- getTxStreamOffset s len
                   let frame = StreamF sid off dats fin
                       build' = build . (frame :)
                   when fin $ modifyIORef' ref (s :)
@@ -240,7 +240,7 @@ sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
     loop fin dats = do
         let (dats1,dats2) = splitChunks dats
             len = totalLen dats1
-        off <- getStreamTxOffset s len
+        off <- getTxStreamOffset s len
         let fin1 = fin && null dats2
             frame = StreamF sid off dats1 fin1
         ready <- isConnection1RTTReady conn

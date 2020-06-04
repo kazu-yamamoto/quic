@@ -35,7 +35,7 @@ sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
     closed <- isTxClosed s
     when closed $ E.throwIO ConnectionIsClosed
-    sclosed <- isStreamTxClosed s
+    sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     let len = sum $ map B.length dats
     -- fixme: size check for 0RTT
@@ -49,7 +49,7 @@ shutdownStream :: Stream -> IO ()
 shutdownStream s = do
     closed <- isTxClosed s
     when closed $ E.throwIO ConnectionIsClosed
-    sclosed <- isStreamTxClosed s
+    sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     putTxStreamData s $ TxStreamData s [] 0 True
 

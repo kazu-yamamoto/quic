@@ -62,7 +62,7 @@ insertCryptoStreams stbl shrd = do
 ----------------------------------------------------------------
 
 cryptoTxOffset :: EncryptionLevel -> Int -> StreamTable -> IO Offset
-cryptoTxOffset lvl len stbl = getStreamTxOffset strm len
+cryptoTxOffset lvl len stbl = getTxStreamOffset strm len
   where
     sid = toCryptoStreamId lvl
     Just strm = lookupStream sid stbl

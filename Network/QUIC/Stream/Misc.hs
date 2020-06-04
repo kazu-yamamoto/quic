@@ -1,12 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Misc (
-    getStreamTxOffset
-  , isStreamTxClosed
-  , setStreamTxFin
-  , getStreamRxOffset
-  , isStreamRxClosed
-  , setStreamRxFin
+    getTxStreamOffset
+  , isTxStreamClosed
+  , setTxStreamFin
+  , getRxStreamOffset
+  , isRxStreamClosed
+  , setRxStreamFin
   --
   , addTxStreamData
   , setTxMaxStreamData
@@ -32,35 +32,35 @@ import Network.QUIC.Stream.Types
 
 ----------------------------------------------------------------
 
-getStreamTxOffset :: Stream -> Int -> IO Offset
-getStreamTxOffset Stream{..} len = atomicModifyIORef' streamStateTx get
+getTxStreamOffset :: Stream -> Int -> IO Offset
+getTxStreamOffset Stream{..} len = atomicModifyIORef' streamStateTx get
   where
     get (StreamState off fin) = (StreamState (off + len) fin, off)
 
-isStreamTxClosed :: Stream -> IO Bool
-isStreamTxClosed Stream{..} = do
+isTxStreamClosed :: Stream -> IO Bool
+isTxStreamClosed Stream{..} = do
     StreamState _ fin <- readIORef streamStateTx
     return fin
 
-setStreamTxFin :: Stream -> IO ()
-setStreamTxFin Stream{..} = atomicModifyIORef' streamStateTx set
+setTxStreamFin :: Stream -> IO ()
+setTxStreamFin Stream{..} = atomicModifyIORef' streamStateTx set
   where
     set (StreamState off _) = (StreamState off True, ())
 
 ----------------------------------------------------------------
 
-getStreamRxOffset :: Stream -> Int -> IO Offset
-getStreamRxOffset Stream{..} len = atomicModifyIORef' streamStateRx get
+getRxStreamOffset :: Stream -> Int -> IO Offset
+getRxStreamOffset Stream{..} len = atomicModifyIORef' streamStateRx get
   where
     get (StreamState off fin) = (StreamState (off + len) fin, off)
 
-isStreamRxClosed :: Stream -> IO Bool
-isStreamRxClosed Stream{..} = do
+isRxStreamClosed :: Stream -> IO Bool
+isRxStreamClosed Stream{..} = do
     StreamState _ fin <- readIORef streamStateRx
     return fin
 
-setStreamRxFin :: Stream -> IO ()
-setStreamRxFin Stream{..} = atomicModifyIORef' streamStateRx set
+setRxStreamFin :: Stream -> IO ()
+setRxStreamFin Stream{..} = atomicModifyIORef' streamStateRx set
   where
     set (StreamState off _) = (StreamState off True, ())
 
