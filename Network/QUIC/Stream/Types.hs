@@ -87,7 +87,7 @@ emptyStreamState = StreamState 0 False
 data RxStreamQ = RxStreamQ {
     rxStreamQ   :: TQueue ByteString
   , pendingData :: IORef (Maybe ByteString)
-  , finReceived  :: IORef Bool
+  , finReceived :: IORef Bool
   }
 
 newRxStreamQ :: IO RxStreamQ
