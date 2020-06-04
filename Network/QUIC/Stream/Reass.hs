@@ -17,18 +17,35 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+getEndOfStream :: Stream -> IO Bool
+getEndOfStream Stream{..} = readIORef $ endOfStream streamRecvQ
+
+setEndOfStream :: Stream -> IO ()
+setEndOfStream Stream{..} = writeIORef (endOfStream streamRecvQ) True
+
+readPendingData :: Stream -> IO (Maybe ByteString)
+readPendingData Stream{..} = readIORef $ pendingData streamRecvQ
+
+writePendingData :: Stream -> ByteString -> IO ()
+writePendingData Stream{..} bs = writeIORef (pendingData streamRecvQ) $ Just bs
+
+clearPendingData :: Stream -> IO ()
+clearPendingData Stream{..} = writeIORef (pendingData streamRecvQ) Nothing
+
+----------------------------------------------------------------
+
 takeRecvStreamQwithSize :: Stream -> Int -> IO ByteString
-takeRecvStreamQwithSize strm@(Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
-    fin <- readIORef finReceived
-    if fin then
+takeRecvStreamQwithSize strm siz0 = do
+    eos <- getEndOfStream strm
+    if eos then
         return ""
       else do
-        mb <- readIORef pendingData
+        mb <- readPendingData strm
         case mb of
           Nothing -> do
               b0 <- takeRecvStreamQ strm
               if b0 == "" then do
-                  writeIORef finReceived True
+                  setEndOfStream strm
                   return ""
                 else do
                   let len = BS.length b0
@@ -37,10 +54,10 @@ takeRecvStreamQwithSize strm@(Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
                       EQ -> return b0
                       GT -> do
                           let (b1,b2) = BS.splitAt siz0 b0
-                          writeIORef pendingData $ Just b2
+                          writePendingData strm b2
                           return b1
           Just b0 -> do
-              writeIORef pendingData Nothing
+              clearPendingData strm
               let len = BS.length b0
               tryRead (siz0 - len) (b0 :)
   where
@@ -50,7 +67,7 @@ takeRecvStreamQwithSize strm@(Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
           Nothing -> return $ BS.concat $ build []
           Just b  -> do
               if b == "" then do
-                  writeIORef finReceived True
+                  setEndOfStream strm
                   return $ BS.concat $ build []
                 else do
                   let len = BS.length b
@@ -59,9 +76,10 @@ takeRecvStreamQwithSize strm@(Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
                     EQ -> return $ BS.concat $ build [b]
                     GT -> do
                         let (b1,b2) = BS.splitAt siz b
-                        writeIORef pendingData $ Just b2
+                        writePendingData strm b2
                         return $ BS.concat $ build [b1]
 
+----------------------------------------------------------------
 ----------------------------------------------------------------
 
 putRxStreamData :: Stream -> RxStreamData -> IO ()

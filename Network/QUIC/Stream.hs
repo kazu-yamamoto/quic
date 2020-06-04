@@ -42,8 +42,8 @@ module Network.QUIC.Stream (
   , lookupStream
   , insertStream
   , insertCryptoStreams
-  , cryptoTxOffset
-  , getCryptoData
+  , txCryptoOffset
+  , rxCryptoData
   ) where
 
 import Network.QUIC.Stream.Misc

@@ -7,8 +7,8 @@ module Network.QUIC.Stream.Table (
   , lookupStream
   , insertStream
   , insertCryptoStreams
-  , cryptoTxOffset
-  , getCryptoData
+  , txCryptoOffset
+  , rxCryptoData
   ) where
 
 import Data.IntMap.Strict (IntMap)
@@ -61,14 +61,14 @@ insertCryptoStreams stbl shrd = do
 
 ----------------------------------------------------------------
 
-cryptoTxOffset :: EncryptionLevel -> Int -> StreamTable -> IO Offset
-cryptoTxOffset lvl len stbl = getTxStreamOffset strm len
+txCryptoOffset :: EncryptionLevel -> Int -> StreamTable -> IO Offset
+txCryptoOffset lvl len stbl = getTxStreamOffset strm len
   where
     sid = toCryptoStreamId lvl
     Just strm = lookupStream sid stbl
 
-getCryptoData :: EncryptionLevel -> RxStreamData -> StreamTable -> IO [CryptoData]
-getCryptoData lvl rx stbl = fst <$> tryReassemble strm rx
+rxCryptoData :: EncryptionLevel -> RxStreamData -> StreamTable -> IO [CryptoData]
+rxCryptoData lvl rx stbl = fst <$> tryReassemble strm rx
   where
     sid = toCryptoStreamId lvl
     Just strm = lookupStream sid stbl

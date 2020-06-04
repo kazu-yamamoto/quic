@@ -87,9 +87,9 @@ setupCryptoStreams Connection{..} = do
 
 getTxCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
 getTxCryptoOffset Connection{..} lvl len =
-    readIORef streamTable >>= cryptoTxOffset lvl len
+    readIORef streamTable >>= txCryptoOffset lvl len
 
 putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO ()
 putRxCrypto conn@Connection{..} lvl rx = do
-    dats <- readIORef streamTable >>= getCryptoData lvl rx
+    dats <- readIORef streamTable >>= rxCryptoData lvl rx
     mapM_ (putCrypto conn . InpHandshake lvl) dats
