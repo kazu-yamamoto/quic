@@ -3,7 +3,7 @@ module Network.QUIC.Stream (
     Stream(..)
   , newStream
   , TxStreamData(..)
-  , TxStreamDataQ
+  , SendStreamQ
   , Shared(..)
   , newShared
   , Flow(..)

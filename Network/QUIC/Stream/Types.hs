@@ -2,7 +2,7 @@ module Network.QUIC.Stream.Types (
     Stream(..)
   , newStream
   , TxStreamData(..)
-  , TxStreamDataQ
+  , SendStreamQ
   , Shared(..)
   , newShared
   , Flow(..)
@@ -49,13 +49,13 @@ type Length = Int
 data TxStreamData = TxStreamData Stream [StreamData] Length Fin
 data RxStreamData = RxStreamData StreamData Offset Length Fin deriving (Eq, Show)
 
-type TxStreamDataQ = TBQueue TxStreamData
+type SendStreamQ = TBQueue TxStreamData
 
 data Shared = Shared {
     sharedCloseSent     :: IORef Bool
   , sharedCloseReceived :: IORef Bool
   , shared1RTTReady     :: IORef Bool
-  , sharedTxStreamDataQ :: TxStreamDataQ
+  , sharedSendStreamQ   :: SendStreamQ
   , sharedConnFlowTx    :: TVar Flow
   }
 
