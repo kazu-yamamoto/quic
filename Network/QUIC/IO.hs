@@ -42,7 +42,7 @@ sendStreamMany s dats = do
     ready <- get1RTTReady s
     when ready $ waitWindowIsOpen s len
     addTxStreamData s len
-    putTxStreamData s $ TxStreamData s dats len False
+    putSendStreamQ s $ TxStreamData s dats len False
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
@@ -51,7 +51,7 @@ shutdownStream s = do
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
-    putTxStreamData s $ TxStreamData s [] 0 True
+    putSendStreamQ s $ TxStreamData s [] 0 True
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO (Either QUICError Stream)

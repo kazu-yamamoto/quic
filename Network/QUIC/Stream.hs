@@ -29,6 +29,10 @@ module Network.QUIC.Stream (
   , set1RTTReady
   , waitWindowIsOpen
   , flowWindow
+  -- * Queue
+  , takeSendStreamQ
+  , tryPeekSendStreamQ
+  , putSendStreamQ
   -- * Reass
   , takeByteString
   , putRxStreamData
@@ -43,6 +47,7 @@ module Network.QUIC.Stream (
   ) where
 
 import Network.QUIC.Stream.Misc
+import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Reass
 import Network.QUIC.Stream.Table
 import Network.QUIC.Stream.Types

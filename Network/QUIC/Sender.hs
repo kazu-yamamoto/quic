@@ -102,7 +102,7 @@ construct conn lvl frames mTargetSize = do
 sender :: Connection -> SendMany -> IO ()
 sender conn send = handleLog logAction $ forever $ do
     ex <- atomically ((Left  <$> takeOutputSTM conn)
-             `orElse` (Right <$> takeTxStreamDataSTM  conn))
+             `orElse` (Right <$> takeSendStreamQSTM conn))
     case ex of
       Left  out -> sendOutput conn send out
       Right tx  -> sendTxStreamData conn send tx
@@ -174,11 +174,11 @@ totalLen = sum . map B.length
 packFin :: Stream -> Bool -> IO Bool
 packFin _ True  = return True
 packFin s False = do
-    mx <- tryPeekTxStreamData s
+    mx <- tryPeekSendStreamQ s
     case mx of
       Just (TxStreamData s1 [] 0 True)
           | streamId s == streamId s1 -> do
-                _ <- takeTxStreamData s
+                _ <- takeSendStreamQ s
                 return True
       _ -> return False
 
@@ -207,11 +207,11 @@ sendStreamSmall conn send s0 frame0 total0 = do
     readIORef ref >>= mapM_ setTxStreamFin
   where
     tryPeek = do
-        mx <- tryPeekTxStreamData s0
+        mx <- tryPeekSendStreamQ s0
         case mx of
           Nothing -> do
               yield
-              tryPeekTxStreamData s0
+              tryPeekSendStreamQ s0
           Just _ -> return mx
     loop ref build total = do
         mx <- tryPeek
@@ -221,9 +221,9 @@ sendStreamSmall conn send s0 frame0 total0 = do
               let sid = streamId s
                   total' = len + total
               if total' < limitation then do
-                  _ <- takeTxStreamData s0 -- cf tryPeek
+                  _ <- takeSendStreamQ s0 -- cf tryPeek
                   addTxData conn len
-                  fin <- packFin s fin0 -- must be after takeTxStreamData
+                  fin <- packFin s fin0 -- must be after takeSendStreamQ
                   off <- getTxStreamOffset s len
                   let frame = StreamF sid off dats fin
                       build' = build . (frame :)
