@@ -30,7 +30,7 @@ module Network.QUIC.Stream (
   , waitWindowIsOpen
   , flowWindow
   -- * Reass
-  , takeRecvStreamQ
+  , takeByteString
   , putRxStreamData
   -- * Table
   , StreamTable

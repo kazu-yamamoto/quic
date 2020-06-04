@@ -2,23 +2,23 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Reass (
-    takeRecvStreamQ
+    takeByteString
   , putRxStreamData
   , tryReassemble
   ) where
 
 import qualified Data.ByteString as BS
-import Control.Concurrent.STM
 import Data.IORef
 
 import Network.QUIC.Imports
+import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Types
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-takeRecvStreamQ :: Stream -> Int -> IO ByteString
-takeRecvStreamQ (Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
+takeByteString :: Stream -> Int -> IO ByteString
+takeByteString strm@(Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
     fin <- readIORef finReceived
     if fin then
         return ""
@@ -26,7 +26,7 @@ takeRecvStreamQ (Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
         mb <- readIORef pendingData
         case mb of
           Nothing -> do
-              b0 <- atomically $ readTQueue recvStreamQ
+              b0 <- takeRecvStreamQ strm
               if b0 == "" then do
                   writeIORef finReceived True
                   return ""
@@ -45,7 +45,7 @@ takeRecvStreamQ (Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
               tryRead (siz0 - len) (b0 :)
   where
     tryRead siz build = do
-        mb <- atomically $ tryReadTQueue recvStreamQ
+        mb <- tryTakeRecvStreamQ strm
         case mb of
           Nothing -> return $ BS.concat $ build []
           Just b  -> do
@@ -69,11 +69,10 @@ putRxStreamData s rx = do
     (dats,fin1) <- tryReassemble s rx
     loop fin1 dats
   where
-    put = atomically . writeTQueue (recvStreamQ $ streamRecvQ s)
     loop False []    = return ()
-    loop True  []    = put ""
+    loop True  []    = putRecvStreamQ s ""
     loop fin1 (d:ds) = do
-        when (d /= "") $ put d
+        when (d /= "") $ putRecvStreamQ s d
         loop fin1 ds
 
 tryReassemble :: Stream -> RxStreamData -> IO ([StreamData], Fin)

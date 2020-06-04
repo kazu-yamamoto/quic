@@ -54,9 +54,10 @@ library
                        Network.QUIC.Socket
                        Network.QUIC.Stream
                        Network.QUIC.Stream.Misc
-                       Network.QUIC.Stream.Types
+                       Network.QUIC.Stream.Queue
                        Network.QUIC.Stream.Reass
                        Network.QUIC.Stream.Table
+                       Network.QUIC.Stream.Types
                        Network.QUIC.TLS
                        Network.QUIC.TLS.Crypto
                        Network.QUIC.TLS.Handshaker
