@@ -73,4 +73,4 @@ recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = do
     closed <- isRxClosed s
     when closed $ E.throwIO ConnectionIsClosed
-    takeRxStreamData s n
+    takeRecvStreamQ s n

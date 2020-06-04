@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Reass (
-    takeRxStreamData
+    takeRecvStreamQ
   , putRxStreamData
   , tryReassemble
   ) where
@@ -17,8 +17,8 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-takeRxStreamData :: Stream -> Int -> IO ByteString
-takeRxStreamData (Stream _ _ _ _ _ _ RxStreamQ{..} _) siz0 = do
+takeRecvStreamQ :: Stream -> Int -> IO ByteString
+takeRecvStreamQ (Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
     fin <- readIORef finReceived
     if fin then
         return ""
@@ -26,7 +26,7 @@ takeRxStreamData (Stream _ _ _ _ _ _ RxStreamQ{..} _) siz0 = do
         mb <- readIORef pendingData
         case mb of
           Nothing -> do
-              b0 <- atomically $ readTQueue rxStreamQ
+              b0 <- atomically $ readTQueue recvStreamQ
               if b0 == "" then do
                   writeIORef finReceived True
                   return ""
@@ -45,7 +45,7 @@ takeRxStreamData (Stream _ _ _ _ _ _ RxStreamQ{..} _) siz0 = do
               tryRead (siz0 - len) (b0 :)
   where
     tryRead siz build = do
-        mb <- atomically $ tryReadTQueue rxStreamQ
+        mb <- atomically $ tryReadTQueue recvStreamQ
         case mb of
           Nothing -> return $ BS.concat $ build []
           Just b  -> do
@@ -69,7 +69,7 @@ putRxStreamData s rx = do
     (dats,fin1) <- tryReassemble s rx
     loop fin1 dats
   where
-    put = atomically . writeTQueue (rxStreamQ $ streamRxQ s)
+    put = atomically . writeTQueue (recvStreamQ $ streamRecvQ s)
     loop False []    = return ()
     loop True  []    = put ""
     loop fin1 (d:ds) = do

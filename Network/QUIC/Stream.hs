@@ -9,7 +9,6 @@ module Network.QUIC.Stream (
   , Flow(..)
   , defaultFlow
   , StreamState(..)
-  , RxStreamQ(..)
   , RxStreamData(..)
   -- * Misc
   , getTxStreamOffset
@@ -31,7 +30,7 @@ module Network.QUIC.Stream (
   , waitWindowIsOpen
   , flowWindow
   -- * Reass
-  , takeRxStreamData
+  , takeRecvStreamQ
   , putRxStreamData
   -- * Table
   , StreamTable

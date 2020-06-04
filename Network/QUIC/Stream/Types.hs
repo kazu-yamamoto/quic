@@ -8,7 +8,7 @@ module Network.QUIC.Stream.Types (
   , Flow(..)
   , defaultFlow
   , StreamState(..)
-  , RxStreamQ(..)
+  , RecvStreamQ(..)
   , RxStreamData(..)
   ) where
 
@@ -27,7 +27,7 @@ data Stream = Stream {
   , streamFlowRx  :: IORef Flow           -- counter, maxDax
   , streamStateTx :: IORef StreamState    -- offset, fin
   , streamStateRx :: IORef StreamState    -- offset, fin
-  , streamRxQ     :: RxStreamQ            -- input bytestring
+  , streamRecvQ   :: RecvStreamQ          -- input bytestring
   , streamReass   :: IORef [RxStreamData] -- input stream fragments to streamQ
   }
 
@@ -39,7 +39,7 @@ newStream sid shrd = Stream sid shrd <$> newTVarIO defaultFlow
                                      <*> newIORef  defaultFlow
                                      <*> newIORef  emptyStreamState
                                      <*> newIORef  emptyStreamState
-                                     <*> newRxStreamQ
+                                     <*> newRecvStreamQ
                                      <*> newIORef []
 
 ----------------------------------------------------------------
@@ -84,11 +84,11 @@ emptyStreamState = StreamState 0 False
 
 ----------------------------------------------------------------
 
-data RxStreamQ = RxStreamQ {
-    rxStreamQ   :: TQueue ByteString
+data RecvStreamQ = RecvStreamQ {
+    recvStreamQ :: TQueue ByteString
   , pendingData :: IORef (Maybe ByteString)
   , finReceived :: IORef Bool
   }
 
-newRxStreamQ :: IO RxStreamQ
-newRxStreamQ = RxStreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
+newRecvStreamQ :: IO RecvStreamQ
+newRecvStreamQ = RecvStreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
