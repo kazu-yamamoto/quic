@@ -32,10 +32,9 @@ import Network.QUIC.Stream.Types
 ----------------------------------------------------------------
 
 getStreamTxOffset :: Stream -> Int -> IO Offset
-getStreamTxOffset Stream{..} len = do
-    StreamState off fin <- readIORef streamStateTx
-    writeIORef streamStateTx $ StreamState (off + len) fin
-    return off
+getStreamTxOffset Stream{..} len = atomicModifyIORef' streamStateTx get
+  where
+    get (StreamState off fin) = (StreamState (off + len) fin, off)
 
 isStreamTxClosed :: Stream -> IO Bool
 isStreamTxClosed Stream{..} = do
@@ -43,17 +42,16 @@ isStreamTxClosed Stream{..} = do
     return fin
 
 setStreamTxFin :: Stream -> IO ()
-setStreamTxFin Stream{..} = do
-    StreamState off _ <- readIORef streamStateTx
-    writeIORef streamStateTx $ StreamState off True
+setStreamTxFin Stream{..} = atomicModifyIORef' streamStateTx set
+  where
+    set (StreamState off _) = (StreamState off True, ())
 
 ----------------------------------------------------------------
 
 getStreamRxOffset :: Stream -> Int -> IO Offset
-getStreamRxOffset Stream{..} len = do
-    StreamState off fin <- readIORef streamStateRx
-    writeIORef streamStateRx $ StreamState (off + len) fin
-    return off
+getStreamRxOffset Stream{..} len = atomicModifyIORef' streamStateRx get
+  where
+    get (StreamState off fin) = (StreamState (off + len) fin, off)
 
 isStreamRxClosed :: Stream -> IO Bool
 isStreamRxClosed Stream{..} = do
@@ -61,9 +59,9 @@ isStreamRxClosed Stream{..} = do
     return fin
 
 setStreamRxFin :: Stream -> IO ()
-setStreamRxFin Stream{..} = do
-    StreamState off _ <- readIORef streamStateRx
-    writeIORef streamStateRx $ StreamState off True
+setStreamRxFin Stream{..} = atomicModifyIORef' streamStateRx set
+  where
+    set (StreamState off _) = (StreamState off True, ())
 
 ----------------------------------------------------------------
 
@@ -109,7 +107,7 @@ get1RTTReady :: Stream -> IO Bool
 get1RTTReady Stream{..} = readIORef $ shared1RTTReady streamShared
 
 set1RTTReady :: Stream -> IO ()
-set1RTTReady Stream{..} = writeIORef (shared1RTTReady streamShared) True
+set1RTTReady Stream{..} = atomicWriteIORef (shared1RTTReady streamShared) True
 
 ----------------------------------------------------------------
 
