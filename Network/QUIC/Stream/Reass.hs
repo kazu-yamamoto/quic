@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Reass (
-    takeByteString
+    takeRecvStreamQwithSize
   , putRxStreamData
   , tryReassemble
   ) where
@@ -17,8 +17,8 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-takeByteString :: Stream -> Int -> IO ByteString
-takeByteString strm@(Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
+takeRecvStreamQwithSize :: Stream -> Int -> IO ByteString
+takeRecvStreamQwithSize strm@(Stream _ _ _ _ _ _ RecvStreamQ{..} _) siz0 = do
     fin <- readIORef finReceived
     if fin then
         return ""

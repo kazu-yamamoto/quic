@@ -34,7 +34,7 @@ module Network.QUIC.Stream (
   , tryPeekSendStreamQ
   , putSendStreamQ
   -- * Reass
-  , takeByteString
+  , takeRecvStreamQwithSize
   , putRxStreamData
   -- * Table
   , StreamTable
