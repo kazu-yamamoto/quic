@@ -7,8 +7,7 @@ module Network.QUIC.Connection.StreamTable (
   , addStream
   , initialRxMaxStreamData
   , setupCryptoStreams
-  , getTxCryptoOffset
-  , putRxCrypto
+  , getCryptoStream
   ) where
 
 import Data.IORef
@@ -16,7 +15,6 @@ import Data.IORef
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
-import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
@@ -80,11 +78,6 @@ setupCryptoStreams Connection{..} = do
 
 ----------------------------------------------------------------
 
-getTxCryptoOffset :: Connection -> EncryptionLevel -> Int -> IO Offset
-getTxCryptoOffset Connection{..} lvl len =
-    readIORef streamTable >>= txCryptoOffset lvl len
-
-putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO ()
-putRxCrypto conn@Connection{..} lvl rx = do
-    dats <- readIORef streamTable >>= rxCryptoData lvl rx
-    mapM_ (putCrypto conn . InpHandshake lvl) dats
+getCryptoStream :: Connection -> EncryptionLevel -> IO Stream
+getCryptoStream Connection{..} lvl =
+    lookupCryptoStream lvl <$> readIORef streamTable

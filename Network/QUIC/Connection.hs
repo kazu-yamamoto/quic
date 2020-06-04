@@ -113,8 +113,7 @@ module Network.QUIC.Connection (
   , addStream
   , initialRxMaxStreamData
   , setupCryptoStreams
-  , getTxCryptoOffset
-  , putRxCrypto
+  , getCryptoStream
   -- * Queue
   , takeInput
   , putInput

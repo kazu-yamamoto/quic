@@ -198,3 +198,9 @@ isStateessReset conn header Crypt{..} = do
       else case decodeStatelessResetToken cryptPacket of
              Nothing    -> return False
              Just token -> isStatelessRestTokenValid conn token
+
+putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO ()
+putRxCrypto conn lvl rx = do
+    strm <- getCryptoStream conn lvl
+    dats <- fst <$> tryReassemble strm rx
+    mapM_ (putCrypto conn . InpHandshake lvl) dats

@@ -36,14 +36,14 @@ module Network.QUIC.Stream (
   -- * Reass
   , takeRecvStreamQwithSize
   , putRxStreamData
+  , tryReassemble
   -- * Table
   , StreamTable
   , emptyStreamTable
   , lookupStream
   , insertStream
   , insertCryptoStreams
-  , txCryptoOffset
-  , rxCryptoData
+  , lookupCryptoStream
   ) where
 
 import Network.QUIC.Stream.Misc
