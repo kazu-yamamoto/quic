@@ -2,13 +2,13 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.StreamTable (
-    putRxStream
-  , putRxCrypto
+    getStream
   , findStream
   , addStream
+  , initialRxMaxStreamData
   , setupCryptoStreams
   , getTxCryptoOffset
-  , initialRxMaxStreamData
+  , putRxCrypto
   ) where
 
 import Data.IORef
@@ -21,21 +21,16 @@ import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-putRxStream :: Connection -> StreamId -> RxStreamData
-            -> (Stream -> IO ())
-            -> IO ()
-putRxStream conn sid rx action = do
-    mstrm0 <- findStream conn sid
-    strm <- case mstrm0 of
-      Just strm0 -> do
-          putRxStreamData strm0 rx
-          return strm0
+getStream :: Connection -> StreamId -> IO Stream
+getStream conn sid = do
+    mstrm <- findStream conn sid
+    case mstrm of
+      Just strm -> do
+          return strm
       Nothing -> do
-          strm0 <- addStream conn sid
-          putRxStreamData strm0 rx
-          putInput conn $ InpNewStream strm0
-          return strm0
-    action strm
+          strm <- addStream conn sid
+          putInput conn $ InpNewStream strm
+          return strm
 
 findStream :: Connection -> StreamId -> IO (Maybe Stream)
 findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable

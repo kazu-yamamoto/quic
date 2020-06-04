@@ -121,24 +121,26 @@ processFrame conn _ (NewToken token) = do
     setNewToken conn token
     connDebugLog conn "processFrame: NewToken"
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
+    strm <- getStream conn sid
     let len = BS.length dat
         rx = RxStreamData dat off len fin
-    putRxStream conn sid rx $ \_ -> return ()-- fixme: including 0RTT?
+    putRxStreamData strm rx
     addRxData conn $ BS.length dat             -- fixme: including 0RTT?
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
+    strm <- getStream conn sid
     let len = BS.length dat
         rx = RxStreamData dat off len fin
-    putRxStream conn sid rx $ \strm -> do
-        addRxStreamData strm $ BS.length dat
-        window <- getRxStreamWindow strm
-        let initialWindow = initialRxMaxStreamData conn sid
-        when (window <= (initialWindow `div` 2)) $ do
-            newMax <- addRxMaxStreamData strm initialWindow
-            putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
-    addRxData conn $ BS.length dat
-    window <- getRxDataWindow conn
-    let initialWindow = initialMaxData $ getMyParameters conn
+    putRxStreamData strm rx
+    addRxStreamData strm $ BS.length dat
+    window <- getRxStreamWindow strm
+    let initialWindow = initialRxMaxStreamData conn sid
     when (window <= (initialWindow `div` 2)) $ do
+        newMax <- addRxMaxStreamData strm initialWindow
+        putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
+    addRxData conn $ BS.length dat
+    cwindow <- getRxDataWindow conn
+    let cinitialWindow = initialMaxData $ getMyParameters conn
+    when (cwindow <= (cinitialWindow `div` 2)) $ do
         newMax <- addRxMaxData conn initialWindow
         putOutput conn $ OutControl RTT1Level [MaxData newMax]
 processFrame conn _ (MaxData n) =
