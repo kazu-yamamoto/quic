@@ -22,7 +22,7 @@ import Network.QUIC.Types
 
 data CryptoToken = CryptoToken {
     tokenQUICVersion :: Version
-  , tokenCreatedTime :: Elapsed
+  , tokenCreatedTime :: TimeSecond
   , tokenCIDs        :: Maybe (CID, CID, CID) -- local, remote, orig local
   }
 
@@ -65,7 +65,7 @@ instance Storable CryptoToken where
         let len = fromIntegral len0 - 1
         rbuf <- newReadBuffer (castPtr (ptr `plusPtr` 1)) len
         ver  <- decodeVersion <$> read32 rbuf
-        tim  <- Elapsed . Seconds . fromIntegral <$> read64 rbuf
+        tim  <- toTimeSecond <$> read64 rbuf
         typ <- read8 rbuf
         case typ of
           0 -> return $ CryptoToken ver tim Nothing
@@ -82,8 +82,8 @@ instance Storable CryptoToken where
         wbuf <- newWriteBuffer (castPtr ptr) len
         write8 wbuf $ fromIntegral len
         write32 wbuf $ encodeVersion ver
-        let Elapsed (Seconds t) = tim
-        write64 wbuf $ fromIntegral t
+        let t = fromTimeSecond tim
+        write64 wbuf t
         case mcids of
           Nothing      -> write8 wbuf 0
           Just (l,r,o) -> do

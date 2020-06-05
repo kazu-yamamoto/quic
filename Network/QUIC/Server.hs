@@ -91,7 +91,7 @@ unregisterConnectionDict ref cid = atomicModifyIORef' ref $ \(ConnectionDict tbl
 ----------------------------------------------------------------
 
 -- Original destination CID -> RecvQ
-newtype RecvQDict = RecvQDict (OrdPSQ CID ElapsedP RecvQ)
+newtype RecvQDict = RecvQDict (OrdPSQ CID TimeMillisecond RecvQ)
 
 recvQDictSize :: Int
 recvQDictSize = 100

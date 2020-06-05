@@ -43,7 +43,7 @@ third (_,_,x) = x
 ----------------------------------------------------------------
 
 {-# INLINE add #-}
-add :: PacketNumber -> ElapsedP -> Retrans -> RetransDB -> RetransDB
+add :: PacketNumber -> TimeMillisecond -> Retrans -> RetransDB -> RetransDB
 add pn tm ent rdb = RetransDB minpn maxpn kept
   where
     minpn = min pn $ minPN rdb
@@ -68,7 +68,7 @@ clear rdb = case PSQ.findMin $ keptPackets rdb of
   Just _  -> nextEmpty rdb
 
 {-# INLINE split #-}
-split :: ElapsedP -> RetransDB -> (RetransDB, [(Int, ElapsedP, Retrans)])
+split :: TimeMillisecond -> RetransDB -> (RetransDB, [(Int, TimeMillisecond, Retrans)])
 split tm rdb = case PSQ.findMin $ keptPackets rdb of
   Nothing -> (rdb, [])
   Just _  -> let (xs,kept) = PSQ.atMostView tm $ keptPackets rdb
@@ -76,7 +76,7 @@ split tm rdb = case PSQ.findMin $ keptPackets rdb of
              in (newrdb, xs)
 
 {-# INLINE adjust #-}
-adjust :: RetransDB -> PSQ.IntPSQ ElapsedP Retrans -> RetransDB
+adjust :: RetransDB -> PSQ.IntPSQ TimeMillisecond Retrans -> RetransDB
 adjust oldrdb newkept = case PSQ.findMin newkept of
   Nothing -> nextEmpty oldrdb
   Just x  -> let minpn = retransPacketNumber $ third x

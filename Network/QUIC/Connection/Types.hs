@@ -60,7 +60,7 @@ data RetransDB = RetransDB {
     minPN :: PacketNumber -- ^ If 'keptPackets' is 'IntPSQ.empty',
                           -- 'maxPN' is copied and 1 is added.
   , maxPN :: PacketNumber
-  , keptPackets :: IntPSQ ElapsedP Retrans
+  , keptPackets :: IntPSQ TimeMillisecond Retrans
   }
 
 emptyRetransDB :: RetransDB

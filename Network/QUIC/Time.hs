@@ -4,15 +4,23 @@ module Network.QUIC.Time (
   , timeCurrentP
   , timeDiff
   , timeDel
-  , Elapsed(..)
-  , ElapsedP(..)
+  , TimeSecond
+  , TimeMillisecond
   , Seconds(..)
   , MilliSeconds(..)
+  , fromTimeSecond
+  , toTimeSecond
   ) where
 
 import Data.Hourglass
 import Data.Int (Int64)
+import Data.Word (Word64)
 import System.Hourglass
+
+----------------------------------------------------------------
+
+type TimeSecond = Elapsed
+type TimeMillisecond = ElapsedP
 
 ----------------------------------------------------------------
 
@@ -35,3 +43,8 @@ timeDel (ElapsedP sec nano) milli
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
 
+fromTimeSecond :: TimeSecond -> Word64
+fromTimeSecond (Elapsed (Seconds t)) = fromIntegral t
+
+toTimeSecond :: Word64 -> Elapsed
+toTimeSecond = Elapsed . Seconds . fromIntegral
