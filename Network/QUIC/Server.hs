@@ -111,7 +111,7 @@ insertRecvQDict ref dcid q = do
     RecvQDict qt0 <- readIORef ref
     let qt1 | PSQ.size qt0 <= recvQDictSize = qt0
             | otherwise = PSQ.deleteMin qt0
-    p <- timeCurrentP
+    p <- getTimeMillisecond
     let qt2 = PSQ.insert dcid p q qt1
     writeIORef ref $ RecvQDict qt2
 
@@ -284,7 +284,7 @@ dispatch Dispatch{..} ServerConfig{..}
         pushToAcceptQ myAuthCIDs peerAuthCIDs o
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
-        tim0 <- timeCurrent
+        tim0 <- getTimeSecond
         let diff = tim `timeDiff` tim0
         return $ tver == ver
               && diff <= Seconds 30 -- fixme

@@ -93,7 +93,7 @@ nextEmpty rdb = emptyRetransDB { minPN = minpn, maxPN = minpn }
 
 keepPlainPacket :: Connection -> PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> IO ()
 keepPlainPacket Connection{..} pn lvl out ppns = do
-    tm <- timeCurrentP
+    tm <- getTimeMillisecond
     let ent = Retrans pn lvl out ppns
     atomicModifyIORef' retransDB $ \rdb -> (add pn tm ent rdb, ())
 
@@ -128,7 +128,7 @@ releaseByAck conn@Connection{..} pn = do
 
 releaseByTimeout :: Connection -> MilliSeconds -> IO [PlainPacket]
 releaseByTimeout Connection{..} milli = do
-    tm <- (`timeDel` milli) <$> timeCurrentP
+    tm <- (`timeDel` milli) <$> getTimeMillisecond
     xs <- atomicModifyIORef' retransDB $ split tm
     return $ map (retransPlainPacket . third) xs
 

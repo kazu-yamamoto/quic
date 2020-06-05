@@ -33,12 +33,12 @@ isRetryToken token = isJust $ tokenCIDs token
 
 generateToken :: Version -> IO CryptoToken
 generateToken ver = do
-    t <- timeCurrent
+    t <- getTimeSecond
     return $ CryptoToken ver t Nothing
 
 generateRetryToken :: Version -> CID -> CID -> CID -> IO CryptoToken
 generateRetryToken ver l r o = do
-    t <- timeCurrent
+    t <- getTimeSecond
     return $ CryptoToken ver t $ Just (l,r,o)
 
 ----------------------------------------------------------------

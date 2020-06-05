@@ -1,7 +1,7 @@
 module Network.QUIC.Time (
     getElapsedTime
-  , timeCurrent
-  , timeCurrentP
+  , getTimeSecond
+  , getTimeMillisecond
   , timeDiff
   , timeDel
   , TimeSecond
@@ -21,6 +21,12 @@ import System.Hourglass
 
 type TimeSecond = Elapsed
 type TimeMillisecond = ElapsedP
+
+getTimeSecond :: IO TimeSecond
+getTimeSecond = timeCurrent
+
+getTimeMillisecond :: IO TimeMillisecond
+getTimeMillisecond = timeCurrentP
 
 ----------------------------------------------------------------
 
