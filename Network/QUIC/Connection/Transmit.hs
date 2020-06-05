@@ -5,18 +5,17 @@ module Network.QUIC.Connection.Transmit (
   , releaseByRetry
   , releaseByAcks
   , releaseByTimeout
-  , MilliSeconds(..)
+  , Milliseconds(..)
   ) where
 
 import Data.Function (on)
-import Data.Hourglass
 import Data.IORef
 import qualified Data.IntPSQ as PSQ
-import System.Hourglass
 
 import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -44,7 +43,7 @@ third (_,_,x) = x
 ----------------------------------------------------------------
 
 {-# INLINE add #-}
-add :: PacketNumber -> ElapsedP -> Retrans -> RetransDB -> RetransDB
+add :: PacketNumber -> TimeMillisecond -> Retrans -> RetransDB -> RetransDB
 add pn tm ent rdb = RetransDB minpn maxpn kept
   where
     minpn = min pn $ minPN rdb
@@ -69,7 +68,7 @@ clear rdb = case PSQ.findMin $ keptPackets rdb of
   Just _  -> nextEmpty rdb
 
 {-# INLINE split #-}
-split :: ElapsedP -> RetransDB -> (RetransDB, [(Int, ElapsedP, Retrans)])
+split :: TimeMillisecond -> RetransDB -> (RetransDB, [(Int, TimeMillisecond, Retrans)])
 split tm rdb = case PSQ.findMin $ keptPackets rdb of
   Nothing -> (rdb, [])
   Just _  -> let (xs,kept) = PSQ.atMostView tm $ keptPackets rdb
@@ -77,7 +76,7 @@ split tm rdb = case PSQ.findMin $ keptPackets rdb of
              in (newrdb, xs)
 
 {-# INLINE adjust #-}
-adjust :: RetransDB -> PSQ.IntPSQ ElapsedP Retrans -> RetransDB
+adjust :: RetransDB -> PSQ.IntPSQ TimeMillisecond Retrans -> RetransDB
 adjust oldrdb newkept = case PSQ.findMin newkept of
   Nothing -> nextEmpty oldrdb
   Just x  -> let minpn = retransPacketNumber $ third x
@@ -94,7 +93,7 @@ nextEmpty rdb = emptyRetransDB { minPN = minpn, maxPN = minpn }
 
 keepPlainPacket :: Connection -> PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> IO ()
 keepPlainPacket Connection{..} pn lvl out ppns = do
-    tm <- timeCurrentP
+    tm <- getTimeMillisecond
     let ent = Retrans pn lvl out ppns
     atomicModifyIORef' retransDB $ \rdb -> (add pn tm ent rdb, ())
 
@@ -127,21 +126,10 @@ releaseByAck conn@Connection{..} pn = do
 
 ----------------------------------------------------------------
 
-releaseByTimeout :: Connection -> MilliSeconds -> IO [PlainPacket]
+releaseByTimeout :: Connection -> Milliseconds -> IO [PlainPacket]
 releaseByTimeout Connection{..} milli = do
-    tm <- (`timeDel` milli) <$> timeCurrentP
+    tm <- getPastTimeMillisecond milli
     xs <- atomicModifyIORef' retransDB $ split tm
     return $ map (retransPlainPacket . third) xs
-
-newtype MilliSeconds = MilliSeconds Int64 deriving (Eq, Show)
-
-timeDel :: ElapsedP -> MilliSeconds -> ElapsedP
-timeDel (ElapsedP sec nano) milli
-  | nano' >= sec1 = ElapsedP sec (nano' - sec1)
-  | otherwise     = ElapsedP (sec - 1) nano'
-  where
-    milliToNano (MilliSeconds n) = NanoSeconds (n * 1000000)
-    sec1 = 1000000000
-    nano' = nano + sec1 - milliToNano milli
 
 ----------------------------------------------------------------

@@ -11,19 +11,18 @@ import qualified Crypto.Token as CT
 import Foreign.Storable
 import Foreign.Ptr
 import Network.ByteOrder
-import Data.Hourglass (Elapsed(..), Seconds(..))
-import Time.System (timeCurrent)
 
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Version
 import Network.QUIC.TLS
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
 data CryptoToken = CryptoToken {
     tokenQUICVersion :: Version
-  , tokenCreatedTime :: Elapsed
+  , tokenCreatedTime :: TimeSecond
   , tokenCIDs        :: Maybe (CID, CID, CID) -- local, remote, orig local
   }
 
@@ -34,12 +33,12 @@ isRetryToken token = isJust $ tokenCIDs token
 
 generateToken :: Version -> IO CryptoToken
 generateToken ver = do
-    t <- timeCurrent
+    t <- getTimeSecond
     return $ CryptoToken ver t Nothing
 
 generateRetryToken :: Version -> CID -> CID -> CID -> IO CryptoToken
 generateRetryToken ver l r o = do
-    t <- timeCurrent
+    t <- getTimeSecond
     return $ CryptoToken ver t $ Just (l,r,o)
 
 ----------------------------------------------------------------
@@ -66,7 +65,7 @@ instance Storable CryptoToken where
         let len = fromIntegral len0 - 1
         rbuf <- newReadBuffer (castPtr (ptr `plusPtr` 1)) len
         ver  <- decodeVersion <$> read32 rbuf
-        tim  <- Elapsed . Seconds . fromIntegral <$> read64 rbuf
+        tim  <- toTimeSecond . fromIntegral <$> read64 rbuf
         typ <- read8 rbuf
         case typ of
           0 -> return $ CryptoToken ver tim Nothing
@@ -83,7 +82,7 @@ instance Storable CryptoToken where
         wbuf <- newWriteBuffer (castPtr ptr) len
         write8 wbuf $ fromIntegral len
         write32 wbuf $ encodeVersion ver
-        let Elapsed (Seconds t) = tim
+        let t = fromTimeSecond tim
         write64 wbuf $ fromIntegral t
         case mcids of
           Nothing      -> write8 wbuf 0

@@ -79,7 +79,7 @@ module Network.QUIC.Connection (
   , releaseByRetry
   , releaseByAcks
   , releaseByTimeout
-  , MilliSeconds(..)
+  , Milliseconds(..)
   -- * State
   , isConnectionOpen
   , isConnectionEstablished

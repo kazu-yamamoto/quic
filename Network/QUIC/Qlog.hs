@@ -7,11 +7,10 @@ import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
-import Data.Hourglass
 import Data.List
-import Time.System
 
 import Network.QUIC.Imports
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 class Qlog a where
@@ -131,16 +130,16 @@ data QlogMsg = QRecvInitial
              | QReceived String
              | QDropped String
 
-toString :: QlogMsg -> Int -> String
+toString :: QlogMsg -> Milliseconds -> String
 toString QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
 toString QSentRetry _ =
     "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],\n"
 toString (QReceived msg) tim =
     "[" ++ show tim ++ ",\"transport\",\"packet_received\"," ++ msg ++ "],\n"
-toString (QSent msg) tim =
+toString (QSent msg) (Milliseconds tim) =
     "[" ++ show tim ++ ",\"transport\",\"packet_sent\","     ++ msg ++ "],\n"
-toString (QDropped msg) tim =
+toString (QDropped msg) (Milliseconds tim) =
     "[" ++ show tim ++ ",\"transport\",\"packet_dropped\","  ++ msg ++ "],\n"
 
 ----------------------------------------------------------------
@@ -158,7 +157,7 @@ writeQlogQ (QlogQ q) msg = atomically $ writeTQueue q msg
 
 newQlogger :: QlogQ -> String -> String -> (String -> IO ()) -> IO ()
 newQlogger q rl ocid logAction = do
-    getTime <- getElapsedTime <$> timeCurrentP
+    getTime <- getElapsedTimeMillisecond <$> getTimeMillisecond
     logAction $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ rl ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
     let body = do
             qmsg <- readQlogQ q
@@ -169,13 +168,3 @@ newQlogger q rl ocid logAction = do
   where
     ignore :: E.SomeException -> IO ()
     ignore _ = return ()
-
-----------------------------------------------------------------
-
-getElapsedTime :: ElapsedP -> IO Int
-getElapsedTime base = relativeTime base <$> timeCurrentP
-
-relativeTime :: ElapsedP -> ElapsedP -> Int
-relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
-  where
-   (Seconds s, NanoSeconds n) = t2 `timeDiffP` t1

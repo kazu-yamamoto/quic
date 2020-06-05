@@ -282,7 +282,7 @@ resender conn = handleIOLog cleanupAction logAction $ do
     forever $ do
         threadDelay 100000
         n <- readIORef ref
-        ppkts <- releaseByTimeout conn (MilliSeconds n)
+        ppkts <- releaseByTimeout conn (Milliseconds n)
         established <- isConnectionEstablished conn
         -- Some implementations do not return Ack for Initial and Handshake
         -- correctly. We should consider that the success of handshake

@@ -21,7 +21,6 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
-import Data.Hourglass (Seconds(..), timeDiff, ElapsedP)
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -32,7 +31,6 @@ import Network.ByteOrder
 import Network.Socket hiding (accept)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
-import Time.System (timeCurrent, timeCurrentP)
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -42,6 +40,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Socket
 import Network.QUIC.TLS
+import Network.QUIC.Time
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 
@@ -92,7 +91,7 @@ unregisterConnectionDict ref cid = atomicModifyIORef' ref $ \(ConnectionDict tbl
 ----------------------------------------------------------------
 
 -- Original destination CID -> RecvQ
-newtype RecvQDict = RecvQDict (OrdPSQ CID ElapsedP RecvQ)
+newtype RecvQDict = RecvQDict (OrdPSQ CID TimeMillisecond RecvQ)
 
 recvQDictSize :: Int
 recvQDictSize = 100
@@ -112,7 +111,7 @@ insertRecvQDict ref dcid q = do
     RecvQDict qt0 <- readIORef ref
     let qt1 | PSQ.size qt0 <= recvQDictSize = qt0
             | otherwise = PSQ.deleteMin qt0
-    p <- timeCurrentP
+    p <- getTimeMillisecond
     let qt2 = PSQ.insert dcid p q qt1
     writeIORef ref $ RecvQDict qt2
 
@@ -285,8 +284,7 @@ dispatch Dispatch{..} ServerConfig{..}
         pushToAcceptQ myAuthCIDs peerAuthCIDs o
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
-        tim0 <- timeCurrent
-        let diff = tim `timeDiff` tim0
+        diff <- getElapsedTimeSecond tim
         return $ tver == ver
               && diff <= Seconds 30 -- fixme
               && dCID == l
