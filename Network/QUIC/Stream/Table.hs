@@ -13,9 +13,6 @@ module Network.QUIC.Stream.Table (
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as Map
 
-import Network.QUIC.Imports
-import Network.QUIC.Stream.Misc
-import Network.QUIC.Stream.Reass
 import Network.QUIC.Stream.Types
 import Network.QUIC.Types
 
