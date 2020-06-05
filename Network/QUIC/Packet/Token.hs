@@ -11,12 +11,11 @@ import qualified Crypto.Token as CT
 import Foreign.Storable
 import Foreign.Ptr
 import Network.ByteOrder
-import Data.Hourglass (Elapsed(..), Seconds(..))
-import Time.System (timeCurrent)
 
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Version
 import Network.QUIC.TLS
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

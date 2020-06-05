@@ -21,7 +21,6 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
-import Data.Hourglass (Seconds(..), timeDiff, ElapsedP)
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -32,7 +31,6 @@ import Network.ByteOrder
 import Network.Socket hiding (accept)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
-import Time.System (timeCurrent, timeCurrentP)
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -42,6 +40,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Socket
 import Network.QUIC.TLS
+import Network.QUIC.Time
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 

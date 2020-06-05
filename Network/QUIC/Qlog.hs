@@ -7,11 +7,11 @@ import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
-import Data.Hourglass
 import Data.List
 import Time.System
 
 import Network.QUIC.Imports
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 class Qlog a where
@@ -169,13 +169,3 @@ newQlogger q rl ocid logAction = do
   where
     ignore :: E.SomeException -> IO ()
     ignore _ = return ()
-
-----------------------------------------------------------------
-
-getElapsedTime :: ElapsedP -> IO Int
-getElapsedTime base = relativeTime base <$> timeCurrentP
-
-relativeTime :: ElapsedP -> ElapsedP -> Int
-relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
-  where
-   (Seconds s, NanoSeconds n) = t2 `timeDiffP` t1

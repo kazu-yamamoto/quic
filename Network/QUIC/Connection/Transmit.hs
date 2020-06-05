@@ -9,14 +9,13 @@ module Network.QUIC.Connection.Transmit (
   ) where
 
 import Data.Function (on)
-import Data.Hourglass
 import Data.IORef
 import qualified Data.IntPSQ as PSQ
-import System.Hourglass
 
 import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -132,16 +131,5 @@ releaseByTimeout Connection{..} milli = do
     tm <- (`timeDel` milli) <$> timeCurrentP
     xs <- atomicModifyIORef' retransDB $ split tm
     return $ map (retransPlainPacket . third) xs
-
-newtype MilliSeconds = MilliSeconds Int64 deriving (Eq, Show)
-
-timeDel :: ElapsedP -> MilliSeconds -> ElapsedP
-timeDel (ElapsedP sec nano) milli
-  | nano' >= sec1 = ElapsedP sec (nano' - sec1)
-  | otherwise     = ElapsedP (sec - 1) nano'
-  where
-    milliToNano (MilliSeconds n) = NanoSeconds (n * 1000000)
-    sec1 = 1000000000
-    nano' = nano + sec1 - milliToNano milli
 
 ----------------------------------------------------------------

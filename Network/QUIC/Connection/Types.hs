@@ -7,7 +7,6 @@ module Network.QUIC.Connection.Types where
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
-import Data.Hourglass
 import Data.IORef
 import Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as IntPSQ
@@ -25,6 +24,7 @@ import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Stream
 import Network.QUIC.TLS
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

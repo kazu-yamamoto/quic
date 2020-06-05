@@ -58,6 +58,7 @@ library
                        Network.QUIC.Stream.Reass
                        Network.QUIC.Stream.Table
                        Network.QUIC.Stream.Types
+                       Network.QUIC.Time
                        Network.QUIC.TLS
                        Network.QUIC.TLS.Crypto
                        Network.QUIC.TLS.Handshaker
