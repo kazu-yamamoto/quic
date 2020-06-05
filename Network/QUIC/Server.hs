@@ -286,7 +286,7 @@ dispatch Dispatch{..} ServerConfig{..}
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
         diff <- getElapsedTimeSecond tim
         return $ tver == ver
-              && diff <= 30 -- fixme
+              && diff <= Seconds 30 -- fixme
               && dCID == l
               && sCID == r
     isRetryTokenValid _ = return False

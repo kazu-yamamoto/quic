@@ -5,7 +5,7 @@ module Network.QUIC.Connection.Transmit (
   , releaseByRetry
   , releaseByAcks
   , releaseByTimeout
-  , MilliSeconds(..)
+  , Milliseconds(..)
   ) where
 
 import Data.Function (on)
@@ -126,7 +126,7 @@ releaseByAck conn@Connection{..} pn = do
 
 ----------------------------------------------------------------
 
-releaseByTimeout :: Connection -> MilliSeconds -> IO [PlainPacket]
+releaseByTimeout :: Connection -> Milliseconds -> IO [PlainPacket]
 releaseByTimeout Connection{..} milli = do
     tm <- getPastTimeMillisecond milli
     xs <- atomicModifyIORef' retransDB $ split tm

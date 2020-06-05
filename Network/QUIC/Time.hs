@@ -8,24 +8,25 @@ module Network.QUIC.Time (
   , TimeMillisecond
   , fromTimeSecond
   , toTimeSecond
-  , MilliSeconds(..)
+  , Seconds(..)
+  , Milliseconds(..)
   ) where
 
-import Data.Hourglass
+import qualified Data.Hourglass as H
 import Data.Int (Int64)
 import Data.Word (Word64)
 import System.Hourglass
 
 ----------------------------------------------------------------
 
-type TimeSecond = Elapsed
-type TimeMillisecond = ElapsedP
+type TimeSecond = H.Elapsed
+type TimeMillisecond = H.ElapsedP
 
 fromTimeSecond :: TimeSecond -> Word64
-fromTimeSecond (Elapsed (Seconds t)) = fromIntegral t
+fromTimeSecond (H.Elapsed (H.Seconds t)) = fromIntegral t
 
 toTimeSecond :: Word64 -> TimeSecond
-toTimeSecond = Elapsed . Seconds . fromIntegral
+toTimeSecond = H.Elapsed . H.Seconds . fromIntegral
 
 ----------------------------------------------------------------
 
@@ -37,31 +38,34 @@ getTimeMillisecond = timeCurrentP
 
 ----------------------------------------------------------------
 
-getElapsedTimeSecond :: TimeSecond -> IO Int
-getElapsedTimeSecond base = do
-    Seconds s <- (base `timeDiff`) <$> getTimeSecond
-    return $ fromIntegral s
-
-getElapsedTimeMillisecond :: TimeMillisecond -> IO Int
-getElapsedTimeMillisecond base = relativeTime base <$> timeCurrentP
-
-relativeTime :: ElapsedP -> ElapsedP -> Int
-relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
-  where
-   (Seconds s, NanoSeconds n) = t2 `timeDiffP` t1
+newtype Seconds = Seconds Int64 deriving (Eq, Ord, Show)
+newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Show)
 
 ----------------------------------------------------------------
 
-newtype MilliSeconds = MilliSeconds Int64 deriving (Eq, Show)
+getElapsedTimeSecond :: TimeSecond -> IO Seconds
+getElapsedTimeSecond base = do
+    H.Seconds s <- (base `H.timeDiff`) <$> getTimeSecond
+    return $ Seconds s
 
-getPastTimeMillisecond :: MilliSeconds -> IO ElapsedP
+getElapsedTimeMillisecond :: TimeMillisecond -> IO Milliseconds
+getElapsedTimeMillisecond base = Milliseconds . relativeTime base <$> timeCurrentP
+
+relativeTime :: TimeMillisecond -> TimeMillisecond -> Int64
+relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
+  where
+   (H.Seconds s, H.NanoSeconds n) = t2 `H.timeDiffP` t1
+
+----------------------------------------------------------------
+
+getPastTimeMillisecond :: Milliseconds -> IO TimeMillisecond
 getPastTimeMillisecond milli = (`timeDel` milli) <$> getTimeMillisecond
 
-timeDel :: ElapsedP -> MilliSeconds -> ElapsedP
-timeDel (ElapsedP sec nano) milli
-  | nano' >= sec1 = ElapsedP sec (nano' - sec1)
-  | otherwise     = ElapsedP (sec - 1) nano'
+timeDel :: TimeMillisecond -> Milliseconds -> TimeMillisecond
+timeDel (H.ElapsedP sec nano) milli
+  | nano' >= sec1 = H.ElapsedP sec (nano' - sec1)
+  | otherwise     = H.ElapsedP (sec - 1) nano'
   where
-    milliToNano (MilliSeconds n) = NanoSeconds (n * 1000000)
+    milliToNano (Milliseconds n) = H.NanoSeconds (n * 1000000)
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli

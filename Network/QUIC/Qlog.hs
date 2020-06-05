@@ -131,16 +131,16 @@ data QlogMsg = QRecvInitial
              | QReceived String
              | QDropped String
 
-toString :: QlogMsg -> Int -> String
+toString :: QlogMsg -> Milliseconds -> String
 toString QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
 toString QSentRetry _ =
     "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],\n"
 toString (QReceived msg) tim =
     "[" ++ show tim ++ ",\"transport\",\"packet_received\"," ++ msg ++ "],\n"
-toString (QSent msg) tim =
+toString (QSent msg) (Milliseconds tim) =
     "[" ++ show tim ++ ",\"transport\",\"packet_sent\","     ++ msg ++ "],\n"
-toString (QDropped msg) tim =
+toString (QDropped msg) (Milliseconds tim) =
     "[" ++ show tim ++ ",\"transport\",\"packet_dropped\","  ++ msg ++ "],\n"
 
 ----------------------------------------------------------------
