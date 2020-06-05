@@ -79,10 +79,9 @@ library
                      , base16-bytestring
                      , bytestring
                      , containers
-                     , cryptonite
                      , crypto-token
+                     , cryptonite
                      , data-default-class
-                     , hourglass
                      , iproute >= 1.7.8
                      , memory
                      , network
@@ -90,6 +89,7 @@ library
                      , psqueues
                      , stm
                      , tls
+                     , unix-time
                      , x509
   -- hs-source-dirs:
   default-language:    Haskell2010

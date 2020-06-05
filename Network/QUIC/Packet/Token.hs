@@ -65,7 +65,7 @@ instance Storable CryptoToken where
         let len = fromIntegral len0 - 1
         rbuf <- newReadBuffer (castPtr (ptr `plusPtr` 1)) len
         ver  <- decodeVersion <$> read32 rbuf
-        tim  <- toTimeSecond <$> read64 rbuf
+        tim  <- toTimeSecond . fromIntegral <$> read64 rbuf
         typ <- read8 rbuf
         case typ of
           0 -> return $ CryptoToken ver tim Nothing
@@ -83,7 +83,7 @@ instance Storable CryptoToken where
         write8 wbuf $ fromIntegral len
         write32 wbuf $ encodeVersion ver
         let t = fromTimeSecond tim
-        write64 wbuf t
+        write64 wbuf $ fromIntegral t
         case mcids of
           Nothing      -> write8 wbuf 0
           Just (l,r,o) -> do

@@ -1,40 +1,20 @@
 module Network.QUIC.Time (
-    getTimeSecond
+    Seconds(..)
+  , Milliseconds(..)
+  , fromTimeSecond
+  , toTimeSecond
+  , TimeSecond
+  , TimeMillisecond
+  , getTimeSecond
   , getTimeMillisecond
   , getElapsedTimeSecond
   , getElapsedTimeMillisecond
   , getPastTimeMillisecond
-  , TimeSecond
-  , TimeMillisecond
-  , fromTimeSecond
-  , toTimeSecond
-  , Seconds(..)
-  , Milliseconds(..)
   ) where
 
-import qualified Data.Hourglass as H
 import Data.Int (Int64)
-import Data.Word (Word64)
-import System.Hourglass
-
-----------------------------------------------------------------
-
-type TimeSecond = H.Elapsed
-type TimeMillisecond = H.ElapsedP
-
-fromTimeSecond :: TimeSecond -> Word64
-fromTimeSecond (H.Elapsed (H.Seconds t)) = fromIntegral t
-
-toTimeSecond :: Word64 -> TimeSecond
-toTimeSecond = H.Elapsed . H.Seconds . fromIntegral
-
-----------------------------------------------------------------
-
-getTimeSecond :: IO TimeSecond
-getTimeSecond = timeCurrent
-
-getTimeMillisecond :: IO TimeMillisecond
-getTimeMillisecond = timeCurrentP
+import Data.UnixTime
+import Foreign.C.Types (CTime(..))
 
 ----------------------------------------------------------------
 
@@ -43,29 +23,45 @@ newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Show)
 
 ----------------------------------------------------------------
 
+newtype TimeSecond = TimeSecond Seconds deriving (Eq, Ord, Show)
+type TimeMillisecond = UnixTime
+
+fromTimeSecond :: TimeSecond -> Int64
+fromTimeSecond (TimeSecond (Seconds t)) = t
+
+toTimeSecond :: Int64 -> TimeSecond
+toTimeSecond = TimeSecond . Seconds
+
+----------------------------------------------------------------
+
+getTimeSecond :: IO TimeSecond
+getTimeSecond = do
+    CTime s <- utSeconds <$> getUnixTime
+    return $ toTimeSecond s
+
+getTimeMillisecond :: IO TimeMillisecond
+getTimeMillisecond = getUnixTime
+
+----------------------------------------------------------------
+
 getElapsedTimeSecond :: TimeSecond -> IO Seconds
 getElapsedTimeSecond base = do
-    H.Seconds s <- (base `H.timeDiff`) <$> getTimeSecond
-    return $ Seconds s
+    c<- getTimeSecond
+    let elapsed = fromTimeSecond c - fromTimeSecond base
+    return $ Seconds elapsed
 
 getElapsedTimeMillisecond :: TimeMillisecond -> IO Milliseconds
-getElapsedTimeMillisecond base = Milliseconds . relativeTime base <$> timeCurrentP
-
-relativeTime :: TimeMillisecond -> TimeMillisecond -> Int64
-relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
-  where
-   (H.Seconds s, H.NanoSeconds n) = t2 `H.timeDiffP` t1
+getElapsedTimeMillisecond base = do
+    c <- getTimeMillisecond
+    let UnixDiffTime (CTime s) u = c `diffUnixTime` base
+        elapsed = fromIntegral (s * 1000 + (fromIntegral u `div` 1000))
+    return $ Milliseconds elapsed
 
 ----------------------------------------------------------------
 
 getPastTimeMillisecond :: Milliseconds -> IO TimeMillisecond
-getPastTimeMillisecond milli = (`timeDel` milli) <$> getTimeMillisecond
-
-timeDel :: TimeMillisecond -> Milliseconds -> TimeMillisecond
-timeDel (H.ElapsedP sec nano) milli
-  | nano' >= sec1 = H.ElapsedP sec (nano' - sec1)
-  | otherwise     = H.ElapsedP (sec - 1) nano'
-  where
-    milliToNano (Milliseconds n) = H.NanoSeconds (n * 1000000)
-    sec1 = 1000000000
-    nano' = nano + sec1 - milliToNano milli
+getPastTimeMillisecond (Milliseconds m) = do
+    let diff = microSecondsToUnixDiffTime $ negate (m * 1000)
+    c <- getTimeMillisecond
+    let past = c `addUnixDiffTime` diff
+    return past

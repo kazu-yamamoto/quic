@@ -8,7 +8,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
 import Data.List
-import Time.System
 
 import Network.QUIC.Imports
 import Network.QUIC.Time
@@ -158,7 +157,7 @@ writeQlogQ (QlogQ q) msg = atomically $ writeTQueue q msg
 
 newQlogger :: QlogQ -> String -> String -> (String -> IO ()) -> IO ()
 newQlogger q rl ocid logAction = do
-    getTime <- getElapsedTimeMillisecond <$> timeCurrentP
+    getTime <- getElapsedTimeMillisecond <$> getTimeMillisecond
     logAction $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ rl ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
     let body = do
             qmsg <- readQlogQ q
