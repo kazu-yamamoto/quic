@@ -1,15 +1,14 @@
 module Network.QUIC.Time (
-    getElapsedTime
-  , getTimeSecond
+    getTimeSecond
   , getTimeMillisecond
-  , timeDiff
-  , timeDel
+  , getElapsedTimeSecond
+  , getElapsedTimeMillisecond
+  , getPastTimeMillisecond
   , TimeSecond
   , TimeMillisecond
-  , Seconds(..)
-  , MilliSeconds(..)
   , fromTimeSecond
   , toTimeSecond
+  , MilliSeconds(..)
   ) where
 
 import Data.Hourglass
@@ -22,6 +21,14 @@ import System.Hourglass
 type TimeSecond = Elapsed
 type TimeMillisecond = ElapsedP
 
+fromTimeSecond :: TimeSecond -> Word64
+fromTimeSecond (Elapsed (Seconds t)) = fromIntegral t
+
+toTimeSecond :: Word64 -> TimeSecond
+toTimeSecond = Elapsed . Seconds . fromIntegral
+
+----------------------------------------------------------------
+
 getTimeSecond :: IO TimeSecond
 getTimeSecond = timeCurrent
 
@@ -30,15 +37,25 @@ getTimeMillisecond = timeCurrentP
 
 ----------------------------------------------------------------
 
-getElapsedTime :: ElapsedP -> IO Int
-getElapsedTime base = relativeTime base <$> timeCurrentP
+getElapsedTimeSecond :: TimeSecond -> IO Int
+getElapsedTimeSecond base = do
+    Seconds s <- (base `timeDiff`) <$> getTimeSecond
+    return $ fromIntegral s
+
+getElapsedTimeMillisecond :: TimeMillisecond -> IO Int
+getElapsedTimeMillisecond base = relativeTime base <$> timeCurrentP
 
 relativeTime :: ElapsedP -> ElapsedP -> Int
 relativeTime t1 t2 = fromIntegral (s * 1000 + (n `div` 1000000))
   where
    (Seconds s, NanoSeconds n) = t2 `timeDiffP` t1
 
+----------------------------------------------------------------
+
 newtype MilliSeconds = MilliSeconds Int64 deriving (Eq, Show)
+
+getPastTimeMillisecond :: MilliSeconds -> IO ElapsedP
+getPastTimeMillisecond milli = (`timeDel` milli) <$> getTimeMillisecond
 
 timeDel :: ElapsedP -> MilliSeconds -> ElapsedP
 timeDel (ElapsedP sec nano) milli
@@ -48,9 +65,3 @@ timeDel (ElapsedP sec nano) milli
     milliToNano (MilliSeconds n) = NanoSeconds (n * 1000000)
     sec1 = 1000000000
     nano' = nano + sec1 - milliToNano milli
-
-fromTimeSecond :: TimeSecond -> Word64
-fromTimeSecond (Elapsed (Seconds t)) = fromIntegral t
-
-toTimeSecond :: Word64 -> Elapsed
-toTimeSecond = Elapsed . Seconds . fromIntegral

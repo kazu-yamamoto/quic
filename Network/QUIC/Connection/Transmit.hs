@@ -128,7 +128,7 @@ releaseByAck conn@Connection{..} pn = do
 
 releaseByTimeout :: Connection -> MilliSeconds -> IO [PlainPacket]
 releaseByTimeout Connection{..} milli = do
-    tm <- (`timeDel` milli) <$> getTimeMillisecond
+    tm <- getPastTimeMillisecond milli
     xs <- atomicModifyIORef' retransDB $ split tm
     return $ map (retransPlainPacket . third) xs
 
