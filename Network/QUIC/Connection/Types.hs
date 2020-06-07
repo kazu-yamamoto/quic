@@ -37,13 +37,12 @@ data ConnectionState = Handshaking
                      | ReadyFor0RTT
                      | ReadyFor1RTT
                      | Established
-                     | Closing CloseState
                      deriving (Eq, Ord, Show)
 
 data CloseState = CloseState {
     closeSent     :: Bool
   , closeReceived :: Bool
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
@@ -172,6 +171,7 @@ data Connection = Connection {
   , retransDB         :: IORef RetransDB
   -- State
   , connectionState   :: TVar ConnectionState
+  , closeState        :: TVar CloseState
   , packetNumber      :: IORef PacketNumber      -- squeezing three to one
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
@@ -238,6 +238,7 @@ newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref i
         <*> newIORef emptyRetransDB
         -- State
         <*> newTVarIO Handshaking
+        <*> newTVarIO CloseState { closeSent = False, closeReceived = False }
         <*> newIORef 0
         <*> newIORef 0
         <*> newIORef (PeerPacketNumbers Set.empty)
