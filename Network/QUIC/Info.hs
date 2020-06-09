@@ -6,7 +6,6 @@ module Network.QUIC.Info where
 import qualified Data.ByteString.Char8 as C8
 import qualified Network.Socket as NS
 import Network.TLS hiding (Version, HandshakeFailed)
-import Network.TLS.QUIC
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
@@ -36,7 +35,8 @@ getConnectionInfo conn = do
     mycid   <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
-    ApplicationSecretInfo mode mproto _ <- getApplicationSecretInfo conn
+    mproto <- getApplicationProtocol conn
+    mode <- getTLSMode conn
     r <- getRetried conn
     v <- getVersion conn
     return ConnectionInfo {
