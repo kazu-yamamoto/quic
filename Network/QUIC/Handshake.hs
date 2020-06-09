@@ -132,16 +132,20 @@ handshakeClient conf conn myAuthCIDs = do
        wait1RTTReady conn
   where
     tell tid e = notifyPeer conn (getErrorCause e) >>= E.throwTo tid
-    installKeysClient _ (InstallEarlyKeys mEarlySecInf) = do
+    installKeysClient _ _ctx (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
         initializeCoder conn RTT0Level
         setConnection0RTTReady conn
-    installKeysClient hsr (InstallHandshakeKeys hndSecInf) = do
+    installKeysClient hsr _ctx (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         initializeCoder conn HandshakeLevel
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
-    installKeysClient hsr (InstallApplicationKeys appSecInf) = do
+    installKeysClient hsr ctx (InstallApplicationKeys appSecInf) = do
+        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
+        minfo <- TLS.contextGetInformation ctx
+        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
+            setTLSMode conn mode
         setApplicationSecretInfo conn appSecInf
         initializeCoder conn RTT1Level
         setEncryptionLevel conn RTT1Level
@@ -150,11 +154,7 @@ handshakeClient conf conn myAuthCIDs = do
         cidInfo <- getNewMyCID conn
         let ncid = NewConnectionID cidInfo 0
         putOutput conn $ OutControl RTT1Level [ncid]
-    done ctx = do
-        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
-        minfo <- TLS.contextGetInformation ctx
-        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
-            setTLSMode conn mode
+    done _ctx = do
         info <- getConnectionInfo conn
         connDebugLog conn $ show info
 
@@ -177,24 +177,24 @@ handshakeServer conf conn myAuthCIDs = do
     wait1RTTReady conn
   where
     tell tid e = notifyPeer conn (getErrorCause e) >>= E.throwTo tid
-    installKeysServer _ (InstallEarlyKeys mEarlySecInf) = do
+    installKeysServer _ _ctx (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
         initializeCoder conn RTT0Level
-    installKeysServer hsr (InstallHandshakeKeys hndSecInf) = do
+    installKeysServer hsr _ctx (InstallHandshakeKeys hndSecInf) = do
         setHandshakeSecretInfo conn hndSecInf
         initializeCoder conn HandshakeLevel
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
-    installKeysServer _ (InstallApplicationKeys appSecInf) = do
+    installKeysServer _ ctx (InstallApplicationKeys appSecInf) = do
+        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
+        minfo <- TLS.contextGetInformation ctx
+        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
+            setTLSMode conn mode
         setApplicationSecretInfo conn appSecInf
         initializeCoder conn RTT1Level
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do
-        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
-        minfo <- TLS.contextGetInformation ctx
-        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
-            setTLSMode conn mode
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
         setEncryptionLevel conn RTT1Level
@@ -205,8 +205,8 @@ handshakeServer conf conn myAuthCIDs = do
         info <- getConnectionInfo conn
         connDebugLog conn $ show info
 
-setPeerParams :: Connection -> [ExtensionRaw] -> IO ()
-setPeerParams conn [ExtensionRaw extid bs]
+setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
+setPeerParams conn _ctx [ExtensionRaw extid bs]
   | extid == extensionID_QuicTransportParameters = do
         let mparams = decodeParameters bs
         case mparams of
@@ -235,7 +235,7 @@ setPeerParams conn [ExtensionRaw extid bs]
               Nothing  -> return ()
               Just srt -> setPeerStatelessResetToken conn srt
         setTxMaxData conn $ initialMaxData params
-setPeerParams _ _ = return ()
+setPeerParams _ _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.HandshakeFailed e) = e
