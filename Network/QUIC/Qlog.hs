@@ -135,7 +135,7 @@ toString QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
 toString QSentRetry _ =
     "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],\n"
-toString (QReceived msg) tim =
+toString (QReceived msg) (Milliseconds tim) =
     "[" ++ show tim ++ ",\"transport\",\"packet_received\"," ++ msg ++ "],\n"
 toString (QSent msg) (Milliseconds tim) =
     "[" ++ show tim ++ ",\"transport\",\"packet_sent\","     ++ msg ++ "],\n"
