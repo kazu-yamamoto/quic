@@ -55,16 +55,15 @@ initialRxMaxStreamData conn sid
 clientInitial :: StreamId -> Parameters -> Int
 clientInitial sid params
   | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiRemote params
-  | isClientInitiatedUnidirectional sid = initialMaxStreamDataUni        params
   | isServerInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal  params
-  | otherwise                           = 0
+  -- intentionally not using isClientInitiatedUnidirectional
+  | otherwise                           = initialMaxStreamDataUni        params
 
 serverInitial :: StreamId -> Parameters -> Int
 serverInitial sid params
   | isServerInitiatedBidirectional  sid = initialMaxStreamDataBidiRemote params
-  | isServerInitiatedUnidirectional sid = initialMaxStreamDataUni        params
   | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal  params
-  | otherwise                           = 0
+  | otherwise                           = initialMaxStreamDataUni        params
 
 ----------------------------------------------------------------
 
