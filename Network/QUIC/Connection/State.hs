@@ -55,15 +55,12 @@ isConnectionEstablished Connection{..} = atomically $ do
     st <- readTVar connectionState
     case st of
       Established -> return True
-      Closing _   -> return True
       _           -> return False
 
 isConnectionOpen :: Connection -> IO Bool
 isConnectionOpen Connection{..} = atomically $ do
-    st <- readTVar connectionState
-    case st of
-      Closing _ -> return False
-      _         -> return True
+    cs <- readTVar closeState
+    return (cs == CloseState False False)
 
 isConnection1RTTReady :: Connection -> IO Bool
 isConnection1RTTReady Connection{..} = atomically $ do
@@ -74,33 +71,21 @@ isConnection1RTTReady Connection{..} = atomically $ do
 
 setCloseSent :: Connection -> IO ()
 setCloseSent Connection{..} = do
-    atomically $ modifyTVar connectionState modify
+    atomically $ modifyTVar closeState $ \cs -> cs { closeSent = True }
     writeIORef (sharedCloseSent shared) True
-  where
-    modify (Closing cs) = Closing $ cs { closeSent = True }
-    modify _            = Closing $ CloseState { closeSent = True
-                                               , closeReceived = False }
 
 setCloseReceived :: Connection -> IO ()
 setCloseReceived Connection{..} = do
-    atomically $ modifyTVar connectionState modify
+    atomically $ modifyTVar closeState $ \cs -> cs { closeReceived = True }
     writeIORef (sharedCloseReceived shared) True
-  where
-    modify (Closing cs) = Closing $ cs { closeReceived = True }
-    modify _            = Closing $ CloseState { closeSent = False
-                                               , closeReceived = True }
 
 isCloseSent :: Connection -> IO Bool
-isCloseSent Connection{..} = atomically (chk <$> readTVar connectionState)
-  where
-    chk (Closing cs) = closeSent cs
-    chk _            = False
+isCloseSent Connection{..} =
+    atomically (closeSent <$> readTVar closeState)
 
 isCloseReceived :: Connection -> IO Bool
-isCloseReceived Connection{..} = atomically (chk <$> readTVar connectionState)
-  where
-    chk (Closing cs) = closeReceived cs
-    chk _            = False
+isCloseReceived Connection{..} =
+    atomically (closeReceived <$> readTVar closeState)
 
 wait0RTTReady :: Connection -> IO ()
 wait0RTTReady Connection{..} = atomically $ do
@@ -119,8 +104,8 @@ waitEstablished Connection{..} = atomically $ do
 
 waitClosed :: Connection -> IO ()
 waitClosed Connection{..} = atomically $ do
-    cs <- readTVar connectionState
-    check (cs == Closing (CloseState True True))
+    cs <- readTVar closeState
+    check (cs == CloseState True True)
 
 ----------------------------------------------------------------
 
