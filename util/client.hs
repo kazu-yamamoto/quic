@@ -22,6 +22,7 @@ import H3
 
 data Options = Options {
     optDebugLog   :: Bool
+  , optShow       :: Bool
   , optQLogDir    :: Maybe FilePath
   , optKeyLogFile :: Maybe FilePath
   , optGroups     :: Maybe String
@@ -38,6 +39,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
     optDebugLog   = False
+  , optShow       = False
   , optQLogDir    = Nothing
   , optKeyLogFile = Nothing
   , optGroups     = Nothing
@@ -59,6 +61,9 @@ options = [
     Option ['d'] ["debug"]
     (NoArg (\o -> o { optDebugLog = True }))
     "print debug info"
+  , Option ['v'] ["show-content"]
+    (NoArg (\o -> o { optShow = True }))
+    "print downloaded content"
   , Option ['q'] ["qlog-dir"]
     (ReqArg (\dir o -> o { optQLogDir = Just dir }) "<dir>")
     "directory to store qlog"
@@ -115,6 +120,15 @@ clientOpts argv =
       (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
       (_,_,errs) -> showUsageAndExit $ concat errs
 
+data Aux = Aux {
+    auxPath :: String
+  , auxAuthority :: String
+  , auxDebug :: String -> IO ()
+  , auxShow :: ByteString -> IO ()
+  }
+
+type Cli = Aux -> Connection -> IO ()
+
 main :: IO ()
 main = do
     args <- getArgs
@@ -122,9 +136,8 @@ main = do
     let ipslen = length ips
     when (ipslen /= 2 && ipslen /= 3) $
         showUsageAndExit "cannot recognize <addr> and <port>\n"
-    let path | ipslen == 3 = "/" ++ (ips !! 2)
+    let path | ipslen == 3 = ips !! 2
              | otherwise   = "/"
-        cmd = C8.pack ("GET " ++ path ++ "\r\n")
         addr:port:_ = ips
         conf = defaultClientConfig {
             ccServerName = addr
@@ -154,36 +167,42 @@ main = do
           }
         debug | optDebugLog = putStrLn
               | otherwise   = \_ -> return ()
-    runClient conf opts cmd addr debug
+        showContent | optShow = C8.putStrLn
+                    | otherwise = \_ -> return ()
+        aux = Aux {
+            auxPath = path
+          , auxAuthority = addr
+          , auxDebug = debug
+          , auxShow = showContent
+          }
+    runClient conf opts aux
 
-runClient :: ClientConfig -> Options -> ByteString -> String -> (String -> IO ()) -> IO ()
-runClient conf opts@Options{..} cmd addr debug = do
-    debug "------------------------"
+runClient :: ClientConfig -> Options -> Aux -> IO ()
+runClient conf opts@Options{..} aux@Aux{..} = do
+    auxDebug "------------------------"
     (info1,info2,res,mig, client') <- runQUICClient conf $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
-              Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ cmd
-              _                                       -> clientH3 addr
+              Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ
+              _                                       -> clientH3
         m <- case optMigration of
           Nothing   -> return False
           Just mtyp -> do
-              debug $ "Migration by " ++ show mtyp
+              auxDebug $ "Migration by " ++ show mtyp
               migration conn mtyp
-        debug "------------------------"
-        client conn debug
-        debug "\n------------------------"
+        client aux conn
         i2 <- getConnectionInfo conn
         r <- getResumptionInfo conn
         return (i1, i2, r, m, client)
     if optVerNego then do
-        putStrLn "Result: (V) version negotiation  ... OK"
+        putStrLn "Result: (V) version negotiation ... OK"
         exitSuccess
       else if optQuantum then do
         putStrLn "Result: (Q) quantum ... OK"
         exitSuccess
       else if optResumption then do
         if isResumptionPossible res then do
-            info3 <- runClient2 conf opts debug res client'
+            info3 <- runClient2 conf opts aux res client'
             if handshakeMode info3 == PreSharedKey then do
                 putStrLn "Result: (R) TLS resumption ... OK"
                 exitSuccess
@@ -195,7 +214,7 @@ runClient conf opts@Options{..} cmd addr debug = do
             exitFailure
       else if opt0RTT then do
         if is0RTTPossible res then do
-            info3 <- runClient2 conf opts debug res client'
+            info3 <- runClient2 conf opts aux res client'
             if handshakeMode info3 == RTT0 then do
                 putStrLn "Result: (Z) 0-RTT ... OK"
                 exitSuccess
@@ -245,31 +264,24 @@ runClient conf opts@Options{..} cmd addr debug = do
                  putStrLn "Result: (D) stream data ... OK"
                  exitSuccess
 
-runClient2 :: ClientConfig -> Options -> (String -> IO ()) -> ResumptionInfo -> (Connection -> (String -> IO ()) -> IO ()) -> IO ConnectionInfo
-runClient2 conf Options{..} debug res client = do
+runClient2 :: ClientConfig -> Options -> Aux -> ResumptionInfo -> Cli
+           -> IO ConnectionInfo
+runClient2 conf Options{..} aux@Aux{..} res client = do
     threadDelay 100000
-    debug "<<<< next connection >>>>"
-    debug "------------------------"
+    auxDebug "<<<< next connection >>>>"
+    auxDebug "------------------------"
     runQUICClient conf' $ \conn -> do
-        if rtt0 then do
-            debug "------------------------ Response for early data"
-            void $ client conn debug
-            debug "------------------------ Response for early data"
-            waitEstablished conn
-            getConnectionInfo conn
-          else do
-            void $ client conn debug
-            getConnectionInfo conn
+        void $ client aux conn
+        getConnectionInfo conn
   where
-    rtt0 = opt0RTT && is0RTTPossible res
-    conf' | rtt0 = conf {
-                ccResumption = res
-              , ccUse0RTT    = True
-              }
-          | otherwise = conf { ccResumption = res }
+    conf' = conf {
+        ccResumption = res
+      , ccUse0RTT    = opt0RTT && is0RTTPossible res
+      }
 
-clientHQ :: ByteString -> Connection -> (String -> IO ()) -> IO ()
-clientHQ cmd conn debug = do
+clientHQ :: Cli
+clientHQ Aux{..} conn = do
+    let cmd = C8.pack ("GET " ++ auxPath ++ "\r\n")
     s <- stream conn
     sendStream s cmd
     shutdownStream s
@@ -278,15 +290,15 @@ clientHQ cmd conn debug = do
     loop s = do
         bs <- recvStream s 1024
         if bs == "" then do
-            debug "Connection finished"
+            auxDebug "Connection finished"
             getConnectionStats conn >>= print
           else do
-            debug $ C8.unpack bs
+            auxShow bs
             loop s
 
-clientH3 :: String -> Connection -> (String -> IO ()) -> IO ()
-clientH3 authority conn debug = do
-    hdrblk <- taglen 1 <$> qpackClient authority
+clientH3 :: Cli
+clientH3 Aux{..} conn = do
+    hdrblk <- taglen 1 <$> qpackClient auxAuthority
     s0 <- stream conn
     s2 <- unidirectionalStream conn
     s6 <- unidirectionalStream conn
@@ -303,10 +315,10 @@ clientH3 authority conn debug = do
   where
     loop s0 = do
         bs <- recvStream s0 1024
-        debug $ "SID: " ++ show (streamId s0)
+        auxDebug $ "SID: " ++ show (streamId s0)
         if bs == "" then do
-            debug "Connection finished"
+            auxDebug "Connection finished"
             getConnectionStats conn >>= print
           else do
-            debug $ show $ BS.unpack bs
+            auxShow bs
             loop s0
