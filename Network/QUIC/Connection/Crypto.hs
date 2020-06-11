@@ -47,10 +47,10 @@ setEncryptionLevel conn@Connection{..} level = do
         writeTVar encryptionLevel level
         case level of
           HandshakeLevel -> do
-              reverse <$> readTVar pendingRTT0      >>= mapM_ (prependRecvQ q)
-              reverse <$> readTVar pendingHandshake >>= mapM_ (prependRecvQ q)
+              readTVar pendingRTT0      >>= mapM_ (prependRecvQ q)
+              readTVar pendingHandshake >>= mapM_ (prependRecvQ q)
           RTT1Level      ->
-              reverse <$> readTVar pendingRTT1      >>= mapM_ (prependRecvQ q)
+              readTVar pendingRTT1      >>= mapM_ (prependRecvQ q)
           _              -> return ()
 
 getEncryptionLevel :: Connection -> IO EncryptionLevel
