@@ -117,9 +117,8 @@ processFrame conn lvl (Crypto off cdat) = do
               putRxCrypto conn lvl rx
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
-processFrame conn _ (NewToken token) = do
+processFrame conn _ (NewToken token) =
     setNewToken conn token
-    connDebugLog conn "processFrame: NewToken"
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
