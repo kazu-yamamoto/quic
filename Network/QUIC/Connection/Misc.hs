@@ -16,6 +16,8 @@ module Network.QUIC.Connection.Misc (
   , getMyParameters
   , getPeerParameters
   , setPeerParameters
+  , checkDelayedAck
+  , resetDelayedAck
   ) where
 
 import Control.Concurrent
@@ -108,3 +110,14 @@ getPeerParameters Connection{..} = readIORef peerParameters
 
 setPeerParameters :: Connection -> Parameters -> IO ()
 setPeerParameters Connection{..} params = writeIORef peerParameters params
+
+----------------------------------------------------------------
+
+checkDelayedAck :: Connection -> IO Bool
+checkDelayedAck Connection{..} = atomicModifyIORef' delayedAck check
+  where
+    check 9 = (0, True)
+    check n = (n+1, False)
+
+resetDelayedAck :: Connection -> IO ()
+resetDelayedAck Connection{..} = writeIORef delayedAck 0

@@ -77,6 +77,8 @@ module Network.QUIC.Connection (
   , getMyParameters
   , getPeerParameters
   , setPeerParameters
+  , checkDelayedAck
+  , resetDelayedAck
   -- * Transmit
   , keepPlainPacket
   , releaseByRetry

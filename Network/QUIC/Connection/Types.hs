@@ -169,6 +169,7 @@ data Connection = Connection {
   , outputQ           :: OutputQ
   , shared            :: Shared
   , retransDB         :: IORef RetransDB
+  , delayedAck        :: IORef Int
   -- State
   , connectionState   :: TVar ConnectionState
   , closeState        :: TVar CloseState
@@ -236,6 +237,7 @@ newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref i
         <*> newTQueueIO
         <*> newShared tvarFlowTx
         <*> newIORef emptyRetransDB
+        <*> newIORef 0
         -- State
         <*> newTVarIO Handshaking
         <*> newTVarIO CloseState { closeSent = False, closeReceived = False }

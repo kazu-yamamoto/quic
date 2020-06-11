@@ -5,6 +5,7 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import Control.Concurrent (yield)
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 
@@ -69,12 +70,16 @@ processCryptPacket conn hdr crypt = do
     case mplain of
       Just plain@(Plain _ pn frames) -> do
           -- For Ping, record PPN first, then send an ACK.
-          -- fixme: need to check Sec 13.1
-          when (any ackEliciting frames) $ addPeerPacketNumbers conn level pn
+          addPeerPacketNumbers conn level pn
           when (level == RTT1Level) $ setPeerPacketNumber conn pn
           unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain
           mapM_ (processFrame conn level) frames
+          when (any ackEliciting frames && level == RTT1Level) $ do
+              sendAck <- checkDelayedAck conn
+              when sendAck $ do
+                  putOutput conn $ OutControl level []
+                  yield
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
@@ -97,7 +102,10 @@ processFrame conn lvl Ping = do
     --   Handshake PN=1
     -- If ACK 2-3 sends immediately, the peer misunderstand that
     -- 0 and 1 are dropped.
-    when (lvl == RTT1Level) $ putOutput conn $ OutControl lvl []
+    when (lvl == RTT1Level) $ do
+        putOutput conn $ OutControl lvl []
+        resetDelayedAck conn
+        yield
 processFrame conn _ (Ack ackInfo _) =
     releaseByAcks conn ackInfo
 processFrame _ _ ResetStream{} = return ()
@@ -136,12 +144,14 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when (window <= (initialWindow `div` 2)) $ do
         newMax <- addRxMaxStreamData strm initialWindow
         putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
+        resetDelayedAck conn
     addRxData conn $ BS.length dat
     cwindow <- getRxDataWindow conn
     let cinitialWindow = initialMaxData $ getMyParameters conn
     when (cwindow <= (cinitialWindow `div` 2)) $ do
         newMax <- addRxMaxData conn initialWindow
         putOutput conn $ OutControl RTT1Level [MaxData newMax]
+        resetDelayedAck conn
 processFrame conn _ (MaxData n) =
     setTxMaxData conn n
 processFrame conn _ (MaxStreamData sid n) = do
@@ -159,6 +169,7 @@ processFrame conn _ (NewConnectionID cidInfo rpt) = do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         let frames = map RetireConnectionID seqNums
         putOutput conn $ OutControl RTT1Level frames
+        resetDelayedAck conn
 processFrame conn _ (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     when (isServer conn) $ case mcidInfo of
@@ -166,8 +177,9 @@ processFrame conn _ (RetireConnectionID sn) = do
       Just (CIDInfo _ cid _) -> do
           unregister <- getUnregister conn
           unregister cid
-processFrame conn RTT1Level (PathChallenge dat) =
+processFrame conn RTT1Level (PathChallenge dat) = do
     putOutput conn $ OutControl RTT1Level [PathResponse dat]
+    resetDelayedAck conn
 processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn lvl (ConnectionCloseQUIC err ftyp reason) = do
