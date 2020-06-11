@@ -6,6 +6,7 @@
 
 module Main where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
@@ -134,21 +135,27 @@ onE :: IO b -> IO a -> IO a
 h `onE` b = b `E.onException` h
 
 serverHQ :: Connection -> IO ()
-serverHQ conn = connDebugLog conn "Connection terminated" `onE` loop
-  where
-    loop = do
-        es <- acceptStream conn
-        case es of
-          Left  e -> print e
-          Right s -> do
-              bs <- recvStream s 1024
+serverHQ conn = connDebugLog conn "Connection terminated" `onE` do
+    es <- acceptStream conn
+    case es of
+      Left  e -> print e
+      Right s -> do
+          consume conn s
+          let sid = streamId s
+          when (isClientInitiatedBidirectional sid) $ do
               sendStream s html
               shutdownStream s
-              if bs == "" then
-                  connDebugLog conn "Connection finished"
-                else do
-                  connDebugLog conn $ C8.unpack bs
-                  loop
+
+consume :: Connection -> Stream -> IO ()
+consume conn s = loop
+  where
+    loop = do
+        bs <- recvStream s 1024
+        if bs == "" then
+            connDebugLog conn "FIN received"
+          else do
+            connDebugLog conn $ C8.unpack bs
+            loop
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
@@ -169,13 +176,13 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     loop hdrbdy = do
         es <- acceptStream conn
         case es of
-          Left  e -> print e
-          Right s -> do -- forkIO
-              bs <- recvStream s 1024
-              let sid = streamId s
-              putStrLn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
-              connDebugLog conn ("SID: " ++ show sid ++ " " ++ show (BS.unpack bs) ++ if bs == "" then " Fin" else "")
-              when (isClientInitiatedBidirectional sid) $ do
-                  sendStreamMany s hdrbdy
-                  shutdownStream s
+          Left ConnectionIsClosed -> return ()
+          Left e                  -> print e
+          Right s -> do
+              void . forkIO $ do
+                  consume conn s
+                  let sid = streamId s
+                  when (isClientInitiatedBidirectional sid) $ do
+                      sendStreamMany s hdrbdy
+                      shutdownStream s
               loop hdrbdy
