@@ -77,26 +77,44 @@ construct conn lvl frames mTargetSize = do
             qlogSent conn ppkt
             encodePlainPacket conn ppkt Nothing
     constructLowerAckPacket _ _ _ _ _ = return []
-    constructTargetPacket ver mycid peercid mlen token = do
-        mypn <- getPacketNumber conn
-        ppns <- getPeerPacketNumbers conn lvl
-        let frames'
-              | nullPeerPacketNumbers ppns = frames
-              | otherwise   = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0 : frames
-        if null frames' then
-            return []
-          else do
-            let frames'' = case mlen of
-                  Nothing -> frames'
-                  Just _  -> frames' ++ [Padding 0] -- for qlog
-            let ppkt = case lvl of
-                  InitialLevel   -> PlainPacket (Initial   ver peercid mycid token) (Plain (Flags 0) mypn frames'')
-                  RTT0Level      -> PlainPacket (RTT0      ver peercid mycid)       (Plain (Flags 0) mypn frames'')
-                  HandshakeLevel -> PlainPacket (Handshake ver peercid mycid)       (Plain (Flags 0) mypn frames'')
-                  RTT1Level      -> PlainPacket (Short         peercid)             (Plain (Flags 0) mypn frames'')
-            keepPlainPacket conn mypn lvl ppkt ppns
+    constructTargetPacket ver mycid peercid mlen token
+      | null frames = do -- ACK only packet
+            ppns <- getPeerPacketNumbers conn lvl -- don't clear
+            if nullPeerPacketNumbers ppns then
+                return []
+              else do
+                mypn <- getPacketNumber conn
+                let frames' = [toAck ppns]
+                    plain = toPlain mypn frames'
+                    ppkt = toPlainPakcet lvl plain
+                -- don't keep this ppkt
+                qlogSent conn ppkt
+                encodePlainPacket conn ppkt mlen
+      | otherwise = do
+            ppns <- getClearPeerPacketNumbers conn lvl -- clear
+            let frames' | nullPeerPacketNumbers ppns = frames
+                        | otherwise                  = toAck ppns : frames
+            mypn <- getPacketNumber conn
+            let plain = toPlain mypn frames'
+                ppkt = toPlainPakcet lvl plain
+            keepPlainPacket conn mypn lvl ppkt ppns -- keep
             qlogSent conn ppkt
             encodePlainPacket conn ppkt mlen
+      where
+        toAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
+        toPlain mypn fs = Plain (Flags 0) mypn fs'
+          where
+            fs' = case mlen of
+              Nothing -> fs
+              Just _  -> fs ++ [Padding 0] -- for qlog
+        toPlainPakcet InitialLevel   plain =
+            PlainPacket (Initial   ver peercid mycid token) plain
+        toPlainPakcet RTT0Level      plain =
+            PlainPacket (RTT0      ver peercid mycid)       plain
+        toPlainPakcet HandshakeLevel plain =
+            PlainPacket (Handshake ver peercid mycid)       plain
+        toPlainPakcet RTT1Level      plain =
+            PlainPacket (Short         peercid)             plain
 
 ----------------------------------------------------------------
 
