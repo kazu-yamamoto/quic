@@ -22,7 +22,6 @@ instance Eq (ServerTrafficSecret a) where
 
 spec :: Spec
 spec = do
-    -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
     describe "test vector" $ do
         it "describes the examples of Keys" $ do
             ----------------------------------------------------------------
