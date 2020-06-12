@@ -22,6 +22,7 @@ encodeVersion Draft25            = 0xff000019
 encodeVersion Draft26            = 0xff00001a
 encodeVersion Draft27            = 0xff00001b
 encodeVersion Draft28            = 0xff00001c
+encodeVersion Draft29            = 0xff00001d
 encodeVersion GreasingVersion    = 0x0a0a0a0a
 encodeVersion (UnknownVersion w) = w
 
@@ -40,6 +41,7 @@ decodeVersion 0xff000019 = Draft25
 decodeVersion 0xff00001a = Draft26
 decodeVersion 0xff00001b = Draft27
 decodeVersion 0xff00001c = Draft28
+decodeVersion 0xff00001d = Draft29
 decodeVersion 0xff00ff00 = GreasingVersion
 decodeVersion w          = UnknownVersion w
 

@@ -28,7 +28,7 @@ data Config = Config {
 -- | The default value for common configuration.
 defaultConfig :: Config
 defaultConfig = Config {
-    confVersions       = [Draft28,Draft27]
+    confVersions       = [Draft29,Draft28,Draft27]
                          -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
   , confCiphers        = supportedCiphers defaultSupported
   , confGroups         = supportedGroups defaultSupported
