@@ -94,7 +94,7 @@ frameExtra (UnknownFrame _Int) = ""
 transportError :: TransportError -> String
 transportError NoError                 = "no_error"
 transportError InternalError           = "internal_error"
-transportError ServerBusy              = "server_busy"
+transportError ConnectionRefused       = "connection_refused"
 transportError FlowControlError        = "flow_control_error"
 transportError StreamLimitError        = "stream_limit_error"
 transportError StreamStateError        = "stream_state_error"

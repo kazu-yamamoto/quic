@@ -14,7 +14,7 @@ type ErrorCode = Int
 
 data TransportError = NoError
                     | InternalError
-                    | ServerBusy
+                    | ConnectionRefused
                     | FlowControlError
                     | StreamLimitError
                     | StreamStateError
@@ -34,7 +34,7 @@ instance Exception TransportError
 fromTransportError :: TransportError -> ErrorCode
 fromTransportError NoError                 = 0x0
 fromTransportError InternalError           = 0x1
-fromTransportError ServerBusy              = 0x2
+fromTransportError ConnectionRefused       = 0x2
 fromTransportError FlowControlError        = 0x3
 fromTransportError StreamLimitError        = 0x4
 fromTransportError StreamStateError        = 0x5
@@ -52,7 +52,7 @@ fromTransportError (UnknownError n)        = n
 toTransportError :: ErrorCode -> TransportError
 toTransportError 0x0 = NoError
 toTransportError 0x1 = InternalError
-toTransportError 0x2 = ServerBusy
+toTransportError 0x2 = ConnectionRefused
 toTransportError 0x3 = FlowControlError
 toTransportError 0x4 = StreamLimitError
 toTransportError 0x5 = StreamStateError
