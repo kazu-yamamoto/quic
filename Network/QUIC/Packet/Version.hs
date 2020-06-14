@@ -42,7 +42,7 @@ decodeVersion 0xff00001a = Draft26
 decodeVersion 0xff00001b = Draft27
 decodeVersion 0xff00001c = Draft28
 decodeVersion 0xff00001d = Draft29
-decodeVersion 0xff00ff00 = GreasingVersion
+decodeVersion 0x0a0a0a0a = GreasingVersion
 decodeVersion w          = UnknownVersion w
 
 ----------------------------------------------------------------
