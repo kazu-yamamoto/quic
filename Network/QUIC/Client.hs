@@ -32,7 +32,10 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
     putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt
-        mver <- case myVers `intersect` peerVers of
+        mver <- case myVers of
+          []  -> return Nothing
+          [_] -> return Nothing
+          _:myVers' -> case myVers' `intersect` peerVers of
                   []    -> return Nothing
                   ver:_ -> do
                       ok <- checkCIDs conn dCID (Left sCID)

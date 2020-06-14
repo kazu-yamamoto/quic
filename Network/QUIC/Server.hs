@@ -203,7 +203,7 @@ dispatch Dispatch{..} ServerConfig{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
          mysa peersa send bs0RTT
   | ver `notElem` confVersions scConfig = do
-        let vers | ver == GreasingVersion      = confVersions scConfig
+        let vers | ver == GreasingVersion = GreasingVersion2 : confVersions scConfig
                  | otherwise = GreasingVersion : confVersions scConfig
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID vers
         send bss
