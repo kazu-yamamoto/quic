@@ -21,6 +21,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
+import qualified Data.ByteString as BS
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -117,7 +118,7 @@ insertRecvQDict ref dcid q = do
 
 ----------------------------------------------------------------
 
-data Accept = Accept Version AuthCIDs AuthCIDs SockAddr SockAddr RecvQ (CID -> Connection -> IO ()) (CID -> IO ())
+data Accept = Accept Version AuthCIDs AuthCIDs SockAddr SockAddr RecvQ Int (CID -> Connection -> IO ()) (CID -> IO ())
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
 
@@ -172,7 +173,8 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
         (pkt, bs0RTT) <- decodePacket bs0
 --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
         let send bs = void $ NSB.sendTo s bs peersa
-        dispatch d conf pkt mysa peersa send bs0RTT
+            len = BS.length bs0 - BS.length bs0RTT
+        dispatch d conf pkt mysa peersa send bs0RTT len
   where
     logAction msg = putStrLn ("dispatcher: " ++ msg)
     recv = do
@@ -198,10 +200,11 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> IO ()
+dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> Int -> IO ()
 dispatch Dispatch{..} ServerConfig{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
-         mysa peersa send bs0RTT
+         mysa peersa send bs0RTT pktSiz
+  | pktSiz < defaultQUICPacketSize = return () -- ignore
   | ver `notElem` confVersions scConfig = do
         let vers | ver == GreasingVersion = GreasingVersion2 : confVersions scConfig
                  | otherwise = GreasingVersion : confVersions scConfig
@@ -238,7 +241,7 @@ dispatch Dispatch{..} ServerConfig{..}
               writeRecvQ q cpkt
               let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
-                  ent = Accept ver myAuthCIDs peerAuthCIDs mysa peersa q reg unreg
+                  ent = Accept ver myAuthCIDs peerAuthCIDs mysa peersa q pktSiz reg unreg
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
@@ -298,12 +301,12 @@ dispatch Dispatch{..} ServerConfig{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ _ _ _ = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ _ _ _ _ = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q -> writeRecvQ q cpkt
       Nothing -> putStrLn "dispatch: orphan 0RTT"
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ _ = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
@@ -321,7 +324,7 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ p
                       qlogReceived conn $ PlainPacket hdr plain
                       let cpkt' = CryptPacket hdr $ setCryptLogged crypt
                       migration conn peersa dCID ref cpkt'
-dispatch _ _ ipkt  _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
+dispatch _ _ ipkt _ _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 
 ----------------------------------------------------------------
 

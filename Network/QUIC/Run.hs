@@ -93,9 +93,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
     initializeCoder conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
-    setMaxPacketSize conn $ case sa0 of
-      NS.SockAddrInet6{} -> defaultQUICPacketSizeForIPv6
-      _                  -> defaultQUICPacketSizeForIPv4
+    setMaxPacketSize conn $ defaultPacketSize sa0
     --
     mytid <- myThreadId
     --
@@ -147,7 +145,7 @@ runQUICServer conf server = handleLog debugLog $ do
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO (Connection, SendMany, Receive, Close, IO (), AuthCIDs)
 createServerConnection conf dispatch acc mainThreadId = do
-    let Accept ver myAuthCIDs peerAuthCIDs mysa peersa0 q register unregister = acc
+    let Accept ver myAuthCIDs peerAuthCIDs mysa peersa0 q pktSiz register unregister = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
     let cls = do
@@ -168,6 +166,7 @@ createServerConnection conf dispatch acc mainThreadId = do
     conn <- serverConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
     initializeCoder conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
+    setMaxPacketSize conn ((defaultPacketSize mysa `max` pktSiz) `min` maxPacketSize mysa)
     --
     let retried = isJust $ retrySrcCID myAuthCIDs
     when retried $ do
@@ -245,3 +244,11 @@ clientCertificateChain :: Connection -> IO (Maybe CertificateChain)
 clientCertificateChain conn
   | isClient conn = return Nothing
   | otherwise     = getCertificateChain conn
+
+defaultPacketSize :: NS.SockAddr -> Int
+defaultPacketSize NS.SockAddrInet6{} = defaultQUICPacketSizeForIPv6
+defaultPacketSize _                  = defaultQUICPacketSizeForIPv4
+
+maxPacketSize :: NS.SockAddr -> Int
+maxPacketSize NS.SockAddrInet6{} = 1500 - 40 - 8 -- fixme
+maxPacketSize _                  = 1500 - 20 - 8 -- fixme
