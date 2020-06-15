@@ -120,7 +120,9 @@ getTxData Connection{..} = atomically $ flowData <$> readTVar flowTx
 setTxMaxData :: Connection -> Int -> IO ()
 setTxMaxData Connection{..} n = atomically $ modifyTVar' flowTx set
   where
-    set flow = flow { flowMaxData = n }
+    set flow
+      | flowMaxData flow < n = flow { flowMaxData = n }
+      | otherwise            = flow
 
 getTxMaxData :: Connection -> STM Int
 getTxMaxData Connection{..} = flowMaxData <$> readTVar flowTx

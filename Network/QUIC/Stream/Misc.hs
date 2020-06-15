@@ -72,8 +72,11 @@ addTxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx add
     add flow = flow { flowData = flowData flow + n }
 
 setTxMaxStreamData :: Stream -> Int -> IO ()
-setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx
-    $ \flow -> flow { flowMaxData = n }
+setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
+  where
+    set flow
+     | flowMaxData flow < n = flow { flowMaxData = n }
+     |otherwise             = flow
 
 ----------------------------------------------------------------
 
