@@ -70,7 +70,7 @@ connect conf = do
 createClientConnection :: ClientConfig -> Version
                        -> IO (Connection, SendMany, Receive, Close, IO (), AuthCIDs)
 createClientConnection conf@ClientConfig{..} ver = do
-    s0 <- udpClientConnectedSocket ccServerName ccPortName
+    (s0,sa0) <- udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
     sref <- newIORef (s0,q)
     let cls = do
@@ -93,6 +93,9 @@ createClientConnection conf@ClientConfig{..} ver = do
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
     initializeCoder conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
+    setMaxPacketSize conn $ case sa0 of
+      NS.SockAddrInet6{} -> defaultQUICPacketSizeForIPv6
+      _                  -> defaultQUICPacketSizeForIPv4
     --
     mytid <- myThreadId
     --

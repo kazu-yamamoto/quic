@@ -183,6 +183,7 @@ data Connection = Connection {
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
+  , maxPacketSize     :: IORef Int
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingHandshake  :: TVar [CryptPacket]
@@ -251,6 +252,7 @@ newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref i
         <*> return tvarFlowTx
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration
+        <*> newIORef defaultQUICPacketSize
         -- TLS
         <*> newTVarIO InitialLevel
         <*> newTVarIO []

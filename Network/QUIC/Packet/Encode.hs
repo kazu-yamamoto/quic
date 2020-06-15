@@ -3,7 +3,6 @@ module Network.QUIC.Packet.Encode (
   , encodeVersionNegotiationPacket
   , encodeRetryPacket
   , encodePlainPacket
-  , maximumQUICPacketSize
   ) where
 
 import qualified Data.ByteString as B
@@ -17,21 +16,6 @@ import Network.QUIC.Packet.Number
 import Network.QUIC.Packet.Version
 import Network.QUIC.TLS
 import Network.QUIC.Types
-
-----------------------------------------------------------------
-
--- minimum PMTU = 1024 + 256 = 1280
--- IPv4 payload = 1280 - 20 - 8 = 1252
--- IPv6 payload = 1280 - 40 - 8 = 1232
-
--- Short = (1 + 160 + 4) + (1 + 4 + 4) + 1024 = 1198  (padlen = 2)
-
-maximumQUICPacketSize :: Int
-maximumQUICPacketSize = 1200
-
--- Not from spec. retry token is 128 sometime.
-maximumQUICHeaderSize :: BufferSize
-maximumQUICHeaderSize = 256
 
 ----------------------------------------------------------------
 

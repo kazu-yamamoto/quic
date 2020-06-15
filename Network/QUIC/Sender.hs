@@ -129,20 +129,25 @@ sender conn send = handleLog logAction $ forever $ do
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
 sendOutput :: Connection -> SendMany -> Output -> IO ()
-sendOutput conn send (OutHandshake x) = sendCryptoFragments conn send x
+sendOutput conn send (OutHandshake x) = do
+    maxSiz <- getMaxPacketSize conn
+    sendCryptoFragments conn send maxSiz x
 sendOutput conn send (OutControl lvl frames) = do
-    bss <- construct conn lvl frames $ Just maximumQUICPacketSize
+    maxSiz <- getMaxPacketSize conn
+    bss <- construct conn lvl frames $ Just maxSiz
     send bss
 sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0)) = do
     let lvl = packetEncryptionLevel hdr0
     let frames = filter retransmittable $ plainFrames plain0
-    bss <- construct conn lvl frames $ Just maximumQUICPacketSize
+    maxSiz <- getMaxPacketSize conn
+    bss <- construct conn lvl frames $ Just maxSiz
     send bss
 
 sendTxStreamData :: Connection -> SendMany -> TxStreamData -> IO ()
 sendTxStreamData conn send tx@(TxStreamData _ _ len _) = do
     addTxData conn len
-    sendStreamFragment conn send tx
+    maxSiz <- getMaxPacketSize conn
+    sendStreamFragment conn send maxSiz tx
 
 limitationC :: Int
 limitationC = 1024
@@ -150,8 +155,8 @@ limitationC = 1024
 thresholdC :: Int
 thresholdC = 200
 
-sendCryptoFragments :: Connection -> SendMany -> [(EncryptionLevel, CryptoData)] ->IO ()
-sendCryptoFragments conn send = loop limitationC maximumQUICPacketSize id
+sendCryptoFragments :: Connection -> SendMany -> Int -> [(EncryptionLevel, CryptoData)] -> IO ()
+sendCryptoFragments conn send maxSiz = loop limitationC maxSiz id
   where
     loop _ _ build0 [] = do
         let bss0 = build0 []
@@ -161,7 +166,7 @@ sendCryptoFragments conn send = loop limitationC maximumQUICPacketSize id
         frame1 <- cryptoFrame conn target lvl
         bss1 <- construct conn lvl [frame1] $ Just siz0
         send $ build0 bss1
-        loop limitationC maximumQUICPacketSize id ((lvl, rest) : xs)
+        loop limitationC maxSiz id ((lvl, rest) : xs)
     loop _ siz0 build0 ((lvl, bs) : []) = do
         frame1 <- cryptoFrame conn bs lvl
         bss1 <- construct conn lvl [frame1] $ Just siz0
@@ -170,7 +175,7 @@ sendCryptoFragments conn send = loop limitationC maximumQUICPacketSize id
         frame1 <- cryptoFrame conn bs lvl
         bss1 <- construct conn lvl [frame1] $ Just siz0
         send $ build0 bss1
-        loop limitationC maximumQUICPacketSize id xs
+        loop limitationC maxSiz id xs
     loop len0 siz0 build0 ((lvl, bs) : xs) = do
         frame1 <- cryptoFrame conn bs lvl
         bss1 <- construct conn lvl [frame1] Nothing
@@ -201,27 +206,27 @@ packFin s False = do
                 return True
       _ -> return False
 
-sendStreamFragment :: Connection -> SendMany -> TxStreamData -> IO ()
-sendStreamFragment conn send (TxStreamData s dats len fin0) = do
+sendStreamFragment :: Connection -> SendMany -> Int -> TxStreamData -> IO ()
+sendStreamFragment conn send maxSiz (TxStreamData s dats len fin0) = do
     let sid = streamId s
     fin <- packFin s fin0
     if len < limitation then do
         off <- getTxStreamOffset s len
         let frame = StreamF sid off dats fin
-        sendStreamSmall conn send s frame len
+        sendStreamSmall conn send s frame len maxSiz
       else
-        sendStreamLarge conn send s dats fin
+        sendStreamLarge conn send s dats fin maxSiz
     when fin $ setTxStreamFin s
 
-sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> IO ()
-sendStreamSmall conn send s0 frame0 total0 = do
+sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> Int -> IO ()
+sendStreamSmall conn send s0 frame0 total0 maxSiz = do
     ref <- newIORef []
     build <- loop ref (frame0 :) total0
     let frames = build []
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
-    bss <- construct conn lvl frames $ Just maximumQUICPacketSize
+    bss <- construct conn lvl frames $ Just maxSiz
     send bss
     readIORef ref >>= mapM_ setTxStreamFin
   where
@@ -251,8 +256,8 @@ sendStreamSmall conn send s0 frame0 total0 = do
                 else
                   return build
 
-sendStreamLarge :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
-sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
+sendStreamLarge :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> Int -> IO ()
+sendStreamLarge conn send s dats0 fin0 maxSiz = loop fin0 dats0
   where
     sid = streamId s
     loop _ [] = return ()
@@ -265,7 +270,7 @@ sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
         ready <- isConnection1RTTReady conn
         let lvl | ready     = RTT1Level
                 | otherwise = RTT0Level
-        bss <- construct conn lvl [frame] $ Just maximumQUICPacketSize
+        bss <- construct conn lvl [frame] $ Just maxSiz
         send bss
         loop fin dats2
 

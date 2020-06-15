@@ -80,6 +80,8 @@ module Network.QUIC.Connection (
   , setPeerParameters
   , checkDelayedAck
   , resetDelayedAck
+  , getMaxPacketSize
+  , setMaxPacketSize
   -- * Transmit
   , keepPlainPacket
   , releaseByRetry

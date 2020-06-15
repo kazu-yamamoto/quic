@@ -18,6 +18,8 @@ module Network.QUIC.Connection.Misc (
   , setPeerParameters
   , checkDelayedAck
   , resetDelayedAck
+  , getMaxPacketSize
+  , setMaxPacketSize
   ) where
 
 import Control.Concurrent
@@ -121,3 +123,11 @@ checkDelayedAck Connection{..} = atomicModifyIORef' delayedAck check
 
 resetDelayedAck :: Connection -> IO ()
 resetDelayedAck Connection{..} = writeIORef delayedAck 0
+
+----------------------------------------------------------------
+
+getMaxPacketSize :: Connection -> IO Int
+getMaxPacketSize Connection{..} = readIORef maxPacketSize
+
+setMaxPacketSize :: Connection -> Int -> IO ()
+setMaxPacketSize Connection{..} n = writeIORef maxPacketSize n

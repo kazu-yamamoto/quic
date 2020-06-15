@@ -4,7 +4,6 @@ module Network.QUIC.Packet (
   , encodeVersionNegotiationPacket
   , encodeRetryPacket
   , encodePlainPacket
-  , maximumQUICPacketSize
   -- * Decode
   , decodePacket
   , decodePackets
