@@ -24,3 +24,7 @@ defaultQUICPacketSizeForIPv6 = 1232
 maximumQUICHeaderSize :: Int
 maximumQUICHeaderSize = 256
 
+----------------------------------------------------------------
+
+idleTimeout :: Int
+idleTimeout = 30000 -- milliseconds

@@ -26,8 +26,7 @@ receiver conn recv = handleLog logAction $ do
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
-        -- fixme: 30 sec comes from Warp
-        mx <- timeout 30000000 recv
+        mx <- timeout (idleTimeout * 1000) recv -- fixme: taking minimum with peer's one
         case mx of
           Nothing -> do
               putInput conn $ InpError ConnectionIsTimeout
