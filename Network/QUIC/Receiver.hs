@@ -75,9 +75,14 @@ processCryptPacket conn hdr crypt = do
               qlogReceived conn $ PlainPacket hdr plain
           mapM_ (processFrame conn level) frames
           when (any ackEliciting frames && level == RTT1Level) $ do
-              sendAck <- checkDelayedAck conn
-              when sendAck $ do
+              if all shouldDelay frames then do
+                  sendAck <- checkDelayedAck conn
+                  when sendAck $ do
+                      putOutput conn $ OutControl level []
+                      yield
+                else do
                   putOutput conn $ OutControl level []
+                  resetDelayedAck conn
                   yield
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt

@@ -77,3 +77,10 @@ retransmittable :: Frame -> Bool
 retransmittable Padding{}          = False
 retransmittable Ack{}              = False
 retransmittable _                  = True
+
+shouldDelay :: Frame -> Bool
+shouldDelay Ack{}     = True
+shouldDelay StreamF{} = True
+shouldDelay Padding{} = True
+shouldDelay Ping{}    = True
+shouldDelay _         = False
