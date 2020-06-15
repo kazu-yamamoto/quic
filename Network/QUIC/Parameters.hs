@@ -255,7 +255,7 @@ decodeParameterList bs = unsafeDupablePerformIO
 defaultParameters :: Parameters
 defaultParameters = baseParameters {
     maxIdleTimeout                 =   30000
-  , maxUdpPayloadSize              =    1280
+  , maxUdpPayloadSize              = maximumUdpPayloadSize -- 2048
   , initialMaxData                 = 1048576
   , initialMaxStreamDataBidiLocal  =  262144
   , initialMaxStreamDataBidiRemote =  262144

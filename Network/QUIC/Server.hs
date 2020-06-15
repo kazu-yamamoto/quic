@@ -176,8 +176,8 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
   where
     logAction msg = putStrLn ("dispatcher: " ++ msg)
     recv = do
---        ex <- E.try $ NSB.recvMsg s 2048 64 0
-        ex <- E.try $ NSB.recvFrom s 2048
+--        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
+        ex <- E.try $ NSB.recvFrom s maximumUdpPayloadSize
         case ex of
            Right x -> return x
            Left se
@@ -328,7 +328,7 @@ dispatch _ _ ipkt  _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 -- | readerServer dies when the socket is closed.
 readerServer :: Socket -> RecvQ -> LogAction -> IO ()
 readerServer s q logAction = handleLog logAction' $ forever $ do
-    pkts <- NSB.recv s 2048 >>= decodeCryptPackets
+    pkts <- NSB.recv s maximumUdpPayloadSize >>= decodeCryptPackets
     mapM (writeRecvQ q) pkts
   where
     logAction' msg = logAction $ "readerServer: " ++ msg

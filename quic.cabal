@@ -66,6 +66,7 @@ library
                        Network.QUIC.Types
                        Network.QUIC.Types.Ack
                        Network.QUIC.Types.CID
+                       Network.QUIC.Types.Constants
                        Network.QUIC.Types.Error
                        Network.QUIC.Types.Frame
                        Network.QUIC.Types.Integer

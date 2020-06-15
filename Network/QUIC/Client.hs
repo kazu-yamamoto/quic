@@ -25,7 +25,7 @@ import Network.QUIC.Types
 -- | readerClient dies when the socket is closed.
 readerClient :: ThreadId -> [Version] -> Socket -> RecvQ -> Connection -> IO ()
 readerClient tid myVers s q conn = handleLog logAction $ forever $ do
-    pkts <- NSB.recv s 2048 >>= decodePackets
+    pkts <- NSB.recv s maximumUdpPayloadSize >>= decodePackets
     mapM_ putQ pkts
   where
     logAction msg = connDebugLog conn ("readerClient: " ++ msg)
