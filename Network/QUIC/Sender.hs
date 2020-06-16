@@ -92,6 +92,11 @@ construct conn lvl frames mTargetSize = do
                 qlogSent conn ppkt
                 encodePlainPacket conn ppkt mlen
       | otherwise = do
+            -- If packets are acked only once, packet loss of ACKs
+            -- causes spurious retransmits. So, Packets should be
+            -- acked mutliple times. For this purpose,
+            -- peerPacketNumber is not clear here. See section 13.2.3
+            -- of transport.
             ppns <- getPeerPacketNumbers conn lvl -- don't clear
             let frames' | nullPeerPacketNumbers ppns = frames
                         | otherwise                  = toAck ppns : frames
