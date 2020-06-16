@@ -303,10 +303,12 @@ maxRetransDelay = 1600
 resender :: Connection -> IO ()
 resender conn = handleIOLog cleanupAction logAction $ do
     ref <- newIORef minRetransDelay
-    forever $ do
+    loop ref (0 :: Int)
+  where
+    loop ref cnt0 = do
         threadDelay 100000
         n <- readIORef ref
-        ppkts <- releaseByTimeout conn (Milliseconds n)
+        ppkts <- releaseByTimeout conn $ Milliseconds n
         established <- isConnectionEstablished conn
         -- Some implementations do not return Ack for Initial and Handshake
         -- correctly. We should consider that the success of handshake
@@ -315,17 +317,18 @@ resender conn = handleIOLog cleanupAction logAction $ do
              | established = filter isRTTxLevel ppkts
              | otherwise   = ppkts
         if null ppkt' then do
-            let n' = n - 100
+            let longEnough = cnt0 == 10
+                n'  | longEnough = n - 50
+                    | otherwise  = n
+                cnt | longEnough = 0
+                    | otherwise  = cnt0 + 1
             when (n' >= minRetransDelay) $ writeIORef ref n'
+            loop ref cnt
           else do
             mapM_ put ppkt'
             let n' = n + 200
             when (n' <= maxRetransDelay) $ writeIORef ref n'
-        ppns <- getPeerPacketNumbers conn RTT1Level
-        when (ppns /= emptyPeerPacketNumbers) $ do
-            -- generating ACK
-            putOutput conn $ OutControl RTT1Level []
-  where
+            loop ref 0
     cleanupAction = putInput conn $ InpError ConnectionIsClosed
     logAction msg = connDebugLog conn ("resender: " ++ msg)
     put ppkt = putOutput conn $ OutPlainPacket ppkt
