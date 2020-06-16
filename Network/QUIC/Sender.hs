@@ -15,6 +15,7 @@ import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Stream
+import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

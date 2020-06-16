@@ -5,7 +5,6 @@ module Network.QUIC.Connection.Transmit (
   , releaseByRetry
   , releaseByAcks
   , releaseByTimeout
-  , Milliseconds(..)
   ) where
 
 import Data.Function (on)
