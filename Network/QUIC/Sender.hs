@@ -92,7 +92,7 @@ construct conn lvl frames mTargetSize = do
                 qlogSent conn ppkt
                 encodePlainPacket conn ppkt mlen
       | otherwise = do
-            ppns <- getClearPeerPacketNumbers conn lvl -- clear
+            ppns <- getPeerPacketNumbers conn lvl -- don't clear
             let frames' | nullPeerPacketNumbers ppns = frames
                         | otherwise                  = toAck ppns : frames
             mypn <- getPacketNumber conn

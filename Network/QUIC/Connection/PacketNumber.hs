@@ -6,9 +6,8 @@ module Network.QUIC.Connection.PacketNumber (
   , setPeerPacketNumber
   , getPeerPacketNumber
   , getPeerPacketNumbers
-  , getClearPeerPacketNumbers
   , addPeerPacketNumbers
-  , updatePeerPacketNumbers
+  , reducePeerPacketNumbers
   , clearPeerPacketNumbers
   , nullPeerPacketNumbers
   , fromPeerPacketNumbers
@@ -50,12 +49,6 @@ getPeerPacketNumbers Connection{..} lvl = get <$> readIORef peerPacketNumbers
   where
     get (PeerPacketNumbers pns)  = PeerPacketNumbers . Set.map (convert lvl) . Set.filter (range lvl) $ pns
 
-getClearPeerPacketNumbers :: Connection -> EncryptionLevel -> IO PeerPacketNumbers
-getClearPeerPacketNumbers Connection{..} lvl = atomicModifyIORef' peerPacketNumbers $ \p -> (clear p, get p)
-  where
-    get (PeerPacketNumbers pns)  = PeerPacketNumbers . Set.map (convert lvl) . Set.filter (range lvl) $ pns
-    clear (PeerPacketNumbers pns) = PeerPacketNumbers (Set.filter (not . range lvl) pns)
-
 addPeerPacketNumbers :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
 addPeerPacketNumbers Connection{..} lvl pn = atomicModifyIORef' peerPacketNumbers add
   where
@@ -66,11 +59,11 @@ clearPeerPacketNumbers Connection{..} lvl = atomicModifyIORef' peerPacketNumbers
   where
     clear (PeerPacketNumbers pns) = (PeerPacketNumbers (Set.filter (not . range lvl) pns), ())
 
-updatePeerPacketNumbers :: Connection -> EncryptionLevel -> PeerPacketNumbers -> IO ()
-updatePeerPacketNumbers Connection{..} lvl (PeerPacketNumbers pns) = atomicModifyIORef' peerPacketNumbers update
+reducePeerPacketNumbers :: Connection -> EncryptionLevel -> PeerPacketNumbers -> IO ()
+reducePeerPacketNumbers Connection{..} lvl (PeerPacketNumbers pns) = atomicModifyIORef' peerPacketNumbers reduce
   where
     pns' = Set.map (convert lvl) pns
-    update (PeerPacketNumbers pns0) = (PeerPacketNumbers (pns0 Set.\\ pns'), ())
+    reduce (PeerPacketNumbers pns0) = (PeerPacketNumbers (pns0 Set.\\ pns'), ())
 
 ----------------------------------------------------------------
 

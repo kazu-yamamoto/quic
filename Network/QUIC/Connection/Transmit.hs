@@ -121,7 +121,7 @@ releaseByAck conn@Connection{..} pn = do
     mx <- atomicModifyIORef' retransDB $ getdel pn
     case mx of
       Nothing -> return ()
-      Just x  -> updatePeerPacketNumbers conn (retransLevel x) (retransACKs x)
+      Just x  -> reducePeerPacketNumbers conn (retransLevel x) (retransACKs x)
 
 ----------------------------------------------------------------
 

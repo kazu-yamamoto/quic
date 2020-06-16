@@ -16,7 +16,6 @@ module Network.QUIC.Connection (
   , getPeerPacketNumber
   , emptyPeerPacketNumbers
   , getPeerPacketNumbers
-  , getClearPeerPacketNumbers
   , addPeerPacketNumbers
   , clearPeerPacketNumbers
   , nullPeerPacketNumbers
