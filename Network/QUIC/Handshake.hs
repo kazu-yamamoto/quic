@@ -198,6 +198,7 @@ handshakeServer conf conn myAuthCIDs = do
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
         setEncryptionLevel conn RTT1Level
+        setConnection1RTTReady conn
         fire 2000000 $ dropSecrets conn
         putOutput conn $ OutControl RTT1Level [HandshakeDone]
         setConnectionEstablished conn

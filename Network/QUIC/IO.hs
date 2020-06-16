@@ -39,7 +39,7 @@ sendStreamMany s dats = do
     when sclosed $ E.throwIO StreamIsClosed
     let len = sum $ map B.length dats
     -- fixme: size check for 0RTT
-    ready <- get1RTTReady s
+    ready <- is1RTTReady s
     when ready $ waitWindowIsOpen s len
     addTxStreamData s len
     putSendStreamQ s $ TxStreamData s dats len False

@@ -17,8 +17,7 @@ module Network.QUIC.Stream.Misc (
   -- Shared
   , isTxClosed
   , isRxClosed
-  , get1RTTReady
-  , set1RTTReady
+  , is1RTTReady
   --
   , waitWindowIsOpen
   , flowWindow
@@ -109,11 +108,8 @@ isRxClosed Stream{..} = readIORef $ sharedCloseReceived streamShared
 
 ----------------------------------------------------------------
 
-get1RTTReady :: Stream -> IO Bool
-get1RTTReady Stream{..} = readIORef $ shared1RTTReady streamShared
-
-set1RTTReady :: Stream -> IO ()
-set1RTTReady Stream{..} = atomicWriteIORef (shared1RTTReady streamShared) True
+is1RTTReady :: Stream -> IO Bool
+is1RTTReady Stream{..} = readIORef $ shared1RTTReady streamShared
 
 ----------------------------------------------------------------
 

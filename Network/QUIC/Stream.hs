@@ -25,8 +25,7 @@ module Network.QUIC.Stream (
   , getRxStreamWindow
   , isTxClosed
   , isRxClosed
-  , get1RTTReady
-  , set1RTTReady
+  , is1RTTReady
   , waitWindowIsOpen
   , flowWindow
   -- * Queue
