@@ -60,7 +60,7 @@ data RetransDB = RetransDB {
                           -- 'maxPN' is copied and 1 is added.
   , maxPN :: PacketNumber
   , keptPackets :: IntPSQ TimeMillisecond Retrans
-  }
+  } deriving Show
 
 emptyRetransDB :: RetransDB
 emptyRetransDB = RetransDB 0 0 IntPSQ.empty
@@ -70,7 +70,7 @@ data Retrans = Retrans {
   , retransLevel        :: EncryptionLevel
   , retransPlainPacket  :: PlainPacket
   , retransACKs         :: PeerPacketNumbers
-  }
+  } deriving Show
 
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
