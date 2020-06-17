@@ -15,8 +15,7 @@ module Network.QUIC.Stream.Misc (
   , addRxMaxStreamData
   , getRxStreamWindow
   -- Shared
-  , isTxClosed
-  , isRxClosed
+  , isClosed
   , is1RTTReady
   --
   , waitWindowIsOpen
@@ -100,11 +99,11 @@ getRxStreamWindow Stream{..} = flowWindow <$> readIORef streamFlowRx
 
 ----------------------------------------------------------------
 
-isTxClosed :: Stream -> IO Bool
-isTxClosed Stream{..} = readIORef $ sharedCloseSent streamShared
-
-isRxClosed :: Stream -> IO Bool
-isRxClosed Stream{..} = readIORef $ sharedCloseReceived streamShared
+isClosed :: Stream -> IO Bool
+isClosed Stream{..} = do
+    tx <- readIORef $ sharedCloseSent streamShared
+    rx <- readIORef $ sharedCloseReceived streamShared
+    return (tx || rx)
 
 ----------------------------------------------------------------
 

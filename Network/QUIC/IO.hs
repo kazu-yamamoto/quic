@@ -33,7 +33,7 @@ sendStream s dat = sendStreamMany s [dat]
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
-    closed <- isTxClosed s
+    closed <- isClosed s
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
@@ -47,7 +47,7 @@ sendStreamMany s dats = do
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
 shutdownStream s = do
-    closed <- isTxClosed s
+    closed <- isClosed s
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
@@ -71,6 +71,6 @@ acceptStream conn = do
 --   an empty bytestring is returned.
 recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = do
-    closed <- isRxClosed s
+    closed <- isClosed s
     when closed $ E.throwIO ConnectionIsClosed
     takeRecvStreamQwithSize s n
