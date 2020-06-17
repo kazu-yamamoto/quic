@@ -216,10 +216,6 @@ stopQUICServer conn = getMainThreadId conn >>= killThread
 
 close :: Connection -> IO ()
 close conn = do
-    when (isServer conn) $ do
-        unregister <- getUnregister conn
-        myCIDs <- getMyCIDs conn
-        mapM_ unregister myCIDs
     let frames = [ConnectionCloseQUIC NoError 0 ""]
     putOutput conn $ OutControl RTT1Level frames
     setCloseSent conn
