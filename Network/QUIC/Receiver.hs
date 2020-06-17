@@ -5,7 +5,6 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Control.Concurrent (yield)
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 
@@ -77,13 +76,10 @@ processCryptPacket conn hdr crypt = do
           when (any ackEliciting frames && level == RTT1Level) $ do
               if all shouldDelay frames then do
                   sendAck <- checkDelayedAck conn
-                  when sendAck $ do
-                      putOutput conn $ OutControl level []
-                      yield
+                  when sendAck $ putOutput conn $ OutControl level []
                 else do
                   putOutput conn $ OutControl level []
                   resetDelayedAck conn
-                  yield
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
@@ -109,7 +105,6 @@ processFrame conn lvl Ping = do
     when (lvl == RTT1Level) $ do
         putOutput conn $ OutControl lvl []
         resetDelayedAck conn
-        yield
 processFrame conn _ (Ack ackInfo _) =
     releaseByAcks conn ackInfo
 processFrame _ _ ResetStream{} = return ()
@@ -155,6 +150,9 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when (cwindow <= (cinitialWindow `div` 2)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         putOutput conn $ OutControl RTT1Level [MaxData newMax]
+        resetDelayedAck conn
+    when fin $ do
+        putOutput conn $ OutControl RTT1Level []
         resetDelayedAck conn
 processFrame conn _ (MaxData n) =
     setTxMaxData conn n
