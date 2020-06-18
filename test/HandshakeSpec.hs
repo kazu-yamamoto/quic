@@ -2,6 +2,7 @@
 
 module HandshakeSpec where
 
+import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
 import Data.IORef
@@ -115,9 +116,11 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
             if n >= 1 then stopQUICServer conn else writeIORef ref (n + 1)
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICError -> Bool) -> IO ()
-testHandshake3 cc1 cc2 sc selector = void $ concurrently clients server
+testHandshake3 cc1 cc2 sc selector = void $ do
+    mvar <- newEmptyMVar
+    concurrently (clients mvar) (server mvar)
   where
-    clients = do
+    clients mvar = do
         let query content conn = do
                 isConnectionOpen conn `shouldReturn` True
                 waitEstablished conn
@@ -125,13 +128,13 @@ testHandshake3 cc1 cc2 sc selector = void $ concurrently clients server
                 sendStream s content
                 shutdownStream s
         runQUICClient cc1 (query "first") `shouldThrow` selector
-        runQUICClient cc2 (query "second") `shouldReturn` ()
-    server = runQUICServer sc $ \conn -> do
+        runQUICClient cc2 (\conn -> query "second" conn >> takeMVar mvar) `shouldReturn` ()
+    server mvar = runQUICServer sc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
-        putStrLn "stopQUICServer"
+        putMVar mvar ()
         stopQUICServer conn
 
 newSessionManager :: IO SessionManager
