@@ -54,18 +54,12 @@ shutdownStream s = do
     putSendStreamQ s $ TxStreamData s [] 0 True
 
 -- | Accepting a stream initiated by the peer.
-acceptStream :: Connection -> IO (Either QUICError Stream)
+acceptStream :: Connection -> IO Stream
 acceptStream conn = do
     openC <- isConnectionOpen conn
     unless openC $ E.throwIO ConnectionIsClosed
-    mi <- takeInput conn
-    case mi of
-      InpNewStream        s         -> return $ Right s
-      InpError e                    -> return $ Left e
-      InpApplicationError e r       -> return $ Left $ ApplicationErrorOccurs e r
-      InpTransportError NoError _ _ -> return $ Left ConnectionIsClosed
-      InpTransportError e _ r       -> return $ Left $ TransportErrorOccurs e r
-      _                             -> E.throwIO MustNotReached
+    NewStream s <- takeInput conn
+    return s
 
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned.

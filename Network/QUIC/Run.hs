@@ -12,7 +12,6 @@ import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc (free)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
-import Network.TLS hiding (Version, HandshakeFailed)
 
 import Network.QUIC.Client
 import Network.QUIC.Config
@@ -64,7 +63,6 @@ connect conf = do
     check se
       | Just (NextVersion ver)   <- E.fromException se = Right ver
       | Just (e :: QUICError)    <- E.fromException se = Left e
-      | Just (e :: TLSException) <- E.fromException se = Left (HandshakeFailed $ show e)
       | otherwise = Left $ BadThingHappen se
 
 createClientConnection :: ClientConfig -> Version
@@ -128,7 +126,7 @@ runQUICServer conf server = handleLog debugLog $ do
                 (conn,send,recv,cls,qlogger, myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
                 handshakeServerConnection conf conn send recv qlogger myAuthCIDs `E.onException` cls
                 return conn
-        void $ forkIO $ E.bracket create close server
+        void $ forkIO (E.bracket create close server `E.catch` ignore)
   where
     debugLog msg = putStrLn ("runQUICServer: " ++ msg)
     setup = do
@@ -191,7 +189,7 @@ handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCID
     tid2 <- forkIO $ resender conn
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
-    handshakeServer conf conn myAuthCIDs `E.onException` clearThreads conn
+    handshakeServer conf conn myAuthCIDs `E.onException`  clearThreads conn
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn

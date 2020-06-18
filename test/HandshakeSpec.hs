@@ -5,8 +5,8 @@ module HandshakeSpec where
 import Control.Concurrent.Async
 import Control.Monad
 import Data.IORef
-import Data.List
 import Network.TLS (HandshakeMode13(..), SessionManager(..), SessionData, SessionID, Credentials(..), credentialLoadX509, Group(..))
+import qualified Network.TLS as TLS
 import Test.Hspec
 
 import Network.QUIC
@@ -58,7 +58,7 @@ spec = do
                 cc2 = defaultClientConfig
                 sc  = sc0
                 certificateRejected e
-                    | HandshakeFailed m <- e = "certificate rejected" `isInfixOf` m
+                    | HandshakeFailed TLS.CertificateUnknown <- e = True
                     | otherwise = False
             testHandshake3 cc1 cc2 sc certificateRejected
         it "fails with no group in common" $ do
@@ -74,7 +74,7 @@ spec = do
                             }
                       }
                 handshakeFailure e
-                    | HandshakeFailed m <- e = "HandshakeFailure" `isInfixOf` m
+                    | TransportErrorOccurs (CryptoError TLS.HandshakeFailure) _ <- e = True
                     | otherwise = False
             testHandshake3 cc1 cc2 sc handshakeFailure
 
@@ -123,15 +123,15 @@ testHandshake3 cc1 cc2 sc selector = void $ concurrently clients server
                 waitEstablished conn
                 s <- stream conn
                 sendStream s content
+                shutdownStream s
         runQUICClient cc1 (query "first") `shouldThrow` selector
         runQUICClient cc2 (query "second") `shouldReturn` ()
     server = runQUICServer sc $ \conn -> do
         isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
-        es <- acceptStream conn
-        case es of
-          Right s -> recvStream s 1024 `shouldReturn` "second"
-          Left  _ -> return ()
+        s <- acceptStream conn
+        recvStream s 1024 `shouldReturn` "second"
+        putStrLn "stopQUICServer"
         stopQUICServer conn
 
 newSessionManager :: IO SessionManager

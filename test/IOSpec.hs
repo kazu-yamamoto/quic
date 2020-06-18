@@ -38,7 +38,7 @@ testSendRecv cc sc = do
         shutdownStream strm
         takeMVar mvar
     server mvar = runQUICServer sc $ \conn -> do
-        Right strm <- acceptStream conn
+        strm <- acceptStream conn
         bs <- recvStream strm 1024
         let len = B.length bs
         n <- loop strm bs len

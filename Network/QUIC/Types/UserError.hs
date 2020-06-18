@@ -1,6 +1,7 @@
 module Network.QUIC.Types.UserError where
 
 import qualified Control.Exception as E
+import qualified Network.TLS as TLS
 
 import Network.QUIC.Imports
 import Network.QUIC.Types.Error
@@ -13,7 +14,7 @@ data QUICError = VersionIsUnknown Word32
                | ConnectionIsTimeout
                | ConnectionIsReset
                | StreamIsClosed
-               | HandshakeFailed String
+               | HandshakeFailed TLS.AlertDescription -- failed in my side
                | NoVersionIsSpecified
                | VersionNegotiationFailed
                | BadThingHappen E.SomeException
@@ -23,7 +24,6 @@ instance E.Exception QUICError
 
 data InternalControl = NextVersion Version
                      | MustNotReached
-                     | Break
                      deriving (Eq, Show)
 
 instance E.Exception InternalControl

@@ -28,8 +28,8 @@ receiver conn recv = handleLog logAction $ do
         mx <- timeout (idleTimeout * 1000) recv -- fixme: taking minimum with peer's one
         case mx of
           Nothing -> do
-              putInput conn $ InpError ConnectionIsTimeout
-              E.throwIO Break
+              exitConnection conn ConnectionIsTimeout
+              E.throwIO ConnectionIsTimeout -- fixme
           Just x  -> return x
     loopHandshake = do
         cpkt <- recvTimeout
@@ -86,7 +86,7 @@ processCryptPacket conn hdr crypt = do
               qlogReceived conn StatelessReset
               connDebugLog conn "Connection is reset statelessly"
               setCloseReceived conn
-              putInput conn $ InpError ConnectionIsReset
+              E.throwTo (connThreadId conn) ConnectionIsReset
             else do
               qlogDropped conn hdr
               connDebugLog conn $ "Cannot decrypt: " ++ show level
@@ -184,14 +184,15 @@ processFrame conn RTT1Level (PathChallenge dat) = do
     resetDelayedAck conn
 processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
-processFrame conn lvl (ConnectionCloseQUIC err ftyp reason) = do
-    when (lvl `elem` [InitialLevel, HandshakeLevel]) $
-        putCrypto conn $ InpTransportError err ftyp reason
-    putInput conn $ InpTransportError err ftyp reason
+processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
     setCloseReceived conn
+    if err == NoError then
+        return ()
+      else do
+        exitConnection conn $ TransportErrorOccurs err reason
 processFrame conn _ (ConnectionCloseApp err reason) = do
-    putInput conn $ InpApplicationError err reason
     setCloseReceived conn
+    exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
     fire 2000000 $ do
@@ -216,4 +217,4 @@ putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO ()
 putRxCrypto conn lvl rx = do
     strm <- getCryptoStream conn lvl
     dats <- fst <$> tryReassemble strm rx
-    mapM_ (putCrypto conn . InpHandshake lvl) dats
+    mapM_ (putCrypto conn . CryptoD lvl) dats

@@ -12,10 +12,10 @@ takeInput conn = atomically $ readTQueue (inputQ conn)
 putInput :: Connection -> Input -> IO ()
 putInput conn inp = atomically $ writeTQueue (inputQ conn) inp
 
-takeCrypto :: Connection -> IO Input
+takeCrypto :: Connection -> IO CryptoD
 takeCrypto conn = atomically $ readTQueue (cryptoQ conn)
 
-putCrypto :: Connection -> Input -> IO ()
+putCrypto :: Connection -> CryptoD -> IO ()
 putCrypto conn inp = atomically $ writeTQueue (cryptoQ conn) inp
 
 takeOutputSTM :: Connection -> STM Output

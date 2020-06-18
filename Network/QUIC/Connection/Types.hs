@@ -53,6 +53,7 @@ emptyPeerPacketNumbers :: PeerPacketNumbers
 emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 
 type InputQ  = TQueue Input
+type CryptoQ = TQueue CryptoD
 type OutputQ = TQueue Output
 
 data RetransDB = RetransDB {
@@ -154,6 +155,7 @@ data Connection = Connection {
   , connDebugLog      :: LogAction
   , connQLog          :: QlogMsg -> IO ()
   -- Manage
+  , connThreadId      :: ThreadId
   , threadIds         :: IORef [Weak ThreadId]
   , killHandshakerAct :: IORef (IO ())
   , sockInfo          :: IORef (Socket,RecvQ)
@@ -165,7 +167,7 @@ data Connection = Connection {
   , peerParameters    :: IORef Parameters
   -- Queues
   , inputQ            :: InputQ
-  , cryptoQ           :: InputQ
+  , cryptoQ           :: CryptoQ
   , outputQ           :: OutputQ
   , shared            :: Shared
   , retransDB         :: IORef RetransDB
@@ -223,6 +225,7 @@ newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref i
         <*> return debugLog
         <*> return qLog
         -- Manage
+        <*> myThreadId
         <*> newIORef []
         <*> newIORef (return ())
         <*> return sref
@@ -319,12 +322,9 @@ isServer Connection{..} = role == Server
 
 ----------------------------------------------------------------
 
-data Input = InpNewStream Stream
-           | InpHandshake EncryptionLevel ByteString
-           | InpTransportError TransportError FrameType ReasonPhrase
-           | InpApplicationError ApplicationError ReasonPhrase
-           | InpError QUICError
-           deriving Show
+newtype Input = NewStream Stream deriving Show
+
+data CryptoD = CryptoD EncryptionLevel ByteString deriving Show
 
 data Output = OutControl EncryptionLevel [Frame]
             | OutHandshake [(EncryptionLevel,ByteString)]

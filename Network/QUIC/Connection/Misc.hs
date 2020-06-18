@@ -20,9 +20,11 @@ module Network.QUIC.Connection.Misc (
   , resetDelayedAck
   , getMaxPacketSize
   , setMaxPacketSize
+  , exitConnection
   ) where
 
 import Control.Concurrent
+import qualified Control.Exception as E
 import Data.IORef
 import Network.Socket
 import System.Mem.Weak
@@ -131,3 +133,8 @@ getMaxPacketSize Connection{..} = readIORef maxPacketSize
 
 setMaxPacketSize :: Connection -> Int -> IO ()
 setMaxPacketSize Connection{..} n = writeIORef maxPacketSize n
+
+----------------------------------------------------------------
+
+exitConnection :: Connection -> QUICError -> IO ()
+exitConnection Connection{..} ue = E.throwTo connThreadId ue

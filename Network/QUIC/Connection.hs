@@ -81,6 +81,7 @@ module Network.QUIC.Connection (
   , resetDelayedAck
   , getMaxPacketSize
   , setMaxPacketSize
+  , exitConnection
   -- * Transmit
   , keepPlainPacket
   , releaseByRetry
@@ -154,12 +155,14 @@ module Network.QUIC.Connection (
   , qlogRecvInitial
   , qlogSentRetry
   -- Types
+  , connThreadId
   , headerBuffer
   , headerBufferSize
   , payloadBuffer
   , payloadBufferSize
   , Input(..)
   , Output(..)
+  , CryptoD(..)
   ) where
 
 import Network.QUIC.Connection.Crypto

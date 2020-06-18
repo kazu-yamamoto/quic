@@ -55,6 +55,8 @@ module Network.QUIC (
   , getConnectionStats
   -- * Errors
   , QUICError(..)
+  , TransportError(..)
+  , ApplicationError(..)
   -- * Synchronization
   , wait1RTTReady
   , waitEstablished

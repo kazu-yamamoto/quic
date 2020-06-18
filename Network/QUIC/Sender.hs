@@ -306,7 +306,7 @@ maxRetransDelay :: Int64
 maxRetransDelay = 1600
 
 resender :: Connection -> IO ()
-resender conn = handleIOLog cleanupAction logAction $ do
+resender conn = handleIOLog (return ()) logAction $ do
     ref <- newIORef minRetransDelay
     loop ref (0 :: Int)
   where
@@ -334,7 +334,6 @@ resender conn = handleIOLog cleanupAction logAction $ do
             let n' = n + 200
             when (n' <= maxRetransDelay) $ writeIORef ref n'
             loop ref 0
-    cleanupAction = putInput conn $ InpError ConnectionIsClosed
     logAction msg = connDebugLog conn ("resender: " ++ msg)
     put ppkt = putOutput conn $ OutPlainPacket ppkt
 
