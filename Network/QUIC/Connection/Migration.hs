@@ -128,7 +128,6 @@ arrange n db = (db', map cidInfoSeq toDrops)
 ----------------------------------------------------------------
 
 -- | Peer starts using a new CID.
---   Old 'usedCIDInfo' is returned to send 'RetireConnectionID'.
 setMyCID :: Connection -> CID -> IO ()
 setMyCID Connection{..} ncid = do
     db <- readIORef myCIDDB
