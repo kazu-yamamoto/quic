@@ -123,7 +123,7 @@ runQUICServer conf server = handleLog debugLog $ do
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
         let create = do
-                (conn,send,recv,cls,qlogger, myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
+                (conn,send,recv,cls,qlogger,myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
                 handshakeServerConnection conf conn send recv qlogger myAuthCIDs `E.onException` cls
                 return conn
         void $ forkIO (E.bracket create close server `E.catch` ignore)
@@ -189,7 +189,7 @@ handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCID
     tid2 <- forkIO $ resender conn
     tid3 <- forkIO qlogger
     setThreadIds conn [tid0,tid1,tid2,tid3]
-    handshakeServer conf conn myAuthCIDs `E.onException`  clearThreads conn
+    handshakeServer conf conn myAuthCIDs `E.onException` clearThreads conn
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn
