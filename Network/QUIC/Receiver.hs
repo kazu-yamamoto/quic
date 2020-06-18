@@ -186,8 +186,9 @@ processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
     setCloseReceived conn
-    if err == NoError then
-        return ()
+    if err == NoError then do
+        sent <- isCloseSent conn
+        unless sent $ exitConnection conn ConnectionIsClosed
       else do
         exitConnection conn $ TransportErrorOccurs err reason
 processFrame conn _ (ConnectionCloseApp err reason) = do
