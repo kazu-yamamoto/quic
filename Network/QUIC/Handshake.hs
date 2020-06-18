@@ -112,6 +112,7 @@ handshakeClient conf conn myAuthCIDs = do
      else
        wait1RTTReady conn
   where
+    tell (TLS.HandshakeFailed (TLS.Error_Misc _)) = return () -- thread blocked
     tell e = notifyPeer conn $ getErrorCause e
     installKeysClient _ _ctx (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
@@ -156,6 +157,7 @@ handshakeServer conf conn myAuthCIDs = do
     setKillHandshaker conn tid
     wait1RTTReady conn
   where
+    tell (TLS.HandshakeFailed (TLS.Error_Misc _)) = return () -- thread blocked
     tell e = notifyPeer conn $ getErrorCause e
     installKeysServer _ _ctx (InstallEarlyKeys mEarlySecInf) = do
         setEarlySecretInfo conn mEarlySecInf
