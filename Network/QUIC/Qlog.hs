@@ -29,7 +29,7 @@ instance Qlog CryptPacket where
     qlog (CryptPacket hdr _) = qlog hdr
 
 instance Qlog PlainPacket where
-    qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" ++ packetType hdr ++ "\",\"frames\":" ++ "[" ++ intercalate "," (map qlog plainFrames) ++ "]" ++ ",\"header\":{\"packet_number\":\"" ++ show plainPacketNumber ++ "\",\"dcid\"=\"" ++ show (headerMyCID hdr) ++ "\"}}"
+    qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" ++ packetType hdr ++ "\",\"frames\":" ++ "[" ++ intercalate "," (map qlog plainFrames) ++ "]" ++ ",\"header\":{\"packet_number\":\"" ++ show plainPacketNumber ++ "\",\"dcid\":\"" ++ show (headerMyCID hdr) ++ "\"}}"
 
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"packet_type\":\"stateless_reset\",\"header\":{\"packet_number\":\"\"}}"
