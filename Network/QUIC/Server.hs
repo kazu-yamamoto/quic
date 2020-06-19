@@ -306,7 +306,7 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ _ _ _ _ =
     case mq of
       Just q -> writeRecvQ q cpkt
       Nothing -> putStrLn "dispatch: orphan 0RTT"
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ _ = do
+dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ _ = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
@@ -317,16 +317,15 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ p
           case mplain of
             Nothing -> connDebugLog conn "Cannot decrypt in dispatch"
             Just plain -> do
+                qlogReceived conn $ PlainPacket hdr plain
+                let cpkt' = CryptPacket hdr $ setCryptLogged crypt
                 mq0 <- newMigrationQ
                 let modify Nothing   = (Just mq0, Left mq0)
                     modify (Just mq) = (Just mq,  Right mq)
                 emq <- atomicModifyIORef' ref modify
                 case emq of
-                  Left mq -> do
-                      qlogReceived conn $ PlainPacket hdr plain
-                      let cpkt' = CryptPacket hdr $ setCryptLogged crypt
-                      migration conn peersa dCID mq cpkt'
-                  Right mq -> writeMigrationQ mq cpkt
+                  Left mq  -> migration conn peersa dCID mq cpkt'
+                  Right mq -> writeMigrationQ mq cpkt'
 dispatch _ _ ipkt _ _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 
 ----------------------------------------------------------------
