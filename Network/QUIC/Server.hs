@@ -317,13 +317,16 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket hdr@(Short dCID) crypt)) _ p
           case mplain of
             Nothing -> connDebugLog conn "Cannot decrypt in dispatch"
             Just plain -> do
-                mmq <- readIORef ref
-                case mmq of
-                  Just mq -> writeMigrationQ mq cpkt
-                  Nothing -> do
+                mq0 <- newMigrationQ
+                let modify Nothing   = (Just mq0, Left mq0)
+                    modify (Just mq) = (Just mq,  Right mq)
+                emq <- atomicModifyIORef' ref modify
+                case emq of
+                  Left mq -> do
                       qlogReceived conn $ PlainPacket hdr plain
                       let cpkt' = CryptPacket hdr $ setCryptLogged crypt
-                      migration conn peersa dCID ref cpkt'
+                      migration conn peersa dCID mq cpkt'
+                  Right mq -> writeMigrationQ mq cpkt
 dispatch _ _ ipkt _ _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 
 ----------------------------------------------------------------
@@ -341,12 +344,10 @@ recvServer q = readRecvQ q
 
 ----------------------------------------------------------------
 
-migration :: Connection -> SockAddr -> CID -> IORef (Maybe MigrationQ) -> CryptPacket -> IO ()
-migration conn peersa dCID ref cpkt = do
+migration :: Connection -> SockAddr -> CID ->  MigrationQ -> CryptPacket -> IO ()
+migration conn peersa dCID mq cpkt = do
     mcidinfo <- timeout 100000 $ choosePeerCID conn -- fixme: 100000
     connDebugLog conn $ "Migrating to " ++ show peersa
-    mq <- newMigrationQ
-    writeIORef ref $ Just mq
     void $ forkIO $ migrator conn peersa mq dCID mcidinfo
     writeMigrationQ mq cpkt
 
