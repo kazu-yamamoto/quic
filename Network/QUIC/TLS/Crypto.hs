@@ -336,13 +336,17 @@ bsXORpad iv pn = Byte.xor iv pnl
 
 ----------------------------------------------------------------
 
-calculateIntegrityTag :: CID -> ByteString -> ByteString
-calculateIntegrityTag oCID pseudo0 =
+calculateIntegrityTag :: Version -> CID -> ByteString -> ByteString
+calculateIntegrityTag ver oCID pseudo0 =
     B.concat $ aes128gcmEncrypt key nonce "" (AddDat pseudo)
   where
     (ocid, ocidlen) = unpackCID oCID
     pseudo = B.concat [B.singleton ocidlen
                       , Short.fromShort ocid
                       ,pseudo0]
-    key = Key "\xcc\xce\x18\x7e\xd0\x9a\x09\xd0\x57\x28\x15\x5a\x6c\xb9\x6b\xe1"
-    nonce = Nonce "\xe5\x49\x30\xf9\x7f\x21\x36\xf0\x53\x0a\x8c\x1c"
+    key = case ver of
+      Draft29 -> Key "\xcc\xce\x18\x7e\xd0\x9a\x09\xd0\x57\x28\x15\x5a\x6c\xb9\x6b\xe1"
+      _       -> Key "\x4d\x32\xec\xdb\x2a\x21\x33\xc8\x41\xe4\x04\x3d\xf2\x7d\x44\x30"
+    nonce = case ver of
+      Draft29 -> Nonce "\xe5\x49\x30\xf9\x7f\x21\x36\xf0\x53\x0a\x8c\x1c"
+      _       -> Nonce "\x4d\x16\x11\xd0\x55\x13\xa5\x52\xc5\x87\xd5\x75"

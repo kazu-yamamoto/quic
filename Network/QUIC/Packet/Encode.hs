@@ -50,7 +50,7 @@ encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuff
     copyByteString wbuf token
     siz <- savingSize wbuf
     pseudo0 <- extractByteString wbuf $ negate siz
-    let tag = calculateIntegrityTag odCID pseudo0
+    let tag = calculateIntegrityTag ver odCID pseudo0
     copyByteString wbuf tag
     -- no header protection
 encodeRetryPacket _ = error "encodeRetryPacket"

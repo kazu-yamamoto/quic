@@ -67,7 +67,8 @@ checkCIDs conn dCID (Left sCID) = do
 checkCIDs conn dCID (Right (pseudo0,tag)) = do
     localCID <- getMyCID conn
     remoteCID <- getPeerCID conn
-    let ok = calculateIntegrityTag remoteCID pseudo0 == tag
+    ver <- getVersion conn
+    let ok = calculateIntegrityTag ver remoteCID pseudo0 == tag
     return (dCID == localCID && ok)
 
 recvClient :: RecvQ -> IO CryptPacket
