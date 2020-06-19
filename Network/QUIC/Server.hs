@@ -328,7 +328,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
                       writeMigrationQ mq cpkt'
                        -- fixme: should not block in this loop
                       mcidinfo <- timeout 100000 $ choosePeerCID conn
-                      connDebugLog conn $ "Migrating to " ++ show peersa
+                      connDebugLog conn $ "Migrating to " ++ show peersa ++ " (" ++ show dCID ++ ")"
                       void $ forkIO $ migrator conn peersa mq dCID mcidinfo
                   Right mq -> do
                       writeMigrationQ mq cpkt'
