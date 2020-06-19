@@ -92,29 +92,29 @@ unregisterConnectionDict ref cid = atomicModifyIORef' ref $ \(ConnectionDict tbl
 ----------------------------------------------------------------
 
 -- Original destination CID -> RecvQ
-newtype RecvQDict = RecvQDict (OrdPSQ CID TimeMillisecond RecvQ)
+data RecvQDict = RecvQDict Int (OrdPSQ CID Int RecvQ)
 
 recvQDictSize :: Int
 recvQDictSize = 100
 
 emptyRecvQDict :: RecvQDict
-emptyRecvQDict = RecvQDict PSQ.empty
+emptyRecvQDict = RecvQDict 0 PSQ.empty
 
 lookupRecvQDict :: IORef RecvQDict -> CID -> IO (Maybe RecvQ)
 lookupRecvQDict ref dcid = do
-    RecvQDict qt <- readIORef ref
+    RecvQDict _ qt <- readIORef ref
     return $ case PSQ.lookup dcid qt of
       Nothing     -> Nothing
       Just (_,q)  -> Just q
 
 insertRecvQDict :: IORef RecvQDict -> CID -> RecvQ -> IO ()
-insertRecvQDict ref dcid q = do
-    RecvQDict qt0 <- readIORef ref
-    let qt1 | PSQ.size qt0 <= recvQDictSize = qt0
-            | otherwise = PSQ.deleteMin qt0
-    p <- getTimeMillisecond
-    let qt2 = PSQ.insert dcid p q qt1
-    writeIORef ref $ RecvQDict qt2
+insertRecvQDict ref dcid q = atomicModifyIORef' ref ins
+  where
+    ins (RecvQDict p qt0) = let qt1 | PSQ.size qt0 <= recvQDictSize = qt0
+                                    | otherwise = PSQ.deleteMin qt0
+                                qt2 = PSQ.insert dcid p q qt1
+                                p' = p + 1 -- fixme: overflow
+                            in (RecvQDict p' qt2, ())
 
 ----------------------------------------------------------------
 
