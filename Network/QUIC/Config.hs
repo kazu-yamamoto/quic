@@ -49,6 +49,7 @@ data ClientConfig = ClientConfig {
   , ccValidate   :: Bool
   , ccResumption :: ResumptionInfo
   , ccUse0RTT    :: Bool
+  , ccPacketSize :: Maybe Int -- ^ QUIC packet size (UDP payload size)
   , ccConfig     :: Config
   }
 
@@ -61,6 +62,7 @@ defaultClientConfig = ClientConfig {
   , ccValidate   = False
   , ccResumption = defaultResumptionInfo
   , ccUse0RTT    = False
+  , ccPacketSize = Nothing
   , ccConfig     = defaultConfig
   }
 

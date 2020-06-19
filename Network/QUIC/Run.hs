@@ -91,7 +91,8 @@ createClientConnection conf@ClientConfig{..} ver = do
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
     initializeCoder conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
-    setMaxPacketSize conn $ defaultPacketSize sa0
+    let pktSiz = fromMaybe 0 ccPacketSize
+    setMaxPacketSize conn ((defaultPacketSize sa0 `max` pktSiz) `min` maxPacketSize sa0)
     --
     mytid <- myThreadId
     --
