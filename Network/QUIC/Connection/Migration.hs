@@ -129,11 +129,11 @@ arrange n db = (db', map cidInfoSeq toDrops)
 
 -- | Peer starts using a new CID.
 setMyCID :: Connection -> CID -> IO ()
-setMyCID Connection{..} ncid = do
-    db <- readIORef myCIDDB
-    case findByCID ncid (cidInfos db) of
-      Nothing      -> return ()
-      Just cidInfo -> atomicModifyIORef' myCIDDB $ set' cidInfo
+setMyCID Connection{..} ncid = atomicModifyIORef' myCIDDB findSet
+  where
+    findSet db = case findByCID ncid (cidInfos db) of
+      Nothing      -> (db, ())
+      Just cidInfo -> (set cidInfo db, ())
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
@@ -156,9 +156,6 @@ set cidInfo db = db'
     db' = db {
         usedCIDInfo = cidInfo
       }
-
-set' :: CIDInfo -> CIDDB -> (CIDDB, ())
-set' cidInfo db = (set cidInfo db, ())
 
 add :: CIDInfo -> CIDDB -> CIDDB
 add cidInfo db = db'

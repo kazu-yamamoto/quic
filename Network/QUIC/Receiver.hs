@@ -46,7 +46,7 @@ receiver conn recv = handleLog logAction $ do
             processCryptPacket conn hdr crypt
           else do
             qlogDropped conn hdr
-            connDebugLog conn "CID is unknown"
+            connDebugLog conn $ show cid ++ " is unknown"
     logAction msg = connDebugLog conn ("receiver: " ++ msg)
 
 processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
