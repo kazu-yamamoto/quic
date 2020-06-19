@@ -324,8 +324,14 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
                     modify (Just mq) = (Just mq,  Right mq)
                 emq <- atomicModifyIORef' ref modify
                 case emq of
-                  Left mq  -> migration conn peersa dCID mq cpkt'
-                  Right mq -> writeMigrationQ mq cpkt'
+                  Left  mq -> do
+                      writeMigrationQ mq cpkt'
+                       -- fixme: should not block in this loop
+                      mcidinfo <- timeout 100000 $ choosePeerCID conn
+                      connDebugLog conn $ "Migrating to " ++ show peersa
+                      void $ forkIO $ migrator conn peersa mq dCID mcidinfo
+                  Right mq -> do
+                      writeMigrationQ mq cpkt'
 dispatch _ _ ipkt _ _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 
 ----------------------------------------------------------------
@@ -342,13 +348,6 @@ recvServer :: RecvQ -> IO CryptPacket
 recvServer q = readRecvQ q
 
 ----------------------------------------------------------------
-
-migration :: Connection -> SockAddr -> CID ->  MigrationQ -> CryptPacket -> IO ()
-migration conn peersa dCID mq cpkt = do
-    mcidinfo <- timeout 100000 $ choosePeerCID conn -- fixme: 100000
-    connDebugLog conn $ "Migrating to " ++ show peersa
-    void $ forkIO $ migrator conn peersa mq dCID mcidinfo
-    writeMigrationQ mq cpkt
 
 migrator :: Connection -> SockAddr -> MigrationQ -> CID -> Maybe CIDInfo -> IO ()
 migrator conn peersa1 mq dcid mcidinfo = do
