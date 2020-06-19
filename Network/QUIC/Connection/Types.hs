@@ -273,10 +273,10 @@ newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref i
         <*> newIORef Nothing
         <*> newIORef peerAuthCIDs
         -- WriteBuffer
-        <*> mallocBytes 256
-        <*> return 256
-        <*> mallocBytes 1280
-        <*> return 1280
+        <*> mallocBytes maximumQUICHeaderSize
+        <*> return      maximumQUICHeaderSize
+        <*> mallocBytes maximumUdpPayloadSize
+        <*> return      maximumUdpPayloadSize
   where
     isclient = rl == Client
     initialRoleInfo
