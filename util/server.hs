@@ -136,15 +136,12 @@ h `onE` b = b `E.onException` h
 
 serverHQ :: Connection -> IO ()
 serverHQ conn = connDebugLog conn "Connection terminated" `onE` do
-    es <- acceptStream conn
-    case es of
-      Left  e -> print e
-      Right s -> do
-          consume conn s
-          let sid = streamId s
-          when (isClientInitiatedBidirectional sid) $ do
-              sendStream s html
-              shutdownStream s
+    s <- acceptStream conn
+    consume conn s
+    let sid = streamId s
+    when (isClientInitiatedBidirectional sid) $ do
+        sendStream s html
+        shutdownStream s
 
 consume :: Connection -> Stream -> IO ()
 consume conn s = loop
@@ -174,15 +171,11 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     loop hdrbdy
   where
     loop hdrbdy = do
-        es <- acceptStream conn
-        case es of
-          Left ConnectionIsClosed -> return ()
-          Left e                  -> print e
-          Right s -> do
-              void . forkIO $ do
-                  consume conn s
-                  let sid = streamId s
-                  when (isClientInitiatedBidirectional sid) $ do
-                      sendStreamMany s hdrbdy
-                      shutdownStream s
-              loop hdrbdy
+        s <- acceptStream conn
+        void . forkIO $ do
+            consume conn s
+            let sid = streamId s
+            when (isClientInitiatedBidirectional sid) $ do
+                sendStreamMany s hdrbdy
+                shutdownStream s
+        loop hdrbdy

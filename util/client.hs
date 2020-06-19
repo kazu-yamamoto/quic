@@ -188,8 +188,9 @@ runClient conf opts@Options{..} aux@Aux{..} = do
         m <- case optMigration of
           Nothing   -> return False
           Just mtyp -> do
+              x <- migration conn mtyp
               auxDebug $ "Migration by " ++ show mtyp
-              migration conn mtyp
+              return x
         client aux conn
         i2 <- getConnectionInfo conn
         r <- getResumptionInfo conn
