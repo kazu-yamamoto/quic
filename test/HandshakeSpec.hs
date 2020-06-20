@@ -4,6 +4,7 @@ module HandshakeSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import qualified Control.Exception as E
 import Control.Monad
 import Data.IORef
 import Network.TLS (HandshakeMode13(..), SessionManager(..), SessionData, SessionID, Credentials(..), credentialLoadX509, Group(..))
@@ -79,6 +80,9 @@ spec = do
                     | otherwise = False
             testHandshake3 cc1 cc2 sc handshakeFailure
 
+onE :: IO b -> IO a -> IO a
+onE h b = E.onException b h
+
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
 testHandshake cc sc mode = void $ concurrently client server
   where
@@ -86,11 +90,13 @@ testHandshake cc sc mode = void $ concurrently client server
         isConnectionOpen conn `shouldReturn` True
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         waitEstablished conn
-    server = runQUICServer sc $ \conn -> do
-        isConnectionOpen conn `shouldReturn` True
-        handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-        waitEstablished conn
-        stopQUICServer conn
+    server = runQUICServer sc serv
+      where
+        serv conn = stopQUICServer conn `onE` do
+            isConnectionOpen conn `shouldReturn` True
+            handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+            waitEstablished conn
+            void $ acceptStream conn
 
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
 testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
@@ -109,11 +115,15 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
         void $ runClient cc2 mode2
     server = do
         ref <- newIORef (0 :: Int)
-        runQUICServer sc $ \conn -> do
-            isConnectionOpen conn `shouldReturn` True
-            waitEstablished conn
+        runQUICServer sc $ serv ref
+      where
+        hndl ref conn = do
             n <- readIORef ref
             if n >= 1 then stopQUICServer conn else writeIORef ref (n + 1)
+        serv ref conn = hndl ref conn `onE` do
+            isConnectionOpen conn `shouldReturn` True
+            waitEstablished conn
+            void $ acceptStream conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICError -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc selector = void $ do
