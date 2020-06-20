@@ -127,6 +127,8 @@ runQUICServer conf server = handleLog debugLog $ do
                 (conn,send,recv,cls,qlogger,myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
                 handshakeServerConnection conf conn send recv qlogger myAuthCIDs `E.onException` cls
                 return conn
+        -- Typically, ConnectionIsClosed breaks acceptStream.
+        -- And the exception should be ignored.
         void $ forkIO (E.bracket create close server `E.catch` ignore)
   where
     debugLog msg = putStrLn ("runQUICServer: " ++ msg)
