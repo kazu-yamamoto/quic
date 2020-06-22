@@ -161,24 +161,25 @@ defaultHooks = Hooks {
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role
-  , roleInfo          :: IORef RoleInfo
-  , quicVersion       :: IORef Version
   -- Actions
   , closeSockets      :: Close
   , connDebugLog      :: LogAction
   , connQLog          :: QlogMsg -> IO ()
   , connHooks         :: Hooks
+  -- Info
+  , roleInfo          :: IORef RoleInfo
+  , quicVersion       :: IORef Version
   -- Manage
   , connThreadId      :: ThreadId
   , threadIds         :: IORef [Weak ThreadId]
   , killHandshakerAct :: IORef (IO ())
   , sockInfo          :: IORef (Socket,RecvQ)
   -- Mine
-  , myCIDDB           :: IORef CIDDB
   , myParameters      :: Parameters
+  , myCIDDB           :: IORef CIDDB
   -- Peer
-  , peerCIDDB         :: TVar CIDDB
   , peerParameters    :: IORef Parameters
+  , peerCIDDB         :: TVar CIDDB
   -- Queues
   , inputQ            :: InputQ
   , cryptoQ           :: CryptoQ
@@ -232,25 +233,21 @@ newConnection :: Role -> Version -> Parameters
               -> IO Connection
 newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog hooks close sref isecs = do
     tvarFlowTx <- newTVarIO defaultFlow
-    Connection rl
+    Connection rl close debugLog qLog hooks
+        -- Info
         <$> newIORef initialRoleInfo
         <*> newIORef ver
-        -- Actions
-        <*> return close
-        <*> return debugLog
-        <*> return qLog
-        <*> return hooks
         -- Manage
         <*> myThreadId
         <*> newIORef []
         <*> newIORef (return ())
         <*> return sref
         -- Mine
-        <*> newIORef (newCIDDB myCID)
         <*> return myparams
+        <*> newIORef (newCIDDB myCID)
         -- Peer
-        <*> newTVarIO (newCIDDB peerCID)
         <*> newIORef baseParameters
+        <*> newTVarIO (newCIDDB peerCID)
         -- Queues
         <*> newTQueueIO
         <*> newTQueueIO
