@@ -8,6 +8,7 @@ module Network.QUIC.Receiver (
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 
+import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
@@ -187,6 +188,7 @@ processFrame conn RTT1Level (PathResponse dat) =
 processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
     setCloseReceived conn
     if err == NoError then do
+        onCloseReceived $ connHooks conn
         sent <- isCloseSent conn
         unless sent $ exitConnection conn ConnectionIsClosed
       else do

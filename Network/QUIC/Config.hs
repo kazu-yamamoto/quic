@@ -4,12 +4,25 @@ module Network.QUIC.Config where
 
 import Data.IP
 import Network.Socket
-import Network.TLS hiding (Version, HostName)
+import Network.TLS hiding (Version, HostName, Hooks)
 import Network.TLS.QUIC
 
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Types
+
+----------------------------------------------------------------
+
+data Hooks = Hooks {
+    onCloseSent     :: IO ()
+  , onCloseReceived :: IO ()
+  }
+
+defaultHooks :: Hooks
+defaultHooks = Hooks {
+    onCloseSent     = return ()
+  , onCloseReceived = return ()
+  }
 
 ----------------------------------------------------------------
 
@@ -23,6 +36,7 @@ data Config = Config {
   , confDebugLog       :: CID -> String -> IO ()
   , confQLog           :: CID -> String -> IO ()
   , confCredentials    :: Credentials
+  , confHooks          :: Hooks
   }
 
 -- | The default value for common configuration.
@@ -37,6 +51,7 @@ defaultConfig = Config {
   , confDebugLog       = \_ _ -> return ()
   , confQLog           = \_ _ -> return ()
   , confCredentials    = mempty
+  , confHooks          = defaultHooks
   }
 
 ----------------------------------------------------------------

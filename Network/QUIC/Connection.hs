@@ -156,11 +156,11 @@ module Network.QUIC.Connection (
   , qlogSentRetry
   -- Types
   , connThreadId
+  , connHooks
   , headerBuffer
   , headerBufferSize
   , payloadBuffer
   , payloadBufferSize
-  , defaultHooks
   , Input(..)
   , Crypto(..)
   , Output(..)

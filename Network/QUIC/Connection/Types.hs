@@ -145,19 +145,6 @@ initialCoder = Coder {
 
 ----------------------------------------------------------------
 
-data Hooks = Hooks {
-    onCloseSent     :: Connection -> IO ()
-  , onCloseReceived :: Connection -> IO ()
-  }
-
-defaultHooks :: Hooks
-defaultHooks = Hooks {
-    onCloseSent     = \_ -> return ()
-  , onCloseReceived = \_ -> return ()
-  }
-
-----------------------------------------------------------------
-
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role

@@ -29,6 +29,8 @@ module Network.QUIC (
   , defaultServerConfig
   , Config(..)
   , defaultConfig
+  , Hooks(..)
+  , defaultHooks
   -- * Types
   , connDebugLog
   , isClientInitiatedBidirectional
