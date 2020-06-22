@@ -160,6 +160,7 @@ module Network.QUIC.Connection (
   , headerBufferSize
   , payloadBuffer
   , payloadBufferSize
+  , defaultHooks
   , Input(..)
   , Output(..)
   , CryptoD(..)

@@ -88,7 +88,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     debugLog $ "Original CID: " ++ show peerCID
     let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
-    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
+    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog defaultHooks cls sref
     initializeCoder conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz = fromMaybe 0 ccPacketSize
@@ -164,7 +164,7 @@ createServerConnection conf dispatch acc mainThreadId = do
         qLog msg = writeQlogQ qq msg
         qlogger = newQlogger qq "server" (show ocid) $ confQLog sconf ocid
     debugLog $ "Original CID: " ++ show ocid
-    conn <- serverConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref
+    conn <- serverConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog defaultHooks cls sref
     initializeCoder conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
     setMaxPacketSize conn ((defaultPacketSize mysa `max` pktSiz) `min` maxPacketSize mysa)

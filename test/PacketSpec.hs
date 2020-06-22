@@ -33,14 +33,14 @@ spec = do
             s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
             q <- newRecvQ
             sref <- newIORef (s,q)
-            clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog cls sref
+            clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks cls sref
             initializeCoder clientConn InitialLevel
             let serverConf = defaultServerConfig {
                        scConfig = defaultConfig {
                            confCredentials = credentials
                          }
                      }
-            serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog cls sref
+            serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks cls sref
             initializeCoder serverConn InitialLevel
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel

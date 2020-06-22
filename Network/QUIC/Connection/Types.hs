@@ -145,6 +145,19 @@ initialCoder = Coder {
 
 ----------------------------------------------------------------
 
+data Hooks = Hooks {
+    onCloseSent     :: Connection -> IO ()
+  , onCloseReceived :: Connection -> IO ()
+  }
+
+defaultHooks :: Hooks
+defaultHooks = Hooks {
+    onCloseSent     = \_ -> return ()
+  , onCloseReceived = \_ -> return ()
+  }
+
+----------------------------------------------------------------
+
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role
@@ -154,6 +167,7 @@ data Connection = Connection {
   , closeSockets      :: Close
   , connDebugLog      :: LogAction
   , connQLog          :: QlogMsg -> IO ()
+  , connHooks         :: Hooks
   -- Manage
   , connThreadId      :: ThreadId
   , threadIds         :: IORef [Weak ThreadId]
@@ -211,11 +225,12 @@ data Connection = Connection {
 
 newConnection :: Role -> Version -> Parameters
               -> AuthCIDs -> AuthCIDs
-              -> LogAction -> (QlogMsg -> IO ()) -> Close
+              -> LogAction -> (QlogMsg -> IO ()) -> Hooks
+              -> Close
               -> IORef (Socket,RecvQ)
               -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref isecs = do
+newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog hooks close sref isecs = do
     tvarFlowTx <- newTVarIO defaultFlow
     Connection rl
         <$> newIORef initialRoleInfo
@@ -224,6 +239,7 @@ newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog close sref i
         <*> return close
         <*> return debugLog
         <*> return qLog
+        <*> return hooks
         -- Manage
         <*> myThreadId
         <*> newIORef []
@@ -291,26 +307,27 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig -> Version -> AuthCIDs -> AuthCIDs
-                 -> LogAction -> (QlogMsg -> IO ()) -> Close
+                 -> LogAction -> (QlogMsg -> IO ()) -> Hooks
+                 -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref = do
+clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref = do
     let Just cid = initSrcCID peerAuthCIDs
         isecs = initialSecrets ver cid
         params = confParameters ccConfig
-    newConnection Client ver params myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
+    newConnection Client ver params myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref isecs
 
 serverConnection :: ServerConfig -> Version -> AuthCIDs -> AuthCIDs
-                 -> LogAction -> (QlogMsg -> IO ()) -> Close
+                 -> LogAction -> (QlogMsg -> IO ()) -> Hooks -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog cls sref = do
+serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref = do
     let Just cid = case retrySrcCID myAuthCIDs of
                      Nothing -> origDstCID myAuthCIDs
                      Just _  -> retrySrcCID myAuthCIDs
         isecs = initialSecrets ver cid
         params = confParameters scConfig
-    newConnection Server ver params myAuthCIDs peerAuthCIDs debugLog qLog cls sref isecs
+    newConnection Server ver params myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref isecs
 
 ----------------------------------------------------------------
 
