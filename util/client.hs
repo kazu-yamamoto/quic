@@ -10,6 +10,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
+import Data.IORef
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
@@ -130,6 +131,7 @@ data Aux = Aux {
   , auxAuthority :: String
   , auxDebug :: String -> IO ()
   , auxShow :: ByteString -> IO ()
+  , auxCheckClose :: IO Bool
   }
 
 type Cli = Aux -> Connection -> IO ()
@@ -141,6 +143,7 @@ main = do
     let ipslen = length ips
     when (ipslen /= 2 && ipslen /= 3) $
         showUsageAndExit "cannot recognize <addr> and <port>\n"
+    cref <- newIORef False
     let path | ipslen == 3 = ips !! 2
              | otherwise   = "/"
         addr:port:_ = ips
@@ -169,6 +172,9 @@ main = do
               , confGroups     = getGroups optGroups
               , confDebugLog   = getStdoutLogger optDebugLog
               , confQLog       = getDirLogger optQLogDir ".qlog"
+              , confHooks      = defaultHooks {
+                    onCloseReceived = writeIORef cref True
+                  }
               }
           }
         debug | optDebugLog = putStrLn
@@ -180,6 +186,7 @@ main = do
           , auxAuthority = addr
           , auxDebug = debug
           , auxShow = showContent
+          , auxCheckClose = readIORef cref
           }
     runClient conf opts aux
 
@@ -269,6 +276,8 @@ runClient conf opts@Options{..} aux@Aux{..} = do
              Nothing -> do
                  putStrLn "Result: (H) handshake ... OK"
                  putStrLn "Result: (D) stream data ... OK"
+                 closeReceived <- auxCheckClose
+                 when closeReceived $ putStrLn "Result: (C) close received ... OK"
                  exitSuccess
 
 runClient2 :: ClientConfig -> Options -> Aux -> ResumptionInfo -> Cli
