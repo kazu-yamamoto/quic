@@ -224,14 +224,13 @@ data Connection = Connection {
   , payloadBufferSize :: BufferSize
   }
 
-newConnection :: Role -> Version -> Parameters
-              -> AuthCIDs -> AuthCIDs
-              -> LogAction -> (QlogMsg -> IO ()) -> Hooks
-              -> Close
+newConnection :: Role
+              -> Parameters -> TrafficSecrets InitialSecret
+              -> Version -> AuthCIDs -> AuthCIDs
+              -> LogAction -> (QlogMsg -> IO ()) -> Hooks -> Close
               -> IORef (Socket,RecvQ)
-              -> TrafficSecrets InitialSecret
               -> IO Connection
-newConnection rl ver myparams myAuthCIDs peerAuthCIDs debugLog qLog hooks close sref isecs = do
+newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks close sref = do
     tvarFlowTx <- newTVarIO defaultFlow
     Connection rl close debugLog qLog hooks
         -- Info
@@ -303,28 +302,31 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 ----------------------------------------------------------------
 
-clientConnection :: ClientConfig -> Version -> AuthCIDs -> AuthCIDs
-                 -> LogAction -> (QlogMsg -> IO ()) -> Hooks
-                 -> Close
-                 -> IORef (Socket,RecvQ)
-                 -> IO Connection
-clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref = do
-    let Just cid = initSrcCID peerAuthCIDs
-        isecs = initialSecrets ver cid
-        params = confParameters ccConfig
-    newConnection Client ver params myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref isecs
-
-serverConnection :: ServerConfig -> Version -> AuthCIDs -> AuthCIDs
+clientConnection :: ClientConfig
+                 -> Version -> AuthCIDs -> AuthCIDs
                  -> LogAction -> (QlogMsg -> IO ()) -> Hooks -> Close
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
-serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref = do
-    let Just cid = case retrySrcCID myAuthCIDs of
-                     Nothing -> origDstCID myAuthCIDs
-                     Just _  -> retrySrcCID myAuthCIDs
-        isecs = initialSecrets ver cid
-        params = confParameters scConfig
-    newConnection Server ver params myAuthCIDs peerAuthCIDs debugLog qLog hooks cls sref isecs
+clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
+    newConnection Client params isecs ver myAuthCIDs peerAuthCIDs
+  where
+    Just cid = initSrcCID peerAuthCIDs
+    isecs = initialSecrets ver cid
+    params = confParameters ccConfig
+
+serverConnection :: ServerConfig
+                 -> Version -> AuthCIDs -> AuthCIDs
+                 -> LogAction -> (QlogMsg -> IO ()) -> Hooks -> Close
+                 -> IORef (Socket,RecvQ)
+                 -> IO Connection
+serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
+    newConnection Server params isecs ver myAuthCIDs peerAuthCIDs
+  where
+    Just cid = case retrySrcCID myAuthCIDs of
+                 Nothing -> origDstCID myAuthCIDs
+                 Just _  -> retrySrcCID myAuthCIDs
+    isecs = initialSecrets ver cid
+    params = confParameters scConfig
 
 ----------------------------------------------------------------
 
