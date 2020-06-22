@@ -58,7 +58,7 @@ acceptStream :: Connection -> IO Stream
 acceptStream conn = do
     openC <- isConnectionOpen conn
     unless openC $ E.throwIO ConnectionIsClosed
-    NewStream s <- takeInput conn
+    InpStream s <- takeInput conn
     return s
 
 -- | Receiving data in the stream. In the case where a FIN is received

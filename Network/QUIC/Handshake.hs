@@ -58,7 +58,7 @@ recvTLS conn hsr level =
     failure = return . Left . internalError
 
     go expected = do
-        Crypto actual bs <- recvCryptoData conn
+        InpHandshake actual bs <- recvCryptoData conn
         if actual /= expected then
             failure $ "encryption level mismatch: expected " ++ show expected ++ " but got " ++ show actual
           else do

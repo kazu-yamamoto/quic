@@ -338,11 +338,10 @@ isServer Connection{..} = role == Server
 
 ----------------------------------------------------------------
 
-newtype Input = NewStream Stream deriving Show
+newtype Input = InpStream Stream deriving Show
+data   Crypto = InpHandshake EncryptionLevel ByteString deriving Show
 
-data Crypto = Crypto EncryptionLevel ByteString deriving Show
-
-data Output = OutControl EncryptionLevel [Frame]
+data Output = OutControl   EncryptionLevel [Frame]
             | OutHandshake [(EncryptionLevel,ByteString)]
-            | OutPlainPacket PlainPacket
+            | OutRetrans   PlainPacket
             deriving Show

@@ -28,7 +28,7 @@ putOutput :: Connection -> Output -> IO ()
 putOutput conn out = atomically $ writeTQueue (outputQ conn) out
 
 putOutputPP :: Connection -> PlainPacket -> IO ()
-putOutputPP conn ppkt = atomically $ writeTQueue (outputQ conn) $ OutPlainPacket ppkt
+putOutputPP conn ppkt = atomically $ writeTQueue (outputQ conn) $ OutRetrans ppkt
 
 takeSendStreamQSTM :: Connection -> STM TxStreamData
 takeSendStreamQSTM conn = readTBQueue $ sharedSendStreamQ $ shared conn

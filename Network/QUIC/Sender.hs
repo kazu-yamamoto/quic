@@ -135,14 +135,14 @@ sender conn send = handleLog logAction $ forever $ do
     logAction msg = connDebugLog conn ("sender: " ++ msg)
 
 sendOutput :: Connection -> SendMany -> Output -> IO ()
-sendOutput conn send (OutHandshake x) = do
-    maxSiz <- getMaxPacketSize conn
-    sendCryptoFragments conn send maxSiz x
 sendOutput conn send (OutControl lvl frames) = do
     maxSiz <- getMaxPacketSize conn
     bss <- construct conn lvl frames $ Just maxSiz
     send bss
-sendOutput conn send (OutPlainPacket (PlainPacket hdr0 plain0)) = do
+sendOutput conn send (OutHandshake x) = do
+    maxSiz <- getMaxPacketSize conn
+    sendCryptoFragments conn send maxSiz x
+sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
     let lvl = packetEncryptionLevel hdr0
     let frames = filter retransmittable $ plainFrames plain0
     maxSiz <- getMaxPacketSize conn
@@ -335,7 +335,7 @@ resender conn = handleIOLog (return ()) logAction $ do
             when (n' <= maxRetransDelay) $ writeIORef ref n'
             loop ref 0
     logAction msg = connDebugLog conn ("resender: " ++ msg)
-    put ppkt = putOutput conn $ OutPlainPacket ppkt
+    put ppkt = putOutput conn $ OutRetrans ppkt
 
 isRTTxLevel :: PlainPacket -> Bool
 isRTTxLevel (PlainPacket hdr _) = lvl == RTT1Level || lvl == RTT0Level

@@ -27,7 +27,7 @@ getStream conn sid = do
           return strm
       Nothing -> do
           strm <- addStream conn sid
-          putInput conn $ NewStream strm
+          putInput conn $ InpStream strm
           return strm
 
 findStream :: Connection -> StreamId -> IO (Maybe Stream)

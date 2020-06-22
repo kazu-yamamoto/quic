@@ -57,7 +57,7 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
             setRetried conn True
             releaseByRetry conn >>= mapM_ put
       where
-        put ppkt = putOutput conn $ OutPlainPacket ppkt
+        put ppkt = putOutput conn $ OutRetrans ppkt
 
 checkCIDs :: Connection -> CID -> Either CID (ByteString,ByteString) -> IO Bool
 checkCIDs conn dCID (Left sCID) = do
