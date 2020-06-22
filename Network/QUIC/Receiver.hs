@@ -109,7 +109,7 @@ processFrame conn _ (Ack ackInfo _) =
     releaseByAcks conn ackInfo
 processFrame _ _ ResetStream{} = return ()
 processFrame _ _ StopSending{} = return ()
-processFrame conn lvl (Crypto off cdat) = do
+processFrame conn lvl (CryptoF off cdat) = do
     let len = BS.length cdat
         rx = RxStreamData cdat off len False
     case lvl of

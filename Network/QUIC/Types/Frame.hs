@@ -19,7 +19,7 @@ data Frame = Padding Int
            | Ack AckInfo Delay
            | ResetStream -- fixme
            | StopSending StreamId ApplicationError
-           | Crypto Offset CryptoData
+           | CryptoF Offset CryptoData
            | NewToken Token
            | StreamF StreamId Offset [StreamData] Fin
            | MaxData Int

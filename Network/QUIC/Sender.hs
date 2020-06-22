@@ -25,7 +25,7 @@ cryptoFrame conn crypto lvl = do
     let len = B.length crypto
     strm <- getCryptoStream conn lvl
     off <- getTxStreamOffset strm len
-    return $ Crypto off crypto
+    return $ CryptoF off crypto
 
 ----------------------------------------------------------------
 

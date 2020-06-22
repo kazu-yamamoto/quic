@@ -42,7 +42,7 @@ encodeFrame wbuf (Ack (AckInfo largest range1 ranges) delay) = do
     putRanges (gap,range) = do
         encodeInt' wbuf $ fromIntegral gap
         encodeInt' wbuf $ fromIntegral range
-encodeFrame wbuf (Crypto off cdata) = do
+encodeFrame wbuf (CryptoF off cdata) = do
     write8 wbuf 0x06
     encodeInt' wbuf $ fromIntegral off
     encodeInt' wbuf $ fromIntegral $ B.length cdata
@@ -169,7 +169,7 @@ decodeCryptoFrame rbuf = do
     off <- fromIntegral <$> decodeInt' rbuf
     len <- fromIntegral <$> decodeInt' rbuf
     cdata <- extractByteString rbuf len
-    return $ Crypto off cdata
+    return $ CryptoF off cdata
 
 decodeAckFrame :: ReadBuffer -> IO Frame
 decodeAckFrame rbuf = do
