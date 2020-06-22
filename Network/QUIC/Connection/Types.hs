@@ -53,7 +53,7 @@ emptyPeerPacketNumbers :: PeerPacketNumbers
 emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 
 type InputQ  = TQueue Input
-type CryptoQ = TQueue CryptoD
+type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
 
 data RetransDB = RetransDB {
@@ -340,7 +340,7 @@ isServer Connection{..} = role == Server
 
 newtype Input = NewStream Stream deriving Show
 
-data CryptoD = CryptoD EncryptionLevel ByteString deriving Show
+data Crypto = Crypto EncryptionLevel ByteString deriving Show
 
 data Output = OutControl EncryptionLevel [Frame]
             | OutHandshake [(EncryptionLevel,ByteString)]

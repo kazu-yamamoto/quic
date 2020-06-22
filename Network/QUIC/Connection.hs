@@ -162,8 +162,8 @@ module Network.QUIC.Connection (
   , payloadBufferSize
   , defaultHooks
   , Input(..)
+  , Crypto(..)
   , Output(..)
-  , CryptoD(..)
   ) where
 
 import Network.QUIC.Connection.Crypto

@@ -43,7 +43,7 @@ rxLevelChanged = sendCompleted
 sendCryptoData :: Connection -> Output -> IO ()
 sendCryptoData = putOutput
 
-recvCryptoData :: Connection -> IO CryptoD
+recvCryptoData :: Connection -> IO Crypto
 recvCryptoData = takeCrypto
 
 recvTLS :: Connection -> IORef HndState -> CryptLevel -> IO (Either TLS.TLSError ByteString)
@@ -58,7 +58,7 @@ recvTLS conn hsr level =
     failure = return . Left . internalError
 
     go expected = do
-        CryptoD actual bs <- recvCryptoData conn
+        Crypto actual bs <- recvCryptoData conn
         if actual /= expected then
             failure $ "encryption level mismatch: expected " ++ show expected ++ " but got " ++ show actual
           else do
