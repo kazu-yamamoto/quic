@@ -59,6 +59,8 @@ module Network.QUIC.Connection (
   , choosePeerCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
+  , setMigrationStarted
+  , isPathValidating
   , checkResponse
   , validatePath
   -- * Misc
@@ -131,6 +133,8 @@ module Network.QUIC.Connection (
   , putOutput
   , putOutputPP
   , takeSendStreamQSTM
+  , readMigrationQ
+  , writeMigrationQ
   -- * Role
   , setToken
   , getToken

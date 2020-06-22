@@ -65,25 +65,20 @@ clearDispatch d = CT.killTokenManager $ tokenMgr d
 
 ----------------------------------------------------------------
 
-data Entry = Entry Connection (IORef (Maybe MigrationQ))
-
--- Destination CID -> Entry
-newtype ConnectionDict = ConnectionDict (Map CID Entry)
+newtype ConnectionDict = ConnectionDict (Map CID Connection)
 
 emptyConnectionDict :: ConnectionDict
 emptyConnectionDict = ConnectionDict M.empty
 
-lookupConnectionDict :: IORef ConnectionDict -> CID -> IO (Maybe Entry)
+lookupConnectionDict :: IORef ConnectionDict -> CID -> IO (Maybe Connection)
 lookupConnectionDict ref cid = do
     ConnectionDict tbl <- readIORef ref
     return $ M.lookup cid tbl
 
 registerConnectionDict :: IORef ConnectionDict -> CID -> Connection -> IO ()
 registerConnectionDict ref cid conn = do
-    mq <- newIORef Nothing :: IO (IORef (Maybe MigrationQ))
-    let ent = Entry conn mq
     atomicModifyIORef' ref $ \(ConnectionDict tbl) ->
-        (ConnectionDict $ M.insert cid ent tbl, ())
+        (ConnectionDict $ M.insert cid conn tbl, ())
 
 unregisterConnectionDict :: IORef ConnectionDict -> CID -> IO ()
 unregisterConnectionDict ref cid = atomicModifyIORef' ref $ \(ConnectionDict tbl) ->
@@ -133,19 +128,6 @@ writeAcceptQ (AcceptQ q) x = atomically $ writeTQueue q x
 
 accept :: Dispatch -> IO Accept
 accept = readAcceptQ . acceptQ
-
-----------------------------------------------------------------
-
-newtype MigrationQ = MigrationQ (TQueue CryptPacket)
-
-newMigrationQ :: IO MigrationQ
-newMigrationQ = MigrationQ <$> newTQueueIO
-
-readMigrationQ :: MigrationQ -> IO CryptPacket
-readMigrationQ (MigrationQ q) = atomically $ readTQueue q
-
-writeMigrationQ :: MigrationQ -> CryptPacket -> IO ()
-writeMigrationQ (MigrationQ q) x = atomically $ writeTQueue q x
 
 ----------------------------------------------------------------
 
@@ -312,26 +294,22 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
     case mx of
       Nothing -> do
           putStrLn $ "CID no match: " ++ show dCID ++ ", " ++ show peersa
-      Just (Entry conn ref)  -> do
+      Just conn -> do
           mplain <- decryptCrypt conn crypt RTT1Level
           case mplain of
             Nothing -> connDebugLog conn "Cannot decrypt in dispatch"
             Just plain -> do
                 qlogReceived conn $ PlainPacket hdr plain
                 let cpkt' = CryptPacket hdr $ setCryptLogged crypt
-                mq0 <- newMigrationQ
-                let modify Nothing   = (Just mq0, Left mq0)
-                    modify (Just mq) = (Just mq,  Right mq)
-                emq <- atomicModifyIORef' ref modify
-                case emq of
-                  Left  mq -> do
-                      writeMigrationQ mq cpkt'
-                       -- fixme: should not block in this loop
-                      mcidinfo <- timeout 100000 $ choosePeerCID conn
-                      connDebugLog conn $ "Migrating to " ++ show peersa ++ " (" ++ show dCID ++ ")"
-                      void $ forkIO $ migrator conn peersa mq dCID mcidinfo
-                  Right mq -> do
-                      writeMigrationQ mq cpkt'
+                writeMigrationQ conn cpkt'
+                migrating <- isPathValidating conn
+                unless migrating $ do
+                    setMigrationStarted conn
+                    -- fixme: should not block in this loop
+                    mcidinfo <- timeout 100000 $ choosePeerCID conn
+                    connDebugLog conn $ "Migrating to " ++ show peersa ++ " (" ++ show dCID ++ ")"
+                    void $ forkIO $ migrator conn peersa dCID mcidinfo
+
 dispatch _ _ ipkt _ _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
 
 ----------------------------------------------------------------
@@ -349,8 +327,8 @@ recvServer q = readRecvQ q
 
 ----------------------------------------------------------------
 
-migrator :: Connection -> SockAddr -> MigrationQ -> CID -> Maybe CIDInfo -> IO ()
-migrator conn peersa1 mq dcid mcidinfo = do
+migrator :: Connection -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
+migrator conn peersa1 dcid mcidinfo = do
     (s0,q) <- getSockInfo conn
     mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
@@ -359,5 +337,5 @@ migrator conn peersa1 mq dcid mcidinfo = do
     -- fixme: if cannot set
     setMyCID conn dcid
     validatePath conn mcidinfo
-    _ <- timeout 2000000 $ forever (readMigrationQ mq >>= writeRecvQ q)
+    _ <- timeout 2000000 $ forever (readMigrationQ conn >>= writeRecvQ q)
     close s0

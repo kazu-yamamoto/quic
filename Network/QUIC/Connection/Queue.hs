@@ -33,3 +33,8 @@ putOutputPP conn ppkt = atomically $ writeTQueue (outputQ conn) $ OutRetrans ppk
 takeSendStreamQSTM :: Connection -> STM TxStreamData
 takeSendStreamQSTM conn = readTBQueue $ sharedSendStreamQ $ shared conn
 
+readMigrationQ :: Connection -> IO CryptPacket
+readMigrationQ conn = atomically $ readTQueue $ migrationQ conn
+
+writeMigrationQ :: Connection -> CryptPacket -> IO ()
+writeMigrationQ conn x = atomically $ writeTQueue (migrationQ conn) x

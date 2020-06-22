@@ -52,10 +52,6 @@ newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
 emptyPeerPacketNumbers :: PeerPacketNumbers
 emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 
-type InputQ  = TQueue Input
-type CryptoQ = TQueue Crypto
-type OutputQ = TQueue Output
-
 data RetransDB = RetransDB {
     minPN :: PacketNumber -- ^ If 'keptPackets' is 'IntPSQ.empty',
                           -- 'maxPN' is copied and 1 is added.
@@ -123,9 +119,10 @@ newCIDDB cid = CIDDB {
 
 ----------------------------------------------------------------
 
-data MigrationState = SendChallenge [PathData]
+data MigrationState = NonMigration
+                    | MigrationStarted
+                    | SendChallenge [PathData]
                     | RecvResponse
-                    | NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
@@ -171,6 +168,7 @@ data Connection = Connection {
   , inputQ            :: InputQ
   , cryptoQ           :: CryptoQ
   , outputQ           :: OutputQ
+  , migrationQ        :: MigrationQ
   , shared            :: Shared
   , retransDB         :: IORef RetransDB
   , delayedAck        :: IORef Int
@@ -235,6 +233,7 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         <*> newIORef baseParameters
         <*> newTVarIO (newCIDDB peerCID)
         -- Queues
+        <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newTQueueIO
@@ -332,3 +331,8 @@ data Output = OutControl   EncryptionLevel [Frame]
             | OutHandshake [(EncryptionLevel,ByteString)]
             | OutRetrans   PlainPacket
             deriving Show
+
+type InputQ  = TQueue Input
+type CryptoQ = TQueue Crypto
+type OutputQ = TQueue Output
+type MigrationQ = TQueue CryptPacket

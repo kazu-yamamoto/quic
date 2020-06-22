@@ -17,6 +17,8 @@ module Network.QUIC.Connection.Migration (
   , choosePeerCID
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
+  , setMigrationStarted
+  , isPathValidating
   , checkResponse
   , validatePath
   ) where
@@ -233,6 +235,18 @@ validatePath conn (Just (CIDInfo retiredSeqNum _ _)) = do
 setChallenges :: Connection -> [PathData] -> IO ()
 setChallenges Connection{..} pdats =
     atomically $ writeTVar migrationState $ SendChallenge pdats
+
+setMigrationStarted :: Connection -> IO ()
+setMigrationStarted Connection{..} =
+    atomically $ writeTVar migrationState MigrationStarted
+
+isPathValidating :: Connection -> IO Bool
+isPathValidating Connection{..} = do
+    s <- atomically $ readTVar migrationState
+    case s of
+      SendChallenge _  -> return True
+      MigrationStarted -> return True
+      _                -> return False
 
 waitResponse :: Connection -> IO ()
 waitResponse Connection{..} = atomically $ do
