@@ -94,7 +94,7 @@ putRxStreamData s rx = do
         loop fin1 ds
 
 tryReassemble :: Stream -> RxStreamData -> IO ([StreamData], Fin)
-tryReassemble Stream{..} (RxStreamData "" _  _ False) = return ([], False)
+tryReassemble Stream{}   (RxStreamData "" _  _ False) = return ([], False)
 tryReassemble Stream{..} (RxStreamData "" off _ True) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     if fin0 then do

@@ -188,7 +188,7 @@ createServerConnection conf dispatch acc mainThreadId = do
     return (conn, send, recv, cls, qlogger, myAuthCIDs)
 
 handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
-handshakeServerConnection conf@ServerConfig{..} conn send recv qlogger myAuthCIDs = E.handle handler $ do
+handshakeServerConnection conf conn send recv qlogger myAuthCIDs = E.handle handler $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender conn
