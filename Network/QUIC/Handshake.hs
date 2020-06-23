@@ -13,6 +13,7 @@ import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Imports
 import Network.QUIC.Info
+import Network.QUIC.Logger
 import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Timeout
@@ -138,7 +139,7 @@ handshakeClient conf conn myAuthCIDs = do
         putOutput conn $ OutControl RTT1Level [ncid]
     done _ctx = do
         info <- getConnectionInfo conn
-        connDebugLog conn $ show info
+        connDebugLog conn $ bhow info
 
 ----------------------------------------------------------------
 
@@ -186,7 +187,7 @@ handshakeServer conf conn myAuthCIDs = do
         setConnectionEstablished conn
         --
         info <- getConnectionInfo conn
-        connDebugLog conn $ show info
+        connDebugLog conn $ bhow info
 
 setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
 setPeerParams conn _ctx [ExtensionRaw extid bs]

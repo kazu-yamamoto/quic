@@ -12,6 +12,7 @@ import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
+import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Stream
@@ -47,8 +48,8 @@ receiver conn recv = handleLog logAction $ do
             processCryptPacket conn hdr crypt
           else do
             qlogDropped conn hdr
-            connDebugLog conn $ show cid ++ " is unknown"
-    logAction msg = connDebugLog conn ("receiver: " ++ msg)
+            connDebugLog conn $ bhow cid <> " is unknown"
+    logAction msg = connDebugLog conn ("receiver: " <> msg)
 
 processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
 processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
@@ -90,7 +91,7 @@ processCryptPacket conn hdr crypt = do
               E.throwTo (connThreadId conn) ConnectionIsReset
             else do
               qlogDropped conn hdr
-              connDebugLog conn $ "Cannot decrypt: " ++ show level
+              connDebugLog conn $ "Cannot decrypt: " <> bhow level
               -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
@@ -117,7 +118,7 @@ processFrame conn lvl (CryptoF off cdat) = do
       InitialLevel   -> do
           putRxCrypto conn lvl rx
       RTT0Level -> do
-          connDebugLog conn $ "processFrame: invalid packet type " ++ show lvl
+          connDebugLog conn $ "processFrame: invalid packet type " <> bhow lvl
       HandshakeLevel ->
           putRxCrypto conn lvl rx
       RTT1Level
@@ -202,7 +203,7 @@ processFrame conn _ HandshakeDone = do
         killHandshaker conn
         dropSecrets conn
 processFrame conn _ (UnknownFrame _n)       = do
-    connDebugLog conn $ "processFrame: " ++ show _n
+    connDebugLog conn $ "processFrame: " <> bhow _n
 processFrame _ _ _ = return () -- error
 
 -- QUIC version 1 uses only short packets for stateless reset.

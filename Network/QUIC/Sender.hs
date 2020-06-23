@@ -132,7 +132,7 @@ sender conn send = handleLog logAction $ forever $ do
       Left  out -> sendOutput conn send out
       Right tx  -> sendTxStreamData conn send tx
   where
-    logAction msg = connDebugLog conn ("sender: " ++ msg)
+    logAction msg = connDebugLog conn ("sender: " <> msg)
 
 sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutControl lvl frames) = do
@@ -334,7 +334,7 @@ resender conn = handleIOLog (return ()) logAction $ do
             let n' = n + 200
             when (n' <= maxRetransDelay) $ writeIORef ref n'
             loop ref 0
-    logAction msg = connDebugLog conn ("resender: " ++ msg)
+    logAction msg = connDebugLog conn ("resender: " <> msg)
     put ppkt = putOutput conn $ OutRetrans ppkt
 
 isRTTxLevel :: PlainPacket -> Bool

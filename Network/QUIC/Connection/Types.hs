@@ -16,12 +16,11 @@ import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc (mallocBytes)
 import Network.Socket (Socket)
 import Network.TLS.QUIC
-import System.Mem.Weak
 
 import Network.QUIC.Config
 import Network.QUIC.Imports
+import Network.QUIC.Logger
 import Network.QUIC.Parameters
-import Network.QUIC.Qlog
 import Network.QUIC.Stream
 import Network.QUIC.TLS
 import Network.QUIC.Time
@@ -146,16 +145,14 @@ initialCoder = Coder {
 data Connection = Connection {
     role              :: Role
   -- Actions
-  , closeSockets      :: Close
-  , connDebugLog      :: LogAction
-  , connQLog          :: QlogMsg -> IO ()
+  , connDebugLog      :: DebugLogger
+  , connQLog          :: QLogger
   , connHooks         :: Hooks
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
   -- Manage
   , connThreadId      :: ThreadId
-  , threadIds         :: IORef [Weak ThreadId]
   , killHandshakerAct :: IORef (IO ())
   , sockInfo          :: IORef (Socket,RecvQ)
   -- Mine
@@ -207,23 +204,24 @@ data Connection = Connection {
   , headerBufferSize  :: BufferSize
   , payloadBuffer     :: Buffer
   , payloadBufferSize :: BufferSize
+  -- Resources
+  , connResources     :: IORef (IO ())
   }
 
 newConnection :: Role
               -> Parameters -> TrafficSecrets InitialSecret
               -> Version -> AuthCIDs -> AuthCIDs
-              -> LogAction -> (QlogMsg -> IO ()) -> Hooks -> Close
+              -> DebugLogger -> QLogger -> Hooks
               -> IORef (Socket,RecvQ)
               -> IO Connection
-newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks close sref = do
+newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
     tvarFlowTx <- newTVarIO defaultFlow
-    Connection rl close debugLog qLog hooks
+    Connection rl debugLog qLog hooks
         -- Info
         <$> newIORef initialRoleInfo
         <*> newIORef ver
         -- Manage
         <*> myThreadId
-        <*> newIORef []
         <*> newIORef (return ())
         <*> return sref
         -- Mine
@@ -275,6 +273,8 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         <*> return      maximumQUICHeaderSize
         <*> mallocBytes maximumUdpPayloadSize
         <*> return      maximumUdpPayloadSize
+        -- Resources
+        <*> newIORef (return ())
   where
     isclient = rl == Client
     initialRoleInfo
@@ -290,7 +290,7 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 clientConnection :: ClientConfig
                  -> Version -> AuthCIDs -> AuthCIDs
-                 -> LogAction -> (QlogMsg -> IO ()) -> Hooks -> Close
+                 -> DebugLogger -> QLogger -> Hooks
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
 clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
@@ -302,7 +302,7 @@ clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
 
 serverConnection :: ServerConfig
                  -> Version -> AuthCIDs -> AuthCIDs
-                 -> LogAction -> (QlogMsg -> IO ()) -> Hooks -> Close
+                 -> DebugLogger -> QLogger -> Hooks
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
 serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =

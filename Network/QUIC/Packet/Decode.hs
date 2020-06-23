@@ -12,6 +12,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Imports
+import Network.QUIC.Logger
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Version
 import Network.QUIC.TLS
@@ -47,7 +48,7 @@ decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     return (pkt, rest)
   where
     handler (E.SomeException e) = do
-        print e
+        stdoutLogger $ bhow e
         return (PacketIB BrokenPacket,"")
     decode rbuf _proFlags True = do
         header <- Short . makeCID <$> extractShortByteString rbuf myCIDLength

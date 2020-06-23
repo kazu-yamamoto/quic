@@ -33,8 +33,7 @@ data Config = Config {
   , confGroups         :: [Group]
   , confParameters     :: Parameters
   , confKeyLog         :: String -> IO ()
-  , confDebugLog       :: CID -> String -> IO ()
-  , confQLog           :: CID -> String -> IO ()
+  , confQLog           :: Maybe FilePath
   , confCredentials    :: Credentials
   , confHooks          :: Hooks
   }
@@ -48,8 +47,7 @@ defaultConfig = Config {
   , confGroups         = supportedGroups defaultSupported
   , confParameters     = defaultParameters
   , confKeyLog         = \_ -> return ()
-  , confDebugLog       = \_ _ -> return ()
-  , confQLog           = \_ _ -> return ()
+  , confQLog           = Nothing
   , confCredentials    = mempty
   , confHooks          = defaultHooks
   }
@@ -65,6 +63,7 @@ data ClientConfig = ClientConfig {
   , ccResumption :: ResumptionInfo
   , ccUse0RTT    :: Bool
   , ccPacketSize :: Maybe Int -- ^ QUIC packet size (UDP payload size)
+  , ccDebugLog   :: Bool
   , ccConfig     :: Config
   }
 
@@ -78,6 +77,7 @@ defaultClientConfig = ClientConfig {
   , ccResumption = defaultResumptionInfo
   , ccUse0RTT    = False
   , ccPacketSize = Nothing
+  , ccDebugLog   = False
   , ccConfig     = defaultConfig
   }
 
@@ -90,6 +90,7 @@ data ServerConfig = ServerConfig {
   , scRequireRetry   :: Bool
   , scSessionManager :: SessionManager
   , scEarlyDataSize  :: Int
+  , scDebugLog       :: Maybe FilePath
   , scConfig         :: Config
   }
 
@@ -101,5 +102,6 @@ defaultServerConfig = ServerConfig {
   , scRequireRetry   = False
   , scSessionManager = noSessionManager
   , scEarlyDataSize  = 0
+  , scDebugLog       = Nothing
   , scConfig         = defaultConfig
   }

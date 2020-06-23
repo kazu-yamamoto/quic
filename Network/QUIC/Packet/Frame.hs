@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Network.QUIC.Packet.Frame (
     encodeFrames
   , encodeFramesWithPadding
@@ -9,6 +11,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Imports
+import Network.QUIC.Logger
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -105,7 +108,7 @@ encodeFrame wbuf (ConnectionCloseApp (ApplicationError err) reason) = do
     copyShortByteString wbuf reason
 encodeFrame wbuf HandshakeDone =
     write8 wbuf 0x1e
-encodeFrame _ _ = putStrLn "encodeFrame: not supported yet" -- fixme
+encodeFrame _ _ = stdoutLogger "encodeFrame: not supported yet" -- fixme
 
 ----------------------------------------------------------------
 

@@ -5,7 +5,6 @@ module Network.QUIC.Connection (
   , isClient
   , isServer
   -- * IO
-  , closeSockets
   , connDebugLog
   , connQLog
   -- * Packet numbers
@@ -66,9 +65,6 @@ module Network.QUIC.Connection (
   -- * Misc
   , setVersion
   , getVersion
-  , setThreadIds
-  , addThreadIds
-  , clearThreads
   , getSockInfo
   , setSockInfo
   , killHandshaker
@@ -84,6 +80,9 @@ module Network.QUIC.Connection (
   , getMaxPacketSize
   , setMaxPacketSize
   , exitConnection
+  , addResource
+  , freeResources
+  , addThreadIdResource
   -- * Transmit
   , keepPlainPacket
   , releaseByRetry

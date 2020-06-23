@@ -36,6 +36,7 @@ library
                        Network.QUIC.Info
                        Network.QUIC.IO
                        Network.QUIC.Imports
+                       Network.QUIC.Logger
                        Network.QUIC.Packet
                        Network.QUIC.Packet.Decode
                        Network.QUIC.Packet.Decrypt
@@ -83,6 +84,8 @@ library
                      , crypto-token
                      , cryptonite
                      , data-default-class
+                     , fast-logger
+                     , filepath
                      , iproute >= 1.7.8
                      , memory
                      , network

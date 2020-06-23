@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Client (
@@ -29,7 +30,7 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
     pkts <- NSB.recv s maximumUdpPayloadSize >>= decodePackets
     mapM_ putQ pkts
   where
-    logAction msg = connDebugLog conn ("readerClient: " ++ msg)
+    logAction msg = connDebugLog conn ("readerClient: " <> msg)
     putQ (PacketIB BrokenPacket) = return ()
     putQ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt

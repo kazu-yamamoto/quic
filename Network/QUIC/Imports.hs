@@ -2,6 +2,7 @@ module Network.QUIC.Imports (
     Bytes
   , ByteString(..)
   , ShortByteString(..)
+  , Builder
   , module Control.Applicative
   , module Control.Monad
   , module Data.Bits
@@ -19,6 +20,7 @@ module Network.QUIC.Imports (
 import Control.Applicative
 import Control.Monad
 import Data.Bits
+import Data.ByteString.Builder (Builder)
 import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short.Internal (ShortByteString(..))
 import Data.Foldable
@@ -27,9 +29,9 @@ import Data.Maybe
 import Data.Monoid
 import Data.Ord
 import Data.Word
-import Numeric
 import Network.ByteOrder
 import Network.QUIC.Utils
+import Numeric
 
 -- | All internal byte sequences.
 --   `ByteString` should be used for FFI related stuff.

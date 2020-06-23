@@ -1,20 +1,22 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Qlog where
 
-import qualified Control.Exception as E
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C8
+
 import qualified Data.ByteString.Short as Short
-import Data.List (intercalate)
+import Data.List (intersperse)
+import System.Log.FastLogger
 
 import Network.QUIC.Imports
 import Network.QUIC.Time
 import Network.QUIC.Types
 
 class Qlog a where
-    qlog :: a -> String
+    qlog :: a -> LogStr
 
 instance Qlog RetryPacket where
     qlog RetryPacket{} = "{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}"
@@ -23,27 +25,27 @@ instance Qlog VersionNegotiationPacket where
     qlog VersionNegotiationPacket{} = "{\"packet_type\":\"version_negotiation\",\"header\":{\"packet_number\":\"\"}}"
 
 instance Qlog Header where
-    qlog hdr = "{\"packet_type\":\"" ++ packetType hdr ++ "\"}"
+    qlog hdr = "{\"packet_type\":\"" <> packetType hdr <> "\"}"
 
 instance Qlog CryptPacket where
     qlog (CryptPacket hdr _) = qlog hdr
 
 instance Qlog PlainPacket where
-    qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" ++ packetType hdr ++ "\",\"frames\":" ++ "[" ++ intercalate "," (map qlog plainFrames) ++ "]" ++ ",\"header\":{\"packet_number\":\"" ++ show plainPacketNumber ++ "\",\"dcid\":\"" ++ show (headerMyCID hdr) ++ "\"}}"
+    qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"}}"
 
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"packet_type\":\"stateless_reset\",\"header\":{\"packet_number\":\"\"}}"
 
-packetType :: Header -> String
+packetType :: Header -> LogStr
 packetType Initial{}   = "initial"
 packetType RTT0{}      = "0RTT"
 packetType Handshake{} = "handshake"
 packetType Short{}     = "1RTT"
 
 instance Qlog Frame where
-    qlog frame = "{\"frame_type\":\"" ++ frameType frame ++ "\"" ++ frameExtra frame ++ "}"
+    qlog frame = "{\"frame_type\":\"" <> frameType frame <> "\"" <> frameExtra frame <> "}"
 
-frameType :: Frame -> String
+frameType :: Frame -> LogStr
 frameType Padding{}             = "padding"
 frameType Ping                  = "ping"
 frameType Ack{}                 = "ack"
@@ -67,31 +69,31 @@ frameType ConnectionCloseApp{}  = "connection_close"
 frameType HandshakeDone{}       = "handshake_done"
 frameType UnknownFrame{}        = "unknown"
 
-frameExtra :: Frame -> String
+frameExtra :: Frame -> LogStr
 frameExtra (Padding _) = ""
 frameExtra  Ping = ""
-frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" ++ ack (fromAckInfo ai)
+frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" <> ack (fromAckInfo ai)
 frameExtra ResetStream{} = ""
 frameExtra (StopSending _StreamId _ApplicationError) = ""
-frameExtra (CryptoF off dat) =  ",\"offset\":\"" ++ show off ++ "\",\"length\":" ++ show (BS.length dat)
+frameExtra (CryptoF off dat) =  ",\"offset\":\"" <> sw off <> "\",\"length\":" <> sw (BS.length dat)
 frameExtra (NewToken _Token) = ""
-frameExtra (StreamF sid off dat fin) = ",\"stream_id\":\"" ++ show sid ++ "\",\"offset\":\"" ++ show off ++ "\",\"length\":" ++ show (sum $ map BS.length dat) ++ ",\"fin\":" ++ if fin then "true" else "false"
-frameExtra (MaxData mx) = ",\"maximum\":\"" ++ show mx ++ "\""
-frameExtra (MaxStreamData sid mx) = ",\"stream_id\":\"" ++ show sid ++ "\",\"maximum\":\"" ++ show mx ++ "\""
+frameExtra (StreamF sid off dat fin) = ",\"stream_id\":\"" <> sw sid <> "\",\"offset\":\"" <> sw off <> "\",\"length\":" <> sw (sum $ map BS.length dat) <> ",\"fin\":" <> if fin then "true" else "false"
+frameExtra (MaxData mx) = ",\"maximum\":\"" <> sw mx <> "\""
+frameExtra (MaxStreamData sid mx) = ",\"stream_id\":\"" <> sw sid <> "\",\"maximum\":\"" <> sw mx <> "\""
 frameExtra (MaxStreams _Direction _Int) = ""
 frameExtra DataBlocked{} = ""
 frameExtra StreamDataBlocked{} = ""
 frameExtra StreamsBlocked{} = ""
-frameExtra (NewConnectionID (CIDInfo sn cid _) _) = ",\"sequence_number\":\"" ++ show sn ++ "\",\"connection_id:\":\"" ++ show cid ++ "\""
-frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" ++ show sn ++ "\""
+frameExtra (NewConnectionID (CIDInfo sn cid _) _) = ",\"sequence_number\":\"" <> sw sn <> "\",\"connection_id:\":\"" <> sw cid <> "\""
+frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" <> sw sn <> "\""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
-frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" ++ transportError err ++ "\",\"raw_error_code\":" ++ show (fromTransportError err) ++ ",\"reason\":\"" ++ C8.unpack (Short.fromShort reason) ++ "\""
-frameExtra (ConnectionCloseApp _err reason) =  ",\"error_space\":\"transport\",\"error_code\":\"" ++ "\",\"raw_error_code\":" ++ show (0 :: Int) ++ ",\"reason\":\"" ++ C8.unpack (Short.fromShort reason) ++ "\"" -- fixme
+frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" <> toLogStr (transportError err) <> "\",\"raw_error_code\":" <> sw (fromTransportError err) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\""
+frameExtra (ConnectionCloseApp _err reason) =  ",\"error_space\":\"transport\",\"error_code\":\"" <> "\",\"raw_error_code\":" <> sw (0 :: Int) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
 frameExtra HandshakeDone{} = ""
 frameExtra (UnknownFrame _Int) = ""
 
-transportError :: TransportError -> String
+transportError :: TransportError -> LogStr
 transportError NoError                 = "no_error"
 transportError InternalError           = "internal_error"
 transportError ConnectionRefused       = "connection_refused"
@@ -107,12 +109,12 @@ transportError InvalidToken            = "invalid_migration"
 transportError CryptoBufferExceeded    = "crypto_buffer_exceeded"
 transportError _                       = ""
 
-ack :: [PacketNumber] -> String
-ack ps = "[" ++ intercalate "," (map shw (chop ps)) ++ "]"
+ack :: [PacketNumber] -> LogStr
+ack ps = "[" <> foldr1 (<>) (intersperse "," (map shw (chop ps))) <> "]"
   where
     shw [] = ""
-    shw [n] = "[\"" ++ show n ++ "\"]"
-    shw ns  = "[\"" ++ show (head ns) ++ "\",\"" ++ show (last ns) ++ "\"]"
+    shw [n] = "[\"" <> sw n <> "\"]"
+    shw ns  = "[\"" <> sw (head ns) <> "\",\"" <> sw (last ns) <> "\"]"
 
 chop :: [PacketNumber] -> [[PacketNumber]]
 chop [] = []
@@ -126,21 +128,26 @@ chop xxs@(x:xs) = frst : rest
 
 data QlogMsg = QRecvInitial
              | QSentRetry
-             | QSent String
-             | QReceived String
-             | QDropped String
+             | QSent LogStr
+             | QReceived LogStr
+             | QDropped LogStr
 
-toString :: QlogMsg -> Milliseconds -> String
-toString QRecvInitial _ =
+toLogStrTime :: QlogMsg -> Milliseconds -> LogStr
+toLogStrTime QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
-toString QSentRetry _ =
+toLogStrTime QSentRetry _ =
     "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],\n"
-toString (QReceived msg) (Milliseconds tim) =
-    "[" ++ show tim ++ ",\"transport\",\"packet_received\"," ++ msg ++ "],\n"
-toString (QSent msg) (Milliseconds tim) =
-    "[" ++ show tim ++ ",\"transport\",\"packet_sent\","     ++ msg ++ "],\n"
-toString (QDropped msg) (Milliseconds tim) =
-    "[" ++ show tim ++ ",\"transport\",\"packet_dropped\","  ++ msg ++ "],\n"
+toLogStrTime (QReceived msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"transport\",\"packet_received\"," <> msg <> "],\n"
+toLogStrTime (QSent msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"transport\",\"packet_sent\","     <> msg <> "],\n"
+toLogStrTime (QDropped msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"transport\",\"packet_dropped\","  <> msg <> "],\n"
+
+----------------------------------------------------------------
+
+sw :: Show a => a -> LogStr
+sw = toLogStr . show
 
 ----------------------------------------------------------------
 
@@ -155,14 +162,15 @@ readQlogQ (QlogQ q) = atomically $ readTQueue q
 writeQlogQ :: QlogQ -> QlogMsg -> IO ()
 writeQlogQ (QlogQ q) msg = atomically $ writeTQueue q msg
 
-newQlogger :: QlogQ -> String -> String -> (String -> IO ()) -> IO ()
+newQlogger :: QlogQ -> ByteString -> ByteString -> FastLogger -> IO ()
 newQlogger q rl ocid logAction = do
     getTime <- getElapsedTimeMillisecond <$> getTimeMillisecond
-    logAction $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" ++ rl ++ "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" ++ ocid ++ "\",\"ODCID\":\"" ++ ocid ++ "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
+    let ocid' = toLogStr ocid
+    logAction $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" <> toLogStr rl <> "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" <> ocid' <> "\",\"ODCID\":\"" <> ocid' <> "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
     let body = do
             qmsg <- readQlogQ q
             tim <- getTime
-            let msg = toString qmsg tim
+            let msg = toLogStrTime qmsg tim
             logAction msg `E.catch` ignore
     forever body `E.finally` logAction "[]]}]}\n"
   where

@@ -3,9 +3,6 @@
 module Network.QUIC.Connection.Misc (
     setVersion
   , getVersion
-  , setThreadIds
-  , addThreadIds
-  , clearThreads
   , getSockInfo
   , setSockInfo
   , killHandshaker
@@ -21,6 +18,9 @@ module Network.QUIC.Connection.Misc (
   , getMaxPacketSize
   , setMaxPacketSize
   , exitConnection
+  , addResource
+  , freeResources
+  , addThreadIdResource
   ) where
 
 import Control.Concurrent
@@ -41,30 +41,6 @@ setVersion Connection{..} ver = writeIORef quicVersion ver
 
 getVersion :: Connection -> IO Version
 getVersion Connection{..} = readIORef quicVersion
-
-----------------------------------------------------------------
-
-setThreadIds :: Connection -> [ThreadId] -> IO ()
-setThreadIds Connection{..} tids = do
-    wtids <- mapM mkWeakThreadId tids
-    writeIORef threadIds wtids
-
-addThreadIds :: Connection -> [ThreadId] -> IO ()
-addThreadIds Connection{..} tids = do
-    wtids <- mapM mkWeakThreadId tids
-    modifyIORef threadIds (wtids ++)
-
-clearThreads :: Connection -> IO ()
-clearThreads Connection{..} = do
-    wtids <- readIORef threadIds
-    mapM_ kill wtids
-    writeIORef threadIds []
-  where
-    kill wtid = do
-        mtid <- deRefWeak wtid
-        case mtid of
-          Nothing  -> return ()
-          Just tid -> killThread tid
 
 ----------------------------------------------------------------
 
@@ -138,3 +114,24 @@ setMaxPacketSize Connection{..} n = writeIORef maxPacketSize n
 
 exitConnection :: Connection -> QUICError -> IO ()
 exitConnection Connection{..} ue = E.throwTo connThreadId ue
+
+----------------------------------------------------------------
+
+addResource :: Connection -> IO () -> IO ()
+addResource Connection{..} f = atomicModifyIORef' connResources $ \fs -> (fs >> f, ())
+
+freeResources :: Connection -> IO ()
+freeResources Connection{..} = join $ readIORef connResources
+
+addThreadIdResource :: Connection -> ThreadId -> IO ()
+addThreadIdResource conn tid = do
+    wtid <- mkWeakThreadId tid
+    let clear = clearThread wtid
+    addResource conn clear
+
+clearThread :: Weak ThreadId -> IO ()
+clearThread wtid = do
+    mtid <- deRefWeak wtid
+    case mtid of
+      Nothing  -> return ()
+      Just tid -> killThread tid

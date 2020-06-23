@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Server (
     Dispatch
@@ -37,6 +37,7 @@ import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
+import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Socket
@@ -158,7 +159,7 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
             len = BS.length bs0 - BS.length bs0RTT
         dispatch d conf pkt mysa peersa send bs0RTT len
   where
-    logAction msg = putStrLn ("dispatcher: " ++ msg)
+    logAction msg = stdoutLogger ("dispatcher: " <> msg)
     recv = do
 --        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
         ex <- E.try $ NSB.recvFrom s maximumUdpPayloadSize
@@ -169,8 +170,7 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
              | otherwise -> case E.fromException se of
                   Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
                   _ -> do
-                      print se
-                      putStrLn "recv again"
+                      stdoutLogger $ "recv again: " <> bhow se
                       recv
 
 ----------------------------------------------------------------
@@ -198,7 +198,7 @@ dispatch Dispatch{..} ServerConfig{..}
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst
-          _                  -> putStrLn "dispatch: Just (1)"
+          _                  -> stdoutLogger "dispatch: Just (1)"
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -210,7 +210,7 @@ dispatch Dispatch{..} ServerConfig{..}
                   mq <- lookupConnectionDict dstTable dCID
                   case mq of
                     Nothing -> pushToAcceptFirst
-                    _       -> putStrLn "dispatch: Just (2)"
+                    _       -> stdoutLogger "dispatch: Just (2)"
           _ -> sendRetry
   where
     pushToAcceptQ myAuthCIDs peerAuthCIDs key = do
@@ -286,14 +286,14 @@ dispatch Dispatch{..} ServerConfig{..}
 dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ _ _ _ _ = do
     mq <- lookupRecvQDict srcTable o
     case mq of
-      Just q -> writeRecvQ q cpkt
-      Nothing -> putStrLn "dispatch: orphan 0RTT"
+      Just q  -> writeRecvQ q cpkt
+      Nothing -> stdoutLogger "dispatch: orphan 0RTT"
 dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ _ = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
-          putStrLn $ "CID no match: " ++ show dCID ++ ", " ++ show peersa
+          stdoutLogger $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
           mplain <- decryptCrypt conn crypt RTT1Level
           case mplain of
@@ -307,20 +307,20 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
                     setMigrationStarted conn
                     -- fixme: should not block in this loop
                     mcidinfo <- timeout 100000 $ choosePeerCID conn
-                    connDebugLog conn $ "Migrating to " ++ show peersa ++ " (" ++ show dCID ++ ")"
+                    connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                     void $ forkIO $ migrator conn peersa dCID mcidinfo
 
-dispatch _ _ ipkt _ _ _ _ _ = putStrLn $ "dispatch: orphan " ++ show ipkt
+dispatch _ _ ipkt _ _ _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow ipkt
 
 ----------------------------------------------------------------
 
 -- | readerServer dies when the socket is closed.
-readerServer :: Socket -> RecvQ -> LogAction -> IO ()
+readerServer :: Socket -> RecvQ -> DebugLogger -> IO ()
 readerServer s q logAction = handleLog logAction' $ forever $ do
     pkts <- NSB.recv s maximumUdpPayloadSize >>= decodeCryptPackets
     mapM (writeRecvQ q) pkts
   where
-    logAction' msg = logAction $ "readerServer: " ++ msg
+    logAction' msg = logAction ("readerServer: " <> msg)
 
 recvServer :: RecvQ -> IO CryptPacket
 recvServer q = readRecvQ q
