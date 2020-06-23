@@ -5,7 +5,6 @@ module Network.QUIC.Imports (
   , module Control.Applicative
   , module Control.Monad
   , module Data.Bits
-  , module Data.List
   , module Data.Foldable
   , module Data.Int
   , module Data.Monoid
@@ -24,7 +23,6 @@ import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short.Internal (ShortByteString(..))
 import Data.Foldable
 import Data.Int
-import Data.List
 import Data.Maybe
 import Data.Monoid
 import Data.Ord

@@ -25,6 +25,7 @@ module Network.QUIC.Connection.Migration (
 
 import Control.Concurrent.STM
 import Data.IORef
+import Data.List (delete, insert)
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types

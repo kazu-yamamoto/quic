@@ -10,6 +10,7 @@ module Network.QUIC.Connection.Transmit (
 import Data.Function (on)
 import Data.IORef
 import qualified Data.IntPSQ as PSQ
+import Data.List (sortBy)
 
 import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Types

@@ -7,7 +7,7 @@ import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
-import Data.List
+import Data.List (intercalate)
 
 import Network.QUIC.Imports
 import Network.QUIC.Time

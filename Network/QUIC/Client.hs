@@ -7,8 +7,9 @@ module Network.QUIC.Client (
   , migration
   ) where
 
-import qualified Control.Exception as E
 import Control.Concurrent
+import qualified Control.Exception as E
+import Data.List (intersect)
 import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
 
