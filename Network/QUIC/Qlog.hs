@@ -162,10 +162,10 @@ readQlogQ (QlogQ q) = atomically $ readTQueue q
 writeQlogQ :: QlogQ -> QlogMsg -> IO ()
 writeQlogQ (QlogQ q) msg = atomically $ writeTQueue q msg
 
-newQlogger :: QlogQ -> ByteString -> ByteString -> FastLogger -> IO ()
+newQlogger :: QlogQ -> ByteString -> CID -> FastLogger -> IO ()
 newQlogger q rl ocid logAction = do
     getTime <- getElapsedTimeMillisecond <$> getTimeMillisecond
-    let ocid' = toLogStr ocid
+    let ocid' = toLogStr $ enc16 $ fromCID ocid
     logAction $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" <> toLogStr rl <> "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" <> ocid' <> "\",\"ODCID\":\"" <> ocid' <> "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
     let body = do
             qmsg <- readQlogQ q

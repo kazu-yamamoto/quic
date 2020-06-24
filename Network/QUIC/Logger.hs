@@ -52,5 +52,5 @@ dirQLogger (Just dir) cid = do
     (fastlogger, clean) <- newFastLogger $ LogFileNoRotate file 4096
     qq <- newQlogQ
     let qLog msg = writeQlogQ qq msg
-        qmgr = newQlogger qq "client" (fromCID cid) fastlogger
+        qmgr = newQlogger qq "client" cid fastlogger
     return (qLog, clean, qmgr)
