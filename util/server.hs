@@ -11,7 +11,7 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C8
+import Data.ByteString.Builder
 import qualified Data.List as L
 import Network.TLS (credentialLoadX509, Credentials(..))
 import qualified Network.TLS.SessionManager as SM
@@ -116,11 +116,11 @@ main = do
           , scRequireRetry   = optRetry
           , scSessionManager = smgr
           , scEarlyDataSize  = 1024
+          , scDebugLog       = optDebugLogDir
           , scConfig         = defaultConfig {
                 confKeyLog      = getLogger optKeyLogFile
               , confGroups      = getGroups optGroups
-              , confDebugLog    = getDirLogger optDebugLogDir ".txt"
-              , confQLog        = getDirLogger optQLogDir ".qlog"
+              , confQLog        = optQLogDir
               , confCredentials = Credentials [cred]
               }
           }
@@ -151,7 +151,7 @@ consume conn s = loop
         if bs == "" then
             connDebugLog conn "FIN received"
           else do
-            connDebugLog conn $ C8.unpack bs
+            connDebugLog conn $ byteString bs
             loop
 
 serverH3 :: Connection -> IO ()

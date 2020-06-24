@@ -157,6 +157,7 @@ main = do
                                    in return $ Just protos
           , ccValidate   = optValidate
           , ccPacketSize = optPacketSize
+          , ccDebugLog   = optDebugLog
           , ccConfig     = defaultConfig {
                 confVersions   = if optVerNego then
                                    GreasingVersion : confVersions defaultConfig
@@ -170,8 +171,7 @@ main = do
                                    defaultParameters
               , confKeyLog     = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
-              , confDebugLog   = getStdoutLogger optDebugLog
-              , confQLog       = getDirLogger optQLogDir ".qlog"
+              , confQLog       = optQLogDir
               , confHooks      = defaultHooks {
                     onCloseReceived = writeIORef cref True
                   }
