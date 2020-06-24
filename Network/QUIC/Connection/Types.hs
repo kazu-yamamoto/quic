@@ -13,7 +13,7 @@ import qualified Data.IntPSQ as IntPSQ
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.X509 (CertificateChain)
-import Foreign.Marshal.Alloc (mallocBytes)
+import Foreign.Marshal.Alloc (mallocBytes, free)
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 
@@ -148,6 +148,9 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger
   , connQLog          :: QLogger
   , connHooks         :: Hooks
+  -- WriteBuffer
+  , headerBuffer      :: (Buffer,BufferSize)
+  , payloadBuffer     :: (Buffer,BufferSize)
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
@@ -199,11 +202,6 @@ data Connection = Connection {
   , hndMode           :: IORef HandshakeMode13
   , appProto          :: IORef (Maybe NegotiatedProtocol)
   , handshakeCIDs     :: IORef AuthCIDs
-  -- WriteBuffer
-  , headerBuffer      :: Buffer
-  , headerBufferSize  :: BufferSize
-  , payloadBuffer     :: Buffer
-  , payloadBufferSize :: BufferSize
   -- Resources
   , connResources     :: IORef (IO ())
   }
@@ -216,7 +214,18 @@ newConnection :: Role
               -> IO Connection
 newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
     tvarFlowTx <- newTVarIO defaultFlow
-    Connection rl debugLog qLog hooks
+    let hlen = maximumQUICHeaderSize
+        plen = maximumUdpPayloadSize
+    hbuf <- mallocBytes hlen
+    pbuf <- mallocBytes plen
+    fref <- newIORef False
+    let freeBufs = do
+            freed <- readIORef fref
+            unless freed $ do
+                free hbuf
+                free pbuf
+                writeIORef fref True
+    Connection rl debugLog qLog hooks (hbuf,hlen) (pbuf,plen)
         -- Info
         <$> newIORef initialRoleInfo
         <*> newIORef ver
@@ -268,13 +277,8 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         <*> newIORef FullHandshake
         <*> newIORef Nothing
         <*> newIORef peerAuthCIDs
-        -- WriteBuffer
-        <*> mallocBytes maximumQUICHeaderSize
-        <*> return      maximumQUICHeaderSize
-        <*> mallocBytes maximumUdpPayloadSize
-        <*> return      maximumUdpPayloadSize
         -- Resources
-        <*> newIORef (return ())
+        <*> newIORef freeBufs
   where
     isclient = rl == Client
     initialRoleInfo

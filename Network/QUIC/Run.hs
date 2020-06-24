@@ -9,7 +9,6 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import Data.IORef
 import Data.X509 (CertificateChain)
-import Foreign.Marshal.Alloc (free)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 
@@ -234,10 +233,8 @@ close conn = do
         myCIDs <- getMyCIDs conn
         mapM_ unregister myCIDs
     killHandshaker conn
-    freeResources conn
     -- close the socket after threads reading/writing the socket die.
-    free $ headerBuffer conn
-    free $ payloadBuffer conn
+    freeResources conn
 
 ----------------------------------------------------------------
 

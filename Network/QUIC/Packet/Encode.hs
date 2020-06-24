@@ -59,7 +59,8 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 
 encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO [ByteString]
 encodePlainPacket conn ppkt mlen = do
-    wbuf <- newWriteBuffer (headerBuffer conn) (headerBufferSize conn)
+    let (buf,buflen) = headerBuffer conn
+    wbuf <- newWriteBuffer buf buflen
     encodePlainPacket' conn wbuf ppkt mlen
 
 encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO [ByteString]
@@ -133,7 +134,8 @@ encodeLongHeaderPP _conn wbuf pkttyp ver dCID sCID flags pn = do
 protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO [ByteString]
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     cipher <- getCipher conn lvl
-    (plaintext0,siz) <- encodeFramesWithPadding (payloadBuffer conn) (payloadBufferSize conn) frames
+    let (buf,buflen) = payloadBuffer conn
+    (plaintext0,siz) <- encodeFramesWithPadding buf buflen frames
     here <- currentOffset wbuf
     let taglen = tagLength cipher
         plaintext = case mlen of

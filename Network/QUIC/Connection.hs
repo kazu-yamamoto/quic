@@ -161,9 +161,7 @@ module Network.QUIC.Connection (
   , connThreadId
   , connHooks
   , headerBuffer
-  , headerBufferSize
   , payloadBuffer
-  , payloadBufferSize
   , Input(..)
   , Crypto(..)
   , Output(..)
