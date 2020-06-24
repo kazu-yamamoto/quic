@@ -36,7 +36,7 @@ dirDebugLogger Nothing _ = do
         clean = return ()
     return (dLog, clean)
 dirDebugLogger (Just dir) cid = do
-    let file = dir </> show cid
+    let file = dir </> (show cid <> ".txt")
     (fastlogger, clean) <- newFastLogger (LogFileNoRotate file 4096)
     let dLog msg = fastlogger (toLogStr msg)
     return (dLog, clean)
@@ -48,7 +48,7 @@ dirQLogger Nothing _ = do
         qmgr = return ()
     return (qLog, clean, qmgr)
 dirQLogger (Just dir) cid = do
-    let file = dir </> show cid
+    let file = dir </> (show cid <> ".qlog")
     (fastlogger, clean) <- newFastLogger $ LogFileNoRotate file 4096
     qq <- newQlogQ
     let qLog msg = writeQlogQ qq msg
