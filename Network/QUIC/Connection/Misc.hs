@@ -121,7 +121,9 @@ addResource :: Connection -> IO () -> IO ()
 addResource Connection{..} f = atomicModifyIORef' connResources $ \fs -> (f >> fs, ())
 
 freeResources :: Connection -> IO ()
-freeResources Connection{..} = join $ readIORef connResources
+freeResources Connection{..} = do
+    doFree <- atomicModifyIORef' connResources $ \fs -> (return (), fs)
+    doFree
 
 addThreadIdResource :: Connection -> ThreadId -> IO ()
 addThreadIdResource conn tid = do

@@ -218,13 +218,7 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         plen = maximumUdpPayloadSize
     hbuf <- mallocBytes hlen
     pbuf <- mallocBytes plen
-    fref <- newIORef False
-    let freeBufs = do
-            freed <- readIORef fref
-            unless freed $ do
-                free hbuf
-                free pbuf
-                writeIORef fref True
+    let freeBufs = free hbuf >> free pbuf
     Connection rl debugLog qLog hooks (hbuf,hlen) (pbuf,plen)
         -- Info
         <$> newIORef initialRoleInfo
