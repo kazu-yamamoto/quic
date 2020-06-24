@@ -12,10 +12,11 @@ module Network.QUIC.Logger (
 
 import System.FilePath
 import System.Log.FastLogger
-import Data.ByteString.Builder (Builder, byteString, toLazyByteString)
+import Data.ByteString.Builder (byteString, toLazyByteString)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy.Char8 as BL
 
+import Network.QUIC.Imports
 import Network.QUIC.Qlog
 import Network.QUIC.Types
 
@@ -38,13 +39,13 @@ dirDebugLogger (Just dir) cid = do
     let dLog msg = fastlogger (toLogStr msg <> "\n")
     return (dLog, clean)
 
-dirQLogger :: Maybe FilePath -> CID -> IO (QLogger, IO ())
-dirQLogger Nothing _ = do
+dirQLogger :: Maybe FilePath -> CID -> ByteString -> IO (QLogger, IO ())
+dirQLogger Nothing _ _ = do
     let qLog _  = return ()
         clean = return ()
     return (qLog, clean)
-dirQLogger (Just dir) cid = do
+dirQLogger (Just dir) cid rl = do
     let file = dir </> (show cid <> ".qlog")
     (fastlogger, clean) <- newFastLogger $ LogFileNoRotate file 4096
-    qlogger <- newQlogger "client" cid fastlogger
+    qlogger <- newQlogger rl cid fastlogger
     return (qlogger, clean)

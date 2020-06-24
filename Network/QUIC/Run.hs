@@ -79,7 +79,7 @@ createClientConnection conf@ClientConfig{..} ver = do
         recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
-    (qLog, qclean) <- dirQLogger (confQLog ccConfig) peerCID
+    (qLog, qclean) <- dirQLogger (confQLog ccConfig) peerCID "client"
     let debugLog msg | ccDebugLog = stdoutLogger msg
                      | otherwise  = return ()
     debugLog $ "Original CID: " <> bhow peerCID
@@ -159,7 +159,7 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
         recv = recvServer q
     let Just myCID = initSrcCID myAuthCIDs
         Just ocid  = origDstCID myAuthCIDs
-    (qLog, qclean)     <- dirQLogger (confQLog scConfig) ocid
+    (qLog, qclean)     <- dirQLogger (confQLog scConfig) ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     let hooks = confHooks scConfig
     debugLog $ "Original CID: " <> bhow ocid
