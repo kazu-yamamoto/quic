@@ -118,7 +118,7 @@ exitConnection Connection{..} ue = E.throwTo connThreadId ue
 ----------------------------------------------------------------
 
 addResource :: Connection -> IO () -> IO ()
-addResource Connection{..} f = atomicModifyIORef' connResources $ \fs -> (fs >> f, ())
+addResource Connection{..} f = atomicModifyIORef' connResources $ \fs -> (f >> fs, ())
 
 freeResources :: Connection -> IO ()
 freeResources Connection{..} = join $ readIORef connResources
