@@ -186,7 +186,8 @@ dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (Byte
 dispatch Dispatch{..} ServerConfig{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
          mysa peersa send bs0RTT pktSiz
-  | pktSiz < defaultQUICPacketSize = return () -- ignore
+  | pktSiz < defaultQUICPacketSize = do
+        stdoutLogger $ "dispatch: too small " <> bhow pktSiz <> ", " <> bhow peersa
   | ver `notElem` confVersions scConfig = do
         let vers | ver == GreasingVersion = GreasingVersion2 : confVersions scConfig
                  | otherwise = GreasingVersion : confVersions scConfig
@@ -198,7 +199,7 @@ dispatch Dispatch{..} ServerConfig{..}
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst
-          _                  -> stdoutLogger "dispatch: Just (1)"
+          _                  -> stdoutLogger $ "dispatch: Just (1) " <> bhow peersa
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -210,7 +211,7 @@ dispatch Dispatch{..} ServerConfig{..}
                   mq <- lookupConnectionDict dstTable dCID
                   case mq of
                     Nothing -> pushToAcceptFirst
-                    _       -> stdoutLogger "dispatch: Just (2)"
+                    _       -> stdoutLogger $ "dispatch: Just (2) " <> bhow peersa
           _ -> sendRetry
   where
     pushToAcceptQ myAuthCIDs peerAuthCIDs key = do
@@ -283,21 +284,21 @@ dispatch Dispatch{..} ServerConfig{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ _ _ _ _ = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ peersa _ _ _ = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q  -> writeRecvQ q cpkt
-      Nothing -> stdoutLogger "dispatch: orphan 0RTT"
+      Nothing -> stdoutLogger $ "dispatch: orphan 0RTT: " <> bhow peersa
 dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ _ = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
-          stdoutLogger $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
+          stdoutLogger $ "dispatch: CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
           mplain <- decryptCrypt conn crypt RTT1Level
           case mplain of
-            Nothing -> connDebugLog conn "Cannot decrypt in dispatch"
+            Nothing -> connDebugLog conn "dispatch: cannot decrypt"
             Just plain -> do
                 qlogReceived conn $ PlainPacket hdr plain
                 let cpkt' = CryptPacket hdr $ setCryptLogged crypt
@@ -310,7 +311,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
                     connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                     void $ forkIO $ migrator conn peersa dCID mcidinfo
 
-dispatch _ _ ipkt _ _ _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow ipkt
+dispatch _ _ ipkt _ peersa _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow peersa <> ", " <> bhow ipkt
 
 ----------------------------------------------------------------
 
