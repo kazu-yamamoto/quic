@@ -35,7 +35,7 @@ dirDebugLogger Nothing _ = do
 dirDebugLogger (Just dir) cid = do
     let file = dir </> (show cid <> ".txt")
     (fastlogger, clean) <- newFastLogger (LogFileNoRotate file 4096)
-    let dLog msg = fastlogger (toLogStr msg)
+    let dLog msg = fastlogger (toLogStr msg <> "\n")
     return (dLog, clean)
 
 dirQLogger :: Maybe FilePath -> CID -> IO (QLogger, IO ())
