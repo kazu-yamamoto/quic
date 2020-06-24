@@ -3,7 +3,6 @@
 
 module Network.QUIC.Qlog where
 
-import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 
@@ -151,28 +150,18 @@ sw = toLogStr . show
 
 ----------------------------------------------------------------
 
-newtype QlogQ = QlogQ (TQueue QlogMsg)
+type QLogger = QlogMsg -> IO ()
 
-newQlogQ :: IO QlogQ
-newQlogQ = QlogQ <$> newTQueueIO
-
-readQlogQ :: QlogQ -> IO QlogMsg
-readQlogQ (QlogQ q) = atomically $ readTQueue q
-
-writeQlogQ :: QlogQ -> QlogMsg -> IO ()
-writeQlogQ (QlogQ q) msg = atomically $ writeTQueue q msg
-
-newQlogger :: QlogQ -> ByteString -> CID -> FastLogger -> IO ()
-newQlogger q rl ocid logAction = do
+newQlogger :: ByteString -> CID -> FastLogger -> IO QLogger
+newQlogger rl ocid fastLogger = do
     getTime <- getElapsedTimeMillisecond <$> getTimeMillisecond
     let ocid' = toLogStr $ enc16 $ fromCID ocid
-    logAction $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" <> toLogStr rl <> "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" <> ocid' <> "\",\"ODCID\":\"" <> ocid' <> "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
-    let body = do
-            qmsg <- readQlogQ q
+    fastLogger $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" <> toLogStr rl <> "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" <> ocid' <> "\",\"ODCID\":\"" <> ocid' <> "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
+    let qlogger qmsg = do
             tim <- getTime
             let msg = toLogStrTime qmsg tim
-            logAction msg `E.catch` ignore
-    forever body `E.finally` logAction "[]]}]}\n"
+            fastLogger msg `E.catch` ignore
+    return qlogger
   where
     ignore :: E.SomeException -> IO ()
     ignore _ = return ()

@@ -4,7 +4,6 @@ module Network.QUIC.Logger (
     Builder
   , DebugLogger
   , QLogger
-  , QManager
   , bhow
   , stdoutLogger
   , dirDebugLogger
@@ -21,8 +20,6 @@ import Network.QUIC.Qlog
 import Network.QUIC.Types
 
 type DebugLogger = Builder -> IO ()
-type QLogger     = QlogMsg -> IO ()
-type QManager    = IO ()
 
 bhow :: Show a => a -> Builder
 bhow = byteString . C8.pack . show
@@ -41,16 +38,13 @@ dirDebugLogger (Just dir) cid = do
     let dLog msg = fastlogger (toLogStr msg)
     return (dLog, clean)
 
-dirQLogger :: Maybe FilePath -> CID -> IO (QLogger, IO (), IO ())
+dirQLogger :: Maybe FilePath -> CID -> IO (QLogger, IO ())
 dirQLogger Nothing _ = do
     let qLog _  = return ()
         clean = return ()
-        qmgr = return ()
-    return (qLog, clean, qmgr)
+    return (qLog, clean)
 dirQLogger (Just dir) cid = do
     let file = dir </> (show cid <> ".qlog")
     (fastlogger, clean) <- newFastLogger $ LogFileNoRotate file 4096
-    qq <- newQlogQ
-    let qLog msg = writeQlogQ qq msg
-        qmgr = newQlogger qq "client" cid fastlogger
-    return (qLog, clean, qmgr)
+    qlogger <- newQlogger "client" cid fastlogger
+    return (qlogger, clean)

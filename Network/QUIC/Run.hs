@@ -56,8 +56,8 @@ connect conf = do
                 Right _    -> E.throwIO VersionNegotiationFailed
   where
     connect' ver = do
-        (conn,send,recv,qmgr,myAuthCIDs) <- createClientConnection conf ver
-        handshakeClientConnection conf conn send recv qmgr myAuthCIDs `E.onException` freeResources conn
+        (conn,send,recv,myAuthCIDs) <- createClientConnection conf ver
+        handshakeClientConnection conf conn send recv myAuthCIDs `E.onException` freeResources conn
         return conn
     check se
       | Just (NextVersion ver)   <- E.fromException se = Right ver
@@ -65,7 +65,7 @@ connect conf = do
       | otherwise = Left $ BadThingHappen se
 
 createClientConnection :: ClientConfig -> Version
-                       -> IO (Connection, SendMany, Receive, QManager, AuthCIDs)
+                       -> IO (Connection, SendMany, Receive, AuthCIDs)
 createClientConnection conf@ClientConfig{..} ver = do
     (s0,sa0) <- udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
@@ -79,7 +79,7 @@ createClientConnection conf@ClientConfig{..} ver = do
         recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
-    (qLog, qclean, qmgr) <- dirQLogger (confQLog ccConfig) peerCID
+    (qLog, qclean) <- dirQLogger (confQLog ccConfig) peerCID
     let debugLog msg | ccDebugLog = stdoutLogger msg
                      | otherwise  = return ()
     debugLog $ "Original CID: " <> bhow peerCID
@@ -97,19 +97,17 @@ createClientConnection conf@ClientConfig{..} ver = do
     mytid <- myThreadId
     --
     void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
-    return (conn,send,recv,qmgr,myAuthCIDs)
+    return (conn,send,recv,myAuthCIDs)
 
-handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
-handshakeClientConnection conf@ClientConfig{..} conn send recv qmgr myAuthCIDs = E.handle handler $ do
+handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()
+handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = E.handle handler $ do
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender conn
-    tid3 <- forkIO qmgr
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
-    addThreadIdResource conn tid3
     handshakeClient conf conn myAuthCIDs `E.onException` freeResources conn
   where
     handler (E.SomeException e) = do
@@ -127,8 +125,8 @@ runQUICServer conf server = handleLog debugLog $ do
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
         let create = do
-                (conn,send,recv,qmgr,myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
-                handshakeServerConnection conf conn send recv qmgr myAuthCIDs `E.onException` freeResources conn
+                (conn,send,recv,myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
+                handshakeServerConnection conf conn send recv myAuthCIDs `E.onException` freeResources conn
                 return conn
         -- Typically, ConnectionIsClosed breaks acceptStream.
         -- And the exception should be ignored.
@@ -147,7 +145,7 @@ runQUICServer conf server = handleLog debugLog $ do
         mapM_ killThread tids
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
-                       -> IO (Connection, SendMany, Receive, QManager, AuthCIDs)
+                       -> IO (Connection, SendMany, Receive, AuthCIDs)
 createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     let Accept ver myAuthCIDs peerAuthCIDs mysa peersa0 q pktSiz register unregister = acc
     s0 <- udpServerConnectedSocket mysa peersa0
@@ -161,8 +159,8 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
         recv = recvServer q
     let Just myCID = initSrcCID myAuthCIDs
         Just ocid  = origDstCID myAuthCIDs
-    (qLog, qclean, qmgr) <- dirQLogger (confQLog scConfig) ocid
-    (debugLog, dclean)   <- dirDebugLogger scDebugLog ocid
+    (qLog, qclean)     <- dirQLogger (confQLog scConfig) ocid
+    (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     let hooks = confHooks scConfig
     debugLog $ "Original CID: " <> bhow ocid
     conn <- serverConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref
@@ -187,18 +185,16 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     register myCID conn
     --
     void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
-    return (conn, send, recv, qmgr, myAuthCIDs)
+    return (conn, send, recv, myAuthCIDs)
 
-handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> IO () -> AuthCIDs -> IO ()
-handshakeServerConnection conf conn send recv qlogger myAuthCIDs = E.handle handler $ do
+handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()
+handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender conn
-    tid3 <- forkIO qlogger
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
-    addThreadIdResource conn tid3
     handshakeServer conf conn myAuthCIDs `E.onException` freeResources conn
     --
     cidInfo <- getNewMyCID conn
