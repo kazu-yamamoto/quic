@@ -169,7 +169,9 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     addResource conn dclean
     initializeCoder conn InitialLevel
     setupCryptoStreams conn -- fixme: cleanup
-    setMaxPacketSize conn ((defaultPacketSize mysa `max` pktSiz) `min` maxPacketSize mysa)
+    let pktSiz' = (defaultPacketSize mysa `max` pktSiz) `min` maxPacketSize mysa
+    setMaxPacketSize conn pktSiz'
+    debugLog $ "Packet size: " <> bhow pktSiz' <> " (" <> bhow pktSiz <> ")"
     --
     let retried = isJust $ retrySrcCID myAuthCIDs
     when retried $ do
