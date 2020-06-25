@@ -156,8 +156,8 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
         (pkt, bs0RTT) <- decodePacket bs0
 --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
         let send bs = void $ NSB.sendTo s bs peersa
-            len = BS.length bs0 - BS.length bs0RTT
-        dispatch d conf pkt mysa peersa send bs0RTT len
+            pktSiz = BS.length bs0 -- both Initial and 0RTT
+        dispatch d conf pkt mysa peersa send bs0RTT pktSiz
   where
     logAction msg = stdoutLogger ("dispatcher: " <> msg)
     recv = do
