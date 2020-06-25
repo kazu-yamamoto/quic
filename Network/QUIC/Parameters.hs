@@ -256,10 +256,10 @@ defaultParameters :: Parameters
 defaultParameters = baseParameters {
     maxIdleTimeout                 = idleTimeout           -- 30000
   , maxUdpPayloadSize              = maximumUdpPayloadSize -- 2048
-  , initialMaxData                 = 1048576
-  , initialMaxStreamDataBidiLocal  =  262144
-  , initialMaxStreamDataBidiRemote =  262144
-  , initialMaxStreamDataUni        =  262144
+  , initialMaxData                 =  655360
+  , initialMaxStreamDataBidiLocal  =   65536
+  , initialMaxStreamDataBidiRemote =   65536
+  , initialMaxStreamDataUni        =   65536
   , initialMaxStreamsBidi          =     100
   , initialMaxStreamsUni           =       3
   , activeConnectionIdLimit        =       3
