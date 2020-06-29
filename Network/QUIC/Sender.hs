@@ -137,8 +137,7 @@ sender conn send = handleLog logAction $ forever $ do
 sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutControl lvl frames) = do
     maxSiz <- getMaxPacketSize conn
-    bss <- construct conn lvl frames $ Just maxSiz
-    send bss
+    construct conn lvl frames (Just maxSiz) >>= send
 sendOutput conn send (OutHandshake x) = do
     maxSiz <- getMaxPacketSize conn
     sendCryptoFragments conn send maxSiz x
@@ -146,8 +145,7 @@ sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
     let lvl = packetEncryptionLevel hdr0
     let frames = filter retransmittable $ plainFrames plain0
     maxSiz <- getMaxPacketSize conn
-    bss <- construct conn lvl frames $ Just maxSiz
-    send bss
+    construct conn lvl frames (Just maxSiz) >>= send
 
 sendTxStreamData :: Connection -> SendMany -> TxStreamData -> IO ()
 sendTxStreamData conn send tx@(TxStreamData _ _ len _) = do
@@ -230,8 +228,7 @@ sendStreamSmall conn send s0 frame0 total0 maxSiz = do
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
-    bss <- construct conn lvl frames $ Just maxSiz
-    send bss
+    construct conn lvl frames (Just maxSiz) >>= send
   where
     tryPeek = do
         mx <- tryPeekSendStreamQ s0
@@ -273,8 +270,7 @@ sendStreamLarge conn send s dats0 fin0 maxSiz = loop fin0 dats0
         ready <- isConnection1RTTReady conn
         let lvl | ready     = RTT1Level
                 | otherwise = RTT0Level
-        bss <- construct conn lvl [frame] $ Just maxSiz
-        send bss
+        construct conn lvl [frame] (Just maxSiz) >>= send
         loop fin dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]
