@@ -226,15 +226,13 @@ sendStreamFragment conn send maxSiz (TxStreamData s dats len fin0) = do
 
 sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> Int -> IO ()
 sendStreamSmall conn send s0 frame0 total0 maxSiz = do
-    ref <- newIORef []
-    build <- loop ref (frame0 :) total0
+    build <- loop (frame0 :) total0
     let frames = build []
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
     bss <- construct conn lvl frames $ Just maxSiz
     send bss
-    readIORef ref >>= mapM_ setTxStreamFin
   where
     tryPeek = do
         mx <- tryPeekSendStreamQ s0
@@ -243,7 +241,7 @@ sendStreamSmall conn send s0 frame0 total0 maxSiz = do
               yield
               tryPeekSendStreamQ s0
           Just _ -> return mx
-    loop ref build total = do
+    loop build total = do
         mx <- tryPeek
         case mx of
           Nothing -> return build
@@ -257,8 +255,8 @@ sendStreamSmall conn send s0 frame0 total0 maxSiz = do
                   off <- getTxStreamOffset s len
                   let frame = StreamF sid off dats fin
                       build' = build . (frame :)
-                  when fin $ modifyIORef' ref (s :)
-                  loop ref build' total'
+                  when fin $ setTxStreamFin s
+                  loop build' total'
                 else
                   return build
 
