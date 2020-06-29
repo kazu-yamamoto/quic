@@ -224,7 +224,7 @@ sendStreamFragment conn send maxSiz (TxStreamData s dats len fin0) = do
 
 sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> Int -> IO ()
 sendStreamSmall conn send s0 frame0 total0 maxSiz = do
-    frames <- loop (frame0 :) total0
+    frames <- loop s0 frame0 total0 id
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
@@ -237,24 +237,31 @@ sendStreamSmall conn send s0 frame0 total0 maxSiz = do
               yield
               tryPeekSendStreamQ s0
           Just _ -> return mx
-    loop build total = do
+    loop :: Stream -> Frame -> Int -> ([Frame] -> [Frame]) -> IO [Frame]
+    loop s frame total build = do
         mx <- tryPeek
         case mx of
-          Nothing -> return $ build []
-          Just (TxStreamData s dats len fin0) -> do
-              let sid = streamId s
-                  total' = len + total
-              if total' < limitation then do
+          Nothing -> return $ build [frame]
+          Just (TxStreamData s1 dats1 len1 fin1) -> do
+              let total1 = len1 + total
+              if total1 < limitation then do
                   _ <- takeSendStreamQ s0 -- cf tryPeek
-                  addTxData conn len
-                  fin <- packFin s fin0 -- must be after takeSendStreamQ
-                  off <- getTxStreamOffset s len
-                  let frame = StreamF sid off dats fin
-                      build' = build . (frame :)
-                  when fin $ setTxStreamFin s
-                  loop build' total'
+                  addTxData conn len1
+                  fin1' <- packFin s fin1 -- must be after takeSendStreamQ
+                  when fin1' $ setTxStreamFin s1
+                  off1 <- getTxStreamOffset s1 len1
+                  let sid  = streamId s
+                      sid1 = streamId s1
+                  if sid == sid1 then do
+                      let StreamF _ off dats _ = frame
+                          frame1 = StreamF sid off (dats ++ dats1) fin1'
+                      loop s1 frame1 total1 build
+                    else do
+                      let frame1 = StreamF sid1 off1 dats1 fin1'
+                          build1 = build . (frame :)
+                      loop s1 frame1 total1 build1
                 else
-                  return $ build []
+                  return $ build [frame]
 
 sendStreamLarge :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> Int -> IO ()
 sendStreamLarge conn send s dats0 fin0 maxSiz = loop fin0 dats0
