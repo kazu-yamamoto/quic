@@ -226,8 +226,7 @@ sendStreamFragment conn send maxSiz (TxStreamData s dats len fin0) = do
 
 sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> Int -> IO ()
 sendStreamSmall conn send s0 frame0 total0 maxSiz = do
-    build <- loop (frame0 :) total0
-    let frames = build []
+    frames <- loop (frame0 :) total0
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
@@ -244,7 +243,7 @@ sendStreamSmall conn send s0 frame0 total0 maxSiz = do
     loop build total = do
         mx <- tryPeek
         case mx of
-          Nothing -> return build
+          Nothing -> return $ build []
           Just (TxStreamData s dats len fin0) -> do
               let sid = streamId s
                   total' = len + total
@@ -258,7 +257,7 @@ sendStreamSmall conn send s0 frame0 total0 maxSiz = do
                   when fin $ setTxStreamFin s
                   loop build' total'
                 else
-                  return build
+                  return $ build []
 
 sendStreamLarge :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> Int -> IO ()
 sendStreamLarge conn send s dats0 fin0 maxSiz = loop fin0 dats0
