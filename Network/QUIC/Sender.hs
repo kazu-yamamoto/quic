@@ -311,7 +311,7 @@ resender conn = handleIOLog (return ()) logAction $ do
     loop ref (0 :: Int)
   where
     loop ref cnt0 = do
-        threadDelay 100000
+        threadDelay 25000 -- 25 ms, the default of max_ack_delay
         n <- readIORef ref
         ppkts <- releaseByTimeout conn $ Milliseconds n
         established <- isConnectionEstablished conn
@@ -328,6 +328,10 @@ resender conn = handleIOLog (return ()) logAction $ do
                 cnt | longEnough = 0
                     | otherwise  = cnt0 + 1
             when (n' >= minRetransDelay) $ writeIORef ref n'
+            lvl <- getEncryptionLevel conn
+            when (lvl == RTT1Level) $ do
+                sendAck <- checkDelayedAck' conn
+                when sendAck $ putOutput conn $ OutControl RTT1Level []
             loop ref cnt
           else do
             mapM_ put ppkt'

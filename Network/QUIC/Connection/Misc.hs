@@ -14,6 +14,7 @@ module Network.QUIC.Connection.Misc (
   , getPeerParameters
   , setPeerParameters
   , checkDelayedAck
+  , checkDelayedAck'
   , resetDelayedAck
   , getMaxPacketSize
   , setMaxPacketSize
@@ -98,6 +99,12 @@ checkDelayedAck Connection{..} = atomicModifyIORef' delayedAck check
   where
     check 9 = (0, True)
     check n = (n+1, False)
+
+checkDelayedAck' :: Connection -> IO Bool
+checkDelayedAck' Connection{..} = atomicModifyIORef' delayedAck check
+  where
+    check 0 = (0, False)
+    check _ = (0, True)
 
 resetDelayedAck :: Connection -> IO ()
 resetDelayedAck Connection{..} = writeIORef delayedAck 0

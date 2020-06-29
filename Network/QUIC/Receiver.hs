@@ -80,8 +80,8 @@ processCryptPacket conn hdr crypt = do
                   sendAck <- checkDelayedAck conn
                   when sendAck $ putOutput conn $ OutControl level []
                 else do
-                  putOutput conn $ OutControl level []
                   resetDelayedAck conn
+                  putOutput conn $ OutControl level []
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
