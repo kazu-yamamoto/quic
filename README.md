@@ -17,6 +17,11 @@ The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/htt
 - [draft-ietf-quic-http](https://tools.ietf.org/html/draft-ietf-quic-http)
 - [draft-ietf-quic-qpack](https://tools.ietf.org/html/draft-ietf-quic-qpack)
 
+Blog articles:
+
+- [Implementation status of QUIC in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/02/18/145038)
+- [Implementing HTTP/3 in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/06/09/155236)
+
 ### Note
 
 To build this package, some unreleased packages are necessary. So, you are not recommended to try this package at this moment.
