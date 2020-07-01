@@ -306,7 +306,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
                 unless migrating $ do
                     setMigrationStarted conn
                     -- fixme: should not block in this loop
-                    mcidinfo <- timeout 100000 $ choosePeerCID conn
+                    mcidinfo <- timeout (Microseconds 100000) $ choosePeerCID conn
                     connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                     void $ forkIO $ migrator conn peersa dCID mcidinfo
 
@@ -337,5 +337,5 @@ migrator conn peersa1 dcid mcidinfo = do
     -- fixme: if cannot set
     setMyCID conn dcid
     validatePath conn mcidinfo
-    _ <- timeout 2000000 $ forever (readMigrationQ conn >>= writeRecvQ q)
+    _ <- timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ q)
     close s0

@@ -15,6 +15,7 @@ import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Stream
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -310,7 +311,7 @@ resender conn = handleIOLog (return ()) logAction $ do
     loop ref (0 :: Int)
   where
     loop ref cnt0 = do
-        threadDelay $ milliToMicro $ Milliseconds 25
+        delay $ Microseconds 25000
         n <- readIORef ref
         ppkts <- releaseByTimeout conn n
         established <- isConnectionEstablished conn

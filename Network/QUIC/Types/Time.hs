@@ -3,6 +3,7 @@
 module Network.QUIC.Types.Time (
     Seconds(..)
   , Milliseconds(..)
+  , Microseconds(..)
   , milliToMicro
   , fromTimeSecond
   , toTimeSecond
@@ -23,10 +24,11 @@ import Foreign.C.Types (CTime(..))
 
 newtype Seconds = Seconds Int64 deriving (Eq, Ord, Show)
 newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Show, Num)
+newtype Microseconds = Microseconds Int deriving (Eq, Ord, Show)
 
 {-# INLINE milliToMicro #-}
-milliToMicro :: Milliseconds -> Int
-milliToMicro (Milliseconds n) = fromIntegral n * 1000
+milliToMicro :: Milliseconds -> Microseconds
+milliToMicro (Milliseconds n) = Microseconds (fromIntegral n * 1000)
 
 ----------------------------------------------------------------
 

@@ -4,6 +4,7 @@ module Network.QUIC.Timeout (
     timeouter
   , timeout
   , fire
+  , delay
   ) where
 
 import Control.Concurrent
@@ -14,6 +15,7 @@ import GHC.Event
 import System.IO.Unsafe (unsafePerformIO)
 
 import Network.QUIC.Imports
+import Network.QUIC.Types
 
 data TimeoutException = TimeoutException deriving (Show, Typeable)
 
@@ -28,8 +30,8 @@ timeouter = forever $ do
     tid <- atomically (readTQueue globalTimeoutQ)
     E.throwTo tid TimeoutException
 
-timeout :: Int -> IO a -> IO (Maybe a)
-timeout microseconds action = do
+timeout :: Microseconds -> IO a -> IO (Maybe a)
+timeout (Microseconds microseconds) action = do
     pid <- myThreadId
     tm <- getSystemTimerManager
     let setup = registerTimeout tm microseconds $
@@ -38,7 +40,10 @@ timeout microseconds action = do
     E.handle (\TimeoutException -> return Nothing) $
         E.bracket setup cleanup $ \_ -> Just <$> action
 
-fire :: Int -> TimeoutCallback -> IO ()
-fire microseconds action = do
+fire :: Microseconds -> TimeoutCallback -> IO ()
+fire (Microseconds microseconds) action = do
     timmgr <- getSystemTimerManager
     void $ registerTimeout timmgr microseconds action
+
+delay :: Microseconds -> IO ()
+delay (Microseconds microseconds) = threadDelay microseconds

@@ -225,7 +225,7 @@ close conn = do
     let frames = [ConnectionCloseQUIC NoError 0 ""]
     putOutput conn $ OutControl RTT1Level frames
     setCloseSent conn
-    void $ timeout 100000 $ waitClosed conn -- fixme: timeout
+    void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
     when (isServer conn) $ do
         unregister <- getUnregister conn
         myCIDs <- getMyCIDs conn

@@ -94,7 +94,7 @@ migration conn typ
 
 migrationClient :: Connection -> Migration -> IO Bool
 migrationClient conn ChangeServerCID = do
-    mn <- timeout 1000000 $ choosePeerCID conn -- fixme
+    mn <- timeout (Microseconds 1000000) $ choosePeerCID conn -- fixme
     case mn of
       Nothing              -> return False
       Just (CIDInfo n _ _) -> do
@@ -108,18 +108,18 @@ migrationClient conn ChangeClientCID = do
     putOutput conn $ OutControl RTT1Level frames
     return True
 migrationClient conn NATRebiding = do
-    rebind conn 5000 -- nearly 0
+    rebind conn $ Microseconds 5000 -- nearly 0
     return True
 migrationClient conn MigrateTo = do
-    mn <- timeout 1000000 $ choosePeerCID conn -- fixme
+    mn <- timeout (Microseconds 1000000) $ choosePeerCID conn -- fixme
     case mn of
       Nothing  -> return False
       mcidinfo -> do
-          rebind conn 5000000
+          rebind conn $ Microseconds 5000000
           validatePath conn mcidinfo
           return True
 
-rebind :: Connection -> Int -> IO ()
+rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
     (s0,q) <- getSockInfo conn
     s1 <- getPeerName s0 >>= udpNATRebindingSocket

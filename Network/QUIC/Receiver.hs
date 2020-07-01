@@ -200,7 +200,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
-    fire 2000000 $ do
+    fire (Microseconds 2000000) $ do
         killHandshaker conn
         dropSecrets conn
 processFrame conn _ (UnknownFrame _n)       = do
