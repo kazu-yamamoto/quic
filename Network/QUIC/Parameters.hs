@@ -96,7 +96,7 @@ toParameterKeyId _    = Nothing
 -- | QUIC transport parameters.
 data Parameters = Parameters {
     originalDestinationConnectionId :: Maybe CID
-  , maxIdleTimeout                  :: Int -- Milliseconds
+  , maxIdleTimeout                  :: Milliseconds
   , statelessResetToken             :: Maybe StatelessResetToken -- 16 bytes
   , maxUdpPayloadSize               :: Int
   , initialMaxData                  :: Int
@@ -106,7 +106,7 @@ data Parameters = Parameters {
   , initialMaxStreamsBidi           :: Int
   , initialMaxStreamsUni            :: Int
   , ackDelayExponent                :: Int
-  , maxAckDelay                     :: Int -- Millisenconds
+  , maxAckDelay                     :: Milliseconds
   , disableActiveMigration          :: Bool
   , preferredAddress                :: Maybe ByteString -- fixme
   , activeConnectionIdLimit         :: Int
@@ -119,7 +119,7 @@ data Parameters = Parameters {
 baseParameters :: Parameters
 baseParameters = Parameters {
     originalDestinationConnectionId    = Nothing
-  , maxIdleTimeout                     = 0 -- disabled
+  , maxIdleTimeout                     = Milliseconds 0 -- disabled
   , statelessResetToken                = Nothing
   , maxUdpPayloadSize                  = 65527
   , initialMaxData                     = -1
@@ -129,7 +129,7 @@ baseParameters = Parameters {
   , initialMaxStreamsBidi              = -1
   , initialMaxStreamsUni               = -1
   , ackDelayExponent                   = 8
-  , maxAckDelay                        = 25
+  , maxAckDelay                        = Milliseconds 25
   , disableActiveMigration             = False
   , preferredAddress                   = Nothing
   , activeConnectionIdLimit            = 2
@@ -144,6 +144,12 @@ decInt = fromIntegral . decodeInt
 encInt :: Int -> ByteString
 encInt = encodeInt . fromIntegral
 
+decMilliseconds :: ByteString -> Milliseconds
+decMilliseconds = Milliseconds . fromIntegral . decodeInt
+
+encMilliseconds :: Milliseconds -> ByteString
+encMilliseconds (Milliseconds n) = encodeInt $ fromIntegral n
+
 fromParameterList :: ParameterList -> Parameters
 fromParameterList kvs = foldl' update params kvs
   where
@@ -151,7 +157,7 @@ fromParameterList kvs = foldl' update params kvs
     update x (ParameterOriginalDestinationConnectionId,v)
         = x { originalDestinationConnectionId = Just (toCID v) }
     update x (ParameterMaxIdleTimeout,v)
-        = x { maxIdleTimeout = decInt v }
+        = x { maxIdleTimeout = decMilliseconds v }
     update x (ParameterStateLessResetToken,v)
         = x { statelessResetToken = Just (StatelessResetToken $ Short.toShort v) }
     update x (ParameterMaxUdpPayloadSize,v)
@@ -171,7 +177,7 @@ fromParameterList kvs = foldl' update params kvs
     update x (ParameterAckDelayExponent,v)
         = x { ackDelayExponent = decInt v }
     update x (ParameterMaxAckDelay,v)
-        = x { maxAckDelay = decInt v }
+        = x { maxAckDelay = decMilliseconds v }
     update x (ParameterDisableActiveMigration,_)
         = x { disableActiveMigration = True }
     update x (ParameterPreferredAddress,v)
@@ -197,7 +203,7 @@ toParameterList :: Parameters -> ParameterList
 toParameterList p = catMaybes [
     diff p originalDestinationConnectionId
          ParameterOriginalDestinationConnectionId    (fromCID . fromJust)
-  , diff p maxIdleTimeout          ParameterMaxIdleTimeout          encInt
+  , diff p maxIdleTimeout          ParameterMaxIdleTimeout          encMilliseconds
   , diff p statelessResetToken     ParameterStateLessResetToken     encSRT
   , diff p maxUdpPayloadSize       ParameterMaxUdpPayloadSize       encInt
   , diff p initialMaxData          ParameterInitialMaxData          encInt
@@ -207,7 +213,7 @@ toParameterList p = catMaybes [
   , diff p initialMaxStreamsBidi   ParameterInitialMaxStreamsBidi   encInt
   , diff p initialMaxStreamsUni    ParameterInitialMaxStreamsUni    encInt
   , diff p ackDelayExponent        ParameterAckDelayExponent        encInt
-  , diff p maxAckDelay             ParameterMaxAckDelay             encInt
+  , diff p maxAckDelay             ParameterMaxAckDelay             encMilliseconds
   , diff p disableActiveMigration  ParameterDisableActiveMigration  (const "")
   , diff p preferredAddress        ParameterPreferredAddress        fromJust
   , diff p activeConnectionIdLimit ParameterActiveConnectionIdLimit encInt

@@ -1,5 +1,7 @@
 module Network.QUIC.Types.Constants where
 
+import Network.QUIC.Types.Time
+
 maximumUdpPayloadSize :: Int
 maximumUdpPayloadSize = 2048 -- no global locking when allocating ByteString
 
@@ -26,5 +28,5 @@ maximumQUICHeaderSize = 256
 
 ----------------------------------------------------------------
 
-idleTimeout :: Int
-idleTimeout = 30000 -- milliseconds
+idleTimeout :: Milliseconds
+idleTimeout = Milliseconds 30000
