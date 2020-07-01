@@ -15,7 +15,6 @@ import Data.List (sortBy)
 import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
-import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

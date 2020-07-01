@@ -59,7 +59,6 @@ library
                        Network.QUIC.Stream.Reass
                        Network.QUIC.Stream.Table
                        Network.QUIC.Stream.Types
-                       Network.QUIC.Time
                        Network.QUIC.TLS
                        Network.QUIC.TLS.Crypto
                        Network.QUIC.TLS.Handshaker
@@ -74,6 +73,7 @@ library
                        Network.QUIC.Types.Packet
                        Network.QUIC.Types.Queue
                        Network.QUIC.Types.Resumption
+                       Network.QUIC.Types.Time
                        Network.QUIC.Types.UserError
                        Network.QUIC.Utils
   -- other-extensions:

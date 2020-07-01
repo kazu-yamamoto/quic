@@ -11,7 +11,6 @@ import Data.List (intersperse)
 import System.Log.FastLogger
 
 import Network.QUIC.Imports
-import Network.QUIC.Time
 import Network.QUIC.Types
 
 class Qlog a where

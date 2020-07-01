@@ -15,7 +15,6 @@ import Network.ByteOrder
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Version
 import Network.QUIC.TLS
-import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

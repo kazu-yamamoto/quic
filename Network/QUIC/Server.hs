@@ -42,7 +42,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Socket
 import Network.QUIC.TLS
-import Network.QUIC.Time
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 

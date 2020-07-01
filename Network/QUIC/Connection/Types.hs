@@ -23,7 +23,6 @@ import Network.QUIC.Logger
 import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.TLS
-import Network.QUIC.Time
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

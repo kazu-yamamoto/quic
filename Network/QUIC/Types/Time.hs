@@ -1,4 +1,4 @@
-module Network.QUIC.Time (
+module Network.QUIC.Types.Time (
     Seconds(..)
   , Milliseconds(..)
   , fromTimeSecond
