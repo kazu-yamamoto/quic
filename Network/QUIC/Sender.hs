@@ -298,10 +298,10 @@ splitChunks bs0 = loop bs0 0 id
 
 ----------------------------------------------------------------
 
-minRetransDelay :: Int64
+minRetransDelay :: Milliseconds
 minRetransDelay = 400
 
-maxRetransDelay :: Int64
+maxRetransDelay :: Milliseconds
 maxRetransDelay = 1600
 
 resender :: Connection -> IO ()
@@ -310,9 +310,9 @@ resender conn = handleIOLog (return ()) logAction $ do
     loop ref (0 :: Int)
   where
     loop ref cnt0 = do
-        threadDelay 25000 -- 25 ms, the default of max_ack_delay
+        threadDelay $ milliToMicro $ Milliseconds 25
         n <- readIORef ref
-        ppkts <- releaseByTimeout conn $ Milliseconds n
+        ppkts <- releaseByTimeout conn n
         established <- isConnectionEstablished conn
         -- Some implementations do not return Ack for Initial and Handshake
         -- correctly. We should consider that the success of handshake

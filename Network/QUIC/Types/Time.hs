@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Network.QUIC.Types.Time (
     Seconds(..)
   , Milliseconds(..)
@@ -20,7 +22,7 @@ import Foreign.C.Types (CTime(..))
 ----------------------------------------------------------------
 
 newtype Seconds = Seconds Int64 deriving (Eq, Ord, Show)
-newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Show)
+newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Show, Num)
 
 {-# INLINE milliToMicro #-}
 milliToMicro :: Milliseconds -> Int
