@@ -185,6 +185,7 @@ data Connection = Connection {
   , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
   , maxPacketSize     :: IORef Int
+  , minIdleTimeout    :: IORef Milliseconds
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingHandshake  :: TVar [CryptPacket]
@@ -254,6 +255,7 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration
         <*> newIORef defaultQUICPacketSize
+        <*> newIORef (maxIdleTimeout myparams)
         -- TLS
         <*> newTVarIO InitialLevel
         <*> newTVarIO []

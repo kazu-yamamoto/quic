@@ -24,10 +24,10 @@ receiver conn recv = handleLog logAction $ do
     loopHandshake
     loopEstablished
   where
-    ito = milliToMicro idleTimeout
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
+        ito <- milliToMicro <$> readMinIdleTimeout conn
         mx <- timeout ito recv -- fixme: taking minimum with peer's one
         case mx of
           Nothing -> do

@@ -22,6 +22,8 @@ module Network.QUIC.Connection.Misc (
   , addResource
   , freeResources
   , addThreadIdResource
+  , readMinIdleTimeout
+  , setMinIdleTimeout
   ) where
 
 import Control.Concurrent
@@ -144,3 +146,15 @@ clearThread wtid = do
     case mtid of
       Nothing  -> return ()
       Just tid -> killThread tid
+
+----------------------------------------------------------------
+
+readMinIdleTimeout :: Connection -> IO Milliseconds
+readMinIdleTimeout Connection{..} = readIORef minIdleTimeout
+
+setMinIdleTimeout :: Connection -> Milliseconds -> IO ()
+setMinIdleTimeout Connection{..} ms
+  | ms == Milliseconds 0 = return ()
+  | otherwise            = modifyIORef' minIdleTimeout modify
+  where
+    modify ms0 = min ms ms0

@@ -84,6 +84,8 @@ module Network.QUIC.Connection (
   , addResource
   , freeResources
   , addThreadIdResource
+  , readMinIdleTimeout
+  , setMinIdleTimeout
   -- * Transmit
   , keepPlainPacket
   , releaseByRetry
