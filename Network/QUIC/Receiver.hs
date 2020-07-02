@@ -97,17 +97,9 @@ processCryptPacket conn hdr crypt = do
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
-processFrame conn lvl Ping = do
-    -- An implementation sends:
-    --   Handshake PN=2
-    --   Handshake PN=3 Ping
-    --   Handshake PN=0
-    --   Handshake PN=1
-    -- If ACK 2-3 sends immediately, the peer misunderstand that
-    -- 0 and 1 are dropped.
-    when (lvl == RTT1Level) $ do
-        putOutput conn $ OutControl lvl []
-        resetDelayedAck conn
+-- shouldDelay Ping == False
+-- So, Ack has been sent already above
+processFrame _ _ Ping = return ()
 processFrame conn _ (Ack ackInfo _) =
     releaseByAcks conn ackInfo
 processFrame _ _ ResetStream{} = return ()
@@ -153,9 +145,6 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when (cwindow <= (cinitialWindow `div` 2)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         putOutput conn $ OutControl RTT1Level [MaxData newMax]
-        resetDelayedAck conn
-    when fin $ do
-        putOutput conn $ OutControl RTT1Level []
         resetDelayedAck conn
 processFrame conn _ (MaxData n) =
     setTxMaxData conn n

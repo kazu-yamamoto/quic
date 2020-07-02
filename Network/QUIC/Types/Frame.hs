@@ -68,19 +68,25 @@ emptyToken = ""
 
 ackEliciting :: Frame -> Bool
 ackEliciting Padding{}             = False
+ackEliciting Ack{}                 = False
 ackEliciting ConnectionCloseQUIC{} = False
 ackEliciting ConnectionCloseApp{}  = False
-ackEliciting Ack{}                 = False
 ackEliciting _                     = True
 
+inFlight :: Frame -> Bool
+inFlight Ack{}                 = False
+inFlight ConnectionCloseQUIC{} = False
+inFlight ConnectionCloseApp{}  = False
+inFlight _                     = True
+
 retransmittable :: Frame -> Bool
-retransmittable Padding{}          = False
-retransmittable Ack{}              = False
-retransmittable _                  = True
+retransmittable Padding{} = False
+retransmittable Ack{}     = False
+retransmittable _         = True
 
 shouldDelay :: Frame -> Bool
-shouldDelay Ack{}     = True
-shouldDelay StreamF{} = True
-shouldDelay Padding{} = True
-shouldDelay Ping{}    = True
-shouldDelay _         = False
+shouldDelay Padding{}           = True
+shouldDelay Ping{}              = False
+shouldDelay Ack{}               = True
+shouldDelay (StreamF _ _ _ fin) = not fin
+shouldDelay _                   = False
