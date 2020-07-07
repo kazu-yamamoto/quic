@@ -179,7 +179,10 @@ handshakeServer conf conn myAuthCIDs = do
         clearKillHandshaker conn
         setEncryptionLevel conn RTT1Level
         setConnection1RTTReady conn
-        fire (Microseconds 2000000) $ dropSecrets conn
+        fire (Microseconds 1000000) $ do
+            dropSecrets conn
+            onPacketNumberSpaceDiscarded conn InitialLevel
+            onPacketNumberSpaceDiscarded conn HandshakeLevel
         putOutput conn $ OutControl RTT1Level [HandshakeDone]
         setConnectionEstablished conn
         --

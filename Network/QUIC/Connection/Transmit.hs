@@ -5,6 +5,10 @@ module Network.QUIC.Connection.Transmit (
   , releaseByRetry
   , releaseByAcks
   , releaseByTimeout
+  , releaseByTimeout'
+  , findOldest
+  , clearSentPackets
+  , noInFlightPacket
   ) where
 
 import Data.Function (on)
@@ -42,8 +46,8 @@ third (_,_,x) = x
 ----------------------------------------------------------------
 
 {-# INLINE add #-}
-add :: PacketNumber -> TimeMillisecond -> Retrans -> RetransDB -> RetransDB
-add pn tm ent rdb = RetransDB minpn maxpn kept
+add :: PacketNumber -> TimeMillisecond -> SentPacket -> SentPackets -> SentPackets
+add pn tm ent rdb = SentPackets minpn maxpn kept
   where
     minpn = min pn $ minPN rdb
     maxpn = max pn $ maxPN rdb
@@ -51,7 +55,7 @@ add pn tm ent rdb = RetransDB minpn maxpn kept
     kept = PSQ.insert key tm ent $ keptPackets rdb
 
 {-# INLINE getdel #-}
-getdel :: PacketNumber -> RetransDB -> (RetransDB, Maybe Retrans)
+getdel :: PacketNumber -> SentPackets -> (SentPackets, Maybe SentPacket)
 getdel pn rdb = case PSQ.lookup key $ keptPackets rdb of
     Nothing    -> (rdb, Nothing)
     Just (_,v) -> let kept = PSQ.delete key $ keptPackets rdb
@@ -61,13 +65,13 @@ getdel pn rdb = case PSQ.lookup key $ keptPackets rdb of
     key = toKey pn
 
 {-# INLINE clear #-}
-clear :: RetransDB -> RetransDB
+clear :: SentPackets -> SentPackets
 clear rdb = case PSQ.findMin $ keptPackets rdb of
   Nothing -> rdb -- don't moidfy minPN
   Just _  -> nextEmpty rdb
 
 {-# INLINE split #-}
-split :: TimeMillisecond -> RetransDB -> (RetransDB, [(Int, TimeMillisecond, Retrans)])
+split :: TimeMillisecond -> SentPackets -> (SentPackets, [(Int, TimeMillisecond, SentPacket)])
 split tm rdb = case PSQ.findMin $ keptPackets rdb of
   Nothing -> (rdb, [])
   Just _  -> let (xs,kept) = PSQ.atMostView tm $ keptPackets rdb
@@ -75,60 +79,97 @@ split tm rdb = case PSQ.findMin $ keptPackets rdb of
              in (newrdb, xs)
 
 {-# INLINE adjust #-}
-adjust :: RetransDB -> PSQ.IntPSQ TimeMillisecond Retrans -> RetransDB
+adjust :: SentPackets -> PSQ.IntPSQ TimeMillisecond SentPacket -> SentPackets
 adjust oldrdb newkept = case PSQ.findMin newkept of
   Nothing -> nextEmpty oldrdb
-  Just x  -> let minpn = retransPacketNumber $ third x
+  Just x  -> let minpn = spPacketNumber $ third x
                  newrdb = oldrdb { minPN = minpn, keptPackets = newkept }
              in newrdb
 
 {-# INLINE nextEmpty #-}
-nextEmpty :: RetransDB -> RetransDB
-nextEmpty rdb = emptyRetransDB { minPN = minpn, maxPN = minpn }
+nextEmpty :: SentPackets -> SentPackets
+nextEmpty rdb = emptySentPackets { minPN = minpn, maxPN = minpn }
   where
    minpn = maxPN rdb + 1
 
+oldest :: SentPackets -> Maybe SentPacket
+oldest (SentPackets _ _ psq) = third <$> PSQ.findMin psq
+
 ----------------------------------------------------------------
 
-keepPlainPacket :: Connection -> PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> IO ()
-keepPlainPacket Connection{..} pn lvl out ppns = do
+keepPlainPacket :: Connection -> EncryptionLevel -> PacketNumber -> PlainPacket -> PeerPacketNumbers -> Int -> IO ()
+keepPlainPacket Connection{..} lvl pn ppkt ppns sentBytes = do
     tm <- getTimeMillisecond
-    let ent = Retrans pn lvl out ppns
-    atomicModifyIORef' retransDB $ \rdb -> (add pn tm ent rdb, ())
+    let ent = SentPacket {
+            spPacketNumber = pn
+          , spLevel        = lvl
+          , spPlainPacket  = ppkt
+          , spACKs         = ppns
+          , spTimeSent     = tm
+          , spSentBytes    = sentBytes
+          }
+    atomicModifyIORef' (sentPackets ! lvl) $ \rdb -> (add pn tm ent rdb, ())
 
 ----------------------------------------------------------------
 
 releaseByRetry :: Connection -> IO [PlainPacket]
 releaseByRetry Connection{..} =
-    atomicModifyIORef' retransDB $ \rdb -> (clear rdb, getAll (keptPackets rdb))
+    atomicModifyIORef' (sentPackets ! InitialLevel) $ \rdb -> (clear rdb, getAll (keptPackets rdb))
   where
-    getAll = map retransPlainPacket
-           . sortBy (compare `on` retransPacketNumber)
+    getAll = map spPlainPacket
+           . sortBy (compare `on` spPacketNumber)
            . map third
            . PSQ.toList
 
 ----------------------------------------------------------------
 
-releaseByAcks :: Connection -> AckInfo -> IO ()
-releaseByAcks conn@Connection{..} ackinfo@(AckInfo largest _ _) = do
-    RetransDB{..} <- readIORef retransDB
-    when (largest >= minPN) $ do
+releaseByAcks :: Connection -> EncryptionLevel -> AckInfo -> IO [SentPacket]
+releaseByAcks conn@Connection{..} lvl ackinfo@(AckInfo largest _ _) = do
+    let ref = sentPackets ! lvl
+    SentPackets{..} <- readIORef ref
+    if largest >= minPN then do
         let pns = fromAckInfoWithMin ackinfo minPN
-        mapM_ (releaseByAck conn) pns
+        catMaybes <$> mapM (releaseByAck conn ref) pns
+      else
+        return []
 
-releaseByAck :: Connection -> PacketNumber -> IO ()
-releaseByAck conn@Connection{..} pn = do
-    mx <- atomicModifyIORef' retransDB $ getdel pn
+releaseByAck :: Connection -> IORef SentPackets -> PacketNumber -> IO (Maybe SentPacket)
+releaseByAck conn ref pn = do
+    mx <- atomicModifyIORef' ref $ getdel pn
     case mx of
-      Nothing -> return ()
-      Just x  -> reducePeerPacketNumbers conn (retransLevel x) (retransACKs x)
+      Nothing -> return Nothing
+      Just x  -> do
+          reducePeerPacketNumbers conn (spLevel x) (spACKs x)
+          return $ Just x
 
 ----------------------------------------------------------------
 
-releaseByTimeout :: Connection -> Milliseconds -> IO [PlainPacket]
-releaseByTimeout Connection{..} milli = do
+releaseByTimeout :: Connection -> EncryptionLevel -> Milliseconds -> IO [PlainPacket]
+releaseByTimeout Connection{..} lvl milli = do
     tm <- getPastTimeMillisecond milli
-    xs <- atomicModifyIORef' retransDB $ split tm
-    return $ map (retransPlainPacket . third) xs
+    xs <- atomicModifyIORef' (sentPackets ! lvl) $ split tm
+    return $ map (spPlainPacket . third) xs
+
+releaseByTimeout' :: Connection -> EncryptionLevel -> Milliseconds -> IO [SentPacket]
+releaseByTimeout' Connection{..} lvl milli = do
+    tm <- getPastTimeMillisecond milli
+    xs <- atomicModifyIORef' (sentPackets ! lvl) $ split tm
+    return $ map third xs
+
 
 ----------------------------------------------------------------
+
+findOldest :: Connection -> EncryptionLevel -> IO (Maybe SentPacket)
+findOldest Connection{..} lvl = oldest <$> readIORef (sentPackets ! lvl)
+
+----------------------------------------------------------------
+
+clearSentPackets :: Connection -> EncryptionLevel -> IO [SentPacket]
+clearSentPackets Connection{..} lvl = do
+    atomicModifyIORef' (sentPackets ! lvl) (\db -> (emptySentPackets, map third $ PSQ.toList $ keptPackets db))
+
+----------------------------------------------------------------
+
+noInFlightPacket :: Connection -> EncryptionLevel -> IO Bool
+noInFlightPacket Connection{..} lvl = do
+    PSQ.null . keptPackets <$> readIORef (sentPackets ! lvl)

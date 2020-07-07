@@ -34,7 +34,7 @@ encodeFramesWithPadding buf siz frames = do
 encodeFrame :: WriteBuffer -> Frame -> IO ()
 encodeFrame wbuf (Padding n) = replicateM_ n $ write8 wbuf 0x00
 encodeFrame wbuf Ping = write8 wbuf 0x01
-encodeFrame wbuf (Ack (AckInfo largest range1 ranges) delay) = do
+encodeFrame wbuf (Ack (AckInfo largest range1 ranges) (Milliseconds delay)) = do
     write8 wbuf 0x02
     encodeInt' wbuf largest
     encodeInt' wbuf $ fromIntegral delay
@@ -181,7 +181,7 @@ decodeAckFrame rbuf = do
     count   <- fromIntegral <$> decodeInt' rbuf
     range1  <- fromIntegral <$> decodeInt' rbuf
     ranges  <- getRanges count id
-    return $ Ack (AckInfo largest range1 ranges) delay
+    return $ Ack (AckInfo largest range1 ranges) $ Milliseconds delay
   where
     getRanges 0 build = return $ build []
     getRanges n build = do

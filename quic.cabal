@@ -25,6 +25,7 @@ library
                        Network.QUIC.Connection.PacketNumber
                        Network.QUIC.Connection.Qlog
                        Network.QUIC.Connection.Queue
+                       Network.QUIC.Connection.Recovery
                        Network.QUIC.Connection.Role
                        Network.QUIC.Connection.State
                        Network.QUIC.Connection.Stream

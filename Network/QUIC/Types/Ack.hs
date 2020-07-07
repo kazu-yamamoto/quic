@@ -3,6 +3,7 @@ module Network.QUIC.Types.Ack where
 import Network.QUIC.Imports
 
 type PacketNumber = Int64
+
 type Range = Int
 type Gap   = Int
 

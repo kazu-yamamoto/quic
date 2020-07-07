@@ -151,6 +151,11 @@ module Network.QUIC.Connection (
   , qlogDropped
   , qlogRecvInitial
   , qlogSentRetry
+  -- Recovery
+  , onAckReceived
+  , onPacketSent
+  , onPacketReceived
+  , onPacketNumberSpaceDiscarded
   -- Types
   , connThreadId
   , connHooks
@@ -165,11 +170,12 @@ import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Migration
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.PacketNumber
+import Network.QUIC.Connection.Qlog
 import Network.QUIC.Connection.Queue
+import Network.QUIC.Connection.Recovery
 import Network.QUIC.Connection.Role
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Transmit
 import Network.QUIC.Connection.Types
-import Network.QUIC.Connection.Qlog

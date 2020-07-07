@@ -7,6 +7,7 @@ module Network.QUIC.Connection.Types where
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
+import Data.Array.IO
 import Data.IORef
 import Data.IntPSQ (IntPSQ)
 import qualified Data.IntPSQ as IntPSQ
@@ -14,6 +15,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc (mallocBytes, free)
+import GHC.Event
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 
@@ -50,22 +52,111 @@ newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
 emptyPeerPacketNumbers :: PeerPacketNumbers
 emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 
-data RetransDB = RetransDB {
+data SentPackets = SentPackets {
     minPN :: PacketNumber -- ^ If 'keptPackets' is 'IntPSQ.empty',
                           -- 'maxPN' is copied and 1 is added.
   , maxPN :: PacketNumber
-  , keptPackets :: IntPSQ TimeMillisecond Retrans
+  , keptPackets :: IntPSQ TimeMillisecond SentPacket
   } deriving Show
 
-emptyRetransDB :: RetransDB
-emptyRetransDB = RetransDB 0 0 IntPSQ.empty
+emptySentPackets :: SentPackets
+emptySentPackets = SentPackets 0 0 IntPSQ.empty
 
-data Retrans = Retrans {
-    retransPacketNumber :: PacketNumber
-  , retransLevel        :: EncryptionLevel
-  , retransPlainPacket  :: PlainPacket
-  , retransACKs         :: PeerPacketNumbers
+data SentPacket = SentPacket {
+    spPacketNumber :: PacketNumber
+  , spLevel        :: EncryptionLevel
+  , spPlainPacket  :: PlainPacket
+  , spACKs         :: PeerPacketNumbers
+  , spTimeSent     :: TimeMillisecond
+  , spSentBytes    :: Int
   } deriving Show
+
+data RTT = RTT {
+  -- | The most recent RTT measurement made when receiving an ack for
+  --   a previously unacked packet.
+    latestRTT   :: Milliseconds
+  -- | The smoothed RTT of the connection.
+  , smoothedRTT :: Milliseconds
+  -- | The RTT variation.
+  , rttvar      :: Milliseconds
+  -- | The minimum RTT seen in the connection, ignoring ack delay.
+  , minRTT      :: Milliseconds
+  -- | The maximum amount of time by which the receiver intends to
+  --   delay acknowledgments for packets in the ApplicationData packet
+  --   number space.  The actual ack_delay in a received ACK frame may
+  --   be larger due to late timers, reordering, or lost ACK frames.
+  , maxAckDelay :: Milliseconds
+  -- | The number of times a PTO has been sent without receiving
+  --  an ack.
+  , ptoCount :: Int
+  }
+
+-- | The RTT used before an RTT sample is taken.
+kInitialRTT :: Milliseconds
+kInitialRTT = Milliseconds 500 -- fixme: 333?
+
+initialRTT :: RTT
+initialRTT = RTT {
+    latestRTT   = Milliseconds 0
+  , smoothedRTT = kInitialRTT
+  , rttvar      = kInitialRTT `unsafeShiftR` 2
+  , minRTT      = Milliseconds 0
+  , maxAckDelay = Milliseconds 0
+  , ptoCount    = 0
+  }
+
+data CC = CC {
+  -- | The sender's current maximum payload size.  Does not include
+  --    UDP or IP overhead.  The max datagram size is used for
+  --    congestion window computations.  An endpoint sets the value of
+  --    this variable based on its PMTU with a minimum value of 1200
+  --    bytes.
+    maxDatagramSize :: Int
+  -- | The sum of the size in bytes of all sent packets that contain
+  --   at least one ack-eliciting or PADDING frame, and have not been
+  --   acked or declared lost.  The size does not include IP or UDP
+  --   overhead, but does include the QUIC header and AEAD overhead.
+  --   Packets only containing ACK frames do not count towards
+  --   bytes_in_flight to ensure congestion control does not impede
+  --   congestion feedback.
+  , bytesInFlight :: Int
+  -- | Maximum number of bytes-in-flight that may be sent.
+  , congestionWindow :: Int
+  -- | The time when QUIC first detects congestion due to loss or ECN,
+  --   causing it to enter congestion recovery.  When a packet sent
+  --   after this time is acknowledged, QUIC exits congestion
+  --   recovery.
+  , congestionRecoveryStartTime :: Maybe TimeMillisecond
+  -- | Slow start threshold in bytes.  When the congestion window is
+  --   below ssthresh, the mode is slow start and the window grows by
+  --   the number of bytes acknowledged.
+  , ssthresh :: Int
+  }
+
+-- | Default limit on the initial bytes in flight.
+kInitialWindow :: Int
+kInitialWindow = 14720
+
+initialCC :: CC
+initialCC = CC {
+    maxDatagramSize = 1200 -- fixme
+  , bytesInFlight = 0
+  , congestionWindow = kInitialWindow
+  , congestionRecoveryStartTime = Nothing
+  , ssthresh = maxBound
+  }
+
+dummySecrets :: TrafficSecrets a
+dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
+
+data LossDetection = LossDetection {
+    largestAckedPacket           :: Maybe PacketNumber
+  , timeOfLastAckElicitingPacket :: Maybe TimeMillisecond
+  , lossTime                     :: Maybe TimeMillisecond
+  }
+
+initialLossDetection :: LossDetection
+initialLossDetection = LossDetection Nothing Nothing Nothing
 
 ----------------------------------------------------------------
 
@@ -181,7 +272,6 @@ data Connection = Connection {
   , outputQ           :: OutputQ
   , migrationQ        :: MigrationQ
   , shared            :: Shared
-  , retransDB         :: IORef RetransDB
   , delayedAck        :: IORef Int
   -- State
   , connectionState   :: TVar ConnectionState
@@ -199,15 +289,48 @@ data Connection = Connection {
   , maxPacketSize     :: IORef Int
   , minIdleTimeout    :: IORef Milliseconds
   -- TLS
-  , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
-  , pendingQ          :: Array EncryptionLevel (TVar [CryptPacket])
+  , encryptionLevel   :: TVar    EncryptionLevel -- to synchronize
+  , pendingQ          :: Array   EncryptionLevel (TVar [CryptPacket])
   , ciphers           :: IOArray EncryptionLevel Cipher
   , coders            :: IOArray EncryptionLevel Coder
   , negotiated        :: IORef Negotiated
   , handshakeCIDs     :: IORef AuthCIDs
   -- Resources
   , connResources     :: IORef (IO ())
+  -- Recovery
+  , recoveryRTT       :: IORef RTT
+  , recoveryCC        :: IORef CC
+  , sentPackets       :: Array EncryptionLevel (IORef SentPackets)
+  , lossDetection     :: Array EncryptionLevel (IORef LossDetection)
+  , timeoutKey        :: IORef (Maybe TimeoutKey)
   }
+
+makePendingQ :: IO (Array EncryptionLevel (TVar [CryptPacket]))
+makePendingQ = do
+    q1 <- newTVarIO []
+    q2 <- newTVarIO []
+    q3 <- newTVarIO []
+    let lst = [(RTT0Level,q1),(HandshakeLevel,q2),(RTT1Level,q3)]
+        arr = array (RTT0Level,RTT1Level) lst
+    return arr
+
+makeSentPackets :: IO (Array EncryptionLevel (IORef SentPackets))
+makeSentPackets = do
+    i1 <- newIORef emptySentPackets
+    i2 <- newIORef emptySentPackets
+    i3 <- newIORef emptySentPackets
+    let lst = [(InitialLevel,i1),(HandshakeLevel,i2),(RTT1Level,i3)]
+        arr = array (InitialLevel,RTT1Level) lst
+    return arr
+
+makeLossDetection :: IO (Array EncryptionLevel (IORef LossDetection))
+makeLossDetection = do
+    i1 <- newIORef initialLossDetection
+    i2 <- newIORef initialLossDetection
+    i3 <- newIORef initialLossDetection
+    let lst = [(InitialLevel,i1),(HandshakeLevel,i2),(RTT1Level,i3)]
+        arr = array (InitialLevel,RTT1Level) lst
+    return arr
 
 newConnection :: Role
               -> Parameters
@@ -222,10 +345,6 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
     hbuf <- mallocBytes hlen
     pbuf <- mallocBytes plen
     let freeBufs = free hbuf >> free pbuf
-    q1 <- newTVarIO []
-    q2 <- newTVarIO []
-    q3 <- newTVarIO []
-    let pendingQueues = array (RTT0Level,RTT1Level) [(RTT0Level,q1),(HandshakeLevel,q2),(RTT1Level,q3)]
     Connection rl debugLog qLog hooks (hbuf,hlen) (pbuf,plen)
         -- Info
         <$> newIORef initialRoleInfo
@@ -246,7 +365,6 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTQueueIO
         <*> newTQueueIO
         <*> newShared tvarFlowTx
-        <*> newIORef emptyRetransDB
         <*> newIORef 0
         -- State
         <*> newTVarIO Handshaking
@@ -265,13 +383,19 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef (maxIdleTimeout myparams)
         -- TLS
         <*> newTVarIO InitialLevel
-        <*> return pendingQueues
+        <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher
         <*> newArray (InitialLevel,RTT1Level) initialCoder
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources
         <*> newIORef freeBufs
+        -- Recovery
+        <*> newIORef initialRTT
+        <*> newIORef initialCC
+        <*> makeSentPackets
+        <*> makeLossDetection
+        <*> newIORef Nothing
   where
     isclient = rl == Client
     initialRoleInfo

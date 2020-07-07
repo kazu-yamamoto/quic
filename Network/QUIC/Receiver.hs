@@ -62,6 +62,7 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
             let newPeerCID = headerPeerCID hdr
             when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
             setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
+        onPacketReceived conn
         processCryptPacket conn hdr crypt
 
 processCryptPacket :: Connection -> Header -> Crypt -> IO ()
@@ -100,8 +101,8 @@ processFrame _ _ Padding{} = return ()
 -- shouldDelay Ping == False
 -- So, Ack has been sent already above
 processFrame _ _ Ping = return ()
-processFrame conn _ (Ack ackInfo _) =
-    releaseByAcks conn ackInfo
+processFrame conn lvl (Ack ackInfo ackDelay) =
+    onAckReceived conn lvl ackInfo ackDelay
 processFrame _ _ ResetStream{} = return ()
 processFrame _ _ StopSending{} = return ()
 processFrame conn lvl (CryptoF off cdat) = do
@@ -189,9 +190,11 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone = do
     setConnectionEstablished conn
-    fire (Microseconds 2000000) $ do
+    fire (Microseconds 1000000) $ do
         killHandshaker conn
         dropSecrets conn
+        onPacketNumberSpaceDiscarded conn InitialLevel
+        onPacketNumberSpaceDiscarded conn HandshakeLevel
 processFrame conn _ (UnknownFrame _n)       = do
     connDebugLog conn $ "processFrame: " <> bhow _n
 processFrame _ _ _ = return () -- error

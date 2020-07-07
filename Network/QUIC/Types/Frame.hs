@@ -7,6 +7,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
 import Network.QUIC.Types.CID
 import Network.QUIC.Types.Error
+import Network.QUIC.Types.Time
 
 ----------------------------------------------------------------
 
@@ -55,7 +56,7 @@ isClientInitiatedUnidirectional sid = (0b11 .&. sid) == 2
 isServerInitiatedUnidirectional :: StreamId -> Bool
 isServerInitiatedUnidirectional sid = (0b11 .&. sid) == 3
 
-type Delay = Int
+type Delay = Milliseconds
 
 type Fin = Bool
 

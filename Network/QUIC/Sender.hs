@@ -2,20 +2,17 @@
 
 module Network.QUIC.Sender (
     sender
-  , resender
   ) where
 
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.ByteString as B
-import Data.IORef
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Stream
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -103,7 +100,8 @@ construct conn lvl frames mTargetSize = do
             mypn <- getPacketNumber conn
             let plain = toPlain mypn frames'
                 ppkt = toPlainPakcet lvl plain
-            keepPlainPacket conn mypn lvl ppkt ppns -- keep
+                sentByes = fromMaybe 0 mTargetSize -- fixme
+            onPacketSent conn lvl mypn ppkt ppns sentByes -- keep
             qlogSent conn ppkt
             encodePlainPacket conn ppkt mlen
       where
@@ -296,52 +294,3 @@ splitChunks bs0 = loop bs0 0 id
       where
         len = B.length b
         siz = siz0 + len
-
-----------------------------------------------------------------
-
-minRetransDelay :: Milliseconds
-minRetransDelay = 400
-
-maxRetransDelay :: Milliseconds
-maxRetransDelay = 1600
-
-resender :: Connection -> IO ()
-resender conn = handleIOLog (return ()) logAction $ do
-    ref <- newIORef minRetransDelay
-    loop ref (0 :: Int)
-  where
-    loop ref cnt0 = do
-        delay $ Microseconds 25000
-        n <- readIORef ref
-        ppkts <- releaseByTimeout conn n
-        established <- isConnectionEstablished conn
-        -- Some implementations do not return Ack for Initial and Handshake
-        -- correctly. We should consider that the success of handshake
-        -- implicitly acknowledge them.
-        let ppkt'
-             | established = filter isRTTxLevel ppkts
-             | otherwise   = ppkts
-        if null ppkt' then do
-            let longEnough = cnt0 == 10
-                n'  | longEnough = n - 50
-                    | otherwise  = n
-                cnt | longEnough = 0
-                    | otherwise  = cnt0 + 1
-            when (n' >= minRetransDelay) $ writeIORef ref n'
-            lvl <- getEncryptionLevel conn
-            when (lvl == RTT1Level) $ do
-                sendAck <- checkDelayedAck' conn
-                when sendAck $ putOutput conn $ OutControl RTT1Level []
-            loop ref cnt
-          else do
-            mapM_ put ppkt'
-            let n' = n + 200
-            when (n' <= maxRetransDelay) $ writeIORef ref n'
-            loop ref 0
-    logAction msg = connDebugLog conn ("resender: " <> msg)
-    put ppkt = putOutput conn $ OutRetrans ppkt
-
-isRTTxLevel :: PlainPacket -> Bool
-isRTTxLevel (PlainPacket hdr _) = lvl == RTT1Level || lvl == RTT0Level
-  where
-    lvl = packetEncryptionLevel hdr
