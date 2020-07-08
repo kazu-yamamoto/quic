@@ -14,6 +14,9 @@ module Network.QUIC.Packet.Header (
   , retryPacketType
   ) where
 
+import Crypto.Random (getRandomBytes)
+import qualified Data.ByteString as BS
+
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -72,11 +75,20 @@ longHeaderPacketType RTT0PacketType      = Flags 0b11010000
 longHeaderPacketType HandshakePacketType = Flags 0b11100000
 longHeaderPacketType RetryPacketType     = Flags 0b11110000
 
-retryPacketType :: Flags Raw
-retryPacketType = Flags 0b11110000
+retryPacketType :: IO (Flags Raw)
+retryPacketType = do
+    r <- getRandomOneByte
+    let flags = 0b11110000 .|. (0b00001111 .&. r)
+    return $ Flags flags
 
-versionNegotiationPacketType :: Flags Raw
-versionNegotiationPacketType = Flags 0b10000000
+getRandomOneByte :: IO Word8
+getRandomOneByte = BS.head <$> getRandomBytes 1
+
+versionNegotiationPacketType :: IO (Flags Raw)
+versionNegotiationPacketType = do
+    r <- getRandomOneByte
+    let flags = 0b10000000 .|. (0b01111111 .&. r)
+    return $ Flags flags
 
 {-# INLINE decodeLongHeaderPacketType #-}
 decodeLongHeaderPacketType :: Flags Protected -> LongHeaderPacketType

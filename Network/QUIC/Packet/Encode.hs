@@ -29,8 +29,7 @@ encodePacket conn (PacketOP pkt) = encodePlainPacket conn pkt Nothing
 
 encodeVersionNegotiationPacket :: VersionNegotiationPacket -> IO ByteString
 encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
-    -- fixme: randomizing unused bits
-    let Flags flags = versionNegotiationPacketType
+    Flags flags <- versionNegotiationPacketType
     write8 wbuf flags
     -- ver .. sCID
     encodeLongHeader wbuf Negotiation dCID sCID
@@ -43,8 +42,7 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
 encodeRetryPacket :: RetryPacket -> IO ByteString
 encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     save wbuf
-    -- fixme: randomizing unused bits
-    let Flags flags = retryPacketType
+    Flags flags <- retryPacketType
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
     copyByteString wbuf token
