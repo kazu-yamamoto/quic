@@ -25,9 +25,8 @@ module Network.QUIC.Connection (
   , checkEncryptionLevel
   , getCipher
   , getApplicationProtocol
-  , setApplicationProtocol
   , getTLSMode
-  , setTLSMode
+  , setNegotiated
   , getTxSecret
   , getRxSecret
   , setInitialSecrets

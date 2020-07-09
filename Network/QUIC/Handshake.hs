@@ -125,10 +125,7 @@ handshakeClient conf conn myAuthCIDs = do
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
     installKeysClient hsr ctx (InstallApplicationKeys appSecInf) = do
-        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
-        minfo <- TLS.contextGetInformation ctx
-        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
-            setTLSMode conn mode
+        storeNegotiated conn ctx appSecInf
         setApplicationSecretInfo conn appSecInf
         initializeCoder conn RTT1Level
         setEncryptionLevel conn RTT1Level
@@ -169,10 +166,7 @@ handshakeServer conf conn myAuthCIDs = do
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
     installKeysServer _ ctx (InstallApplicationKeys appSecInf) = do
-        TLS.getNegotiatedProtocol ctx >>= setApplicationProtocol conn
-        minfo <- TLS.contextGetInformation ctx
-        forM_ (minfo >>= TLS.infoTLS13HandshakeMode) $ \mode ->
-            setTLSMode conn mode
+        storeNegotiated conn ctx appSecInf
         setApplicationSecretInfo conn appSecInf
         initializeCoder conn RTT1Level
         -- will switch to RTT1Level after client Finished
@@ -237,4 +231,13 @@ notifyPeer conn err = do
     putOutput conn $ OutControl level frames
     setCloseSent conn
     exitConnection conn $ HandshakeFailed ad
+
+storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
+storeNegotiated conn ctx appSecInf = do
+    appPro <- TLS.getNegotiatedProtocol ctx
+    minfo <- TLS.contextGetInformation ctx
+    let mode = case minfo >>= TLS.infoTLS13HandshakeMode of
+          Nothing -> FullHandshake
+          Just m  -> m
+    setNegotiated conn mode appPro appSecInf
 

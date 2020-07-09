@@ -67,9 +67,6 @@ data Retrans = Retrans {
   , retransACKs         :: PeerPacketNumbers
   } deriving Show
 
-dummySecrets :: TrafficSecrets a
-dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
-
 ----------------------------------------------------------------
 
 data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
@@ -140,6 +137,21 @@ initialCoder = Coder {
 
 ----------------------------------------------------------------
 
+data Negotiated = Negotiated {
+      handshakeMode :: HandshakeMode13
+    , applicationProtocol :: Maybe NegotiatedProtocol
+    , applicationSecretInfo :: ApplicationSecretInfo
+    }
+
+initialNegotiated :: Negotiated
+initialNegotiated = Negotiated {
+      handshakeMode = FullHandshake
+    , applicationProtocol = Nothing
+    , applicationSecretInfo = ApplicationSecretInfo defaultTrafficSecrets
+    }
+
+----------------------------------------------------------------
+
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     role              :: Role
@@ -194,8 +206,7 @@ data Connection = Connection {
   , hndSecInfo        :: IORef HandshakeSecretInfo
   , appSecInfo        :: IORef ApplicationSecretInfo
   , coders            :: IOArray EncryptionLevel Coder
-  , hndMode           :: IORef HandshakeMode13
-  , appProto          :: IORef (Maybe NegotiatedProtocol)
+  , negotiated        :: IORef Negotiated
   , handshakeCIDs     :: IORef AuthCIDs
   -- Resources
   , connResources     :: IORef (IO ())
@@ -263,8 +274,7 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
         <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
         <*> newArray (InitialLevel,RTT1Level) initialCoder
-        <*> newIORef FullHandshake
-        <*> newIORef Nothing
+        <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources
         <*> newIORef freeBufs
