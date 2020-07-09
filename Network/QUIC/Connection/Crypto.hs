@@ -198,6 +198,9 @@ dropSecrets Connection{..} = do
     atomicWriteIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
     atomicModifyIORef' hndSecInfo $ \(HandshakeSecretInfo cipher _) ->
         (HandshakeSecretInfo cipher defaultTrafficSecrets, ())
+    writeIORef iniCoder initialCoder
+    writeIORef elyCoder initialCoder
+    writeIORef hndCoder initialCoder
 
 ----------------------------------------------------------------
 
