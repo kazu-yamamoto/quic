@@ -201,10 +201,7 @@ data Connection = Connection {
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
   , pendingQ          :: Array EncryptionLevel (TVar [CryptPacket])
-  , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
-  , elySecInfo        :: IORef EarlySecretInfo
-  , hndSecInfo        :: IORef HandshakeSecretInfo
-  , appSecInfo        :: IORef ApplicationSecretInfo
+  , ciphers           :: IOArray EncryptionLevel Cipher
   , coders            :: IOArray EncryptionLevel Coder
   , negotiated        :: IORef Negotiated
   , handshakeCIDs     :: IORef AuthCIDs
@@ -213,12 +210,12 @@ data Connection = Connection {
   }
 
 newConnection :: Role
-              -> Parameters -> TrafficSecrets InitialSecret
+              -> Parameters
               -> Version -> AuthCIDs -> AuthCIDs
               -> DebugLogger -> QLogger -> Hooks
               -> IORef (Socket,RecvQ)
               -> IO Connection
-newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
+newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
     tvarFlowTx <- newTVarIO defaultFlow
     let hlen = maximumQUICHeaderSize
         plen = maximumUdpPayloadSize
@@ -269,10 +266,7 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         -- TLS
         <*> newTVarIO InitialLevel
         <*> return pendingQueues
-        <*> newIORef isecs
-        <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
-        <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
-        <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
+        <*> newArray (InitialLevel,RTT1Level) defaultCipher
         <*> newArray (InitialLevel,RTT1Level) initialCoder
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
@@ -297,10 +291,8 @@ clientConnection :: ClientConfig
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
 clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
-    newConnection Client params isecs ver myAuthCIDs peerAuthCIDs
+    newConnection Client params ver myAuthCIDs peerAuthCIDs
   where
-    Just cid = initSrcCID peerAuthCIDs
-    isecs = initialSecrets ver cid
     params = confParameters ccConfig
 
 serverConnection :: ServerConfig
@@ -309,12 +301,8 @@ serverConnection :: ServerConfig
                  -> IORef (Socket,RecvQ)
                  -> IO Connection
 serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
-    newConnection Server params isecs ver myAuthCIDs peerAuthCIDs
+    newConnection Server params ver myAuthCIDs peerAuthCIDs
   where
-    Just cid = case retrySrcCID myAuthCIDs of
-                 Nothing -> origDstCID myAuthCIDs
-                 Just _  -> retrySrcCID myAuthCIDs
-    isecs = initialSecrets ver cid
     params = confParameters scConfig
 
 ----------------------------------------------------------------

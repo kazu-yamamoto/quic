@@ -33,14 +33,14 @@ spec = do
             q <- newRecvQ
             sref <- newIORef (s,q)
             clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref
-            initializeCoder clientConn InitialLevel
+            initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
             let serverConf = defaultServerConfig {
                        scConfig = defaultConfig {
                            confCredentials = credentials
                          }
                      }
             serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref
-            initializeCoder serverConn InitialLevel
+            initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt InitialLevel
             let ppkt = PlainPacket header plain

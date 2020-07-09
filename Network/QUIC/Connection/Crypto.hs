@@ -7,20 +7,10 @@ module Network.QUIC.Connection.Crypto (
   , checkEncryptionLevel
   --
   , getCipher
+  , setCipher
   , getTLSMode
   , getApplicationProtocol
   , setNegotiated
-  --
-  , getTxSecret
-  , getRxSecret
-  , setInitialSecrets
-  --
-  , getEarlySecretInfo
-  , getHandshakeSecretInfo
-  , getApplicationSecretInfo
-  , setEarlySecretInfo
-  , setHandshakeSecretInfo
-  , setApplicationSecretInfo
   --
   , dropSecrets
   --
@@ -68,32 +58,10 @@ checkEncryptionLevel Connection{..} level cpkt = atomically $ do
 ----------------------------------------------------------------
 
 getCipher :: Connection -> EncryptionLevel -> IO Cipher
-getCipher _ InitialLevel = return defaultCipher
-getCipher Connection{..} RTT0Level = do
-    EarlySecretInfo cipher _ <- readIORef elySecInfo
-    return cipher
-getCipher Connection{..} _ = do
-    HandshakeSecretInfo cipher _ <- readIORef hndSecInfo
-    return cipher
+getCipher Connection{..} lvl = readArray ciphers lvl
 
-setEarlySecretInfo :: Connection -> Maybe EarlySecretInfo -> IO ()
-setEarlySecretInfo _ Nothing = return ()
-setEarlySecretInfo Connection{..} (Just info) = atomicWriteIORef elySecInfo info
-
-setHandshakeSecretInfo :: Connection -> HandshakeSecretInfo -> IO ()
-setHandshakeSecretInfo Connection{..} = atomicWriteIORef hndSecInfo
-
-setApplicationSecretInfo :: Connection -> ApplicationSecretInfo -> IO ()
-setApplicationSecretInfo Connection{..} = atomicWriteIORef appSecInfo
-
-getEarlySecretInfo :: Connection -> IO EarlySecretInfo
-getEarlySecretInfo Connection{..} = readIORef elySecInfo
-
-getHandshakeSecretInfo :: Connection -> IO HandshakeSecretInfo
-getHandshakeSecretInfo Connection{..} = readIORef hndSecInfo
-
-getApplicationSecretInfo :: Connection -> IO ApplicationSecretInfo
-getApplicationSecretInfo Connection{..} = readIORef appSecInfo
+setCipher :: Connection -> EncryptionLevel -> Cipher -> IO ()
+setCipher Connection{..} lvl cipher = writeArray ciphers lvl cipher
 
 ----------------------------------------------------------------
 
@@ -113,100 +81,21 @@ setNegotiated Connection{..} mode mproto appSecInf =
 
 ----------------------------------------------------------------
 
-setInitialSecrets :: Connection -> TrafficSecrets InitialSecret -> IO ()
-setInitialSecrets Connection{..} secs = writeIORef iniSecrets secs
-
-----------------------------------------------------------------
-
-getTxSecret :: Connection -> EncryptionLevel -> IO Secret
-getTxSecret conn InitialLevel   = txInitialSecret     conn
-getTxSecret conn RTT0Level      =  xEarlySecret       conn
-getTxSecret conn HandshakeLevel = txHandshakeSecret   conn
-getTxSecret conn RTT1Level      = txApplicationSecret conn
-
-getRxSecret :: Connection -> EncryptionLevel -> IO Secret
-getRxSecret conn InitialLevel   = rxInitialSecret     conn
-getRxSecret conn RTT0Level      =  xEarlySecret       conn
-getRxSecret conn HandshakeLevel = rxHandshakeSecret   conn
-getRxSecret conn RTT1Level      = rxApplicationSecret conn
-
-----------------------------------------------------------------
-
-txInitialSecret :: Connection -> IO Secret
-txInitialSecret conn = do
-    (c,s) <- xInitialSecret conn
-    return $ if isClient conn then c else s
-
-rxInitialSecret :: Connection -> IO Secret
-rxInitialSecret conn = do
-    (c,s) <- xInitialSecret conn
-    return $ if isClient conn then s else c
-
-xInitialSecret :: Connection -> IO (Secret, Secret)
-xInitialSecret Connection{..} = do
-    (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef iniSecrets
-    return (Secret c, Secret s)
-
-----------------------------------------------------------------
-
-xEarlySecret :: Connection -> IO Secret
-xEarlySecret Connection{..} = do
-    (EarlySecretInfo _ (ClientTrafficSecret c)) <- readIORef elySecInfo
-    return $ Secret c
-
-----------------------------------------------------------------
-
-txHandshakeSecret :: Connection -> IO Secret
-txHandshakeSecret conn = do
-    (c,s) <- xHandshakeSecret conn
-    return $ if isClient conn then c else s
-
-rxHandshakeSecret :: Connection -> IO Secret
-rxHandshakeSecret conn = do
-    (c,s) <- xHandshakeSecret conn
-    return $ if isClient conn then s else c
-
-xHandshakeSecret :: Connection -> IO (Secret, Secret)
-xHandshakeSecret Connection{..} = do
-    HandshakeSecretInfo _ (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef hndSecInfo
-    return (Secret c, Secret s)
-
-----------------------------------------------------------------
-
-txApplicationSecret :: Connection -> IO Secret
-txApplicationSecret conn = do
-    (c,s) <- xApplicationSecret conn
-    return $ if isClient conn then c else s
-
-rxApplicationSecret :: Connection -> IO Secret
-rxApplicationSecret conn = do
-    (c,s) <- xApplicationSecret conn
-    return $ if isClient conn then s else c
-
-xApplicationSecret :: Connection -> IO (Secret, Secret)
-xApplicationSecret Connection{..} = do
-    ApplicationSecretInfo (ClientTrafficSecret c, ServerTrafficSecret s) <- readIORef appSecInfo
-    return (Secret c, Secret s)
-
-----------------------------------------------------------------
-
 dropSecrets :: Connection -> IO ()
 dropSecrets Connection{..} = do
-    writeIORef iniSecrets defaultTrafficSecrets
-    atomicWriteIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
-    atomicModifyIORef' hndSecInfo $ \(HandshakeSecretInfo cipher _) ->
-        (HandshakeSecretInfo cipher defaultTrafficSecrets, ())
     writeArray coders InitialLevel   initialCoder
     writeArray coders RTT0Level      initialCoder
     writeArray coders HandshakeLevel initialCoder
 
 ----------------------------------------------------------------
 
-initializeCoder :: Connection -> EncryptionLevel -> IO ()
-initializeCoder conn lvl = do
+initializeCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO ()
+initializeCoder conn lvl (ClientTrafficSecret c, ServerTrafficSecret s) = do
+    let txSecret | isClient conn = Secret c
+                 | otherwise     = Secret s
+    let rxSecret | isClient conn = Secret s
+                 | otherwise     = Secret c
     cipher <- getCipher conn lvl
-    txSecret <- getTxSecret conn lvl
-    rxSecret <- getRxSecret conn lvl
     let txPayloadKey = aeadKey cipher txSecret
         txPayloadIV  = initialVector cipher txSecret
         txHeaderKey = headerProtectionKey cipher txSecret

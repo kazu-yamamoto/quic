@@ -115,19 +115,20 @@ handshakeClient conf conn myAuthCIDs = do
   where
     tell (TLS.HandshakeFailed (TLS.Error_Misc _)) = return () -- thread blocked
     tell e = notifyPeer conn $ getErrorCause e
-    installKeysClient _ _ctx (InstallEarlyKeys mEarlySecInf) = do
-        setEarlySecretInfo conn mEarlySecInf
-        initializeCoder conn RTT0Level
+    installKeysClient _ _ctx (InstallEarlyKeys Nothing) = return ()
+    installKeysClient _ _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
+        setCipher conn RTT0Level cphr
+        initializeCoder conn RTT0Level (cts, ServerTrafficSecret "")
         setConnection0RTTReady conn
-    installKeysClient hsr _ctx (InstallHandshakeKeys hndSecInf) = do
-        setHandshakeSecretInfo conn hndSecInf
-        initializeCoder conn HandshakeLevel
+    installKeysClient hsr _ctx (InstallHandshakeKeys (HandshakeSecretInfo cphr tss)) = do
+        setCipher conn HandshakeLevel cphr
+        setCipher conn RTT1Level cphr
+        initializeCoder conn HandshakeLevel tss
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
-    installKeysClient hsr ctx (InstallApplicationKeys appSecInf) = do
+    installKeysClient hsr ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
-        setApplicationSecretInfo conn appSecInf
-        initializeCoder conn RTT1Level
+        initializeCoder conn RTT1Level tss
         setEncryptionLevel conn RTT1Level
         rxLevelChanged hsr
         setConnection1RTTReady conn
@@ -157,18 +158,20 @@ handshakeServer conf conn myAuthCIDs = do
   where
     tell (TLS.HandshakeFailed (TLS.Error_Misc _)) = return () -- thread blocked
     tell e = notifyPeer conn $ getErrorCause e
-    installKeysServer _ _ctx (InstallEarlyKeys mEarlySecInf) = do
-        setEarlySecretInfo conn mEarlySecInf
-        initializeCoder conn RTT0Level
-    installKeysServer hsr _ctx (InstallHandshakeKeys hndSecInf) = do
-        setHandshakeSecretInfo conn hndSecInf
-        initializeCoder conn HandshakeLevel
+    installKeysServer _ _ctx (InstallEarlyKeys Nothing) = return ()
+    installKeysServer _ _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
+        setCipher conn RTT0Level cphr
+        initializeCoder conn RTT0Level (cts, ServerTrafficSecret "")
+        setConnection0RTTReady conn
+    installKeysServer hsr _ctx (InstallHandshakeKeys (HandshakeSecretInfo cphr tss)) = do
+        setCipher conn HandshakeLevel cphr
+        setCipher conn RTT1Level cphr
+        initializeCoder conn HandshakeLevel tss
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
-    installKeysServer _ ctx (InstallApplicationKeys appSecInf) = do
+    installKeysServer _ ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
-        setApplicationSecretInfo conn appSecInf
-        initializeCoder conn RTT1Level
+        initializeCoder conn RTT1Level tss
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do

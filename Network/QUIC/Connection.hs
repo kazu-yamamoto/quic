@@ -24,18 +24,10 @@ module Network.QUIC.Connection (
   , setEncryptionLevel
   , checkEncryptionLevel
   , getCipher
+  , setCipher
   , getApplicationProtocol
   , getTLSMode
   , setNegotiated
-  , getTxSecret
-  , getRxSecret
-  , setInitialSecrets
-  , getEarlySecretInfo
-  , getHandshakeSecretInfo
-  , getApplicationSecretInfo
-  , setEarlySecretInfo
-  , setHandshakeSecretInfo
-  , setApplicationSecretInfo
   , dropSecrets
   , Coder(..)
   , initializeCoder

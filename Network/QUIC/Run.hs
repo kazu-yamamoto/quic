@@ -25,6 +25,7 @@ import Network.QUIC.Receiver
 import Network.QUIC.Sender
 import Network.QUIC.Server
 import Network.QUIC.Socket
+import Network.QUIC.TLS
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 
@@ -89,7 +90,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref
     addResource conn cls
     addResource conn qclean
-    initializeCoder conn InitialLevel
+    initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz = fromMaybe 0 ccPacketSize
     setMaxPacketSize conn ((defaultPacketSize sa0 `max` pktSiz) `min` maxPacketSize sa0)
@@ -167,7 +168,10 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     addResource conn cls
     addResource conn qclean
     addResource conn dclean
-    initializeCoder conn InitialLevel
+    let cid = case retrySrcCID myAuthCIDs of
+                Just rcid -> rcid
+                Nothing   -> ocid
+    initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz' = (defaultPacketSize mysa `max` pktSiz) `min` maxPacketSize mysa
     setMaxPacketSize conn pktSiz'
