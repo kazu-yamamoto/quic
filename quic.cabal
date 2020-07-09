@@ -78,6 +78,7 @@ library
                        Network.QUIC.Utils
   -- other-extensions:
   build-depends:       base >= 4.7 && < 5
+                     , array
                      , base16-bytestring
                      , bytestring
                      , containers

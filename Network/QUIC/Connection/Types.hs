@@ -195,10 +195,7 @@ data Connection = Connection {
   , elySecInfo        :: IORef EarlySecretInfo
   , hndSecInfo        :: IORef HandshakeSecretInfo
   , appSecInfo        :: IORef ApplicationSecretInfo
-  , iniCoder          :: IORef Coder
-  , elyCoder          :: IORef Coder
-  , hndCoder          :: IORef Coder
-  , appCoder          :: IORef Coder
+  , coders            :: IOArray EncryptionLevel Coder
   , hndMode           :: IORef HandshakeMode13
   , appProto          :: IORef (Maybe NegotiatedProtocol)
   , handshakeCIDs     :: IORef AuthCIDs
@@ -265,10 +262,7 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)
         <*> newIORef (ApplicationSecretInfo defaultTrafficSecrets)
-        <*> newIORef initialCoder
-        <*> newIORef initialCoder
-        <*> newIORef initialCoder
-        <*> newIORef initialCoder
+        <*> newArray (InitialLevel,RTT1Level) initialCoder
         <*> newIORef FullHandshake
         <*> newIORef Nothing
         <*> newIORef peerAuthCIDs

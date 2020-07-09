@@ -2,6 +2,8 @@
 
 module Network.QUIC.Types.Packet where
 
+import Data.Ix
+
 import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
 import Network.QUIC.Types.CID
@@ -109,7 +111,7 @@ data EncryptionLevel = InitialLevel
                      | RTT0Level
                      | HandshakeLevel
                      | RTT1Level
-                     deriving (Eq, Ord, Show)
+                     deriving (Eq, Ord, Ix, Show)
 
 packetEncryptionLevel :: Header -> EncryptionLevel
 packetEncryptionLevel Initial{}   = InitialLevel

@@ -11,6 +11,7 @@ module Network.QUIC.Imports (
   , module Data.Monoid
   , module Data.Ord
   , module Data.Word
+  , module Data.Array.IO
   , module Data.Maybe
   , module Numeric
   , module Network.ByteOrder
@@ -25,6 +26,7 @@ import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short.Internal (ShortByteString(..))
 import Data.Foldable
 import Data.Int
+import Data.Array.IO
 import Data.Maybe
 import Data.Monoid
 import Data.Ord

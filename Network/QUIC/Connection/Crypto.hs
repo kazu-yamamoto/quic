@@ -33,8 +33,9 @@ import Control.Concurrent.STM
 import Data.IORef
 import Network.TLS.QUIC
 
-import Network.QUIC.Connection.Types
 import Network.QUIC.Connection.Misc
+import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
@@ -198,9 +199,9 @@ dropSecrets Connection{..} = do
     atomicWriteIORef elySecInfo (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
     atomicModifyIORef' hndSecInfo $ \(HandshakeSecretInfo cipher _) ->
         (HandshakeSecretInfo cipher defaultTrafficSecrets, ())
-    writeIORef iniCoder initialCoder
-    writeIORef elyCoder initialCoder
-    writeIORef hndCoder initialCoder
+    writeArray coders InitialLevel   initialCoder
+    writeArray coders RTT0Level      initialCoder
+    writeArray coders HandshakeLevel initialCoder
 
 ----------------------------------------------------------------
 
@@ -220,13 +221,7 @@ initializeCoder conn lvl = do
         dec = decryptPayload cipher rxPayloadKey rxPayloadIV
         unp = protectionMask cipher rxHeaderKey
     let coder = Coder enc dec pro unp
-    writeIORef (protectionRef conn lvl) coder
+    writeArray (coders conn) lvl coder
 
 getCoder :: Connection -> EncryptionLevel -> IO Coder
-getCoder conn lvl = readIORef $ protectionRef conn lvl
-
-protectionRef :: Connection -> EncryptionLevel -> IORef Coder
-protectionRef conn InitialLevel   = iniCoder conn
-protectionRef conn RTT0Level      = elyCoder conn
-protectionRef conn HandshakeLevel = hndCoder conn
-protectionRef conn RTT1Level      = appCoder conn
+getCoder conn lvl = readArray (coders conn) lvl
