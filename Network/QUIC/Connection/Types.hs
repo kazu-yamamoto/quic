@@ -188,9 +188,7 @@ data Connection = Connection {
   , minIdleTimeout    :: IORef Milliseconds
   -- TLS
   , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
-  , pendingHandshake  :: TVar [CryptPacket]
-  , pendingRTT0       :: TVar [CryptPacket]
-  , pendingRTT1       :: TVar [CryptPacket]
+  , pendingQ          :: Array EncryptionLevel (TVar [CryptPacket])
   , iniSecrets        :: IORef (TrafficSecrets InitialSecret)
   , elySecInfo        :: IORef EarlySecretInfo
   , hndSecInfo        :: IORef HandshakeSecretInfo
@@ -216,6 +214,10 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
     hbuf <- mallocBytes hlen
     pbuf <- mallocBytes plen
     let freeBufs = free hbuf >> free pbuf
+    q1 <- newTVarIO []
+    q2 <- newTVarIO []
+    q3 <- newTVarIO []
+    let pendingQueues = array (RTT0Level,RTT1Level) [(RTT0Level,q1),(HandshakeLevel,q2),(RTT1Level,q3)]
     Connection rl debugLog qLog hooks (hbuf,hlen) (pbuf,plen)
         -- Info
         <$> newIORef initialRoleInfo
@@ -255,9 +257,7 @@ newConnection rl myparams isecs ver myAuthCIDs peerAuthCIDs debugLog qLog hooks 
         <*> newIORef (maxIdleTimeout myparams)
         -- TLS
         <*> newTVarIO InitialLevel
-        <*> newTVarIO []
-        <*> newTVarIO []
-        <*> newTVarIO []
+        <*> return pendingQueues
         <*> newIORef isecs
         <*> newIORef (EarlySecretInfo defaultCipher (ClientTrafficSecret ""))
         <*> newIORef (HandshakeSecretInfo defaultCipher defaultTrafficSecrets)

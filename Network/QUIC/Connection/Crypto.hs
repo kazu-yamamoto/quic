@@ -48,10 +48,10 @@ setEncryptionLevel conn@Connection{..} level = do
         writeTVar encryptionLevel level
         case level of
           HandshakeLevel -> do
-              readTVar pendingRTT0      >>= mapM_ (prependRecvQ q)
-              readTVar pendingHandshake >>= mapM_ (prependRecvQ q)
+              readTVar (pendingQ ! RTT0Level)      >>= mapM_ (prependRecvQ q)
+              readTVar (pendingQ ! HandshakeLevel) >>= mapM_ (prependRecvQ q)
           RTT1Level      ->
-              readTVar pendingRTT1      >>= mapM_ (prependRecvQ q)
+              readTVar (pendingQ ! RTT1Level)      >>= mapM_ (prependRecvQ q)
           _              -> return ()
 
 getEncryptionLevel :: Connection -> IO EncryptionLevel
@@ -63,11 +63,7 @@ checkEncryptionLevel Connection{..} level cpkt = atomically $ do
     if l >= level then
         return True
       else do
-        case level of
-          RTT0Level      -> modifyTVar' pendingRTT0 (cpkt :)
-          HandshakeLevel -> modifyTVar' pendingHandshake (cpkt :)
-          RTT1Level      -> modifyTVar' pendingRTT1 (cpkt :)
-          _              -> return ()
+        modifyTVar' (pendingQ ! level) (cpkt :)
         return False
 
 ----------------------------------------------------------------
