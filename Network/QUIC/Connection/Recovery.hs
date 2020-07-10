@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Recovery (
@@ -132,11 +133,14 @@ updateRTT Connection{..} latestRTT0 ackDelay0 = do
 
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
+    mtm <- timeOfLastAckElicitingPacket <$> readIORef (lossDetection ! lvl)
+    when (isNothing mtm) $ connDebugLog "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: Nothing"
     modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
           lossTime = Nothing
         }
     RTT{..} <- readIORef recoveryRTT
     LossDetection{..} <- readIORef (lossDetection ! lvl)
+    when (isNothing largestAckedPacket) $ connDebugLog "detectAndRemoveLostPackets: largestAckedPacket: Nothing"
     let Just largestAckedPacket' = largestAckedPacket
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
 
@@ -181,6 +185,8 @@ getPtoTimeAndSpace conn@Connection{..} = do
     let duration = (smoothedRTT + max (4 * rttvar) kGranularity) * (2 ^ ptoCount)
     -- Arm PTO from now when there are no inflight packets.
     if bytesInFlight <= 0 then do
+        validated <- peerCompletedAddressValidation conn
+        when validated $ connDebugLog "getPtoTimeAndSpace: validated"
         pto <- getFutureTimeMillisecond duration
         lvl <- getEncryptionLevel conn
         return $ Just (pto, lvl)
@@ -243,6 +249,7 @@ updateLossDetectionTimer conn@Connection{..} tms = do
       Nothing -> return ()
       Just k -> unregisterTimeout mgr k
     Microseconds us <- getTimeoutInMicrosecond tms
+    when (us <= 0) $ connDebugLog "updateLossDetectionTimer: minus"
     key <- registerTimeout mgr us $ onLossDetectionTimeout conn
     writeIORef timeoutKey $ Just key
 
@@ -279,6 +286,7 @@ onLossDetectionTimeout conn@Connection{..} = do
       Just (_, lvl) -> do
           -- Time threshold loss Detection
           lostPackets <- detectAndRemoveLostPackets conn lvl
+          when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
           onPacketsLost conn lostPackets
           setLossDetectionTimer conn
       Nothing -> do
@@ -291,10 +299,12 @@ onLossDetectionTimeout conn@Connection{..} = do
                 Nothing -> return ()
                 Just (_, lvl) -> putOutput conn $ OutControl lvl [Ping]
             else do
+              when (isServer conn) $ connDebugLog "onLossDetectionTimeout: server"
               -- Client sends an anti-deadlock packet: Initial is padded
               -- to earn more anti-amplification credit,
               -- a Handshake packet proves address ownership.
               lvl <- getEncryptionLevel conn
+              when (lvl == RTT1Level) $ connDebugLog "onLossDetectionTimeout: RTT1"
               putOutput conn $ OutControl lvl [Ping]
 
           modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = ptoCount rtt + 1 }
