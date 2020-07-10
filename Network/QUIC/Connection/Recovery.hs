@@ -98,47 +98,36 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
 updateRTT :: Connection -> Milliseconds -> Milliseconds -> IO ()
 updateRTT Connection{..} latestRTT0 ackDelay0 = do
     rtt@RTT{..} <- readIORef recoveryRTT
-    if latestRTT == Milliseconds 0 then do -- first time
-        -- smoothed_rtt = rtt_sample
-        -- rttvar = rtt_sample / 2
-        let rtt' = rtt {
-                latestRTT = latestRTT0
-              , minRTT = latestRTT0
-              , smoothedRTT = latestRTT0
-              , rttvar = latestRTT0 `unsafeShiftR` 1
-              }
-        writeIORef recoveryRTT rtt'
-      else do
-        -- ack_delay = min(Ack Delay in ACK Frame, max_ack_delay)
-        -- adjusted_rtt = latest_rtt
-        -- if (min_rtt + ack_delay < latest_rtt):
-        --   adjusted_rtt = latest_rtt - ack_delay
-        -- smoothed_rtt = 7/8 * smoothed_rtt + 1/8 * adjusted_rtt
-        -- rttvar_sample = abs(smoothed_rtt - adjusted_rtt)
-        -- rttvar = 3/4 * rttvar + 1/4 * rttvar_sample
+    -- ack_delay = min(Ack Delay in ACK Frame, max_ack_delay)
+    -- adjusted_rtt = latest_rtt
+    -- if (min_rtt + ack_delay < latest_rtt):
+    --   adjusted_rtt = latest_rtt - ack_delay
+    -- smoothed_rtt = 7/8 * smoothed_rtt + 1/8 * adjusted_rtt
+    -- rttvar_sample = abs(smoothed_rtt - adjusted_rtt)
+    -- rttvar = 3/4 * rttvar + 1/4 * rttvar_sample
 
-        -- don't use latestRTT, use latestRTT0 instead
+    -- don't use latestRTT, use latestRTT0 instead
 
-        -- minRTT ignores ack delay.
-        let minRTT' = min minRTT latestRTT0
-        -- Limit ackDelay by maxAckDelay
-        let ackDelay = min ackDelay0 maxAckDelay
-        -- Adjust for ack delay if plausible.
-        let adjustedRTT
-              | latestRTT0 > minRTT + ackDelay = latestRTT0 - ackDelay
-              | otherwise                      = latestRTT0
+    -- minRTT ignores ack delay.
+    let minRTT' = min minRTT latestRTT0
+    -- Limit ackDelay by maxAckDelay
+    let ackDelay = min ackDelay0 maxAckDelay
+    -- Adjust for ack delay if plausible.
+    let adjustedRTT
+          | latestRTT0 > minRTT + ackDelay = latestRTT0 - ackDelay
+          | otherwise                      = latestRTT0
 
-        let rttvar' = rttvar - (rttvar `unsafeShiftR` 2)
-                    + (abs (smoothedRTT - adjustedRTT) `unsafeShiftR` 2)
-        let smoothedRTT' = smoothedRTT - (smoothedRTT `unsafeShiftR` 3)
-                         + (adjustedRTT `unsafeShiftR` 3)
-        let rtt' = rtt {
-                latestRTT = latestRTT0
-              , minRTT = minRTT'
-              , smoothedRTT = smoothedRTT'
-              , rttvar = rttvar'
-              }
-        writeIORef recoveryRTT rtt'
+    let rttvar' = rttvar - (rttvar `unsafeShiftR` 2)
+                + (abs (smoothedRTT - adjustedRTT) `unsafeShiftR` 2)
+    let smoothedRTT' = smoothedRTT - (smoothedRTT `unsafeShiftR` 3)
+                     + (adjustedRTT `unsafeShiftR` 3)
+    let rtt' = rtt {
+            latestRTT = latestRTT0
+          , minRTT = minRTT'
+          , smoothedRTT = smoothedRTT'
+          , rttvar = rttvar'
+          }
+    writeIORef recoveryRTT rtt'
 
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO [SentPacket]
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
