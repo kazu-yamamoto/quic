@@ -189,12 +189,12 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone = do
+    onPacketNumberSpaceDiscarded conn InitialLevel
+    onPacketNumberSpaceDiscarded conn HandshakeLevel
     setConnectionEstablished conn
     fire (Microseconds 1000000) $ do
         killHandshaker conn
         dropSecrets conn
-        onPacketNumberSpaceDiscarded conn InitialLevel
-        onPacketNumberSpaceDiscarded conn HandshakeLevel
 processFrame conn _ (UnknownFrame _n)       = do
     connDebugLog conn $ "processFrame: " <> bhow _n
 processFrame _ _ _ = return () -- error
