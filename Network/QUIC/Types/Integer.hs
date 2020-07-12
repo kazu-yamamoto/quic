@@ -62,7 +62,7 @@ decomp :: Int -> [Word8] -> Int64 -> [Word8]
 decomp 0 ws _ = ws
 decomp n ws x = decomp (n-1) (w:ws) x'
   where
-    x' = x `shiftR` 8
+    x' = x .>>. 8
     w  = fromIntegral x
 
 encodeInt8 :: Int64  -> ByteString
@@ -95,7 +95,7 @@ decodeInt bs = unsafeDupablePerformIO $ withReadBuffer bs decodeInt'
 decodeInt' :: ReadBuffer -> IO Int64
 decodeInt' rbuf = do
     b0 <- read8 rbuf
-    let flag = b0 `shiftR` 6
+    let flag = b0 .>>. 6
         b1 = fromIntegral (b0 .&. 0b00111111)
     case flag of
       0 -> return b1

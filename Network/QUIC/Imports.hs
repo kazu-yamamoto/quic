@@ -17,6 +17,7 @@ module Network.QUIC.Imports (
   , module Numeric
   , module Network.ByteOrder
   , module Network.QUIC.Utils
+  , (.<<.), (.>>.)
   ) where
 
 import Control.Applicative
@@ -40,3 +41,11 @@ import Numeric
 -- | All internal byte sequences.
 --   `ByteString` should be used for FFI related stuff.
 type Bytes = ShortByteString
+
+infixl 8 .<<.
+(.<<.) :: Bits a => a -> Int -> a
+(.<<.) = unsafeShiftL
+
+infixl 8 .>>.
+(.>>.) :: Bits a => a -> Int -> a
+(.>>.) = unsafeShiftR

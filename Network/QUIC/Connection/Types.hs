@@ -99,7 +99,7 @@ initialRTT :: RTT
 initialRTT = RTT {
     latestRTT   = kInitialRTT
   , smoothedRTT = kInitialRTT
-  , rttvar      = kInitialRTT `unsafeShiftR` 1
+  , rttvar      = kInitialRTT .>>. 1
   , minRTT      = kInitialRTT
   , maxAckDelay = Milliseconds 25 -- fimxe
   , ptoCount    = 0

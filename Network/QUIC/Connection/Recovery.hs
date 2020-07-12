@@ -29,7 +29,7 @@ kPacketThreshold = 3
 --   considers a packet lost.  Specified as an RTT multiplier.
 
 kTimeThreshold :: Milliseconds -> Milliseconds
-kTimeThreshold x = x + (x `unsafeShiftR` 3) -- 9/8
+kTimeThreshold x = x + (x .>>. 3) -- 9/8
 
 -- | Timer granularity.
 kGranularity :: Milliseconds
@@ -117,10 +117,10 @@ updateRTT Connection{..} latestRTT0 ackDelay0 = do
           | latestRTT0 > minRTT + ackDelay = latestRTT0 - ackDelay
           | otherwise                      = latestRTT0
 
-    let rttvar' = rttvar - (rttvar `unsafeShiftR` 2)
-                + (abs (smoothedRTT - adjustedRTT) `unsafeShiftR` 2)
-    let smoothedRTT' = smoothedRTT - (smoothedRTT `unsafeShiftR` 3)
-                     + (adjustedRTT `unsafeShiftR` 3)
+    let rttvar' = rttvar - (rttvar .>>. 2)
+                + (abs (smoothedRTT - adjustedRTT) .>>. 2)
+    let smoothedRTT' = smoothedRTT - (smoothedRTT .>>. 3)
+                     + (adjustedRTT .>>. 3)
     let rtt' = rtt {
             latestRTT = latestRTT0
           , minRTT = minRTT'
@@ -301,11 +301,11 @@ onLossDetectionTimeout conn@Connection{..} = do
 
 -- | Minimum congestion window in bytes.
 kMinimumWindow :: CC -> Int
-kMinimumWindow CC{..} = maxDatagramSize `unsafeShiftL` 1
+kMinimumWindow CC{..} = maxDatagramSize .<<. 1
 
 -- | Reduction in congestion window when a new loss event is detected.
 kLossReductionFactor :: Int -> Int
-kLossReductionFactor = (`unsafeShiftR` 2)
+kLossReductionFactor = (.>>. 2)
 
 -- | Period of time for persistent congestion to be established,
 -- specified as a PTO multiplier.
@@ -369,7 +369,7 @@ inPersistentCongestion _ []  = return False
 inPersistentCongestion _ [_] = return False
 inPersistentCongestion Connection{..} lostPackets = do
     RTT{..} <- readIORef recoveryRTT
-    let pto = smoothedRTT + max (rttvar `unsafeShiftL` 2) kGranularity + maxAckDelay
+    let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
         Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
         start = spSentBytes $ head lostPackets
         end   = spSentBytes $ last lostPackets
