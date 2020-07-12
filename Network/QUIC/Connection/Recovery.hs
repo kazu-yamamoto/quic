@@ -367,24 +367,22 @@ congestionEvent Connection{..} sentTime = do
         -- A packet can be sent to speed up loss recovery.
         -- maybeSendOnePacket conn -- fixme
 
-inPersistentCongestion :: Connection -> Seq SentPacket -> IO Bool
-inPersistentCongestion Connection{..} lostPackets =
-    case Seq.viewl lostPackets of
+inPersistentCongestion :: Connection -> Seq SentPacket -> SentPacket -> IO Bool
+inPersistentCongestion Connection{..} lostPackets' lstPkt =
+    case Seq.viewl lostPackets' of
       EmptyL -> return False
-      fstPkt :< _ -> case Seq.viewr lostPackets of
-        EmptyR -> return False
-        _ :> lstPkt -> do
-            RTT{..} <- readIORef recoveryRTT
-            let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
-                Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
-                beg = spSentBytes fstPkt
-                end = spSentBytes lstPkt
-            return (fromIntegral congestionPeriod >= (end - beg))
+      fstPkt :< _ -> do
+          RTT{..} <- readIORef recoveryRTT
+          let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
+              Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
+              beg = spSentBytes fstPkt
+              end = spSentBytes lstPkt
+          return (fromIntegral congestionPeriod >= (end - beg))
 
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
-  _ :> lastPkt -> do
+  lostPackets' :> lastPkt -> do
     cc@CC{..} <- readIORef recoveryCC
     -- Remove lost packets from bytesInFlight.
     let sentBytes = sum $ fmap spSentBytes lostPackets
@@ -392,7 +390,7 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
     congestionEvent conn $ spTimeSent lastPkt
 
     -- Collapse congestion window if persistent congestion
-    persistent <- inPersistentCongestion conn lostPackets
+    persistent <- inPersistentCongestion conn lostPackets' lastPkt
     let window | persistent = kMinimumWindow cc
                | otherwise  = congestionWindow
     writeIORef recoveryCC $ cc {
