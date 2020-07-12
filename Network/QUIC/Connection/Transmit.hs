@@ -2,11 +2,11 @@
 
 module Network.QUIC.Connection.Transmit (
     keepPlainPacket
-  , releaseByRetry
   , releaseByAcks
   , releaseByTimeout
+  , releaseByClear
+  , releaseByRetry
   , findOldest
-  , clearSentPackets
   , noInFlightPacket
   ) where
 
@@ -37,11 +37,6 @@ keepPlainPacket Connection{..} lvl pn ppkt ppns sentBytes = do
 
 ----------------------------------------------------------------
 
-releaseByRetry :: Connection -> IO (Seq PlainPacket)
-releaseByRetry conn = fmap spPlainPacket <$> clearSentPackets conn InitialLevel
-
-----------------------------------------------------------------
-
 releaseByAcks :: Connection -> EncryptionLevel -> AckInfo -> IO (Seq SentPacket)
 releaseByAcks Connection{..} lvl ackinfo = do
     let predicate = fromAckInfoToPred ackinfo . spPacketNumber
@@ -61,20 +56,24 @@ releaseByTimeout Connection{..} lvl milli = do
 
 ----------------------------------------------------------------
 
+releaseByClear :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
+releaseByClear Connection{..} lvl = do
+    atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
+        (emptySentPackets, db)
+
+----------------------------------------------------------------
+
+releaseByRetry :: Connection -> IO (Seq PlainPacket)
+releaseByRetry conn = fmap spPlainPacket <$> releaseByClear conn InitialLevel
+
+----------------------------------------------------------------
+
 findOldest :: Connection -> EncryptionLevel -> IO (Maybe SentPacket)
 findOldest Connection{..} lvl = oldest <$> readIORef (sentPackets ! lvl)
   where
     oldest (SentPackets db) = case Seq.viewl db of
       EmptyL -> Nothing
       x :< _ -> Just x
-
-----------------------------------------------------------------
-
--- fixme
-clearSentPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
-clearSentPackets Connection{..} lvl = do
-    atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
-        (emptySentPackets, db)
 
 ----------------------------------------------------------------
 

@@ -403,7 +403,7 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     -- Remove any unacknowledged packets from flight.
-    clearedPackets <- clearSentPackets conn lvl
+    clearedPackets <- releaseByClear conn lvl
     let sentBytes = sum $ fmap spSentBytes clearedPackets
     modifyIORef' recoveryCC $ \cc -> cc {
         bytesInFlight = bytesInFlight cc - sentBytes
