@@ -9,8 +9,8 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.IORef
-import Data.IntPSQ (IntPSQ)
-import qualified Data.IntPSQ as IntPSQ
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.X509 (CertificateChain)
@@ -52,15 +52,10 @@ newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
 emptyPeerPacketNumbers :: PeerPacketNumbers
 emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 
-data SentPackets = SentPackets {
-    minPN :: PacketNumber -- ^ If 'keptPackets' is 'IntPSQ.empty',
-                          -- 'maxPN' is copied and 1 is added.
-  , maxPN :: PacketNumber
-  , keptPackets :: IntPSQ TimeMillisecond SentPacket
-  } deriving Show
+newtype SentPackets = SentPackets (Seq SentPacket)
 
 emptySentPackets :: SentPackets
-emptySentPackets = SentPackets 0 0 IntPSQ.empty
+emptySentPackets = SentPackets Seq.empty
 
 data SentPacket = SentPacket {
     spPacketNumber :: PacketNumber

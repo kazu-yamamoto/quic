@@ -9,6 +9,8 @@ module Network.QUIC.Connection.Recovery (
 
 import Data.IORef
 import GHC.Event
+import Data.Sequence (Seq, ViewL(..), ViewR(..))
+import qualified Data.Sequence as Seq
 
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Queue
@@ -67,10 +69,11 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
 
     newlyAckedPackets <- releaseByAcks conn lvl acks
 
-    when (not (null newlyAckedPackets)) $ do
+    case Seq.viewr newlyAckedPackets of
+      EmptyR -> return ()
+      _ :> lastPkt -> do
         -- If the largest acknowledged is newly acked and
         -- at least one ack-eliciting was newly acked, update the RTT.
-        let lastPkt = last newlyAckedPackets
         when (spPacketNumber lastPkt == largestAcked) $ do
             latestRtt' <- getElapsedTimeMillisecond $ spTimeSent lastPkt
             let ackDelay' | lvl == RTT1Level = ackDelay
@@ -129,7 +132,7 @@ updateRTT Connection{..} latestRTT0 ackDelay0 = do
           }
     writeIORef recoveryRTT rtt'
 
-detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO [SentPacket]
+detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
     modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
           lossTime = Nothing
@@ -142,7 +145,7 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
 
     -- fixme: using kPacketThreshold
     -- fixme: checking unacked.packetNumber > largestAckedPacket[lvl]
-    lostPackets <- releaseByTimeout' conn lvl lossDelay
+    lostPackets <- releaseByTimeout conn lvl lossDelay
 
     mx <- findOldest conn lvl
     case mx of
@@ -322,7 +325,7 @@ inCongestionRecovery :: TimeMillisecond -> Maybe TimeMillisecond -> Bool
 inCongestionRecovery _ Nothing = False -- checkme
 inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 
-onPacketsAcked :: Connection -> [SentPacket] -> IO ()
+onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
 onPacketsAcked Connection{..} ackedPackets = mapM_ control ackedPackets
   where
     control ackedPacket = do
@@ -364,25 +367,29 @@ congestionEvent Connection{..} sentTime = do
         -- A packet can be sent to speed up loss recovery.
         -- maybeSendOnePacket conn -- fixme
 
-inPersistentCongestion :: Connection -> [SentPacket] -> IO Bool
-inPersistentCongestion _ []  = return False
-inPersistentCongestion _ [_] = return False
-inPersistentCongestion Connection{..} lostPackets = do
-    RTT{..} <- readIORef recoveryRTT
-    let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
-        Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
-        start = spSentBytes $ head lostPackets
-        end   = spSentBytes $ last lostPackets
-    return (fromIntegral congestionPeriod >= (end - start))
+inPersistentCongestion :: Connection -> Seq SentPacket -> IO Bool
+inPersistentCongestion Connection{..} lostPackets =
+    case Seq.viewl lostPackets of
+      EmptyL -> return False
+      fstPkt :< _ -> case Seq.viewr lostPackets of
+        EmptyR -> return False
+        _ :> lstPkt -> do
+            RTT{..} <- readIORef recoveryRTT
+            let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
+                Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
+                beg = spSentBytes fstPkt
+                end = spSentBytes lstPkt
+            return (fromIntegral congestionPeriod >= (end - beg))
 
-onPacketsLost :: Connection -> [SentPacket] -> IO ()
-onPacketsLost _ [] = return ()
-onPacketsLost conn@Connection{..} lostPackets = do
+onPacketsLost :: Connection -> Seq SentPacket -> IO ()
+onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
+  EmptyR -> return ()
+  _ :> lastPkt -> do
     cc@CC{..} <- readIORef recoveryCC
     -- Remove lost packets from bytesInFlight.
-    let sentBytes = sum $ map spSentBytes lostPackets
+    let sentBytes = sum $ fmap spSentBytes lostPackets
 
-    congestionEvent conn $ spTimeSent $ last lostPackets
+    congestionEvent conn $ spTimeSent lastPkt
 
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lostPackets
@@ -397,7 +404,7 @@ onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- clearSentPackets conn lvl
-    let sentBytes = sum $ map spSentBytes clearedPackets
+    let sentBytes = sum $ fmap spSentBytes clearedPackets
     modifyIORef' recoveryCC $ \cc -> cc {
         bytesInFlight = bytesInFlight cc - sentBytes
       }

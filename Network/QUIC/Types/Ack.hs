@@ -75,3 +75,15 @@ fromAckInfoWithMin (AckInfo lpn fr grs) lim
       where
         z = s - fromIntegral g - 2
         r' = max lim (z - fromIntegral r)
+
+fromAckInfoToPred :: AckInfo -> (PacketNumber -> Bool)
+fromAckInfoToPred (AckInfo lpn fr grs) =
+    \x -> or $ map (f x) $ loop grs [(stt,lpn)]
+  where
+    f x (l,u) = l <= x && x <= u
+    stt = lpn - fromIntegral fr
+    loop _          []        = error "loop"
+    loop []         acc       = acc
+    loop ((g,r):xs) acc@((s,_):_) = loop xs $ (z - fromIntegral r, z) : acc
+      where
+        z = s - fromIntegral g - 2
