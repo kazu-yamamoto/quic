@@ -80,8 +80,6 @@ module Network.QUIC.Connection (
   -- * Transmit
   , keepPlainPacket
   , releaseByRetry
-  , releaseByAcks
-  , releaseByTimeout
   -- * State
   , isConnectionOpen
   , isConnectionEstablished

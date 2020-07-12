@@ -22,10 +22,8 @@ import Network.QUIC.Types
 
 -- | Maximum reordering in packets before packet threshold loss
 --   detection considers a packet lost.
-{- fixme
-kPacketThreshold :: Int
+kPacketThreshold :: PacketNumber
 kPacketThreshold = 3
--}
 
 -- | Maximum reordering in time before time threshold loss detection
 --   considers a packet lost.  Specified as an RTT multiplier.
@@ -138,16 +136,19 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
           lossTime = Nothing
         }
     RTT{..} <- readIORef recoveryRTT
+    LossDetection{..} <- readIORef (lossDetection ! lvl)
+    let Just largestAckedPacket' = largestAckedPacket
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
 
     -- Minimum time of kGranularity before packets are deemed lost.
     let lossDelay = max lossDelay0 kGranularity
 
-    -- fixme: using kPacketThreshold
-    -- fixme: checking unacked.packetNumber > largestAckedPacket[lvl]
-    lostPackets <- releaseByTimeout conn lvl lossDelay
+    tm <- getPastTimeMillisecond lossDelay
+    let predicate ent = spTimeSent ent <= tm
+                     || (spPacketNumber ent <= largestAckedPacket' - kPacketThreshold)
+    lostPackets <- releaseByPredicate conn lvl predicate
 
-    mx <- findOldest conn lvl
+    mx <- findOldest conn lvl (\x -> spPacketNumber x <= largestAckedPacket')
     case mx of
       Nothing -> return ()
       Just x  -> do

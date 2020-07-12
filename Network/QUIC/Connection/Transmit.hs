@@ -3,7 +3,7 @@
 module Network.QUIC.Connection.Transmit (
     keepPlainPacket
   , releaseByAcks
-  , releaseByTimeout
+  , releaseByPredicate
   , releaseByClear
   , releaseByRetry
   , findOldest
@@ -38,18 +38,14 @@ keepPlainPacket Connection{..} lvl pn ppkt ppns sentBytes = do
 ----------------------------------------------------------------
 
 releaseByAcks :: Connection -> EncryptionLevel -> AckInfo -> IO (Seq SentPacket)
-releaseByAcks Connection{..} lvl ackinfo = do
+releaseByAcks conn lvl ackinfo = do
     let predicate = fromAckInfoToPred ackinfo . spPacketNumber
-    atomicModifyIORef'(sentPackets ! lvl) $ \(SentPackets db) ->
-        let (newlyAckedPackets, db') = Seq.partition predicate db
-        in (SentPackets db', newlyAckedPackets)
+    releaseByPredicate conn lvl predicate
 
 ----------------------------------------------------------------
 
-releaseByTimeout :: Connection -> EncryptionLevel -> Milliseconds -> IO (Seq SentPacket)
-releaseByTimeout Connection{..} lvl milli = do
-    tm <- getPastTimeMillisecond milli
-    let predicate ent = spTimeSent ent <= tm
+releaseByPredicate :: Connection -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
+releaseByPredicate Connection{..} lvl predicate = do
     atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
        let (lostPackets, db') = Seq.partition predicate db
        in (SentPackets db', lostPackets)
@@ -68,10 +64,11 @@ releaseByRetry conn = fmap spPlainPacket <$> releaseByClear conn InitialLevel
 
 ----------------------------------------------------------------
 
-findOldest :: Connection -> EncryptionLevel -> IO (Maybe SentPacket)
-findOldest Connection{..} lvl = oldest <$> readIORef (sentPackets ! lvl)
+findOldest :: Connection -> EncryptionLevel -> (SentPacket -> Bool)
+           -> IO (Maybe SentPacket)
+findOldest Connection{..} lvl p = oldest <$> readIORef (sentPackets ! lvl)
   where
-    oldest (SentPackets db) = case Seq.viewl db of
+    oldest (SentPackets db) = case Seq.viewl $ Seq.filter p db of
       EmptyL -> Nothing
       x :< _ -> Just x
 
