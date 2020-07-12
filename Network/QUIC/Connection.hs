@@ -77,9 +77,6 @@ module Network.QUIC.Connection (
   , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
-  -- * Transmit
-  , keepPlainPacket
-  , releaseByRetry
   -- * State
   , isConnectionOpen
   , isConnectionEstablished
@@ -154,6 +151,8 @@ module Network.QUIC.Connection (
   , onPacketSent
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
+  , keepPlainPacket
+  , releaseByRetry
   -- Types
   , connThreadId
   , connHooks
@@ -175,5 +174,4 @@ import Network.QUIC.Connection.Role
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
-import Network.QUIC.Connection.Transmit
 import Network.QUIC.Connection.Types
