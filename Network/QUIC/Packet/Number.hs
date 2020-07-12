@@ -45,11 +45,11 @@ decodePacketNumber largestPN truncatedPN bytes
  && candidatePN >= pnWin               = candidatePN - pnWin
   | otherwise                          = candidatePN
   where
-    mx = 1 `shiftL` 62
+    mx = 1 .<<. 62
     pnNbits = bytes * 8
     expectedPN = largestPN + 1
-    pnWin = 1 `shiftL` pnNbits
-    pnHwin = pnWin `div` 2
+    pnWin = 1 .<<. pnNbits
+    pnHwin = pnWin .>>. 1
     pnMask = pnWin - 1
     candidatePN = (expectedPN .&. complement pnMask)
               .|. fromIntegral truncatedPN
