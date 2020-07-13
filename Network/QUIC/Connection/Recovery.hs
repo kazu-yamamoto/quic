@@ -187,10 +187,21 @@ getLossTimeAndSpace Connection{..} =
                | t < t0    -> loop ls $ Just (t,l)
                | otherwise -> loop ls r
 
+-- Sec 6.2.1. Computing PTO
+-- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
+calcPTO :: RTT -> Milliseconds
+calcPTO RTT{..} = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
+
+calcPTO' :: RTT -> Milliseconds
+calcPTO' RTT{..} = smoothedRTT + max (rttvar .<<. 2) kGranularity
+
+backOff :: Milliseconds -> Int -> Milliseconds
+backOff n cnt = n * (2 ^ cnt)
+
 getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel))
 getPtoTimeAndSpace conn@Connection{..} = do
-    RTT{..} <- readIORef recoveryRTT
-    let duration = (smoothedRTT + max (rttvar .<<. 2) kGranularity) * (2 ^ ptoCount)
+    rtt <- readIORef recoveryRTT
+    let duration = backOff (calcPTO' rtt) (ptoCount rtt)
     -- Arm PTO from now when there are no inflight packets.
     validated <- peerCompletedAddressValidation conn
     if validated then
@@ -212,8 +223,8 @@ getPtoTimeAndSpace conn@Connection{..} = do
             if not completed then
                 return r
               else do
-                RTT{..} <- readIORef recoveryRTT
-                let duration' = duration + maxAckDelay * (2 ^ ptoCount)
+                rtt <- readIORef recoveryRTT
+                let duration' = backOff (calcPTO rtt) (ptoCount rtt)
                 loop1 duration' l ls r
           else
             loop1 duration l ls r
@@ -397,10 +408,8 @@ inPersistentCongestion Connection{..} lostPackets' lstPkt =
     case Seq.viewl lostPackets' of
       EmptyL -> return False
       fstPkt :< _ -> do
-          RTT{..} <- readIORef recoveryRTT
-          -- Sec 6.2.1. Computing PTO
-          -- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
-          let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
+          rtt <- readIORef recoveryRTT
+          let pto = calcPTO rtt
               Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
               outer = microSecondsToUnixDiffTime congestionPeriod
               beg = spTimeSent fstPkt
