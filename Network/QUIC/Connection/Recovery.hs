@@ -16,6 +16,7 @@ import Data.Sequence (Seq, (<|), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
 
 import Network.QUIC.Connection.Crypto
+import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Types
@@ -448,7 +449,11 @@ keepPlainPacket Connection{..} lvl pn ppkt ppns sentBytes = do
 releaseByAcks :: Connection -> EncryptionLevel -> AckInfo -> IO (Seq SentPacket)
 releaseByAcks conn lvl ackinfo = do
     let predicate = fromAckInfoToPred ackinfo . spPacketNumber
-    releaseByPredicate conn lvl predicate
+    newlyAckedPackets <- releaseByPredicate conn lvl predicate
+    mapM_ reduce newlyAckedPackets
+    return $ newlyAckedPackets
+  where
+    reduce x = reducePeerPacketNumbers conn (spLevel x) (spACKs x)
 
 ----------------------------------------------------------------
 
