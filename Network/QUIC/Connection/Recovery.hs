@@ -201,44 +201,44 @@ backOff n cnt = n * (2 ^ cnt)
 getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel))
 getPtoTimeAndSpace conn@Connection{..} = do
     rtt <- readIORef recoveryRTT
-    let duration = backOff (calcPTO' rtt) (ptoCount rtt)
+    let pto = backOff (calcPTO' rtt) (ptoCount rtt)
     -- Arm PTO from now when there are no inflight packets.
     validated <- peerCompletedAddressValidation conn
     if validated then
-        loop duration [InitialLevel, HandshakeLevel, RTT1Level] Nothing
+        loop pto [InitialLevel, HandshakeLevel, RTT1Level] Nothing
       else do
         when validated $ connDebugLog "getPtoTimeAndSpace: validated"
-        pto <- getFutureTimeMillisecond duration
+        ptoTime <- getFutureTimeMillisecond pto
         lvl <- getEncryptionLevel conn
-        return $ Just (pto, lvl)
+        return $ Just (ptoTime, lvl)
   where
     loop :: Milliseconds -> [EncryptionLevel] -> (Maybe (TimeMillisecond, EncryptionLevel)) -> IO (Maybe (TimeMillisecond, EncryptionLevel))
     loop _ [] r = return r
-    loop duration (l:ls) r = do
+    loop pto (l:ls) r = do
         notInFlight <- noInFlightPacket conn l
         if notInFlight then
-            loop duration ls r
+            loop pto ls r
           else if (l == RTT1Level) then do
             completed <- isConnectionEstablished conn
             if not completed then
                 return r
               else do
                 rtt <- readIORef recoveryRTT
-                let duration' = backOff (calcPTO rtt) (ptoCount rtt)
-                loop1 duration' l ls r
+                let pto' = backOff (calcPTO rtt) (ptoCount rtt)
+                loop1 pto' l ls r
           else
-            loop1 duration l ls r
-    loop1 duration l ls r = do
+            loop1 pto l ls r
+    loop1 pto l ls r = do
         LossDetection{..} <- readIORef (lossDetection ! l)
         case timeOfLastAckElicitingPacket of
-          Nothing -> loop duration ls r
+          Nothing -> loop pto ls r
           Just t -> do
-              let pto = t `addMillisecond` duration
+              let ptoTime = t `addMillisecond` pto
               case r of
-                Nothing -> loop duration ls $ Just (pto,l)
-                Just (pto0,_)
-                  | pto < pto0 -> loop duration ls $ Just (pto, l)
-                  | otherwise  -> loop duration ls r
+                Nothing -> loop pto ls $ Just (ptoTime,l)
+                Just (ptoTime0,_)
+                  | ptoTime < ptoTime0 -> loop pto ls $ Just (ptoTime, l)
+                  | otherwise          -> loop pto ls r
 
 -- Sec 6.2.1. Computing PTO
 -- "That is, a client does not reset the PTO backoff factor on
