@@ -412,6 +412,9 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
         bytesInFlight = bytesInFlight - sentBytes
       , congestionWindow = window
       }
+    mapM_ put lostPackets
+  where
+    put spkt = putOutput conn $ OutRetrans $ spPlainPacket spkt
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
