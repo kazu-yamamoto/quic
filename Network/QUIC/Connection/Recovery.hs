@@ -142,8 +142,9 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
     LossDetection{..} <- readIORef (lossDetection ! lvl)
     when (isNothing largestAckedPacket) $ connDebugLog "detectAndRemoveLostPackets: largestAckedPacket: Nothing"
     let Just largestAckedPacket' = largestAckedPacket
+    -- Sec 6.1.2. Time Threshold
+    -- max(kTimeThreshold * max(smoothed_rtt, latest_rtt), kGranularity)
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
-
     -- Minimum time of kGranularity before packets are deemed lost.
     let lossDelay = max lossDelay0 kGranularity
 
@@ -384,6 +385,8 @@ inPersistentCongestion Connection{..} lostPackets' lstPkt =
       EmptyL -> return False
       fstPkt :< _ -> do
           RTT{..} <- readIORef recoveryRTT
+          -- Sec 6.2.1. Computing PTO
+          -- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
           let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
               Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
               beg = spSentBytes fstPkt
