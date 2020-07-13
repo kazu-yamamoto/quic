@@ -11,9 +11,10 @@ module Network.QUIC.Connection.Recovery (
   ) where
 
 import Data.IORef
-import GHC.Event
 import Data.Sequence (Seq, (<|), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
+import Data.UnixTime
+import GHC.Event
 
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.PacketNumber
@@ -401,9 +402,11 @@ inPersistentCongestion Connection{..} lostPackets' lstPkt =
           -- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
           let pto = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
               Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
-              beg = spSentBytes fstPkt
-              end = spSentBytes lstPkt
-          return (fromIntegral congestionPeriod >= (end - beg))
+              outer = microSecondsToUnixDiffTime congestionPeriod
+              beg = spTimeSent fstPkt
+              end = spTimeSent lstPkt
+              inner = end `diffUnixTime ` beg
+          return (inner <= outer)
 
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
