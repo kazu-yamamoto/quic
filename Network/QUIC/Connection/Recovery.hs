@@ -92,8 +92,14 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
 
         onPacketsAcked conn newlyAckedPackets
 
-        -- Reset ptoCount unless the client is unsure if
-        -- the server has validated the client's address.
+        -- Sec 6.2.1. Computing PTO
+        -- "The PTO backoff factor is reset when an acknowledgement is
+        --  received, except in the following case. A server might
+        --  take longer to respond to packets during the handshake
+        --  than otherwise. To protect such a server from repeated
+        --  client probes, the PTO backoff is not reset at a client
+        --  that is not yet certain that the server has finished
+        --  validating the client's address."
         completed <- peerCompletedAddressValidation conn
         when completed $ modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
 
@@ -183,7 +189,7 @@ getLossTimeAndSpace Connection{..} =
 getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel))
 getPtoTimeAndSpace conn@Connection{..} = do
     RTT{..} <- readIORef recoveryRTT
-    let duration = (smoothedRTT + max (4 * rttvar) kGranularity) * (2 ^ ptoCount)
+    let duration = (smoothedRTT + max (rttvar .<<. 2) kGranularity) * (2 ^ ptoCount)
     -- Arm PTO from now when there are no inflight packets.
     validated <- peerCompletedAddressValidation conn
     if validated then
@@ -222,6 +228,11 @@ getPtoTimeAndSpace conn@Connection{..} = do
                   | pto < pto0 -> loop duration ls $ Just (pto, l)
                   | otherwise  -> loop duration ls r
 
+-- Sec 6.2.1. Computing PTO
+-- "That is, a client does not reset the PTO backoff factor on
+--  receiving acknowledgements until it receives a HANDSHAKE_DONE
+--  frame or an acknowledgement for one of its Handshake or 1-RTT
+--  packets."
 peerCompletedAddressValidation :: Connection -> IO Bool
 -- For servers: assume clients validate the server's address implicitly.
 peerCompletedAddressValidation conn
