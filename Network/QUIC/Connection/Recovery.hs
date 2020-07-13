@@ -182,17 +182,16 @@ getLossTimeAndSpace Connection{..} =
 getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel))
 getPtoTimeAndSpace conn@Connection{..} = do
     RTT{..} <- readIORef recoveryRTT
-    CC{..} <- readIORef recoveryCC
     let duration = (smoothedRTT + max (4 * rttvar) kGranularity) * (2 ^ ptoCount)
     -- Arm PTO from now when there are no inflight packets.
-    if bytesInFlight <= 0 then do
-        validated <- peerCompletedAddressValidation conn
+    validated <- peerCompletedAddressValidation conn
+    if validated then
+        loop duration [InitialLevel, HandshakeLevel, RTT1Level] Nothing
+      else do
         when validated $ connDebugLog "getPtoTimeAndSpace: validated"
         pto <- getFutureTimeMillisecond duration
         lvl <- getEncryptionLevel conn
         return $ Just (pto, lvl)
-      else
-        loop duration [InitialLevel, HandshakeLevel, RTT1Level] Nothing
   where
     loop :: Milliseconds -> [EncryptionLevel] -> (Maybe (TimeMillisecond, EncryptionLevel)) -> IO (Maybe (TimeMillisecond, EncryptionLevel))
     loop _ [] r = return r
@@ -267,8 +266,8 @@ setLossDetectionTimer conn@Connection{..} = do
             canceltLossDetectionTimer conn
           else do
               CC{..} <- readIORef recoveryCC
-              completed <- peerCompletedAddressValidation conn
-              if bytesInFlight > 0  && completed then
+              validated <- peerCompletedAddressValidation conn
+              if bytesInFlight > 0 && validated then
                   -- There is nothing to detect lost, so no timer is set.
                   -- However, the client needs to arm the timer if the
                   -- server might be blocked by the anti-amplification limit.
@@ -292,7 +291,8 @@ onLossDetectionTimeout conn@Connection{..} = do
           setLossDetectionTimer conn
       Nothing -> do
           CC{..} <- readIORef recoveryCC
-          if bytesInFlight > 0 then do
+          validated <- peerCompletedAddressValidation conn
+          if bytesInFlight > 0 && validated then do
               -- PTO. Send new data if available, else retransmit old data.
               -- If neither is available, send a single PING frame.
               mx <- getPtoTimeAndSpace conn
