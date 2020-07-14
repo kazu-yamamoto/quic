@@ -349,8 +349,10 @@ onLossDetectionTimeout conn@Connection{..} = do
 ----------------------------------------------------------------
 
 -- | Minimum congestion window in bytes.
-kMinimumWindow :: CC -> Int
-kMinimumWindow CC{..} = maxDatagramSize .<<. 1
+kMinimumWindow :: Connection -> IO Int
+kMinimumWindow Connection{..} = do
+    siz <- readIORef maxPacketSize
+    return (siz .<<. 1 )
 
 -- | Reduction in congestion window when a new loss event is detected.
 kLossReductionFactor :: Int -> Int
@@ -376,6 +378,7 @@ onPacketsAcked Connection{..} ackedPackets = mapM_ control ackedPackets
   where
     control ackedPacket = do
         cc0@CC{..} <- readIORef recoveryCC
+        maxPktSiz <- readIORef maxPacketSize
         let sentBytes = spSentBytes ackedPacket
             timeSent = spTimeSent ackedPacket
             cc1 = cc0 { bytesInFlight = bytesInFlight - sentBytes }
@@ -392,19 +395,20 @@ onPacketsAcked Connection{..} ackedPackets = mapM_ control ackedPackets
                   }
               -- Congestion avoidance.
               | otherwise = cc1 {
-                    congestionWindow = congestionWindow + maxDatagramSize * sentBytes `div` congestionWindow
+                    congestionWindow = congestionWindow + maxPktSiz * sentBytes `div` congestionWindow
                   }
         writeIORef recoveryCC cc2
 
 congestionEvent :: Connection -> TimeMillisecond -> IO ()
-congestionEvent Connection{..} sentTime = do
+congestionEvent conn@Connection{..} sentTime = do
     cc@CC{..} <- readIORef recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
     unless (inCongestionRecovery sentTime congestionRecoveryStartTime) $ do
         now <- getTimeMillisecond
+        minWindow <- kMinimumWindow conn
         let window0 = kLossReductionFactor congestionWindow
-            window = max window0 $ kMinimumWindow cc
+            window = max window0 minWindow
         writeIORef recoveryCC $ cc {
             congestionRecoveryStartTime = Just now
           , congestionWindow = window
@@ -442,7 +446,8 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
 
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lvl lostPackets' lastPkt
-    let window | persistent = kMinimumWindow cc
+    minWindow <- kMinimumWindow conn
+    let window | persistent = minWindow
                | otherwise  = congestionWindow
     writeIORef recoveryCC $ cc {
         bytesInFlight = bytesInFlight - sentBytes

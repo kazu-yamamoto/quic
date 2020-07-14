@@ -101,12 +101,6 @@ initialRTT = RTT {
   }
 
 data CC = CC {
-  -- | The sender's current maximum payload size.  Does not include
-  --    UDP or IP overhead.  The max datagram size is used for
-  --    congestion window computations.  An endpoint sets the value of
-  --    this variable based on its PMTU with a minimum value of 1200
-  --    bytes.
-    maxDatagramSize :: Int
   -- | The sum of the size in bytes of all sent packets that contain
   --   at least one ack-eliciting or PADDING frame, and have not been
   --   acked or declared lost.  The size does not include IP or UDP
@@ -114,7 +108,7 @@ data CC = CC {
   --   Packets only containing ACK frames do not count towards
   --   bytes_in_flight to ensure congestion control does not impede
   --   congestion feedback.
-  , bytesInFlight :: Int
+    bytesInFlight :: Int
   -- | Maximum number of bytes-in-flight that may be sent.
   , congestionWindow :: Int
   -- | The time when QUIC first detects congestion due to loss or ECN,
@@ -134,8 +128,7 @@ kInitialWindow = 14720
 
 initialCC :: CC
 initialCC = CC {
-    maxDatagramSize = 1200 -- fixme
-  , bytesInFlight = 0
+    bytesInFlight = 0
   , congestionWindow = kInitialWindow
   , congestionRecoveryStartTime = Nothing
   , ssthresh = maxBound
