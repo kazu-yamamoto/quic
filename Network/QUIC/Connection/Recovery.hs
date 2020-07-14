@@ -10,6 +10,7 @@ module Network.QUIC.Connection.Recovery (
   , releaseByRetry
   ) where
 
+import Control.Concurrent.STM
 import Data.IORef
 import Data.Sequence (Seq, (<|), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
@@ -299,7 +300,7 @@ setLossDetectionTimer conn@Connection{..} = do
             -- The server's timer is not set if nothing can be sent.
             canceltLossDetectionTimer conn
           else do
-              CC{..} <- readIORef recoveryCC
+              CC{..} <- readTVarIO recoveryCC
               validated <- peerCompletedAddressValidation conn
               if bytesInFlight > 0 && validated then
                   -- There is nothing to detect lost, so no timer is set.
@@ -324,7 +325,7 @@ onLossDetectionTimeout conn@Connection{..} = do
           onPacketsLost conn lvl lostPackets
           setLossDetectionTimer conn
       Nothing -> do
-          CC{..} <- readIORef recoveryCC
+          CC{..} <- readTVarIO recoveryCC
           validated <- peerCompletedAddressValidation conn
           if bytesInFlight > 0 && validated then do
               -- PTO. Send new data if available, else retransmit old data.
@@ -364,8 +365,8 @@ kPersistentCongestionThreshold :: Milliseconds -> Milliseconds
 kPersistentCongestionThreshold (Milliseconds ms) = Milliseconds (3 * ms)
 
 onPacketSentCC :: Connection -> Int -> IO ()
-onPacketSentCC Connection{..} bytesSent =
-    modifyIORef' recoveryCC $ \cc -> cc {
+onPacketSentCC Connection{..} bytesSent = atomically $
+    modifyTVar' recoveryCC $ \cc -> cc {
         bytesInFlight = bytesInFlight cc + bytesSent
       }
 
@@ -377,7 +378,7 @@ onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
 onPacketsAcked Connection{..} ackedPackets = mapM_ control ackedPackets
   where
     control ackedPacket = do
-        cc0@CC{..} <- readIORef recoveryCC
+        cc0@CC{..} <- readTVarIO recoveryCC
         maxPktSiz <- readIORef maxPacketSize
         let sentBytes = spSentBytes ackedPacket
             timeSent = spTimeSent ackedPacket
@@ -397,11 +398,11 @@ onPacketsAcked Connection{..} ackedPackets = mapM_ control ackedPackets
               | otherwise = cc1 {
                     congestionWindow = congestionWindow + maxPktSiz * sentBytes `div` congestionWindow
                   }
-        writeIORef recoveryCC cc2
+        atomically $ writeTVar recoveryCC cc2
 
 congestionEvent :: Connection -> TimeMillisecond -> IO ()
 congestionEvent conn@Connection{..} sentTime = do
-    cc@CC{..} <- readIORef recoveryCC
+    cc@CC{..} <- readTVarIO recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
     unless (inCongestionRecovery sentTime congestionRecoveryStartTime) $ do
@@ -409,7 +410,7 @@ congestionEvent conn@Connection{..} sentTime = do
         minWindow <- kMinimumWindow conn
         let window0 = kLossReductionFactor congestionWindow
             window = max window0 minWindow
-        writeIORef recoveryCC $ cc {
+        atomically $ writeTVar recoveryCC $ cc {
             congestionRecoveryStartTime = Just now
           , congestionWindow = window
           , ssthresh = window
@@ -438,7 +439,7 @@ onPacketsLost :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
   lostPackets' :> lastPkt -> do
-    cc@CC{..} <- readIORef recoveryCC
+    cc@CC{..} <- readTVarIO recoveryCC
     -- Remove lost packets from bytesInFlight.
     let sentBytes = sum $ fmap spSentBytes lostPackets
 
@@ -449,7 +450,7 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
     minWindow <- kMinimumWindow conn
     let window | persistent = minWindow
                | otherwise  = congestionWindow
-    writeIORef recoveryCC $ cc {
+    atomically $ writeTVar recoveryCC $ cc {
         bytesInFlight = bytesInFlight - sentBytes
       , congestionWindow = window
       }
@@ -462,7 +463,7 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- releaseByClear conn lvl
     let sentBytes = sum $ fmap spSentBytes clearedPackets
-    modifyIORef' recoveryCC $ \cc -> cc {
+    atomically $ modifyTVar' recoveryCC $ \cc -> cc {
         bytesInFlight = bytesInFlight cc - sentBytes
       }
     -- Reset the loss detection and PTO timer

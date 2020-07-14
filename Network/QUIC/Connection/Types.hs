@@ -287,7 +287,7 @@ data Connection = Connection {
   , connResources     :: IORef (IO ())
   -- Recovery
   , recoveryRTT       :: IORef RTT
-  , recoveryCC        :: IORef CC
+  , recoveryCC        :: TVar CC
   , sentPackets       :: Array EncryptionLevel (IORef SentPackets)
   , lossDetection     :: Array EncryptionLevel (IORef LossDetection)
   , timeoutKey        :: IORef (Maybe TimeoutKey)
@@ -380,7 +380,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef freeBufs
         -- Recovery
         <*> newIORef initialRTT
-        <*> newIORef initialCC
+        <*> newTVarIO initialCC
         <*> makeSentPackets
         <*> makeLossDetection
         <*> newIORef Nothing
