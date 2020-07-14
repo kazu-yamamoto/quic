@@ -402,8 +402,8 @@ onPacketsAcked Connection{..} ackedPackets = do
                   }
         in cc2
 
-congestionEvent :: Connection -> TimeMillisecond -> IO ()
-congestionEvent conn@Connection{..} sentTime = do
+onNewCongestionEvent :: Connection -> TimeMillisecond -> IO ()
+onNewCongestionEvent conn@Connection{..} sentTime = do
     CC{congestionRecoveryStartTime} <- readTVarIO recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
@@ -447,17 +447,14 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
     atomically $ modifyTVar' recoveryCC $ \cc ->
       cc {bytesInFlight = bytesInFlight cc - sentBytes }
 
-    congestionEvent conn $ spTimeSent lastPkt
+    onNewCongestionEvent conn $ spTimeSent lastPkt
 
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lvl lostPackets' lastPkt
-    minWindow <- kMinimumWindow conn
-    atomically $ modifyTVar' recoveryCC $ \cc ->
-      let window | persistent = minWindow
-                 | otherwise  = congestionWindow cc
-      in cc {
-           congestionWindow = window
-         }
+    when persistent $ do
+        minWindow <- kMinimumWindow conn
+        atomically $ modifyTVar' recoveryCC $ \cc ->
+          cc { congestionWindow = minWindow }
     mapM_ put lostPackets
   where
     put spkt = putOutput conn $ OutRetrans $ spPlainPacket spkt
