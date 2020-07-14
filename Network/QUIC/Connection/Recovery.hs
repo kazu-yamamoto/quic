@@ -9,6 +9,7 @@ module Network.QUIC.Connection.Recovery (
   , onPacketNumberSpaceDiscarded
   , keepPlainPacket
   , releaseByRetry
+  , waitWindowOpen
   ) where
 
 import Control.Concurrent.STM
@@ -539,3 +540,10 @@ noInFlightPacket :: Connection -> EncryptionLevel -> IO Bool
 noInFlightPacket Connection{..} lvl = do
     SentPackets db <- readIORef (sentPackets ! lvl)
     return $ Seq.null db
+
+----------------------------------------------------------------
+
+waitWindowOpen :: Connection -> Int -> IO ()
+waitWindowOpen Connection{..} siz = atomically $ do
+    CC{..} <- readTVar recoveryCC
+    check (siz <= congestionWindow - bytesInFlight)

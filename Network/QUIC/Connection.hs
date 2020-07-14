@@ -154,6 +154,7 @@ module Network.QUIC.Connection (
   , onPacketNumberSpaceDiscarded
   , keepPlainPacket
   , releaseByRetry
+  , waitWindowOpen
   -- Types
   , connThreadId
   , connHooks
