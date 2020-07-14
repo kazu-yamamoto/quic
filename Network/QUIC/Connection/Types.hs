@@ -92,11 +92,11 @@ kInitialRTT = Milliseconds 500 -- fixme: 333?
 
 initialRTT :: RTT
 initialRTT = RTT {
-    latestRTT   = kInitialRTT
+    latestRTT   = Milliseconds 0
   , smoothedRTT = kInitialRTT
   , rttvar      = kInitialRTT .>>. 1
-  , minRTT      = kInitialRTT
-  , maxAckDelay = Milliseconds 25 -- fimxe
+  , minRTT      = Milliseconds 0
+  , maxAckDelay = Milliseconds 0
   , ptoCount    = 0
   }
 
