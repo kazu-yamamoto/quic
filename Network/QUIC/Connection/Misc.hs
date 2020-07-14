@@ -24,6 +24,7 @@ module Network.QUIC.Connection.Misc (
   , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
+  , setMaxAckDaley
   ) where
 
 import Control.Concurrent
@@ -158,3 +159,9 @@ setMinIdleTimeout Connection{..} ms
   | otherwise            = modifyIORef' minIdleTimeout modify
   where
     modify ms0 = min ms ms0
+
+----------------------------------------------------------------
+
+setMaxAckDaley :: Connection -> Milliseconds -> IO ()
+setMaxAckDaley Connection{..} delay =
+    modifyIORef' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay }

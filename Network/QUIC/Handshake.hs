@@ -219,6 +219,7 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
               Just srt -> setPeerStatelessResetToken conn srt
         setTxMaxData conn $ initialMaxData params
         setMinIdleTimeout conn $ maxIdleTimeout params
+        setMaxAckDaley conn $ maxAckDelay params
 setPeerParams _ _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError

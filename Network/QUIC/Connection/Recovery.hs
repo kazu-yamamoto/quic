@@ -124,9 +124,9 @@ updateRTT Connection{..} lvl latestRTT0 ackDelay0 = do
       else do
         -- minRTT ignores ack delay.
         let minRTT' = min minRTT latestRTT0
-        -- Limit ackDelay by maxAckDelay
+        -- Limit ack_delay by max_ack_delay
         -- ack_delay = min(Ack Delay in ACK Frame, max_ack_delay)
-        let ackDelay = min ackDelay0 $ getMaxAckDelay lvl maxAckDelay
+        let ackDelay = min ackDelay0 $ getMaxAckDelay lvl maxAckDelay1RTT
         -- Adjust for ack delay if plausible.
         -- adjusted_rtt = latest_rtt
         -- if (min_rtt + ack_delay < latest_rtt):
@@ -208,7 +208,7 @@ getMaxAckDelay lvl delay
 calcPTO :: RTT -> EncryptionLevel -> Milliseconds
 calcPTO RTT{..} lvl = smoothedRTT + max (rttvar .<<. 2) kGranularity + delay
   where
-    delay = getMaxAckDelay lvl maxAckDelay
+    delay = getMaxAckDelay lvl maxAckDelay1RTT
 
 backOff :: Milliseconds -> Int -> Milliseconds
 backOff n cnt = n * (2 ^ cnt)

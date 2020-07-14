@@ -77,6 +77,7 @@ module Network.QUIC.Connection (
   , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
+  , setMaxAckDaley
   -- * State
   , isConnectionOpen
   , isConnectionEstablished

@@ -80,7 +80,7 @@ data RTT = RTT {
   --   delay acknowledgments for packets in the ApplicationData packet
   --   number space.  The actual ack_delay in a received ACK frame may
   --   be larger due to late timers, reordering, or lost ACK frames.
-  , maxAckDelay :: Milliseconds
+  , maxAckDelay1RTT :: Milliseconds
   -- | The number of times a PTO has been sent without receiving
   --  an ack.
   , ptoCount :: Int
@@ -92,12 +92,12 @@ kInitialRTT = Milliseconds 500 -- fixme: 333?
 
 initialRTT :: RTT
 initialRTT = RTT {
-    latestRTT   = Milliseconds 0
-  , smoothedRTT = kInitialRTT
-  , rttvar      = kInitialRTT .>>. 1
-  , minRTT      = Milliseconds 0
-  , maxAckDelay = Milliseconds 0
-  , ptoCount    = 0
+    latestRTT       = Milliseconds 0
+  , smoothedRTT     = kInitialRTT
+  , rttvar          = kInitialRTT .>>. 1
+  , minRTT          = Milliseconds 0
+  , maxAckDelay1RTT = Milliseconds 0
+  , ptoCount        = 0
   }
 
 data CC = CC {
