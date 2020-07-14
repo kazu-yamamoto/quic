@@ -14,7 +14,7 @@ module Network.QUIC.Connection.Recovery (
 
 import Control.Concurrent.STM
 import Data.IORef
-import Data.Sequence (Seq, (<|), ViewL(..), ViewR(..))
+import Data.Sequence (Seq, (|>), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
 import Data.UnixTime
 import GHC.Event
@@ -487,7 +487,7 @@ keepPlainPacket Connection{..} lvl pn ppkt ppns sentBytes = do
           , spSentBytes    = sentBytes
           }
     atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
-      let db' = ent <| db
+      let db' = db |> ent
       in  (SentPackets db', ())
 
 ----------------------------------------------------------------
