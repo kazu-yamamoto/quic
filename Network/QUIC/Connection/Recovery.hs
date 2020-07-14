@@ -449,6 +449,7 @@ onPacketsLost :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
   lostPackets' :> lastPkt -> do
+    mapM_ (print . spPacketNumber) lostPackets
     -- Remove lost packets from bytesInFlight.
     let sentBytes = sum $ fmap spSentBytes lostPackets
     atomically $ modifyTVar' recoveryCC $ \cc ->
@@ -458,6 +459,7 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
 
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lvl lostPackets' lastPkt
+    print persistent
     when persistent $ do
         minWindow <- kMinimumWindow conn
         atomically $ modifyTVar' recoveryCC $ \cc ->
@@ -547,10 +549,11 @@ noInFlightPacket Connection{..} lvl = do
 
 ----------------------------------------------------------------
 
-waitWindowOpen :: Connection -> Int -> IO ()
+waitWindowOpen :: Connection -> Int -> IO (Int, Int)
 waitWindowOpen Connection{..} siz = atomically $ do
     CC{..} <- readTVar recoveryCC
     check (siz <= congestionWindow - bytesInFlight)
+    return (congestionWindow, bytesInFlight)
 
 setInitialCongestionWindow :: Connection -> Int -> IO ()
 setInitialCongestionWindow Connection{..} pktSiz = atomically $ do

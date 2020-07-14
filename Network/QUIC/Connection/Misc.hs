@@ -100,7 +100,7 @@ setPeerParameters Connection{..} params = writeIORef peerParameters params
 checkDelayedAck :: Connection -> IO Bool
 checkDelayedAck Connection{..} = atomicModifyIORef' delayedAck check
   where
-    check 9 = (0, True)
+    check 1 = (0, True)
     check n = (n+1, False)
 
 checkDelayedAck' :: Connection -> IO Bool
