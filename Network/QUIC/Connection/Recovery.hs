@@ -78,9 +78,7 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
         -- at least one ack-eliciting was newly acked, update the RTT.
         when (spPacketNumber lastPkt == largestAcked) $ do
             latestRtt' <- getElapsedTimeMillisecond $ spTimeSent lastPkt
-            let ackDelay' | lvl == RTT1Level = ackDelay
-                          | otherwise        = 0
-            updateRTT conn latestRtt' ackDelay'
+            updateRTT conn lvl latestRtt' ackDelay
 
         {- fimxe
         -- Process ECN information if present.
@@ -89,7 +87,7 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
         -}
 
         lostPackets <- detectAndRemoveLostPackets conn lvl
-        onPacketsLost conn lostPackets
+        onPacketsLost conn lvl lostPackets
 
         onPacketsAcked conn newlyAckedPackets
 
@@ -106,8 +104,8 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
 
         setLossDetectionTimer conn
 
-updateRTT :: Connection -> Milliseconds -> Milliseconds -> IO ()
-updateRTT Connection{..} latestRTT0 ackDelay0 = do
+updateRTT :: Connection -> EncryptionLevel -> Milliseconds -> Milliseconds -> IO ()
+updateRTT Connection{..} lvl latestRTT0 ackDelay0 = do
     rtt@RTT{..} <- readIORef recoveryRTT
     -- don't use latestRTT, use latestRTT0 instead
 
@@ -115,7 +113,7 @@ updateRTT Connection{..} latestRTT0 ackDelay0 = do
     let minRTT' = min minRTT latestRTT0
     -- Limit ackDelay by maxAckDelay
     -- ack_delay = min(Ack Delay in ACK Frame, max_ack_delay)
-    let ackDelay = min ackDelay0 maxAckDelay
+    let ackDelay = min ackDelay0 $ getMaxAckDelay lvl maxAckDelay
     -- Adjust for ack delay if plausible.
     -- adjusted_rtt = latest_rtt
     -- if (min_rtt + ack_delay < latest_rtt):
@@ -187,58 +185,57 @@ getLossTimeAndSpace Connection{..} =
                | t < t0    -> loop ls $ Just (t,l)
                | otherwise -> loop ls r
 
+getMaxAckDelay :: EncryptionLevel -> Milliseconds -> Milliseconds
+getMaxAckDelay lvl delay
+  | lvl `elem` [InitialLevel,HandshakeLevel] = 0
+  | otherwise                                = delay
+
 -- Sec 6.2.1. Computing PTO
 -- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
-calcPTO :: RTT -> Milliseconds
-calcPTO RTT{..} = smoothedRTT + max (rttvar .<<. 2) kGranularity + maxAckDelay
-
-calcPTO' :: RTT -> Milliseconds
-calcPTO' RTT{..} = smoothedRTT + max (rttvar .<<. 2) kGranularity
+calcPTO :: RTT -> EncryptionLevel -> Milliseconds
+calcPTO RTT{..} lvl = smoothedRTT + max (rttvar .<<. 2) kGranularity + delay
+  where
+    delay = getMaxAckDelay lvl maxAckDelay
 
 backOff :: Milliseconds -> Int -> Milliseconds
 backOff n cnt = n * (2 ^ cnt)
 
 getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel))
 getPtoTimeAndSpace conn@Connection{..} = do
-    rtt <- readIORef recoveryRTT
-    let pto = backOff (calcPTO' rtt) (ptoCount rtt)
     -- Arm PTO from now when there are no inflight packets.
     validated <- peerCompletedAddressValidation conn
-    if validated then
-        loop pto [InitialLevel, HandshakeLevel, RTT1Level] Nothing
+    if validated then do
+        completed <- isConnectionEstablished conn
+        let lvls | completed = [InitialLevel, HandshakeLevel, RTT1Level]
+                 | otherwise = [InitialLevel, HandshakeLevel]
+        loop lvls Nothing
       else do
         when validated $ connDebugLog "getPtoTimeAndSpace: validated"
-        ptoTime <- getFutureTimeMillisecond pto
+        rtt <- readIORef recoveryRTT
         lvl <- getEncryptionLevel conn
+        let pto = backOff (calcPTO rtt lvl) (ptoCount rtt)
+        ptoTime <- getFutureTimeMillisecond pto
         return $ Just (ptoTime, lvl)
   where
-    loop :: Milliseconds -> [EncryptionLevel] -> (Maybe (TimeMillisecond, EncryptionLevel)) -> IO (Maybe (TimeMillisecond, EncryptionLevel))
-    loop _ [] r = return r
-    loop pto (l:ls) r = do
+    loop :: [EncryptionLevel] -> (Maybe (TimeMillisecond, EncryptionLevel)) -> IO (Maybe (TimeMillisecond, EncryptionLevel))
+    loop [] r = return r
+    loop (l:ls) r = do
         notInFlight <- noInFlightPacket conn l
         if notInFlight then
-            loop pto ls r
-          else if (l == RTT1Level) then do
-            completed <- isConnectionEstablished conn
-            if not completed then
-                return r
-              else do
-                rtt <- readIORef recoveryRTT
-                let pto' = backOff (calcPTO rtt) (ptoCount rtt)
-                loop1 pto' l ls r
-          else
-            loop1 pto l ls r
-    loop1 pto l ls r = do
-        LossDetection{..} <- readIORef (lossDetection ! l)
-        case timeOfLastAckElicitingPacket of
-          Nothing -> loop pto ls r
-          Just t -> do
-              let ptoTime = t `addMillisecond` pto
-              case r of
-                Nothing -> loop pto ls $ Just (ptoTime,l)
-                Just (ptoTime0,_)
-                  | ptoTime < ptoTime0 -> loop pto ls $ Just (ptoTime, l)
-                  | otherwise          -> loop pto ls r
+            loop ls r
+          else do
+            LossDetection{..} <- readIORef (lossDetection ! l)
+            case timeOfLastAckElicitingPacket of
+              Nothing -> loop ls r
+              Just t -> do
+                  rtt <- readIORef recoveryRTT
+                  let pto = calcPTO rtt l
+                  let ptoTime = t `addMillisecond` pto
+                  case r of
+                    Nothing -> loop ls $ Just (ptoTime,l)
+                    Just (ptoTime0,_)
+                      | ptoTime < ptoTime0 -> loop ls $ Just (ptoTime, l)
+                      | otherwise          -> loop ls r
 
 -- Sec 6.2.1. Computing PTO
 -- "That is, a client does not reset the PTO backoff factor on
@@ -311,7 +308,7 @@ onLossDetectionTimeout conn@Connection{..} = do
           -- Time threshold loss Detection
           lostPackets <- detectAndRemoveLostPackets conn lvl
           when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
-          onPacketsLost conn lostPackets
+          onPacketsLost conn lvl lostPackets
           setLossDetectionTimer conn
       Nothing -> do
           CC{..} <- readIORef recoveryCC
@@ -404,15 +401,15 @@ congestionEvent Connection{..} sentTime = do
         -- maybeSendOnePacket conn -- fixme
 
 -- Sec 7.8. Persistent Congestion
-inPersistentCongestion :: Connection -> Seq SentPacket -> SentPacket -> IO Bool
-inPersistentCongestion Connection{..} lostPackets' lstPkt =
+inPersistentCongestion :: Connection -> EncryptionLevel -> Seq SentPacket -> SentPacket -> IO Bool
+inPersistentCongestion Connection{..} lvl lostPackets' lstPkt =
     case Seq.viewl lostPackets' of
       EmptyL -> return False
       fstPkt :< _ -> do
           rtt <- readIORef recoveryRTT
           -- https://github.com/quicwg/base-drafts/pull/3290#discussion_r355089680
           -- congestion_period <= largest_lost_packet.time_sent - earliest_lost_packet.time_sent
-          let pto = calcPTO rtt
+          let pto = calcPTO rtt lvl
               Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
               threshold = microSecondsToUnixDiffTime congestionPeriod
               beg = spTimeSent fstPkt
@@ -420,8 +417,8 @@ inPersistentCongestion Connection{..} lostPackets' lstPkt =
               duration = end `diffUnixTime ` beg
           return (duration >= threshold)
 
-onPacketsLost :: Connection -> Seq SentPacket -> IO ()
-onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
+onPacketsLost :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
+onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
   lostPackets' :> lastPkt -> do
     cc@CC{..} <- readIORef recoveryCC
@@ -431,7 +428,7 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
     congestionEvent conn $ spTimeSent lastPkt
 
     -- Collapse congestion window if persistent congestion
-    persistent <- inPersistentCongestion conn lostPackets' lastPkt
+    persistent <- inPersistentCongestion conn lvl lostPackets' lastPkt
     let window | persistent = kMinimumWindow cc
                | otherwise  = congestionWindow
     writeIORef recoveryCC $ cc {
