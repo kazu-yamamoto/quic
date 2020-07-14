@@ -10,6 +10,7 @@ module Network.QUIC.Connection.Recovery (
   , keepPlainPacket
   , releaseByRetry
   , waitWindowOpen
+  , setInitialCongestionWindow
   ) where
 
 import Control.Concurrent.STM
@@ -351,6 +352,12 @@ onLossDetectionTimeout conn@Connection{..} = do
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
+-- | Default limit on the initial bytes in flight.
+kInitialWindow :: Int -> Int
+-- kInitialWindow pktSiz = min 14720 (10 * pktSiz)
+-- kInitialWindow pktSiz = 2 * pktSiz
+kInitialWindow pktSiz = 3 * pktSiz
+
 -- | Minimum congestion window in bytes.
 kMinimumWindow :: Connection -> IO Int
 kMinimumWindow Connection{..} = do
@@ -544,3 +551,9 @@ waitWindowOpen :: Connection -> Int -> IO ()
 waitWindowOpen Connection{..} siz = atomically $ do
     CC{..} <- readTVar recoveryCC
     check (siz <= congestionWindow - bytesInFlight)
+
+setInitialCongestionWindow :: Connection -> Int -> IO ()
+setInitialCongestionWindow Connection{..} pktSiz = atomically $ do
+    modifyTVar' recoveryCC $ \cc -> cc {
+        congestionWindow = kInitialWindow pktSiz
+      }

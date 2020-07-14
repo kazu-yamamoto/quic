@@ -122,14 +122,10 @@ data CC = CC {
   , ssthresh :: Int
   }
 
--- | Default limit on the initial bytes in flight.
-kInitialWindow :: Int
-kInitialWindow = 14720
-
 initialCC :: CC
 initialCC = CC {
     bytesInFlight = 0
-  , congestionWindow = kInitialWindow
+  , congestionWindow = 0
   , congestionRecoveryStartTime = Nothing
   , ssthresh = maxBound
   }

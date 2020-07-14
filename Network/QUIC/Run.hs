@@ -92,8 +92,10 @@ createClientConnection conf@ClientConfig{..} ver = do
     addResource conn qclean
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz = fromMaybe 0 ccPacketSize
-    setMaxPacketSize conn ((defaultPacketSize sa0 `max` pktSiz) `min` maxPacketSize sa0)
+    let pktSiz0 = fromMaybe 0 ccPacketSize
+        pktSiz = (defaultPacketSize sa0 `max` pktSiz0) `min` maxPacketSize sa0
+    setMaxPacketSize conn pktSiz
+    setInitialCongestionWindow conn pktSiz
     --
     mytid <- myThreadId
     --
@@ -146,7 +148,7 @@ runQUICServer conf server = handleLog debugLog $ do
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO (Connection, SendMany, Receive, AuthCIDs)
 createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
-    let Accept ver myAuthCIDs peerAuthCIDs mysa peersa0 q pktSiz register unregister = acc
+    let Accept ver myAuthCIDs peerAuthCIDs mysa peersa0 q pktSiz0 register unregister = acc
     s0 <- udpServerConnectedSocket mysa peersa0
     sref <- newIORef (s0,q)
     let cls = do
@@ -171,9 +173,10 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
                 Nothing   -> ocid
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz' = (defaultPacketSize mysa `max` pktSiz) `min` maxPacketSize mysa
-    setMaxPacketSize conn pktSiz'
-    debugLog $ "Packet size: " <> bhow pktSiz' <> " (" <> bhow pktSiz <> ")"
+    let pktSiz = (defaultPacketSize mysa `max` pktSiz0) `min` maxPacketSize mysa
+    setMaxPacketSize conn pktSiz
+    setInitialCongestionWindow conn pktSiz
+    debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow pktSiz0 <> ")"
     --
     let retried = isJust $ retrySrcCID myAuthCIDs
     when retried $ do
