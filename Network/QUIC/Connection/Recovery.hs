@@ -403,19 +403,22 @@ congestionEvent Connection{..} sentTime = do
         -- A packet can be sent to speed up loss recovery.
         -- maybeSendOnePacket conn -- fixme
 
+-- Sec 7.8. Persistent Congestion
 inPersistentCongestion :: Connection -> Seq SentPacket -> SentPacket -> IO Bool
 inPersistentCongestion Connection{..} lostPackets' lstPkt =
     case Seq.viewl lostPackets' of
       EmptyL -> return False
       fstPkt :< _ -> do
           rtt <- readIORef recoveryRTT
+          -- https://github.com/quicwg/base-drafts/pull/3290#discussion_r355089680
+          -- congestion_period <= largest_lost_packet.time_sent - earliest_lost_packet.time_sent
           let pto = calcPTO rtt
               Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
-              outer = microSecondsToUnixDiffTime congestionPeriod
+              threshold = microSecondsToUnixDiffTime congestionPeriod
               beg = spTimeSent fstPkt
               end = spTimeSent lstPkt
-              inner = end `diffUnixTime ` beg
-          return (inner <= outer)
+              duration = end `diffUnixTime ` beg
+          return (duration >= threshold)
 
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
