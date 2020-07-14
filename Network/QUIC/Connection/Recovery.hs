@@ -81,8 +81,9 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
         -- If the largest acknowledged is newly acked and
         -- at least one ack-eliciting was newly acked, update the RTT.
         when (spPacketNumber lastPkt == largestAcked) $ do
-            latestRtt' <- getElapsedTimeMillisecond $ spTimeSent lastPkt
-            updateRTT conn lvl latestRtt' ackDelay
+            rtt <- getElapsedTimeMillisecond $ spTimeSent lastPkt
+            let latestRtt = max rtt kGranularity
+            updateRTT conn lvl latestRtt ackDelay
 
         {- fimxe
         -- Process ECN information if present.
