@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Network.QUIC.Connection.Recovery (
     onAckReceived
@@ -375,11 +376,11 @@ inCongestionRecovery _ Nothing = False -- checkme
 inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 
 onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
-onPacketsAcked Connection{..} ackedPackets = mapM_ control ackedPackets
+onPacketsAcked Connection{..} ackedPackets = do
+    maxPktSiz <- readIORef maxPacketSize
+    mapM_ (control maxPktSiz) ackedPackets
   where
-    control ackedPacket = do
-        cc0@CC{..} <- readTVarIO recoveryCC
-        maxPktSiz <- readIORef maxPacketSize
+    control maxPktSiz ackedPacket = atomically $ modifyTVar' recoveryCC $ \cc0@CC{..} ->
         let sentBytes = spSentBytes ackedPacket
             timeSent = spTimeSent ackedPacket
             cc1 = cc0 { bytesInFlight = bytesInFlight - sentBytes }
@@ -398,24 +399,25 @@ onPacketsAcked Connection{..} ackedPackets = mapM_ control ackedPackets
               | otherwise = cc1 {
                     congestionWindow = congestionWindow + maxPktSiz * sentBytes `div` congestionWindow
                   }
-        atomically $ writeTVar recoveryCC cc2
+        in cc2
 
 congestionEvent :: Connection -> TimeMillisecond -> IO ()
 congestionEvent conn@Connection{..} sentTime = do
-    cc@CC{..} <- readTVarIO recoveryCC
+    CC{congestionRecoveryStartTime} <- readTVarIO recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
     unless (inCongestionRecovery sentTime congestionRecoveryStartTime) $ do
         now <- getTimeMillisecond
         minWindow <- kMinimumWindow conn
-        let window0 = kLossReductionFactor congestionWindow
-            window = max window0 minWindow
-        atomically $ writeTVar recoveryCC $ cc {
-            congestionRecoveryStartTime = Just now
-          , congestionWindow = window
-          , ssthresh = window
-          }
         -- A packet can be sent to speed up loss recovery.
+        atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow} ->
+            let window0 = kLossReductionFactor congestionWindow
+                window = max window0 minWindow
+            in cc {
+                congestionRecoveryStartTime = Just now
+              , congestionWindow = window
+              , ssthresh = window
+              }
         -- maybeSendOnePacket conn -- fixme
 
 -- Sec 7.8. Persistent Congestion
@@ -439,21 +441,22 @@ onPacketsLost :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
   lostPackets' :> lastPkt -> do
-    cc@CC{..} <- readTVarIO recoveryCC
     -- Remove lost packets from bytesInFlight.
     let sentBytes = sum $ fmap spSentBytes lostPackets
+    atomically $ modifyTVar' recoveryCC $ \cc ->
+      cc {bytesInFlight = bytesInFlight cc - sentBytes }
 
     congestionEvent conn $ spTimeSent lastPkt
 
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lvl lostPackets' lastPkt
     minWindow <- kMinimumWindow conn
-    let window | persistent = minWindow
-               | otherwise  = congestionWindow
-    atomically $ writeTVar recoveryCC $ cc {
-        bytesInFlight = bytesInFlight - sentBytes
-      , congestionWindow = window
-      }
+    atomically $ modifyTVar' recoveryCC $ \cc ->
+      let window | persistent = minWindow
+                 | otherwise  = congestionWindow cc
+      in cc {
+           congestionWindow = window
+         }
     mapM_ put lostPackets
   where
     put spkt = putOutput conn $ OutRetrans $ spPlainPacket spkt
