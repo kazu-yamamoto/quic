@@ -88,7 +88,7 @@ data RTT = RTT {
 
 -- | The RTT used before an RTT sample is taken.
 kInitialRTT :: Milliseconds
-kInitialRTT = Milliseconds 500 -- fixme: 333?
+kInitialRTT = Milliseconds 333
 
 initialRTT :: RTT
 initialRTT = RTT {
