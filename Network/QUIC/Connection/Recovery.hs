@@ -169,8 +169,7 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
     -- Sec 6.1.2. Time Threshold
     -- max(kTimeThreshold * max(smoothed_rtt, latest_rtt), kGranularity)
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
-    -- Minimum time of kGranularity before packets are deemed lost.
-    let lossDelay = max lossDelay0 kGranularity
+    let lossDelay = max lossDelay0 10 -- kGranularity is too small
 
     tm <- getPastTimeMillisecond lossDelay
     let predicate ent = spTimeSent ent <= tm
