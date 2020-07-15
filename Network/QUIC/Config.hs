@@ -103,5 +103,9 @@ defaultServerConfig = ServerConfig {
   , scSessionManager = noSessionManager
   , scEarlyDataSize  = 0
   , scDebugLog       = Nothing
-  , scConfig         = defaultConfig
+  , scConfig         = defaultConfig {
+        confParameters = defaultParameters {
+              greaseQuicBit = True
+            }
+      }
   }
