@@ -14,6 +14,7 @@ import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Number
 import Network.QUIC.Packet.Version
+import Network.QUIC.Parameters
 import Network.QUIC.TLS
 import Network.QUIC.Types
 
@@ -90,7 +91,8 @@ encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames)) 
     -- flag
     let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen
-        Flags flags' = encodeShortHeaderFlags flags pp
+    quicBit <- greaseQuicBit <$> getPeerParameters conn
+    Flags flags' <- encodeShortHeaderFlags flags pp quicBit
     headerBeg <- currentOffset wbuf
     write8 wbuf flags'
     -- dCID
@@ -119,10 +121,11 @@ encodeLongHeaderPP :: Connection -> WriteBuffer
                    -> Flags Raw
                    -> PacketNumber
                    -> IO (EncodedPacketNumber, Int)
-encodeLongHeaderPP _conn wbuf pkttyp ver dCID sCID flags pn = do
+encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
     let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength pnLen
-        Flags flags' = encodeLongHeaderFlags pkttyp flags pp
+    quicBit <- greaseQuicBit <$> getPeerParameters conn
+    Flags flags' <- encodeLongHeaderFlags pkttyp flags pp quicBit
     write8 wbuf flags'
     encodeLongHeader wbuf ver dCID sCID
     return el

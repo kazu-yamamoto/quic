@@ -277,6 +277,7 @@ defaultParameters = baseParameters {
   , initialMaxStreamsBidi          =     100
   , initialMaxStreamsUni           =       3
   , activeConnectionIdLimit        =       3
+  , greaseQuicBit                  = True
   }
 
 data AuthCIDs = AuthCIDs {

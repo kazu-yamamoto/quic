@@ -51,17 +51,26 @@ flagBits flags
 
 ----------------------------------------------------------------
 
+randomizeQuicBit :: Word8 -> Bool -> IO Word8
+randomizeQuicBit flags quicBit
+  | quicBit = do
+        r <- getRandomOneByte
+        return $ ((flags .&. 0b10111111) .|. (r .&. 0b01000000))
+  | otherwise = return flags
+
 {-# INLINE encodeShortHeaderFlags #-}
-encodeShortHeaderFlags :: Flags Raw -> Flags Raw -> Flags Raw
-encodeShortHeaderFlags (Flags fg) (Flags pp) = Flags flags
+encodeShortHeaderFlags :: Flags Raw -> Flags Raw -> Bool -> IO (Flags Raw)
+encodeShortHeaderFlags (Flags fg) (Flags pp) quicBit =
+    Flags <$> randomizeQuicBit flags quicBit
   where
     flags =          0b01000000
          .|. (fg .&. 0b00111100)
          .|. (pp .&. 0b00000011)
 
 {-# INLINE encodeLongHeaderFlags #-}
-encodeLongHeaderFlags :: LongHeaderPacketType -> Flags Raw -> Flags Raw -> Flags Raw
-encodeLongHeaderFlags typ (Flags fg) (Flags pp) = Flags flags
+encodeLongHeaderFlags :: LongHeaderPacketType -> Flags Raw -> Flags Raw -> Bool -> IO (Flags Raw)
+encodeLongHeaderFlags typ (Flags fg) (Flags pp) quicBit =
+    Flags <$> randomizeQuicBit flags quicBit
   where
     Flags tp = longHeaderPacketType typ
     flags =   tp
