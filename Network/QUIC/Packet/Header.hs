@@ -87,7 +87,7 @@ longHeaderPacketType RetryPacketType     = Flags 0b11110000
 retryPacketType :: IO (Flags Raw)
 retryPacketType = do
     r <- getRandomOneByte
-    let flags = 0b11110000 .|. (0b00001111 .&. r)
+    let flags = 0b11110000 .|. (r .&. 0b00001111)
     return $ Flags flags
 
 getRandomOneByte :: IO Word8
@@ -96,7 +96,7 @@ getRandomOneByte = BS.head <$> getRandomBytes 1
 versionNegotiationPacketType :: IO (Flags Raw)
 versionNegotiationPacketType = do
     r <- getRandomOneByte
-    let flags = 0b10000000 .|. (0b01111111 .&. r)
+    let flags = 0b10000000 .|. (r .&. 0b01111111)
     return $ Flags flags
 
 {-# INLINE decodeLongHeaderPacketType #-}
