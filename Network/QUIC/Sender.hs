@@ -101,7 +101,7 @@ construct conn lvl frames mTargetSize = do
             let plain = toPlain mypn frames'
                 ppkt = toPlainPakcet lvl plain
                 sentBytes = fromMaybe 0 mTargetSize -- fixme
-            waitWindowOpen conn sentBytes >>= print
+            waitWindowOpen conn sentBytes
             onPacketSent conn lvl mypn ppkt ppns sentBytes -- keep
             qlogSent conn ppkt
             encodePlainPacket conn ppkt mlen

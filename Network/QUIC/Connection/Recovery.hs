@@ -547,11 +547,10 @@ noInFlightPacket Connection{..} lvl = do
 
 ----------------------------------------------------------------
 
-waitWindowOpen :: Connection -> Int -> IO (Int, Int)
+waitWindowOpen :: Connection -> Int -> IO ()
 waitWindowOpen Connection{..} siz = atomically $ do
     CC{..} <- readTVar recoveryCC
     check (siz <= congestionWindow - bytesInFlight)
-    return (congestionWindow, bytesInFlight)
 
 setInitialCongestionWindow :: Connection -> Int -> IO ()
 setInitialCongestionWindow Connection{..} pktSiz = atomically $ do
