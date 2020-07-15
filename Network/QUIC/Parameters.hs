@@ -50,6 +50,7 @@ data ParameterKeyId =
   | ParameterInitialSourceConnectionId
   | ParameterRetrySourceConnectionId
   | ParameterGrease
+  | ParameterGreaseQuicBit
   deriving (Eq,Show)
 
 fromParameterKeyId :: ParameterKeyId -> Word16
@@ -71,6 +72,7 @@ fromParameterKeyId ParameterActiveConnectionIdLimit         = 0x0e
 fromParameterKeyId ParameterInitialSourceConnectionId       = 0x0f
 fromParameterKeyId ParameterRetrySourceConnectionId         = 0x10
 fromParameterKeyId ParameterGrease                          = 0xff
+fromParameterKeyId ParameterGreaseQuicBit                   = 0x2ab2
 
 toParameterKeyId :: Word16 -> Maybe ParameterKeyId
 toParameterKeyId 0x00 = Just ParameterOriginalDestinationConnectionId
@@ -91,6 +93,7 @@ toParameterKeyId 0x0e = Just ParameterActiveConnectionIdLimit
 toParameterKeyId 0x0f = Just ParameterInitialSourceConnectionId
 toParameterKeyId 0x10 = Just ParameterRetrySourceConnectionId
 toParameterKeyId 0xff = Just ParameterGrease
+toParameterKeyId 0x2ab2 = Just ParameterGreaseQuicBit
 toParameterKeyId _    = Nothing
 
 -- | QUIC transport parameters.
@@ -110,9 +113,10 @@ data Parameters = Parameters {
   , disableActiveMigration          :: Bool
   , preferredAddress                :: Maybe ByteString -- fixme
   , activeConnectionIdLimit         :: Int
-  , greaseParameter                 :: Maybe ByteString
   , initialSourceConnectionId       :: Maybe CID
   , retrySourceConnectionId         :: Maybe CID
+  , greaseParameter                 :: Maybe ByteString
+  , greaseQuicBit                   :: Bool
   } deriving (Eq,Show)
 
 -- | The default value for QUIC transport parameters.
@@ -133,9 +137,10 @@ baseParameters = Parameters {
   , disableActiveMigration             = False
   , preferredAddress                   = Nothing
   , activeConnectionIdLimit            = 2
-  , greaseParameter                    = Nothing
   , initialSourceConnectionId          = Nothing
   , retrySourceConnectionId            = Nothing
+  , greaseParameter                    = Nothing
+  , greaseQuicBit                      = False
   }
 
 decInt :: ByteString -> Int
@@ -184,12 +189,14 @@ fromParameterList kvs = foldl' update params kvs
         = x { preferredAddress = Just v }
     update x (ParameterActiveConnectionIdLimit,v)
         = x { activeConnectionIdLimit = decInt v }
-    update x (ParameterGrease,v)
-        = x { greaseParameter = Just v }
     update x (ParameterInitialSourceConnectionId,v)
         = x { initialSourceConnectionId = Just (toCID v) }
     update x (ParameterRetrySourceConnectionId,v)
         = x { retrySourceConnectionId = Just (toCID v) }
+    update x (ParameterGrease,v)
+        = x { greaseParameter = Just v }
+    update x (ParameterGreaseQuicBit,_)
+        = x { greaseQuicBit = True }
 
 diff :: Eq a => Parameters -> (Parameters -> a) -> ParameterKeyId -> (a -> ParameterValue) -> Maybe (ParameterKeyId,ParameterValue)
 diff params label key enc
@@ -221,6 +228,7 @@ toParameterList p = catMaybes [
          ParameterInitialSourceConnectionId    (fromCID . fromJust)
   , diff p retrySourceConnectionId
          ParameterRetrySourceConnectionId      (fromCID . fromJust)
+  , diff p greaseQuicBit           ParameterGreaseQuicBit           (const "")
   , diff p greaseParameter         ParameterGrease                  fromJust
   ]
 
