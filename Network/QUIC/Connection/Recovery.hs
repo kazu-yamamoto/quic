@@ -445,15 +445,18 @@ inPersistentCongestion Connection{..} lvl lostPackets' lstPkt =
               duration = end `diffUnixTime ` beg
           return (duration >= threshold)
 
+decreaseBytesInFlight :: Connection -> Seq SentPacket -> IO ()
+decreaseBytesInFlight Connection{..} packets = do
+    let sentBytes = sum (spSentBytes <$> packets)
+    atomically $ modifyTVar' recoveryCC $ \cc ->
+      cc { bytesInFlight = bytesInFlight cc - sentBytes }
+
 onPacketsLost :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
   lostPackets' :> lastPkt -> do
     -- Remove lost packets from bytesInFlight.
-    let sentBytes = sum $ fmap spSentBytes lostPackets
-    atomically $ modifyTVar' recoveryCC $ \cc ->
-      cc {bytesInFlight = bytesInFlight cc - sentBytes }
-
+    decreaseBytesInFlight conn lostPackets
     onNewCongestionEvent conn $ spTimeSent lastPkt
 
     -- Collapse congestion window if persistent congestion
@@ -470,10 +473,7 @@ onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- releaseByClear conn lvl
-    let sentBytes = sum $ fmap spSentBytes clearedPackets
-    atomically $ modifyTVar' recoveryCC $ \cc -> cc {
-        bytesInFlight = bytesInFlight cc - sentBytes
-      }
+    decreaseBytesInFlight conn clearedPackets
     -- Reset the loss detection and PTO timer
     writeIORef (lossDetection ! lvl) initialLossDetection
     modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
@@ -526,7 +526,10 @@ releaseByClear Connection{..} lvl = do
 ----------------------------------------------------------------
 
 releaseByRetry :: Connection -> IO (Seq PlainPacket)
-releaseByRetry conn = fmap spPlainPacket <$> releaseByClear conn InitialLevel
+releaseByRetry conn = do
+    packets <- releaseByClear conn InitialLevel
+    decreaseBytesInFlight conn packets
+    return (spPlainPacket <$> packets)
 
 ----------------------------------------------------------------
 
