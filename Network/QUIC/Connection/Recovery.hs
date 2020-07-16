@@ -270,9 +270,9 @@ peerCompletedAddressValidation conn
 -- has received HANDSHAKE_DONE
 peerCompletedAddressValidation conn = isConnectionEstablished conn
 
-canceltLossDetectionTimer :: Connection -> IO ()
-canceltLossDetectionTimer Connection{..} = do
-    mk <- readIORef timeoutKey
+cancelLossDetectionTimer :: Connection -> IO ()
+cancelLossDetectionTimer Connection{..} = do
+    mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Nothing, oldkey)
     case mk of
       Nothing -> return ()
       Just k -> do
@@ -282,14 +282,13 @@ canceltLossDetectionTimer Connection{..} = do
 updateLossDetectionTimer :: Connection -> TimeMillisecond -> IO ()
 updateLossDetectionTimer conn@Connection{..} tms = do
     mgr <- getSystemTimerManager
-    mk <- readIORef timeoutKey
-    case mk of
-      Nothing -> return ()
-      Just k -> unregisterTimeout mgr k
     Microseconds us <- getTimeoutInMicrosecond tms
     when (us <= 0) $ connDebugLog "updateLossDetectionTimer: minus"
     key <- registerTimeout mgr us $ onLossDetectionTimeout conn
-    writeIORef timeoutKey $ Just key
+    mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Just key, oldkey)
+    case mk of
+      Nothing -> return ()
+      Just k -> unregisterTimeout mgr k
 
 setLossDetectionTimer :: Connection -> IO ()
 setLossDetectionTimer conn@Connection{..} = do
@@ -301,7 +300,7 @@ setLossDetectionTimer conn@Connection{..} = do
       Nothing ->
           if serverIsAtAntiAmplificationLimit then -- server is at anti-amplification limit
             -- The server's timer is not set if nothing can be sent.
-            canceltLossDetectionTimer conn
+            cancelLossDetectionTimer conn
           else do
               CC{..} <- readTVarIO recoveryCC
               validated <- peerCompletedAddressValidation conn
@@ -309,7 +308,7 @@ setLossDetectionTimer conn@Connection{..} = do
                   -- There is nothing to detect lost, so no timer is set.
                   -- However, the client needs to arm the timer if the
                   -- server might be blocked by the anti-amplification limit.
-                  canceltLossDetectionTimer conn
+                  cancelLossDetectionTimer conn
                 else do
                   -- Determine which PN space to arm PTO for.
                   mx <- getPtoTimeAndSpace conn
