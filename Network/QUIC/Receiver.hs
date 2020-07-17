@@ -62,6 +62,9 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
             let newPeerCID = headerPeerCID hdr
             when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
             setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
+        when (isServer conn && level == HandshakeLevel) $ do
+            dropSecrets conn InitialLevel
+            onPacketNumberSpaceDiscarded conn InitialLevel
         onPacketReceived conn
         processCryptPacket conn hdr crypt
 
@@ -189,12 +192,13 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone = do
-    onPacketNumberSpaceDiscarded conn InitialLevel
-    onPacketNumberSpaceDiscarded conn HandshakeLevel
+    fire (Microseconds 100000) $ do
+        dropSecrets conn RTT0Level
+        dropSecrets conn HandshakeLevel
+        onPacketNumberSpaceDiscarded conn HandshakeLevel
     setConnectionEstablished conn
-    fire (Microseconds 1000000) $ do
-        killHandshaker conn
-        dropSecrets conn
+    -- to receive NewSessionTicket
+    fire (Microseconds 1000000) $ killHandshaker conn
 processFrame conn _ (UnknownFrame _n)       = do
     connDebugLog conn $ "processFrame: " <> bhow _n
 processFrame _ _ _ = return () -- error

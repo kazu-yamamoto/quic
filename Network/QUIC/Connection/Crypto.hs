@@ -81,11 +81,8 @@ setNegotiated Connection{..} mode mproto appSecInf =
 
 ----------------------------------------------------------------
 
-dropSecrets :: Connection -> IO ()
-dropSecrets Connection{..} = do
-    writeArray coders InitialLevel   initialCoder
-    writeArray coders RTT0Level      initialCoder
-    writeArray coders HandshakeLevel initialCoder
+dropSecrets :: Connection -> EncryptionLevel -> IO ()
+dropSecrets Connection{..} lvl = writeArray coders lvl initialCoder
 
 ----------------------------------------------------------------
 

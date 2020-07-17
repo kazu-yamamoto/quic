@@ -175,15 +175,16 @@ handshakeServer conf conn myAuthCIDs = do
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do
+        setEncryptionLevel conn RTT1Level
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
-        setEncryptionLevel conn RTT1Level
-        onPacketNumberSpaceDiscarded conn InitialLevel
-        onPacketNumberSpaceDiscarded conn HandshakeLevel
+        fire (Microseconds 100000) $ do
+            dropSecrets conn RTT0Level
+            dropSecrets conn HandshakeLevel
+            onPacketNumberSpaceDiscarded conn HandshakeLevel
         setConnection1RTTReady conn
-        fire (Microseconds 1000000) $ dropSecrets conn
-        putOutput conn $ OutControl RTT1Level [HandshakeDone]
         setConnectionEstablished conn
+        putOutput conn $ OutControl RTT1Level [HandshakeDone]
         --
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info

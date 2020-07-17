@@ -159,7 +159,11 @@ thresholdC :: Int
 thresholdC = 200
 
 sendCryptoFragments :: Connection -> SendMany -> Int -> [(EncryptionLevel, CryptoData)] -> IO ()
-sendCryptoFragments conn send maxSiz = loop limitationC maxSiz id
+sendCryptoFragments conn send maxSiz lcs = do
+    loop limitationC maxSiz id lcs
+    when (isClient conn && any (\(l,_) -> l == HandshakeLevel) lcs) $ do
+        dropSecrets conn InitialLevel
+        onPacketNumberSpaceDiscarded conn InitialLevel
   where
     loop _ _ build0 [] = do
         let bss0 = build0 []
