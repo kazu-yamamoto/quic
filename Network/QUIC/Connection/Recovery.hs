@@ -220,19 +220,23 @@ backOff n cnt = n * (2 ^ cnt)
 getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel))
 getPtoTimeAndSpace conn@Connection{..} = do
     -- Arm PTO from now when there are no inflight packets.
-    validated <- peerCompletedAddressValidation conn
-    if validated then do
+    CC{..} <- readTVarIO recoveryCC
+    if bytesInFlight <= 0 then do
+        validated <- peerCompletedAddressValidation conn
+        if validated then do
+            connDebugLog "getPtoTimeAndSpace: validated"
+            return Nothing
+          else do
+            rtt <- readIORef recoveryRTT
+            lvl <- getEncryptionLevel conn
+            let pto = backOff (calcPTO rtt lvl) (ptoCount rtt)
+            ptoTime <- getFutureTimeMillisecond pto
+            return $ Just (ptoTime, lvl)
+      else do
         completed <- isConnectionEstablished conn
         let lvls | completed = [InitialLevel, HandshakeLevel, RTT1Level]
                  | otherwise = [InitialLevel, HandshakeLevel]
         loop lvls Nothing
-      else do
-        when validated $ connDebugLog "getPtoTimeAndSpace: validated"
-        rtt <- readIORef recoveryRTT
-        lvl <- getEncryptionLevel conn
-        let pto = backOff (calcPTO rtt lvl) (ptoCount rtt)
-        ptoTime <- getFutureTimeMillisecond pto
-        return $ Just (ptoTime, lvl)
   where
     loop :: [EncryptionLevel] -> (Maybe (TimeMillisecond, EncryptionLevel)) -> IO (Maybe (TimeMillisecond, EncryptionLevel))
     loop [] r = return r
@@ -283,12 +287,15 @@ updateLossDetectionTimer :: Connection -> TimeMillisecond -> IO ()
 updateLossDetectionTimer conn@Connection{..} tms = do
     mgr <- getSystemTimerManager
     Microseconds us <- getTimeoutInMicrosecond tms
-    when (us <= 0) $ connDebugLog "updateLossDetectionTimer: minus"
-    key <- registerTimeout mgr us $ onLossDetectionTimeout conn
-    mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Just key, oldkey)
-    case mk of
-      Nothing -> return ()
-      Just k -> unregisterTimeout mgr k
+    if us <= 0 then do
+        connDebugLog "updateLossDetectionTimer: minus"
+        cancelLossDetectionTimer conn
+      else do
+        key <- registerTimeout mgr us (onLossDetectionTimeout conn)
+        mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Just key, oldkey)
+        case mk of
+          Nothing -> return ()
+          Just k -> unregisterTimeout mgr k
 
 setLossDetectionTimer :: Connection -> IO ()
 setLossDetectionTimer conn@Connection{..} = do
@@ -304,7 +311,7 @@ setLossDetectionTimer conn@Connection{..} = do
           else do
               CC{..} <- readTVarIO recoveryCC
               validated <- peerCompletedAddressValidation conn
-              if bytesInFlight > 0 && validated then
+              if bytesInFlight <= 0 && validated then
                   -- There is nothing to detect lost, so no timer is set.
                   -- However, the client needs to arm the timer if the
                   -- server might be blocked by the anti-amplification limit.

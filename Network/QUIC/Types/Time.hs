@@ -90,8 +90,8 @@ getFutureTimeMillisecond :: Milliseconds -> IO TimeMillisecond
 getFutureTimeMillisecond (Milliseconds m) = do
     let diff = microSecondsToUnixDiffTime (m * 1000)
     c <- getTimeMillisecond
-    let past = c `addUnixDiffTime` diff
-    return past
+    let future = c `addUnixDiffTime` diff
+    return future
 
 addMillisecond :: TimeMillisecond -> Milliseconds -> TimeMillisecond
 addMillisecond tm (Milliseconds ms) = tm `addUnixDiffTime` delta
