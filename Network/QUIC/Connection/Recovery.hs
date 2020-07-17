@@ -316,6 +316,9 @@ setLossDetectionTimer conn@Connection{..} = do
                     Nothing -> return ()
                     Just (timeout, _) -> updateLossDetectionTimer conn timeout
 
+-- The only time the PTO is armed when there are no bytes in flight is
+-- when it's a client and it's unsure if the server has completed
+-- address validation.
 onLossDetectionTimeout :: Connection -> IO ()
 onLossDetectionTimeout conn@Connection{..} = do
     mtl <- getLossTimeAndSpace conn
@@ -328,8 +331,7 @@ onLossDetectionTimeout conn@Connection{..} = do
           setLossDetectionTimer conn
       Nothing -> do
           CC{..} <- readTVarIO recoveryCC
-          validated <- peerCompletedAddressValidation conn
-          if bytesInFlight > 0 && validated then do
+          if bytesInFlight > 0 then do
               -- PTO. Send new data if available, else retransmit old data.
               -- If neither is available, send a single PING frame.
               mx <- getPtoTimeAndSpace conn
@@ -337,12 +339,12 @@ onLossDetectionTimeout conn@Connection{..} = do
                 Nothing -> return ()
                 Just (_, lvl) -> putOutput conn $ OutControl lvl [Ping]
             else do
-              when (isServer conn) $ connDebugLog "onLossDetectionTimeout: server"
               -- Client sends an anti-deadlock packet: Initial is padded
               -- to earn more anti-amplification credit,
               -- a Handshake packet proves address ownership.
+              validated <- peerCompletedAddressValidation conn
+              when (validated) $ connDebugLog "onLossDetectionTimeout: RTT1"
               lvl <- getEncryptionLevel conn
-              when (lvl == RTT1Level) $ connDebugLog "onLossDetectionTimeout: RTT1"
               putOutput conn $ OutControl lvl [Ping]
 
           modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = ptoCount rtt + 1 }
