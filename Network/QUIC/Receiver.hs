@@ -192,10 +192,10 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone = do
+    onPacketNumberSpaceDiscarded conn HandshakeLevel
     fire (Microseconds 100000) $ do
         dropSecrets conn RTT0Level
         dropSecrets conn HandshakeLevel
-        onPacketNumberSpaceDiscarded conn HandshakeLevel
     setConnectionEstablished conn
     -- to receive NewSessionTicket
     fire (Microseconds 1000000) $ killHandshaker conn
