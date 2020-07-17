@@ -531,9 +531,11 @@ releaseByClear Connection{..} lvl = do
 ----------------------------------------------------------------
 
 releaseByRetry :: Connection -> IO (Seq PlainPacket)
-releaseByRetry conn = do
+releaseByRetry conn@Connection{..} = do
     packets <- releaseByClear conn InitialLevel
     decreaseBytesInFlight conn packets
+    writeIORef (lossDetection ! InitialLevel) initialLossDetection
+    modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     return (spPlainPacket <$> packets)
 
 ----------------------------------------------------------------
