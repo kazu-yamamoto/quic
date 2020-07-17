@@ -409,6 +409,9 @@ onPacketsAcked Connection{..} ackedPackets = do
               -- Slow start.
               | cwin < ssthresh = cwin + spSentBytes
               -- Congestion avoidance.
+              -- In this implementation, maxPktSiz == spSentBytes.
+              -- spSentBytes is large enough, so we don't care
+              -- the roundup issue of `div`.
               | otherwise = cwin + maxPktSiz * spSentBytes `div` cwin
 
 onNewCongestionEvent :: Connection -> TimeMillisecond -> IO ()
