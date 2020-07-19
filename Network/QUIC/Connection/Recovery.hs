@@ -221,7 +221,7 @@ getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel)
 getPtoTimeAndSpace conn@Connection{..} = do
     -- Arm PTO from now when there are no inflight packets.
     CC{..} <- readTVarIO recoveryCC
-    if bytesInFlight <= 0 then do
+    if False then do
         validated <- peerCompletedAddressValidation conn
         if validated then do
             connDebugLog "getPtoTimeAndSpace: validated"
