@@ -57,13 +57,18 @@ newtype SentPackets = SentPackets (Seq SentPacket)
 emptySentPackets :: SentPackets
 emptySentPackets = SentPackets Seq.empty
 
+data SentPacketI = SentPacketI {
+    spPacketNumber      :: PacketNumber
+  , spEncryptionLevel   :: EncryptionLevel
+  , spPlainPacket       :: PlainPacket
+  , spPeerPacketNumbers :: PeerPacketNumbers
+  , spAckEliciting      :: Bool
+  } deriving Show
+
 data SentPacket = SentPacket {
-    spPacketNumber :: PacketNumber
-  , spLevel        :: EncryptionLevel
-  , spPlainPacket  :: PlainPacket
-  , spACKs         :: PeerPacketNumbers
-  , spTimeSent     :: TimeMillisecond
-  , spSentBytes    :: Int
+    spSentPacketI :: SentPacketI
+  , spTimeSent    :: TimeMillisecond
+  , spSentBytes   :: Int
   } deriving Show
 
 data RTT = RTT {

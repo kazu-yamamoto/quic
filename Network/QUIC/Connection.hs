@@ -151,7 +151,6 @@ module Network.QUIC.Connection (
   , onPacketSent
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
-  , keepPlainPacket
   , releaseByRetry
   , waitWindowOpen
   , setInitialCongestionWindow
@@ -163,6 +162,8 @@ module Network.QUIC.Connection (
   , Input(..)
   , Crypto(..)
   , Output(..)
+  , SentPacketI(..)
+  , SentPacket(..)
   ) where
 
 import Network.QUIC.Connection.Crypto
