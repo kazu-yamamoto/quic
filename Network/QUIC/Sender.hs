@@ -77,6 +77,7 @@ construct conn lvl frames mTargetSize = do
     constructLowerAckPacket _ _ _ _ _ = return []
     constructTargetPacket ver mycid peercid mlen token
       | null frames = do -- ACK only packet
+            resetDealyedAck conn
             ppns <- getPeerPacketNumbers conn lvl -- don't clear
             if nullPeerPacketNumbers ppns then
                 return []
@@ -94,6 +95,7 @@ construct conn lvl frames mTargetSize = do
             -- acked mutliple times. For this purpose,
             -- peerPacketNumber is not clear here. See section 13.2.3
             -- of transport.
+            resetDealyedAck conn
             ppns <- getPeerPacketNumbers conn lvl -- don't clear
             let frames' | nullPeerPacketNumbers ppns = frames
                         | otherwise                  = toAck ppns : frames

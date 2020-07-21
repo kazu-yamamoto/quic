@@ -14,6 +14,7 @@ module Network.QUIC.Connection.Misc (
   , getPeerParameters
   , setPeerParameters
   , delayedAck
+  , resetDealyedAck
   , getMaxPacketSize
   , setMaxPacketSize
   , exitConnection
@@ -111,6 +112,12 @@ delayedAck conn@Connection{..} = do
     sendAck = putOutput conn $ OutControl RTT1Level []
     check 3 = (0,   (3,  True))
     check n = (n+1, (n, False))
+
+resetDealyedAck :: Connection -> IO ()
+resetDealyedAck Connection{..} = do
+    writeIORef delayedAckCount 0
+    let new = return ()
+    join $ atomicModifyIORef' delayedAckCancel $ \old -> (new, old)
 
 ----------------------------------------------------------------
 
