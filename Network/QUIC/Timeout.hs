@@ -4,6 +4,7 @@ module Network.QUIC.Timeout (
     timeouter
   , timeout
   , fire
+  , cfire
   , delay
   ) where
 
@@ -21,22 +22,23 @@ data TimeoutException = TimeoutException deriving (Show, Typeable)
 
 instance Exception TimeoutException
 
-globalTimeoutQ :: TQueue ThreadId
+globalTimeoutQ :: TQueue (IO ())
 globalTimeoutQ = unsafePerformIO newTQueueIO
 {-# NOINLINE globalTimeoutQ #-}
 
 timeouter :: IO ()
 timeouter = forever $ do
-    tid <- atomically (readTQueue globalTimeoutQ)
-    E.throwTo tid TimeoutException
+    action <- atomically (readTQueue globalTimeoutQ)
+    action
 
 timeout :: Microseconds -> IO a -> IO (Maybe a)
 timeout (Microseconds microseconds) action = do
-    pid <- myThreadId
-    tm <- getSystemTimerManager
-    let setup = registerTimeout tm microseconds $
-            atomically $ writeTQueue globalTimeoutQ pid
-        cleanup key = unregisterTimeout tm key
+    tid <- myThreadId
+    timmgr <- getSystemTimerManager
+    let killMe = E.throwTo tid TimeoutException
+        onTimeout = atomically $ writeTQueue globalTimeoutQ killMe
+        setup = registerTimeout timmgr microseconds onTimeout
+        cleanup key = unregisterTimeout timmgr key
     E.handle (\TimeoutException -> return Nothing) $
         E.bracket setup cleanup $ \_ -> Just <$> action
 
@@ -44,6 +46,14 @@ fire :: Microseconds -> TimeoutCallback -> IO ()
 fire (Microseconds microseconds) action = do
     timmgr <- getSystemTimerManager
     void $ registerTimeout timmgr microseconds action
+
+
+cfire :: Microseconds -> TimeoutCallback -> IO (IO ())
+cfire (Microseconds microseconds) action = do
+    timmgr <- getSystemTimerManager
+    key <- registerTimeout timmgr microseconds action
+    let cancel = unregisterTimeout timmgr key
+    return cancel
 
 delay :: Microseconds -> IO ()
 delay (Microseconds microseconds) = threadDelay microseconds
