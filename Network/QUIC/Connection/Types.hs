@@ -256,7 +256,8 @@ data Connection = Connection {
   , outputQ           :: OutputQ
   , migrationQ        :: MigrationQ
   , shared            :: Shared
-  , delayedAck        :: IORef Int
+  , delayedAckCount   :: IORef Int
+  , delayedAckCancel  :: IORef (IO ())
   -- State
   , connectionState   :: TVar ConnectionState
   , closeState        :: TVar CloseState
@@ -350,6 +351,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTQueueIO
         <*> newShared tvarFlowTx
         <*> newIORef 0
+        <*> newIORef (return ())
         -- State
         <*> newTVarIO Handshaking
         <*> newTVarIO CloseState { closeSent = False, closeReceived = False }

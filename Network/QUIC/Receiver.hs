@@ -80,13 +80,8 @@ processCryptPacket conn hdr crypt = do
           unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain
           mapM_ (processFrame conn level) frames
-          when (any ackEliciting frames && level == RTT1Level) $ do
-              if all shouldDelay frames then do
-                  sendAck <- checkDelayedAck conn
-                  when sendAck $ putOutput conn $ OutControl level []
-                else do
-                  resetDelayedAck conn
-                  putOutput conn $ OutControl level []
+          when (any ackEliciting frames && level == RTT1Level) $
+              delayedAck conn
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
@@ -101,9 +96,8 @@ processCryptPacket conn hdr crypt = do
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
--- shouldDelay Ping == False
--- So, Ack has been sent already above
-processFrame _ _ Ping = return ()
+processFrame conn lvl Ping =
+    putOutput conn $ OutControl lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) =
     onAckReceived conn lvl ackInfo ackDelay
 processFrame _ _ ResetStream{} = return ()
@@ -142,14 +136,12 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when (window <= (initialWindow .>>. 1)) $ do
         newMax <- addRxMaxStreamData strm initialWindow
         putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
-        resetDelayedAck conn
     addRxData conn $ BS.length dat
     cwindow <- getRxDataWindow conn
     let cinitialWindow = initialMaxData $ getMyParameters conn
     when (cwindow <= (cinitialWindow .>>. 1)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         putOutput conn $ OutControl RTT1Level [MaxData newMax]
-        resetDelayedAck conn
 processFrame conn _ (MaxData n) =
     setTxMaxData conn n
 processFrame conn _ (MaxStreamData sid n) = do
@@ -167,7 +159,6 @@ processFrame conn _ (NewConnectionID cidInfo rpt) = do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         let frames = map RetireConnectionID seqNums
         putOutput conn $ OutControl RTT1Level frames
-        resetDelayedAck conn
 processFrame conn _ (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     when (isServer conn) $ case mcidInfo of
@@ -175,9 +166,8 @@ processFrame conn _ (RetireConnectionID sn) = do
       Just (CIDInfo _ cid _) -> do
           unregister <- getUnregister conn
           unregister cid
-processFrame conn RTT1Level (PathChallenge dat) = do
+processFrame conn RTT1Level (PathChallenge dat) =
     putOutput conn $ OutControl RTT1Level [PathResponse dat]
-    resetDelayedAck conn
 processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do

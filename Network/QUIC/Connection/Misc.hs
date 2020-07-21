@@ -13,9 +13,7 @@ module Network.QUIC.Connection.Misc (
   , getMyParameters
   , getPeerParameters
   , setPeerParameters
-  , checkDelayedAck
-  , checkDelayedAck'
-  , resetDelayedAck
+  , delayedAck
   , getMaxPacketSize
   , setMaxPacketSize
   , exitConnection
@@ -33,9 +31,11 @@ import Data.IORef
 import Network.Socket
 import System.Mem.Weak
 
+import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -97,20 +97,20 @@ setPeerParameters Connection{..} params = writeIORef peerParameters params
 
 ----------------------------------------------------------------
 
-checkDelayedAck :: Connection -> IO Bool
-checkDelayedAck Connection{..} = atomicModifyIORef' delayedAck check
+delayedAck :: Connection -> IO ()
+delayedAck conn@Connection{..} = do
+    (oldcnt,send) <- atomicModifyIORef' delayedAckCount check
+    when (oldcnt == 0) $ do
+        new <- cfire (Microseconds 20000) $ sendAck
+        join $ atomicModifyIORef' delayedAckCancel $ \old -> (new, old)
+    when send $ do
+        let new = return ()
+        join $ atomicModifyIORef' delayedAckCancel $ \old -> (new, old)
+        sendAck
   where
-    check 1 = (0, True)
-    check n = (n+1, False)
-
-checkDelayedAck' :: Connection -> IO Bool
-checkDelayedAck' Connection{..} = atomicModifyIORef' delayedAck check
-  where
-    check 0 = (0, False)
-    check _ = (0, True)
-
-resetDelayedAck :: Connection -> IO ()
-resetDelayedAck Connection{..} = writeIORef delayedAck 0
+    sendAck = putOutput conn $ OutControl RTT1Level []
+    check 3 = (0,   (3,  True))
+    check n = (n+1, (n, False))
 
 ----------------------------------------------------------------
 
@@ -163,5 +163,5 @@ setMinIdleTimeout Connection{..} ms
 ----------------------------------------------------------------
 
 setMaxAckDaley :: Connection -> Milliseconds -> IO ()
-setMaxAckDaley Connection{..} delay =
-    modifyIORef' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay }
+setMaxAckDaley Connection{..} delay0 =
+    modifyIORef' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }

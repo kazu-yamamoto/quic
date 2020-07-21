@@ -66,9 +66,7 @@ module Network.QUIC.Connection (
   , getMyParameters
   , getPeerParameters
   , setPeerParameters
-  , checkDelayedAck
-  , checkDelayedAck'
-  , resetDelayedAck
+  , delayedAck
   , getMaxPacketSize
   , setMaxPacketSize
   , exitConnection
