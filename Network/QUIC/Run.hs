@@ -210,7 +210,7 @@ handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do
     mgr <- getTokenManager conn
     token <- encryptToken mgr cryptoToken
     let ncid = NewConnectionID cidInfo 0
-    let frames = [NewToken token,ncid]
+    let frames = [NewToken token,ncid,HandshakeDone]
     putOutput conn $ OutControl RTT1Level frames
   where
     handler (E.SomeException e) = do

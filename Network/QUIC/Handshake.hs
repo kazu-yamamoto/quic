@@ -184,7 +184,7 @@ handshakeServer conf conn myAuthCIDs = do
             dropSecrets conn HandshakeLevel
         setConnection1RTTReady conn
         setConnectionEstablished conn
-        putOutput conn $ OutControl RTT1Level [HandshakeDone]
+--        putOutput conn $ OutControl RTT1Level [HandshakeDone]
         --
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
