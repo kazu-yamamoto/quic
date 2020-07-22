@@ -110,7 +110,7 @@ delayedAck conn@Connection{..} = do
         sendAck
   where
     sendAck = putOutput conn $ OutControl RTT1Level []
-    check 3 = (0,   (3,  True))
+    check 1 = (0,   (1,  True))
     check n = (n+1, (n, False))
 
 resetDealyedAck :: Connection -> IO ()
