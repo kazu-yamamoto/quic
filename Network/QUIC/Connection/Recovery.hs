@@ -364,9 +364,8 @@ onLossDetectionTimeout conn@Connection{..} = do
 
 -- | Default limit on the initial bytes in flight.
 kInitialWindow :: Int -> Int
--- kInitialWindow pktSiz = min 14720 (10 * pktSiz)
--- kInitialWindow pktSiz = 2 * pktSiz
-kInitialWindow pktSiz = 3 * pktSiz
+kInitialWindow pktSiz = min 14720 (10 * pktSiz)
+--kInitialWindow pktSiz = 2 * pktSiz
 
 -- | Minimum congestion window in bytes.
 kMinimumWindow :: Connection -> IO Int
