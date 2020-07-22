@@ -34,15 +34,16 @@ sendPacket conn send spktis = do
     (sentPackets, bss) <- loop now maxSiz spktis id id
     waitWindowOpen conn maxSiz
     send bss
-    forM_ sentPackets $ onPacketSent conn
-    forM_ spktis $ \x -> qlogSent conn $ spPlainPacket x
+    forM_ sentPackets $ \x -> do
+        onPacketSent conn x
+        qlogSent conn $ spPlainPacket $ spSentPacketI x
   where
     loop _ _ [] _ _ = error "sendPacket: loop"
     loop now siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
         let sentBytes = totalLen bss
         let sentPacket = SentPacket {
-                spSentPacketI  = spkti
+                spSentPacketI  = addPadding spkti
               , spTimeSent     = now
               , spSentBytes    = sentBytes
               }
@@ -59,6 +60,19 @@ sendPacket conn send spktis = do
             build1' = build1 . (bss ++)
             siz' = siz - sentBytes
         loop now siz' ss build0' build1'
+
+addPadding :: SentPacketI -> SentPacketI
+addPadding spi = spi {
+      spPlainPacket = modify $ spPlainPacket spi
+    }
+  where
+    modify (PlainPacket hdr plain) = PlainPacket hdr plain'
+      where
+        plain' = plain {
+          plainFrames = plainFrames plain ++ [Padding 0]
+        }
+
+----------------------------------------------------------------
 
 construct :: Connection
           -> EncryptionLevel
@@ -112,7 +126,7 @@ construct conn lvl frames = do
                 return []
               else do
                 mypn <- getPacketNumber conn
-                let frames' = [toAck ppns, Padding 0]
+                let frames' = [toAck ppns]
                     plain = Plain (Flags 0) mypn frames'
                     ppkt = toPlainPakcet lvl plain
                 return [SentPacketI mypn lvl ppkt ppns False]
@@ -127,7 +141,7 @@ construct conn lvl frames = do
             let frames' | nullPeerPacketNumbers ppns = frames
                         | otherwise                  = toAck ppns : frames
             mypn <- getPacketNumber conn
-            let plain = Plain (Flags 0) mypn (frames' ++ [Padding 0])
+            let plain = Plain (Flags 0) mypn frames'
                 ppkt = toPlainPakcet lvl plain
             return [SentPacketI mypn lvl ppkt ppns True]
       where
