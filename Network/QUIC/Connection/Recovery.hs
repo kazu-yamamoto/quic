@@ -508,21 +508,21 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
 releaseByAcks :: Connection -> EncryptionLevel -> AckInfo -> IO (Seq SentPacket)
 releaseByAcks conn lvl ackinfo = do
     let predicate = fromAckInfoToPred ackinfo . spPacketNumber . spSentPacketI
-    newlyAckedPackets <- releaseByPredicate conn lvl predicate
-    mapM_ reduce newlyAckedPackets
-    return $ newlyAckedPackets
-  where
-    reduce x = reducePeerPacketNumbers conn lvl ppns
-      where
-        ppns = spPeerPacketNumbers $ spSentPacketI x
+    releaseByPredicate conn lvl predicate
 
 ----------------------------------------------------------------
 
 releaseByPredicate :: Connection -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
-releaseByPredicate Connection{..} lvl predicate = do
-    atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
+releaseByPredicate conn@Connection{..} lvl predicate = do
+    packets <- atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
        let (lostPackets, db') = Seq.partition predicate db
        in (SentPackets db', lostPackets)
+    mapM_ reduce packets
+    return $ packets
+  where
+    reduce x = reducePeerPacketNumbers conn lvl ppns
+      where
+        ppns = spPeerPacketNumbers $ spSentPacketI x
 
 ----------------------------------------------------------------
 
