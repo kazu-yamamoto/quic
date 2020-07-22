@@ -401,17 +401,19 @@ onPacketsAcked Connection{..} ackedPackets = do
     modify maxPktSiz cc@CC{..} = cc {
            bytesInFlight = bytesInFlight'
          , congestionWindow = congestionWindow'
+         , bytesAcked = bytesAcked'
          }
       where
-        (bytesInFlight',congestionWindow') =
-              foldl' (.+) (bytesInFlight,congestionWindow) ackedPackets
-        (bytes,cwin) .+ SentPacket{..} = (bytes',cwin')
+        (bytesInFlight',congestionWindow',bytesAcked') =
+              foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked) ackedPackets
+        (bytes,cwin,acked) .+ SentPacket{..} = (bytes',cwin',acked'')
           where
             isRecovery = inCongestionRecovery spTimeSent congestionRecoveryStartTime
             bytes' = bytes - spSentBytes
+            acked' = acked + spSentBytes
             cwin'
               -- Do not increase congestion window in recovery period.
-              | isRecovery = cwin
+              | isRecovery      = cwin
               -- fixme: Do not increase congestion_window if application
               -- limited or flow control limited.
               --
@@ -421,7 +423,10 @@ onPacketsAcked Connection{..} ackedPackets = do
               -- In this implementation, maxPktSiz == spSentBytes.
               -- spSentBytes is large enough, so we don't care
               -- the roundup issue of `div`.
-              | otherwise = cwin + maxPktSiz * spSentBytes `div` cwin
+              | acked' >= cwin  = cwin + maxPktSiz
+              | otherwise       = cwin
+            acked'' | acked' >= cwin = acked' - cwin
+                    | otherwise      = acked'
 
 onNewCongestionEvent :: Connection -> TimeMillisecond -> IO ()
 onNewCongestionEvent conn@Connection{..} sentTime = do
@@ -432,13 +437,15 @@ onNewCongestionEvent conn@Connection{..} sentTime = do
         now <- getTimeMillisecond
         minWindow <- kMinimumWindow conn
         -- A packet can be sent to speed up loss recovery.
-        atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow} ->
+        atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow,bytesAcked} ->
             let window0 = kLossReductionFactor congestionWindow
                 window = max window0 minWindow
+                acked = kLossReductionFactor bytesAcked
             in cc {
                 congestionRecoveryStartTime = Just now
               , congestionWindow = window
               , ssthresh = window
+              , bytesAcked = acked
               }
         -- maybeSendOnePacket conn -- fixme
 
@@ -478,7 +485,10 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
     when persistent $ do
         minWindow <- kMinimumWindow conn
         atomically $ modifyTVar' recoveryCC $ \cc ->
-          cc { congestionWindow = minWindow }
+          cc {
+            congestionWindow = minWindow
+          , bytesAcked = 0
+          }
     mapM_ put $ Seq.filter (spAckEliciting . spSentPacketI) lostPackets
   where
     put spkt = putOutput conn $ OutRetrans $ spPlainPacket $ spSentPacketI spkt

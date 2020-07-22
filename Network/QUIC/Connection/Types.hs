@@ -125,6 +125,9 @@ data CC = CC {
   --   below ssthresh, the mode is slow start and the window grows by
   --   the number of bytes acknowledged.
   , ssthresh :: Int
+  -- | Records number of bytes acked, and used for incrementing
+  --   the congestion window during congestion avoidance.
+  , bytesAcked :: Int
   }
 
 initialCC :: CC
@@ -133,6 +136,7 @@ initialCC = CC {
   , congestionWindow = 0
   , congestionRecoveryStartTime = Nothing
   , ssthresh = maxBound
+  , bytesAcked = 0
   }
 
 dummySecrets :: TrafficSecrets a
