@@ -108,15 +108,15 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
         --  that is not yet certain that the server has finished
         --  validating the client's address."
         completed <- peerCompletedAddressValidation conn
-        when completed $ modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+        when completed $ atomicModifyIORef' recoveryRTT $ \rtt ->
+          (rtt { ptoCount = 0 }, ())
 
         setLossDetectionTimer conn
 
 updateRTT :: Connection -> EncryptionLevel -> Milliseconds -> Milliseconds -> IO ()
-updateRTT Connection{..} lvl latestRTT0 ackDelay0 = do
-    rtt@RTT{..} <- readIORef recoveryRTT
+updateRTT Connection{..} lvl latestRTT0 ackDelay0 = atomicModifyIORef' recoveryRTT $ \rtt@RTT{..} ->
     -- don't use latestRTT, use latestRTT0 instead
-    if latestRTT == Milliseconds 0 then do -- first time
+    if latestRTT == Milliseconds 0 then -- first time
         -- Overwriting the initial value with the first sample.
         -- Initial value was used to calculate PTO.
         --
@@ -128,35 +128,35 @@ updateRTT Connection{..} lvl latestRTT0 ackDelay0 = do
               , smoothedRTT = latestRTT0
               , rttvar      = latestRTT0 `unsafeShiftR` 1
               }
-        writeIORef recoveryRTT rtt'
-      else do
+        in (rtt', ())
+      else
         -- minRTT ignores ack delay.
         let minRTT' = min minRTT latestRTT0
         -- Limit ack_delay by max_ack_delay
         -- ack_delay = min(Ack Delay in ACK Frame, max_ack_delay)
-        let ackDelay = min ackDelay0 $ getMaxAckDelay lvl maxAckDelay1RTT
+            ackDelay = min ackDelay0 $ getMaxAckDelay lvl maxAckDelay1RTT
         -- Adjust for ack delay if plausible.
         -- adjusted_rtt = latest_rtt
         -- if (min_rtt + ack_delay < latest_rtt):
         --   adjusted_rtt = latest_rtt - ack_delay
-        let adjustedRTT
+            adjustedRTT
               | latestRTT0 > minRTT + ackDelay = latestRTT0 - ackDelay
               | otherwise                      = latestRTT0
 
         -- rttvar_sample = abs(smoothed_rtt - adjusted_rtt)
         -- rttvar = 3/4 * rttvar + 1/4 * rttvar_sample
-        let rttvar' = rttvar - (rttvar .>>. 2)
+            rttvar' = rttvar - (rttvar .>>. 2)
                     + (abs (smoothedRTT - adjustedRTT) .>>. 2)
         -- smoothed_rtt = 7/8 * smoothed_rtt + 1/8 * adjusted_rtt
-        let smoothedRTT' = smoothedRTT - (smoothedRTT .>>. 3)
+            smoothedRTT' = smoothedRTT - (smoothedRTT .>>. 3)
                          + (adjustedRTT .>>. 3)
-        let rtt' = rtt {
+            rtt' = rtt {
                 latestRTT = latestRTT0
               , minRTT = minRTT'
               , smoothedRTT = smoothedRTT'
               , rttvar = rttvar'
               }
-        writeIORef recoveryRTT rtt'
+        in (rtt', ())
 
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
@@ -372,7 +372,8 @@ onLossDetectionTimeout conn@Connection{..} = do
                 }, ())
               putOutput conn $ OutControl lvl [Ping]
 
-          modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = ptoCount rtt + 1 }
+          atomicModifyIORef' recoveryRTT $ \rtt ->
+            (rtt { ptoCount = ptoCount rtt + 1 }, ())
           setLossDetectionTimer conn
 
 ----------------------------------------------------------------
@@ -516,7 +517,8 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     decreaseBytesInFlight conn clearedPackets
     -- Reset the loss detection and PTO timer
     writeIORef (lossDetection ! lvl) initialLossDetection
-    modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+    atomicModifyIORef' recoveryRTT $ \rtt ->
+      (rtt { ptoCount = 0 }, ())
     setLossDetectionTimer conn
 
 ----------------------------------------------------------------
@@ -555,7 +557,8 @@ releaseByRetry conn@Connection{..} = do
     packets <- releaseByClear conn InitialLevel
     decreaseBytesInFlight conn packets
     writeIORef (lossDetection ! InitialLevel) initialLossDetection
-    modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+    atomicModifyIORef' recoveryRTT $ \rtt ->
+      (rtt { ptoCount = 0 }, ())
     return (spPlainPacket . spSentPacketI <$> packets)
 
 ----------------------------------------------------------------
