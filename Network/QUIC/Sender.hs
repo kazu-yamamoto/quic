@@ -103,7 +103,7 @@ construct conn lvl frames = do
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
-            return [SentPacketI mypn lvl ppkt ppns False]
+            return [SentPacketI mypn InitialLevel ppkt ppns False]
     constructLowerAckPacket RTT1Level ver mycid peercid _ = do
         ppns <- getPeerPacketNumbers conn HandshakeLevel
         if nullPeerPacketNumbers ppns then
@@ -116,7 +116,7 @@ construct conn lvl frames = do
                 ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                 plain    = Plain (Flags 0) mypn [ackFrame]
                 ppkt     = PlainPacket header plain
-            return [SentPacketI mypn lvl ppkt ppns False]
+            return [SentPacketI mypn HandshakeLevel ppkt ppns False]
     constructLowerAckPacket _ _ _ _ _ = return []
     constructTargetPacket ver mycid peercid token
       | null frames = do -- ACK only packet

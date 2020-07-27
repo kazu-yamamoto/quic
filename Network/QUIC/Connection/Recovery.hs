@@ -403,7 +403,6 @@ onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
 onPacketsAcked Connection{..} ackedPackets = do
     maxPktSiz <- readIORef maxPacketSize
     atomically $ modifyTVar' recoveryCC $ modify maxPktSiz
-    readTVarIO recoveryCC >>= print
   where
     modify maxPktSiz cc@CC{..} = cc {
            bytesInFlight = bytesInFlight'
@@ -502,6 +501,7 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
+    clearPeerPacketNumbers conn lvl
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- releaseByClear conn lvl
     decreaseBytesInFlight conn clearedPackets
