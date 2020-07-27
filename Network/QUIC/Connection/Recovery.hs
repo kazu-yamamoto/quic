@@ -316,8 +316,8 @@ setLossDetectionTimer conn@Connection{..} = do
       Nothing ->
           if serverIsAtAntiAmplificationLimit then -- server is at anti-amplification limit
             -- The server's timer is not set if nothing can be sent.
-            cancelLossDetectionTimer conn
-          else do
+              cancelLossDetectionTimer conn
+            else do
               CC{..} <- readTVarIO recoveryCC
               validated <- peerCompletedAddressValidation conn
               if bytesInFlight <= 0 && validated then
@@ -403,6 +403,7 @@ onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
 onPacketsAcked Connection{..} ackedPackets = do
     maxPktSiz <- readIORef maxPacketSize
     atomically $ modifyTVar' recoveryCC $ modify maxPktSiz
+    readTVarIO recoveryCC >>= print
   where
     modify maxPktSiz cc@CC{..} = cc {
            bytesInFlight = bytesInFlight'
