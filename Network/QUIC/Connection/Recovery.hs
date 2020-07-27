@@ -322,7 +322,7 @@ setLossDetectionTimer conn@Connection{..} = do
                   -- Determine which PN space to arm PTO for.
                   mx <- getPtoTimeAndSpace conn
                   case mx of
-                    Nothing -> connDebugLog "setLossDetectionTimer: Nothing"
+                    Nothing -> cancelLossDetectionTimer conn
                     Just (timeout, _) -> updateLossDetectionTimer conn timeout
 
 -- The only time the PTO is armed when there are no bytes in flight is
