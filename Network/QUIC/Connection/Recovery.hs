@@ -174,8 +174,8 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
     let lossDelay = max lossDelay0 kGranularity
 
     tm <- getPastTimeMillisecond lossDelay
-    let predicate ent = spTimeSent ent <= tm
-                     || (spPacketNumber (spSentPacketI ent) <= largestAckedPacket' - kPacketThreshold)
+    let predicate ent = (spPacketNumber (spSentPacketI ent) <= largestAckedPacket' - kPacketThreshold)
+                     || (spPacketNumber (spSentPacketI ent) <= largestAckedPacket' && spTimeSent ent <= tm)
     lostPackets <- releaseByPredicate conn lvl predicate
 
     mx <- findOldest conn lvl (\x -> spPacketNumber (spSentPacketI x) <= largestAckedPacket')
