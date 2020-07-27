@@ -322,7 +322,7 @@ setLossDetectionTimer conn@Connection{..} = do
                   -- Determine which PN space to arm PTO for.
                   mx <- getPtoTimeAndSpace conn
                   case mx of
-                    Nothing -> return ()
+                    Nothing -> connDebugLog "setLossDetectionTimer: Nothing"
                     Just (timeout, _) -> updateLossDetectionTimer conn timeout
 
 -- The only time the PTO is armed when there are no bytes in flight is
@@ -345,7 +345,7 @@ onLossDetectionTimeout conn@Connection{..} = do
               -- If neither is available, send a single PING frame.
               mx <- getPtoTimeAndSpace conn
               case mx of
-                Nothing -> return ()
+                Nothing -> connDebugLog "onLossDetectionTimeout: Nothing"
                 Just (_, lvl) -> putOutput conn $ OutControl lvl [Ping]
             else do
               -- Client sends an anti-deadlock packet: Initial is padded
@@ -488,6 +488,7 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
             congestionWindow = minWindow
           , bytesAcked = 0
           }
+    -- fixme: converting RTT0 to Short
     mapM_ put $ Seq.filter (spAckEliciting . spSentPacketI) lostPackets
   where
     put spkt = putOutput conn $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
