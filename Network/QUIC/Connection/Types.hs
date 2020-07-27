@@ -105,6 +105,11 @@ initialRTT = RTT {
   , ptoCount        = 0
   }
 
+data CCMode = SlowStart
+            | Avoidance
+            | Recovery
+            deriving Show
+
 data CC = CC {
   -- | The sum of the size in bytes of all sent packets that contain
   --   at least one ack-eliciting or PADDING frame, and have not been
@@ -128,6 +133,7 @@ data CC = CC {
   -- | Records number of bytes acked, and used for incrementing
   --   the congestion window during congestion avoidance.
   , bytesAcked :: Int
+  , ccMode :: CCMode
   } deriving Show
 
 initialCC :: CC
@@ -137,6 +143,7 @@ initialCC = CC {
   , congestionRecoveryStartTime = Nothing
   , ssthresh = maxBound
   , bytesAcked = 0
+  , ccMode = SlowStart
   }
 
 dummySecrets :: TrafficSecrets a

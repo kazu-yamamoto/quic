@@ -409,31 +409,30 @@ onPacketsAcked Connection{..} ackedPackets = do
            bytesInFlight = bytesInFlight'
          , congestionWindow = congestionWindow'
          , bytesAcked = bytesAcked'
+         , ccMode = ccMode'
          }
       where
-        (bytesInFlight',congestionWindow',bytesAcked') =
-              foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked) ackedPackets
-        (bytes,cwin,acked) .+ SentPacket{..} = (bytes',cwin',acked'')
+        (bytesInFlight',congestionWindow',bytesAcked',ccMode') =
+              foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked,ccMode) ackedPackets
+        (bytes,cwin,acked,_) .+ SentPacket{..} = (bytes',cwin',acked',mode')
           where
             isRecovery = inCongestionRecovery spTimeSent congestionRecoveryStartTime
             bytes' = bytes - spSentBytes
-            acked' = acked + spSentBytes
-            cwin'
+            ackedA = acked + spSentBytes
+            (cwin',acked',mode')
               -- Do not increase congestion window in recovery period.
-              | isRecovery      = cwin
+              | isRecovery      = (cwin, acked, Recovery)
               -- fixme: Do not increase congestion_window if application
               -- limited or flow control limited.
               --
               -- Slow start.
-              | cwin < ssthresh = cwin + spSentBytes
+              | cwin < ssthresh = (cwin + spSentBytes, acked, SlowStart)
               -- Congestion avoidance.
               -- In this implementation, maxPktSiz == spSentBytes.
               -- spSentBytes is large enough, so we don't care
               -- the roundup issue of `div`.
-              | acked' >= cwin  = cwin + maxPktSiz
-              | otherwise       = cwin
-            acked'' | acked' >= cwin = acked' - cwin
-                    | otherwise      = acked'
+              | ackedA >= cwin  = (cwin + maxPktSiz, ackedA - cwin, Avoidance)
+              | otherwise       = (cwin, ackedA, Avoidance)
 
 onNewCongestionEvent :: Connection -> TimeMillisecond -> IO ()
 onNewCongestionEvent conn@Connection{..} sentTime = do
