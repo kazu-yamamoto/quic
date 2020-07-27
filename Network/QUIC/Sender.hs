@@ -87,37 +87,32 @@ construct conn lvl frames = do
     if established || (isServer conn && lvl == HandshakeLevel) then do
         constructTargetPacket ver mycid peercid token
       else do
-        ppkt0 <- constructLowerAckPacket lvl ver mycid peercid token
+        ppkt0 <- constructLowerAckPacket ver mycid peercid token
         ppkt1 <- constructTargetPacket ver mycid peercid token
         return (ppkt0 ++ ppkt1)
   where
-    constructLowerAckPacket HandshakeLevel ver mycid peercid token = do
-        ppns <- getPeerPacketNumbers conn InitialLevel
-        if nullPeerPacketNumbers ppns then
+    constructLowerAckPacket ver mycid peercid token = do
+        let lvl' = case lvl of
+              HandshakeLevel -> InitialLevel
+              RTT1Level      -> HandshakeLevel
+              _              -> RTT1Level
+        if lvl' == RTT1Level then
             return []
           else do
-            -- This packet will not be acknowledged.
-            clearPeerPacketNumbers conn InitialLevel
-            mypn <- getPacketNumber conn
-            let header   = Initial ver peercid mycid token
-                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
-                plain    = Plain (Flags 0) mypn [ackFrame]
-                ppkt     = PlainPacket header plain
-            return [SentPacketI mypn InitialLevel ppkt ppns False]
-    constructLowerAckPacket RTT1Level ver mycid peercid _ = do
-        ppns <- getPeerPacketNumbers conn HandshakeLevel
-        if nullPeerPacketNumbers ppns then
-            return []
-          else do
-            -- This packet will not be acknowledged.
-            clearPeerPacketNumbers conn HandshakeLevel
-            mypn <- getPacketNumber conn
-            let header   = Handshake ver peercid mycid
-                ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
-                plain    = Plain (Flags 0) mypn [ackFrame]
-                ppkt     = PlainPacket header plain
-            return [SentPacketI mypn HandshakeLevel ppkt ppns False]
-    constructLowerAckPacket _ _ _ _ _ = return []
+            ppns <- getPeerPacketNumbers conn lvl'
+            if nullPeerPacketNumbers ppns then
+                return []
+              else do
+                -- This packet will not be acknowledged.
+                clearPeerPacketNumbers conn lvl'
+                mypn <- getPacketNumber conn
+                let header
+                      | lvl' == InitialLevel = Initial   ver peercid mycid token
+                      | otherwise            = Handshake ver peercid mycid
+                    ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
+                    plain    = Plain (Flags 0) mypn [ackFrame]
+                    ppkt     = PlainPacket header plain
+                return [SentPacketI mypn lvl' ppkt ppns False]
     constructTargetPacket ver mycid peercid token
       | null frames = do -- ACK only packet
             resetDealyedAck conn
