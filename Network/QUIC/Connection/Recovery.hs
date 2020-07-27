@@ -50,7 +50,7 @@ onPacketSent conn@Connection{..} sentPacket = do
     onPacketSentCC conn $ spSentBytes sentPacket
     when (spAckEliciting $ spSentPacketI sentPacket) $
         modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
-            timeOfLastAckElicitingPacket = Just $ spTimeSent sentPacket
+            timeOfLastAckElicitingPacket = spTimeSent sentPacket
           }
     atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
       let db' = db |> sentPacket
@@ -160,8 +160,8 @@ updateRTT Connection{..} lvl latestRTT0 ackDelay0 = do
 
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
-    mtm <- timeOfLastAckElicitingPacket <$> readIORef (lossDetection ! lvl)
-    when (isNothing mtm) $ connDebugLog "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: Nothing"
+    lae <- timeOfLastAckElicitingPacket <$> readIORef (lossDetection ! lvl)
+    when (lae == timeMillisecond0) $ connDebugLog "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: 0"
     modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
           lossTime = Nothing
         }
@@ -252,12 +252,12 @@ getPtoTimeAndSpace conn@Connection{..} = do
             loop ls r
           else do
             LossDetection{..} <- readIORef (lossDetection ! l)
-            case timeOfLastAckElicitingPacket of
-              Nothing -> loop ls r
-              Just t -> do
+            if timeOfLastAckElicitingPacket == timeMillisecond0 then
+                loop ls r
+              else do
                   rtt <- readIORef recoveryRTT
                   let pto = calcPTO rtt l
-                  let ptoTime = t `addMillisecond` pto
+                  let ptoTime = timeOfLastAckElicitingPacket `addMillisecond` pto
                   case r of
                     Nothing -> loop ls $ Just (ptoTime,l)
                     Just (ptoTime0,_)
@@ -353,7 +353,12 @@ onLossDetectionTimeout conn@Connection{..} = do
               mx <- getPtoTimeAndSpace conn
               case mx of
                 Nothing -> connDebugLog "onLossDetectionTimeout: Nothing"
-                Just (_, lvl) -> putOutput conn $ OutControl lvl [Ping]
+                Just (_, lvl) -> do
+                    now <- getTimeMillisecond
+                    modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
+                        timeOfLastAckElicitingPacket = now
+                      }
+                    putOutput conn $ OutControl lvl [Ping]
             else do
               -- Client sends an anti-deadlock packet: Initial is padded
               -- to earn more anti-amplification credit,
@@ -361,6 +366,10 @@ onLossDetectionTimeout conn@Connection{..} = do
               validated <- peerCompletedAddressValidation conn
               when (validated) $ connDebugLog "onLossDetectionTimeout: RTT1"
               lvl <- getEncryptionLevel conn
+              now <- getTimeMillisecond
+              modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
+                  timeOfLastAckElicitingPacket = now
+                }
               putOutput conn $ OutControl lvl [Ping]
 
           modifyIORef' recoveryRTT $ \rtt -> rtt { ptoCount = ptoCount rtt + 1 }

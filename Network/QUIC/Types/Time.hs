@@ -4,6 +4,7 @@ module Network.QUIC.Types.Time (
     Seconds(..)
   , Milliseconds(..)
   , Microseconds(..)
+  , timeMillisecond0
   , milliToMicro
   , fromTimeSecond
   , toTimeSecond
@@ -38,6 +39,9 @@ milliToMicro (Milliseconds n) = Microseconds (fromIntegral n * 1000)
 
 newtype TimeSecond = TimeSecond Seconds deriving (Eq, Ord, Show)
 type TimeMillisecond = UnixTime
+
+timeMillisecond0 :: UnixTime
+timeMillisecond0 = UnixTime 0 0
 
 fromTimeSecond :: TimeSecond -> Int64
 fromTimeSecond (TimeSecond (Seconds t)) = t

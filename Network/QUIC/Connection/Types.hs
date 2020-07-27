@@ -151,12 +151,12 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 data LossDetection = LossDetection {
     largestAckedPacket           :: Maybe PacketNumber
-  , timeOfLastAckElicitingPacket :: Maybe TimeMillisecond
+  , timeOfLastAckElicitingPacket :: TimeMillisecond
   , lossTime                     :: Maybe TimeMillisecond
   } deriving Show
 
 initialLossDetection :: LossDetection
-initialLossDetection = LossDetection Nothing Nothing Nothing
+initialLossDetection = LossDetection Nothing timeMillisecond0 Nothing
 
 ----------------------------------------------------------------
 
