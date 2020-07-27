@@ -291,17 +291,20 @@ cancelLossDetectionTimer Connection{..} = do
 
 updateLossDetectionTimer :: Connection -> TimeMillisecond -> IO ()
 updateLossDetectionTimer conn@Connection{..} tms = do
-    mgr <- getSystemTimerManager
-    Microseconds us <- getTimeoutInMicrosecond tms
-    if us <= 0 then do
-        connDebugLog "updateLossDetectionTimer: minus"
-        cancelLossDetectionTimer conn
-      else do
-        key <- registerTimeout mgr us (onLossDetectionTimeout conn)
-        mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Just key, oldkey)
-        case mk of
-          Nothing -> return ()
-          Just k -> unregisterTimeout mgr k
+    oldtms <- readIORef timeoutTime
+    when (oldtms /= Just tms) $ do
+        mgr <- getSystemTimerManager
+        Microseconds us <- getTimeoutInMicrosecond tms
+        if us <= 0 then do
+            connDebugLog "updateLossDetectionTimer: minus"
+            cancelLossDetectionTimer conn
+          else do
+            key <- registerTimeout mgr us (onLossDetectionTimeout conn)
+            mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Just key, oldkey)
+            case mk of
+              Nothing -> return ()
+              Just k -> unregisterTimeout mgr k
+            writeIORef timeoutTime $ Just tms
 
 setLossDetectionTimer :: Connection -> IO ()
 setLossDetectionTimer conn@Connection{..} = do
