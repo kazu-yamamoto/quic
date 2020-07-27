@@ -48,9 +48,10 @@ onPacketSent conn@Connection{..} sentPacket = do
     let lvl | lvl0 == RTT0Level = RTT1Level
             | otherwise         = lvl0
     onPacketSentCC conn $ spSentBytes sentPacket
-    modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
-        timeOfLastAckElicitingPacket = Just $ spTimeSent sentPacket
-      }
+    when (spAckEliciting $ spSentPacketI sentPacket) $
+        modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
+            timeOfLastAckElicitingPacket = Just $ spTimeSent sentPacket
+          }
     atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
       let db' = db |> sentPacket
       in  (SentPackets db', ())
