@@ -89,7 +89,7 @@ data RTT = RTT {
   -- | The number of times a PTO has been sent without receiving
   --  an ack.
   , ptoCount :: Int
-  }
+  } deriving Show
 
 -- | The RTT used before an RTT sample is taken.
 kInitialRTT :: Milliseconds
@@ -128,7 +128,7 @@ data CC = CC {
   -- | Records number of bytes acked, and used for incrementing
   --   the congestion window during congestion avoidance.
   , bytesAcked :: Int
-  }
+  } deriving Show
 
 initialCC :: CC
 initialCC = CC {
@@ -146,7 +146,7 @@ data LossDetection = LossDetection {
     largestAckedPacket           :: Maybe PacketNumber
   , timeOfLastAckElicitingPacket :: Maybe TimeMillisecond
   , lossTime                     :: Maybe TimeMillisecond
-  }
+  } deriving Show
 
 initialLossDetection :: LossDetection
 initialLossDetection = LossDetection Nothing Nothing Nothing
