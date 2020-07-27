@@ -180,7 +180,10 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
 
     mx <- findOldest conn lvl (\x -> spPacketNumber (spSentPacketI x) <= largestAckedPacket')
     case mx of
+      -- No gap packet. PTO turn.
       Nothing -> return ()
+      -- There are gap packets which are not declared lost.
+      -- Set lossTime to next.
       Just x  -> do
           let next = spTimeSent x `addMillisecond` lossDelay
           modifyIORef' (lossDetection ! lvl) $ \ld -> ld {
