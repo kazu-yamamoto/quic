@@ -40,7 +40,7 @@ kTimeThreshold x = x + (x .>>. 3) -- 9/8
 
 -- | Timer granularity.
 kGranularity :: Milliseconds
-kGranularity = Milliseconds 1
+kGranularity = Milliseconds 5
 
 onPacketSent :: Connection -> SentPacket -> IO ()
 onPacketSent conn@Connection{..} sentPacket = do
@@ -171,7 +171,7 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
     -- Sec 6.1.2. Time Threshold
     -- max(kTimeThreshold * max(smoothed_rtt, latest_rtt), kGranularity)
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
-    let lossDelay = max lossDelay0 10 -- kGranularity is too small
+    let lossDelay = max lossDelay0 kGranularity
 
     tm <- getPastTimeMillisecond lossDelay
     let predicate ent = spTimeSent ent <= tm
