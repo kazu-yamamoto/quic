@@ -31,7 +31,8 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 setToken :: Connection -> Token -> IO ()
-setToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci { clientInitialToken = token }
+setToken Connection{..} token = atomicModifyIORef'' roleInfo $
+    \ci -> ci { clientInitialToken = token }
 
 getToken :: Connection -> IO Token
 getToken conn@Connection{..}
@@ -48,10 +49,10 @@ getResumptionInfo Connection{..} = resumptionInfo <$> readIORef roleInfo
 
 setRetried :: Connection -> Bool -> IO ()
 setRetried conn@Connection{..} r
-  | isClient conn = modifyIORef' roleInfo $ \ci -> ci {
+  | isClient conn = atomicModifyIORef'' roleInfo $ \ci -> ci {
         resumptionInfo = (resumptionInfo ci) { resumptionRetry = r}
         }
-  | otherwise     = modifyIORef' roleInfo $ \si -> si { askRetry = r }
+  | otherwise     = atomicModifyIORef'' roleInfo $ \si -> si { askRetry = r }
 
 getRetried :: Connection -> IO Bool
 getRetried conn@Connection{..}
@@ -61,19 +62,19 @@ getRetried conn@Connection{..}
 ----------------------------------------------------------------
 
 setResumptionSession :: Connection -> SessionEstablish
-setResumptionSession Connection{..} si sd = modifyIORef' roleInfo $ \ci -> ci {
+setResumptionSession Connection{..} si sd = atomicModifyIORef'' roleInfo $ \ci -> ci {
     resumptionInfo = (resumptionInfo ci) { resumptionSession = Just (si,sd) }
   }
 
 setNewToken :: Connection -> Token -> IO ()
-setNewToken Connection{..} token = modifyIORef' roleInfo $ \ci -> ci {
+setNewToken Connection{..} token = atomicModifyIORef'' roleInfo $ \ci -> ci {
     resumptionInfo = (resumptionInfo ci) { resumptionToken = token }
   }
 
 ----------------------------------------------------------------
 
 setRegister :: Connection -> (CID -> Connection -> IO ()) -> (CID -> IO ()) -> IO ()
-setRegister Connection{..} regisrer unregister = modifyIORef' roleInfo $ \si -> si {
+setRegister Connection{..} regisrer unregister = atomicModifyIORef'' roleInfo $ \si -> si {
     registerCID = regisrer
   , unregisterCID = unregister
   }
@@ -87,9 +88,8 @@ getUnregister Connection{..} = unregisterCID <$> readIORef roleInfo
 ----------------------------------------------------------------
 
 setTokenManager :: Connection -> CT.TokenManager -> IO ()
-setTokenManager Connection{..} mgr = modifyIORef' roleInfo $ \si -> si {
-    tokenManager = mgr
-  }
+setTokenManager Connection{..} mgr = atomicModifyIORef'' roleInfo $
+    \si -> si { tokenManager = mgr }
 
 getTokenManager :: Connection -> IO CT.TokenManager
 getTokenManager Connection{..} = tokenManager <$> readIORef roleInfo
@@ -97,9 +97,8 @@ getTokenManager Connection{..} = tokenManager <$> readIORef roleInfo
 ----------------------------------------------------------------
 
 setMainThreadId :: Connection -> ThreadId -> IO ()
-setMainThreadId Connection{..} tid = modifyIORef' roleInfo $ \si -> si {
-    mainThreadId = tid
-  }
+setMainThreadId Connection{..} tid = atomicModifyIORef'' roleInfo $
+    \si -> si { mainThreadId = tid }
 
 getMainThreadId :: Connection -> IO ThreadId
 getMainThreadId Connection{..} = mainThreadId <$> readIORef roleInfo
@@ -107,9 +106,8 @@ getMainThreadId Connection{..} = mainThreadId <$> readIORef roleInfo
 ----------------------------------------------------------------
 
 setCertificateChain :: Connection -> Maybe CertificateChain -> IO ()
-setCertificateChain Connection{..} mcc = modifyIORef' roleInfo $ \si -> si {
-    certChain = mcc
-  }
+setCertificateChain Connection{..} mcc = atomicModifyIORef'' roleInfo $
+    \si -> si { certChain = mcc }
 
 getCertificateChain :: Connection -> IO (Maybe CertificateChain)
 getCertificateChain Connection{..} = certChain <$> readIORef roleInfo

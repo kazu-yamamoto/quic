@@ -37,7 +37,7 @@ getPeerPacketNumber :: Connection -> IO PacketNumber
 getPeerPacketNumber Connection{..} = readIORef peerPacketNumber
 
 setPeerPacketNumber :: Connection -> PacketNumber -> IO ()
-setPeerPacketNumber Connection{..} n = modifyIORef' peerPacketNumber set
+setPeerPacketNumber Connection{..} n = atomicModifyIORef'' peerPacketNumber set
   where
     set m = max m n
 

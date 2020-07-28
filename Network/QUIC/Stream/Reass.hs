@@ -111,7 +111,7 @@ tryReassemble Stream{..} x@(RxStreamData dat off len False) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     case off0 `compare` off of
       LT -> do
-          modifyIORef' streamReass (push x)
+          atomicModifyIORef'' streamReass (push x)
           return ([], False)
       EQ -> do
           let off1 = off0 + len
@@ -132,7 +132,7 @@ tryReassemble Stream{..} x@(RxStreamData dat off len True) = do
       else case off0 `compare` off of
         LT -> do
             writeIORef streamStateRx si1
-            modifyIORef' streamReass (push x)
+            atomicModifyIORef'' streamReass (push x)
             return ([], False)
         EQ -> do
             let off1 = off0 + len

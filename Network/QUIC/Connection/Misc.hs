@@ -80,7 +80,7 @@ getPeerAuthCIDs :: Connection -> IO AuthCIDs
 getPeerAuthCIDs Connection{..} = readIORef handshakeCIDs
 
 setPeerAuthCIDs :: Connection -> (AuthCIDs -> AuthCIDs) -> IO ()
-setPeerAuthCIDs Connection{..} f = modifyIORef' handshakeCIDs f
+setPeerAuthCIDs Connection{..} f = atomicModifyIORef'' handshakeCIDs f
 
 ----------------------------------------------------------------
 
@@ -162,7 +162,7 @@ readMinIdleTimeout Connection{..} = readIORef minIdleTimeout
 setMinIdleTimeout :: Connection -> Milliseconds -> IO ()
 setMinIdleTimeout Connection{..} ms
   | ms == Milliseconds 0 = return ()
-  | otherwise            = modifyIORef' minIdleTimeout modify
+  | otherwise            = atomicModifyIORef'' minIdleTimeout modify
   where
     modify ms0 = min ms ms0
 
@@ -170,4 +170,4 @@ setMinIdleTimeout Connection{..} ms
 
 setMaxAckDaley :: Connection -> Milliseconds -> IO ()
 setMaxAckDaley Connection{..} delay0 =
-    modifyIORef' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }
+    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }
