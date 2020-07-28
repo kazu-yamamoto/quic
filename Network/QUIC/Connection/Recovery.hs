@@ -336,45 +336,47 @@ setLossDetectionTimer conn@Connection{..} = do
 -- address validation.
 onLossDetectionTimeout :: Connection -> IO ()
 onLossDetectionTimeout conn@Connection{..} = do
-    mtl <- getLossTimeAndSpace conn
-    case mtl of
-      Just (_, lvl) -> do
-          -- Time threshold loss Detection
-          lostPackets <- detectAndRemoveLostPackets conn lvl
-          when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
-          onPacketsLost conn lvl lostPackets
-          setLossDetectionTimer conn
-      Nothing -> do
-          CC{..} <- readTVarIO recoveryCC
-          if bytesInFlight > 0 then do
-              -- PTO. Send new data if available, else retransmit old data.
-              -- If neither is available, send a single PING frame.
-              mx <- getPtoTimeAndSpace conn
-              case mx of
-                Nothing -> connDebugLog "onLossDetectionTimeout: Nothing"
-                Just (_, lvl) -> do
-                    now <- getTimeMillisecond
-                    atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-                        timeOfLastAckElicitingPacket = now
-                      }
-                    putOutput conn $ OutControl lvl [Ping]
-                    putOutput conn $ OutControl lvl [Ping]
-            else do
-              -- Client sends an anti-deadlock packet: Initial is padded
-              -- to earn more anti-amplification credit,
-              -- a Handshake packet proves address ownership.
-              validated <- peerCompletedAddressValidation conn
-              when (validated) $ connDebugLog "onLossDetectionTimeout: RTT1"
-              lvl <- getEncryptionLevel conn
-              now <- getTimeMillisecond
-              atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-                  timeOfLastAckElicitingPacket = now
-                }
-              putOutput conn $ OutControl lvl [Ping]
+    open <- isConnectionOpen conn
+    when open $ do
+        mtl <- getLossTimeAndSpace conn
+        case mtl of
+          Just (_, lvl) -> do
+              -- Time threshold loss Detection
+              lostPackets <- detectAndRemoveLostPackets conn lvl
+              when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
+              onPacketsLost conn lvl lostPackets
+              setLossDetectionTimer conn
+          Nothing -> do
+              CC{..} <- readTVarIO recoveryCC
+              if bytesInFlight > 0 then do
+                  -- PTO. Send new data if available, else retransmit old data.
+                  -- If neither is available, send a single PING frame.
+                  mx <- getPtoTimeAndSpace conn
+                  case mx of
+                    Nothing -> connDebugLog "onLossDetectionTimeout: Nothing"
+                    Just (_, lvl) -> do
+                        now <- getTimeMillisecond
+                        atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
+                            timeOfLastAckElicitingPacket = now
+                          }
+                        putOutput conn $ OutControl lvl [Ping]
+                        putOutput conn $ OutControl lvl [Ping]
+                else do
+                  -- Client sends an anti-deadlock packet: Initial is padded
+                  -- to earn more anti-amplification credit,
+                  -- a Handshake packet proves address ownership.
+                  validated <- peerCompletedAddressValidation conn
+                  when (validated) $ connDebugLog "onLossDetectionTimeout: RTT1"
+                  lvl <- getEncryptionLevel conn
+                  now <- getTimeMillisecond
+                  atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
+                      timeOfLastAckElicitingPacket = now
+                    }
+                  putOutput conn $ OutControl lvl [Ping]
 
-          atomicModifyIORef'' recoveryRTT $ \rtt ->
-            rtt { ptoCount = ptoCount rtt + 1 }
-          setLossDetectionTimer conn
+              atomicModifyIORef'' recoveryRTT $ \rtt ->
+                rtt { ptoCount = ptoCount rtt + 1 }
+              setLossDetectionTimer conn
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
