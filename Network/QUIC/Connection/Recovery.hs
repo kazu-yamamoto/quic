@@ -254,7 +254,7 @@ getPtoTimeAndSpace conn@Connection{..} = do
                 loop ls r
               else do
                   rtt <- readIORef recoveryRTT
-                  let pto = calcPTO rtt l
+                  let pto = backOff (calcPTO rtt l) (ptoCount rtt)
                   let ptoTime = timeOfLastAckElicitingPacket `addMillisecond` pto
                   case r of
                     Nothing -> loop ls $ Just (ptoTime,l)
