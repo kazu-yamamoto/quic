@@ -169,8 +169,30 @@ sendOutput conn send (OutControl lvl frames) = do
 sendOutput conn send (OutHandshake x) = do
     sendCryptoFragments conn send x
 sendOutput conn send (OutRetrans lvl (PlainPacket _ plain0)) = do
-    let frames = filter retransmittable $ plainFrames plain0
+    frames <- adjustForRetransmit conn $ plainFrames plain0
     construct conn lvl frames >>= sendPacket conn send
+
+adjustForRetransmit :: Connection -> [Frame] -> IO [Frame]
+adjustForRetransmit _    [] = return []
+adjustForRetransmit conn (Padding{}:xs) = adjustForRetransmit conn xs
+adjustForRetransmit conn (Ack{}:xs)     = adjustForRetransmit conn xs
+adjustForRetransmit conn (MaxStreamData sid _:xs) = do
+    mstrm <- findStream conn sid
+    case mstrm of
+      Nothing   -> adjustForRetransmit conn xs
+      Just strm -> do
+          newMax <- addRxMaxStreamData strm 0
+          let r = MaxStreamData sid newMax
+          rs <- adjustForRetransmit conn xs
+          return (r : rs)
+adjustForRetransmit conn (MaxData{}:xs) = do
+    newMax <- addRxMaxData conn 0
+    let r = MaxData newMax
+    rs <- adjustForRetransmit conn xs
+    return (r : rs)
+adjustForRetransmit conn (x:xs) = do
+    rs <- adjustForRetransmit conn xs
+    return (x : rs)
 
 sendTxStreamData :: Connection -> SendMany -> TxStreamData -> IO ()
 sendTxStreamData conn send tx@(TxStreamData _ _ len _) = do

@@ -79,8 +79,3 @@ inFlight Ack{}                 = False
 inFlight ConnectionCloseQUIC{} = False
 inFlight ConnectionCloseApp{}  = False
 inFlight _                     = True
-
-retransmittable :: Frame -> Bool
-retransmittable Padding{} = False
-retransmittable Ack{}     = False
-retransmittable _         = True
