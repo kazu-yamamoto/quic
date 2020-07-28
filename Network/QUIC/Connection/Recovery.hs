@@ -68,10 +68,7 @@ onPacketReceived conn = do
 onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Milliseconds -> IO ()
 onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay = do
     atomicModifyIORef'' (lossDetection ! lvl) $ \ld@LossDetection{..} ->
-      let lgstAcked = case largestAckedPacket of
-            Nothing -> largestAcked
-            Just la -> max largestAcked la
-      in ld { largestAckedPacket = Just lgstAcked }
+      ld { largestAckedPacket = max largestAckedPacket largestAcked }
 
     newlyAckedPackets <- releaseByAcks conn lvl acks
 
@@ -166,19 +163,18 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
         }
     RTT{..} <- readIORef recoveryRTT
     LossDetection{..} <- readIORef (lossDetection ! lvl)
-    when (isNothing largestAckedPacket) $ connDebugLog "detectAndRemoveLostPackets: largestAckedPacket: Nothing"
-    let Just largestAckedPacket' = largestAckedPacket
+    when (largestAckedPacket == -1) $ connDebugLog "detectAndRemoveLostPackets: largestAckedPacket: -1"
     -- Sec 6.1.2. Time Threshold
     -- max(kTimeThreshold * max(smoothed_rtt, latest_rtt), kGranularity)
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
     let lossDelay = max lossDelay0 kGranularity
 
     tm <- getPastTimeMillisecond lossDelay
-    let predicate ent = (spPacketNumber (spSentPacketI ent) <= largestAckedPacket' - kPacketThreshold)
-                     || (spPacketNumber (spSentPacketI ent) <= largestAckedPacket' && spTimeSent ent <= tm)
+    let predicate ent = (spPacketNumber (spSentPacketI ent) <= largestAckedPacket - kPacketThreshold)
+                     || (spPacketNumber (spSentPacketI ent) <= largestAckedPacket && spTimeSent ent <= tm)
     lostPackets <- releaseByPredicate conn lvl predicate
 
-    mx <- findOldest conn lvl (\x -> spPacketNumber (spSentPacketI x) <= largestAckedPacket')
+    mx <- findOldest conn lvl (\x -> spPacketNumber (spSentPacketI x) <= largestAckedPacket)
     case mx of
       -- No gap packet. PTO turn.
       Nothing -> return ()
