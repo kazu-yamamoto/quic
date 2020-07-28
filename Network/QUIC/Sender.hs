@@ -30,17 +30,17 @@ sendPacket :: Connection -> SendMany -> [SentPacketI] -> IO ()
 sendPacket _ _ [] = return ()
 sendPacket conn send spktis = do
     maxSiz <- getMaxPacketSize conn
-    now <- getTimeMillisecond
-    (sentPackets, bss) <- loop now maxSiz spktis id id
     waitWindowOpen conn maxSiz
+    (sentPackets, bss) <- loop maxSiz spktis id id
     send bss
     forM_ sentPackets $ \x -> do
         onPacketSent conn x
         qlogSent conn $ spPlainPacket $ spSentPacketI x
   where
-    loop _ _ [] _ _ = error "sendPacket: loop"
-    loop now siz [spkti] build0 build1 = do
+    loop _ [] _ _ = error "sendPacket: loop"
+    loop siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
+        now <- getTimeMillisecond
         let sentBytes = totalLen bss
         let sentPacket = SentPacket {
                 spSentPacketI  = addPadding spkti
@@ -48,8 +48,9 @@ sendPacket conn send spktis = do
               , spSentBytes    = sentBytes
               }
         return (build0 [sentPacket], build1 bss)
-    loop now siz (spkti:ss) build0 build1 = do
+    loop siz (spkti:ss) build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) Nothing
+        now <- getTimeMillisecond
         let sentBytes = totalLen bss
         let sentPacket = SentPacket {
                 spSentPacketI  = spkti
@@ -59,7 +60,7 @@ sendPacket conn send spktis = do
         let build0' = (build0 . (sentPacket :))
             build1' = build1 . (bss ++)
             siz' = siz - sentBytes
-        loop now siz' ss build0' build1'
+        loop siz' ss build0' build1'
 
 addPadding :: SentPacketI -> SentPacketI
 addPadding spi = spi {
