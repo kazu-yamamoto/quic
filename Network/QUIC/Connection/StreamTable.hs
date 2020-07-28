@@ -10,11 +10,10 @@ module Network.QUIC.Connection.StreamTable (
   , getCryptoStream
   ) where
 
-import Data.IORef
-
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
@@ -42,7 +41,7 @@ addStream conn@Connection{..} sid = do
     setTxMaxStreamData strm txMaxStreamData
     let rxMaxStreamData = initialRxMaxStreamData conn sid
     setRxMaxStreamData strm rxMaxStreamData
-    atomicModifyIORef' streamTable $ \tbl -> (insertStream sid strm tbl, ())
+    atomicModifyIORef'' streamTable $ insertStream sid strm
     return strm
 
 initialRxMaxStreamData :: Connection -> StreamId -> Int

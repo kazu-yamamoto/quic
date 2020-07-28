@@ -7,9 +7,8 @@ module Network.QUIC.Connection.Stream (
   , setPeerStreamID
   ) where
 
-import Data.IORef
-
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.Types
 
 getMyNewStreamId :: Connection -> IO StreamId

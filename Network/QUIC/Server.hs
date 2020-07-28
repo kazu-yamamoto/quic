@@ -22,7 +22,6 @@ import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
-import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.OrdPSQ (OrdPSQ)
@@ -76,13 +75,12 @@ lookupConnectionDict ref cid = do
     return $ M.lookup cid tbl
 
 registerConnectionDict :: IORef ConnectionDict -> CID -> Connection -> IO ()
-registerConnectionDict ref cid conn = do
-    atomicModifyIORef' ref $ \(ConnectionDict tbl) ->
-        (ConnectionDict $ M.insert cid conn tbl, ())
+registerConnectionDict ref cid conn = atomicModifyIORef'' ref $
+    \(ConnectionDict tbl) -> ConnectionDict $ M.insert cid conn tbl
 
 unregisterConnectionDict :: IORef ConnectionDict -> CID -> IO ()
-unregisterConnectionDict ref cid = atomicModifyIORef' ref $ \(ConnectionDict tbl) ->
-  (ConnectionDict $ M.delete cid tbl, ())
+unregisterConnectionDict ref cid = atomicModifyIORef'' ref $
+    \(ConnectionDict tbl) -> ConnectionDict $ M.delete cid tbl
 
 ----------------------------------------------------------------
 
@@ -103,13 +101,13 @@ lookupRecvQDict ref dcid = do
       Just (_,q)  -> Just q
 
 insertRecvQDict :: IORef RecvQDict -> CID -> RecvQ -> IO ()
-insertRecvQDict ref dcid q = atomicModifyIORef' ref ins
+insertRecvQDict ref dcid q = atomicModifyIORef'' ref ins
   where
     ins (RecvQDict p qt0) = let qt1 | PSQ.size qt0 <= recvQDictSize = qt0
                                     | otherwise = PSQ.deleteMin qt0
                                 qt2 = PSQ.insert dcid p q qt1
                                 p' = p + 1 -- fixme: overflow
-                            in (RecvQDict p' qt2, ())
+                            in RecvQDict p' qt2
 
 ----------------------------------------------------------------
 

@@ -23,7 +23,6 @@ module Network.QUIC.Stream.Misc (
   ) where
 
 import Control.Concurrent.STM
-import Data.IORef
 
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Types
@@ -41,9 +40,9 @@ isTxStreamClosed Stream{..} = do
     return fin
 
 setTxStreamFin :: Stream -> IO ()
-setTxStreamFin Stream{..} = atomicModifyIORef' streamStateTx set
+setTxStreamFin Stream{..} = atomicModifyIORef'' streamStateTx set
   where
-    set (StreamState off _) = (StreamState off True, ())
+    set (StreamState off _) = StreamState off True
 
 ----------------------------------------------------------------
 
@@ -58,9 +57,9 @@ isRxStreamClosed Stream{..} = do
     return fin
 
 setRxStreamFin :: Stream -> IO ()
-setRxStreamFin Stream{..} = atomicModifyIORef' streamStateRx set
+setRxStreamFin Stream{..} = atomicModifyIORef'' streamStateRx set
   where
-    set (StreamState off _) = (StreamState off True, ())
+    set (StreamState off _) = StreamState off True
 
 ----------------------------------------------------------------
 
@@ -79,13 +78,13 @@ setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
 ----------------------------------------------------------------
 
 addRxStreamData :: Stream -> Int -> IO ()
-addRxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add
+addRxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx add
   where
-    add flow = (flow { flowData = flowData flow + n }, ())
+    add flow = flow { flowData = flowData flow + n }
 
 setRxMaxStreamData :: Stream -> Int -> IO ()
-setRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx
-    $ \flow -> (flow { flowMaxData = n }, ())
+setRxMaxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx
+    $ \flow -> flow { flowMaxData = n }
 
 addRxMaxStreamData :: Stream -> Int -> IO Int
 addRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add

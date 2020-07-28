@@ -13,7 +13,6 @@ module Network.QUIC.Stream.Types (
   ) where
 
 import Control.Concurrent.STM
-import Data.IORef
 
 import Network.QUIC.Imports
 import Network.QUIC.Types

@@ -7,7 +7,6 @@ module Network.QUIC.Run where
 
 import Control.Concurrent
 import qualified Control.Exception as E
-import Data.IORef
 import Data.X509 (CertificateChain)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB

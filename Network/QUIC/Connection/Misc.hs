@@ -28,7 +28,6 @@ module Network.QUIC.Connection.Misc (
 
 import Control.Concurrent
 import qualified Control.Exception as E
-import Data.IORef
 import Network.Socket
 import System.Mem.Weak
 
@@ -135,7 +134,7 @@ exitConnection Connection{..} ue = E.throwTo connThreadId ue
 ----------------------------------------------------------------
 
 addResource :: Connection -> IO () -> IO ()
-addResource Connection{..} f = atomicModifyIORef' connResources $ \fs -> (f >> fs, ())
+addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f >> fs
 
 freeResources :: Connection -> IO ()
 freeResources Connection{..} = do

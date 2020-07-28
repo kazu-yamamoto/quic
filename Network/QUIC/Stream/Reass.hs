@@ -8,7 +8,6 @@ module Network.QUIC.Stream.Reass (
   ) where
 
 import qualified Data.ByteString as BS
-import Data.IORef
 
 import Network.QUIC.Imports
 import Network.QUIC.Logger

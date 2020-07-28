@@ -5,7 +5,6 @@ module Network.QUIC.Handshake where
 import Control.Concurrent
 import qualified Control.Exception as E
 import Data.ByteString
-import Data.IORef
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
@@ -29,8 +28,7 @@ newHndStateRef :: IO (IORef HndState)
 newHndStateRef = newIORef HndState { hsRecvCnt = 0 }
 
 sendCompleted :: IORef HndState -> IO ()
-sendCompleted hsr = atomicModifyIORef' hsr $ \hs ->
-    (hs { hsRecvCnt = 0 }, ())
+sendCompleted hsr = atomicModifyIORef'' hsr $ \hs -> hs { hsRecvCnt = 0 }
 
 recvCompleted :: IORef HndState -> IO Int
 recvCompleted hsr = atomicModifyIORef' hsr $ \hs ->

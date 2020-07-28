@@ -19,7 +19,6 @@ module Network.QUIC.Connection.Crypto (
   ) where
 
 import Control.Concurrent.STM
-import Data.IORef
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Misc

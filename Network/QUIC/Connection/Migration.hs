@@ -24,7 +24,6 @@ module Network.QUIC.Connection.Migration (
   ) where
 
 import Control.Concurrent.STM
-import Data.IORef
 import Data.List (delete, insert)
 
 import Network.QUIC.Connection.Queue
@@ -132,11 +131,11 @@ arrange n db = (db', map cidInfoSeq toDrops)
 
 -- | Peer starts using a new CID.
 setMyCID :: Connection -> CID -> IO ()
-setMyCID Connection{..} ncid = atomicModifyIORef' myCIDDB findSet
+setMyCID Connection{..} ncid = atomicModifyIORef'' myCIDDB findSet
   where
     findSet db = case findByCID ncid (cidInfos db) of
-      Nothing      -> (db, ())
-      Just cidInfo -> (set cidInfo db, ())
+      Nothing      -> db
+      Just cidInfo -> set cidInfo db
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)

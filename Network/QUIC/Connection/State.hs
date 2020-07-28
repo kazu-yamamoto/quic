@@ -26,9 +26,9 @@ module Network.QUIC.Connection.State (
   ) where
 
 import Control.Concurrent.STM
-import Data.IORef
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.Stream
 
 ----------------------------------------------------------------
@@ -130,9 +130,9 @@ getTxMaxData Connection{..} = flowMaxData <$> readTVar flowTx
 ----------------------------------------------------------------
 
 addRxData :: Connection -> Int -> IO ()
-addRxData Connection{..} n = atomicModifyIORef' flowRx add
+addRxData Connection{..} n = atomicModifyIORef'' flowRx add
   where
-    add flow = (flow { flowData = flowData flow + n }, ())
+    add flow = flow { flowData = flowData flow + n }
 
 getRxData :: Connection -> IO Int
 getRxData Connection{..} = flowData <$> readIORef flowRx

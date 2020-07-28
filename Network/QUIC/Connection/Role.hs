@@ -21,10 +21,10 @@ module Network.QUIC.Connection.Role (
 
 import Control.Concurrent
 import qualified Crypto.Token as CT
-import Data.IORef
 import Data.X509 (CertificateChain)
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Types
 

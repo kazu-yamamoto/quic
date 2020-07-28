@@ -13,7 +13,6 @@ module Network.QUIC.Connection.Recovery (
   ) where
 
 import Control.Concurrent.STM
-import Data.IORef
 import Data.Sequence (Seq, (|>), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
 import Data.UnixTime
@@ -49,12 +48,11 @@ onPacketSent conn@Connection{..} sentPacket = do
             | otherwise         = lvl0
     onPacketSentCC conn $ spSentBytes sentPacket
     when (spAckEliciting $ spSentPacketI sentPacket) $
-        atomicModifyIORef' (lossDetection ! lvl) $ \ld -> (ld {
+        atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
             timeOfLastAckElicitingPacket = spTimeSent sentPacket
-          }, ())
-    atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
-      let db' = db |> sentPacket
-      in  (SentPackets db', ())
+          }
+    atomicModifyIORef'' (sentPackets ! lvl) $
+        \(SentPackets db) -> SentPackets (db |> sentPacket)
     setLossDetectionTimer conn
 
 -- fixme
@@ -69,11 +67,11 @@ onPacketReceived conn = do
 
 onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Milliseconds -> IO ()
 onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay = do
-    atomicModifyIORef' (lossDetection ! lvl) $ \ld@LossDetection{..} ->
+    atomicModifyIORef'' (lossDetection ! lvl) $ \ld@LossDetection{..} ->
       let lgstAcked = case largestAckedPacket of
             Nothing -> largestAcked
             Just la -> max largestAcked la
-      in (ld { largestAckedPacket = Just lgstAcked }, ())
+      in ld { largestAckedPacket = Just lgstAcked }
 
     newlyAckedPackets <- releaseByAcks conn lvl acks
 
@@ -108,13 +106,13 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
         --  that is not yet certain that the server has finished
         --  validating the client's address."
         completed <- peerCompletedAddressValidation conn
-        when completed $ atomicModifyIORef' recoveryRTT $ \rtt ->
-          (rtt { ptoCount = 0 }, ())
+        when completed $ atomicModifyIORef'' recoveryRTT $ \rtt ->
+          rtt { ptoCount = 0 }
 
         setLossDetectionTimer conn
 
 updateRTT :: Connection -> EncryptionLevel -> Milliseconds -> Milliseconds -> IO ()
-updateRTT Connection{..} lvl latestRTT0 ackDelay0 = atomicModifyIORef' recoveryRTT $ \rtt@RTT{..} ->
+updateRTT Connection{..} lvl latestRTT0 ackDelay0 = atomicModifyIORef'' recoveryRTT $ \rtt@RTT{..} ->
     -- don't use latestRTT, use latestRTT0 instead
     if latestRTT == Milliseconds 0 then -- first time
         -- Overwriting the initial value with the first sample.
@@ -128,7 +126,7 @@ updateRTT Connection{..} lvl latestRTT0 ackDelay0 = atomicModifyIORef' recoveryR
               , smoothedRTT = latestRTT0
               , rttvar      = latestRTT0 `unsafeShiftR` 1
               }
-        in (rtt', ())
+        in rtt'
       else
         -- minRTT ignores ack delay.
         let minRTT' = min minRTT latestRTT0
@@ -156,15 +154,15 @@ updateRTT Connection{..} lvl latestRTT0 ackDelay0 = atomicModifyIORef' recoveryR
               , smoothedRTT = smoothedRTT'
               , rttvar = rttvar'
               }
-        in (rtt', ())
+        in rtt'
 
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
     lae <- timeOfLastAckElicitingPacket <$> readIORef (lossDetection ! lvl)
     when (lae == timeMillisecond0) $ connDebugLog "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: 0"
-    atomicModifyIORef' (lossDetection ! lvl) $ \ld -> (ld {
+    atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
           lossTime = Nothing
-        }, ())
+        }
     RTT{..} <- readIORef recoveryRTT
     LossDetection{..} <- readIORef (lossDetection ! lvl)
     when (isNothing largestAckedPacket) $ connDebugLog "detectAndRemoveLostPackets: largestAckedPacket: Nothing"
@@ -187,9 +185,9 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
       -- Set lossTime to next.
       Just x  -> do
           let next = spTimeSent x `addMillisecond` lossDelay
-          atomicModifyIORef' (lossDetection ! lvl) $ \ld -> (ld {
+          atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
                 lossTime = Just next
-              }, ())
+              }
 
     return lostPackets
 
@@ -355,9 +353,9 @@ onLossDetectionTimeout conn@Connection{..} = do
                 Nothing -> connDebugLog "onLossDetectionTimeout: Nothing"
                 Just (_, lvl) -> do
                     now <- getTimeMillisecond
-                    atomicModifyIORef' (lossDetection ! lvl) $ \ld -> (ld {
+                    atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
                         timeOfLastAckElicitingPacket = now
-                      }, ())
+                      }
                     putOutput conn $ OutControl lvl [Ping]
             else do
               -- Client sends an anti-deadlock packet: Initial is padded
@@ -367,13 +365,13 @@ onLossDetectionTimeout conn@Connection{..} = do
               when (validated) $ connDebugLog "onLossDetectionTimeout: RTT1"
               lvl <- getEncryptionLevel conn
               now <- getTimeMillisecond
-              atomicModifyIORef' (lossDetection ! lvl) $ \ld -> (ld {
+              atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
                   timeOfLastAckElicitingPacket = now
-                }, ())
+                }
               putOutput conn $ OutControl lvl [Ping]
 
-          atomicModifyIORef' recoveryRTT $ \rtt ->
-            (rtt { ptoCount = ptoCount rtt + 1 }, ())
+          atomicModifyIORef'' recoveryRTT $ \rtt ->
+            rtt { ptoCount = ptoCount rtt + 1 }
           setLossDetectionTimer conn
 
 ----------------------------------------------------------------
@@ -517,8 +515,7 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     decreaseBytesInFlight conn clearedPackets
     -- Reset the loss detection and PTO timer
     writeIORef (lossDetection ! lvl) initialLossDetection
-    atomicModifyIORef' recoveryRTT $ \rtt ->
-      (rtt { ptoCount = 0 }, ())
+    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     setLossDetectionTimer conn
 
 ----------------------------------------------------------------
@@ -557,8 +554,7 @@ releaseByRetry conn@Connection{..} = do
     packets <- releaseByClear conn InitialLevel
     decreaseBytesInFlight conn packets
     writeIORef (lossDetection ! InitialLevel) initialLossDetection
-    atomicModifyIORef' recoveryRTT $ \rtt ->
-      (rtt { ptoCount = 0 }, ())
+    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     return (spPlainPacket . spSentPacketI <$> packets)
 
 ----------------------------------------------------------------

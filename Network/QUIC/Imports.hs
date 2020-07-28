@@ -7,6 +7,7 @@ module Network.QUIC.Imports (
   , module Control.Monad
   , module Data.Bits
   , module Data.Foldable
+  , module Data.IORef
   , module Data.Int
   , module Data.Monoid
   , module Data.Ord
@@ -18,18 +19,20 @@ module Network.QUIC.Imports (
   , module Network.ByteOrder
   , module Network.QUIC.Utils
   , (.<<.), (.>>.)
+  , atomicModifyIORef''
   ) where
 
 import Control.Applicative
 import Control.Monad
+import Data.Array
+import Data.Array.IO
 import Data.Bits
 import Data.ByteString.Builder (Builder)
 import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short.Internal (ShortByteString(..))
 import Data.Foldable
+import Data.IORef
 import Data.Int
-import Data.Array
-import Data.Array.IO
 import Data.Maybe
 import Data.Monoid
 import Data.Ord
@@ -49,3 +52,6 @@ infixl 8 .<<.
 infixl 8 .>>.
 (.>>.) :: Bits a => a -> Int -> a
 (.>>.) = unsafeShiftR
+
+atomicModifyIORef'' :: IORef a -> (a -> a) -> IO ()
+atomicModifyIORef'' ref f = atomicModifyIORef' ref $ \x -> (f x, ())

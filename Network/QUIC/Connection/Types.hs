@@ -8,7 +8,6 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
-import Data.IORef
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Data.Set (Set)
