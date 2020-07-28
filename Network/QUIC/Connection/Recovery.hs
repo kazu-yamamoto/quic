@@ -358,6 +358,7 @@ onLossDetectionTimeout conn@Connection{..} = do
                         timeOfLastAckElicitingPacket = now
                       }
                     putOutput conn $ OutControl lvl [Ping]
+                    putOutput conn $ OutControl lvl [Ping]
             else do
               -- Client sends an anti-deadlock packet: Initial is padded
               -- to earn more anti-amplification credit,
