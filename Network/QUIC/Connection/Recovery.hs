@@ -66,48 +66,52 @@ onPacketReceived conn = do
   when serverIsAtAntiAmplificationLimit $ setLossDetectionTimer conn
 
 onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Milliseconds -> IO ()
-onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay = do
-    atomicModifyIORef'' (lossDetection ! lvl) $ \ld@LossDetection{..} ->
-      ld { largestAckedPacket = max largestAckedPacket largestAcked }
-
-    newlyAckedPackets <- releaseByAcks conn lvl acks
-
-    case Seq.viewr newlyAckedPackets of
+onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
+    changed <- atomicModifyIORef' (lossDetection ! lvl) update
+    when changed $ releaseByAcks conn lvl ackInfo >>= process
+  where
+    update ld@LossDetection{..} = (ld', changed)
+      where
+        ld' = ld { largestAckedPacket = max largestAckedPacket largestAcked
+                 , previousAckInfo = ackInfo
+                 }
+        changed = previousAckInfo /= ackInfo
+    process newlyAckedPackets = case Seq.viewr newlyAckedPackets of
       EmptyR -> return ()
       _ :> lastPkt -> do
-        -- If the largest acknowledged is newly acked and
-        -- at least one ack-eliciting was newly acked, update the RTT.
-        when (spPacketNumber (spSentPacketI lastPkt) == largestAcked
-           && any (spAckEliciting . spSentPacketI) newlyAckedPackets) $ do
-            rtt <- getElapsedTimeMillisecond $ spTimeSent lastPkt
-            let latestRtt = max rtt kGranularity
-            updateRTT conn lvl latestRtt ackDelay
+          -- If the largest acknowledged is newly acked and
+          -- at least one ack-eliciting was newly acked, update the RTT.
+          when (spPacketNumber (spSentPacketI lastPkt) == largestAcked
+             && any (spAckEliciting . spSentPacketI) newlyAckedPackets) $ do
+              rtt <- getElapsedTimeMillisecond $ spTimeSent lastPkt
+              let latestRtt = max rtt kGranularity
+              updateRTT conn lvl latestRtt ackDelay
 
-        {- fimxe
-        -- Process ECN information if present.
-        if (ACK frame contains ECN information):
-           ProcessECN(ack, lvl)
-        -}
+          {- fimxe
+          -- Process ECN information if present.
+          if (ACK frame contains ECN information):
+             ProcessECN(ack, lvl)
+          -}
 
-        lostPackets <- detectAndRemoveLostPackets conn lvl
-        onPacketsLost conn lvl lostPackets
-        retransmit conn lvl lostPackets
+          lostPackets <- detectAndRemoveLostPackets conn lvl
+          onPacketsLost conn lvl lostPackets
+          retransmit conn lvl lostPackets
 
-        onPacketsAcked conn newlyAckedPackets
+          onPacketsAcked conn newlyAckedPackets
 
-        -- Sec 6.2.1. Computing PTO
-        -- "The PTO backoff factor is reset when an acknowledgement is
-        --  received, except in the following case. A server might
-        --  take longer to respond to packets during the handshake
-        --  than otherwise. To protect such a server from repeated
-        --  client probes, the PTO backoff is not reset at a client
-        --  that is not yet certain that the server has finished
-        --  validating the client's address."
-        completed <- peerCompletedAddressValidation conn
-        when completed $ atomicModifyIORef'' recoveryRTT $ \rtt ->
-          rtt { ptoCount = 0 }
+          -- Sec 6.2.1. Computing PTO
+          -- "The PTO backoff factor is reset when an acknowledgement is
+          --  received, except in the following case. A server might
+          --  take longer to respond to packets during the handshake
+          --  than otherwise. To protect such a server from repeated
+          --  client probes, the PTO backoff is not reset at a client
+          --  that is not yet certain that the server has finished
+          --  validating the client's address."
+          completed <- peerCompletedAddressValidation conn
+          when completed $ atomicModifyIORef'' recoveryRTT $ \rtt ->
+            rtt { ptoCount = 0 }
 
-        setLossDetectionTimer conn
+          setLossDetectionTimer conn
 
 updateRTT :: Connection -> EncryptionLevel -> Milliseconds -> Milliseconds -> IO ()
 updateRTT Connection{..} lvl latestRTT0 ackDelay0 = atomicModifyIORef'' recoveryRTT $ \rtt@RTT{..} ->

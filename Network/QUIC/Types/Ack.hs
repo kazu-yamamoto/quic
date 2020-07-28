@@ -10,6 +10,9 @@ type Gap   = Int
 data AckInfo = AckInfo PacketNumber Range [(Gap,Range)]
              deriving (Eq, Show)
 
+ackInfo0 :: AckInfo
+ackInfo0 = AckInfo (-1) 0 []
+
 -- |
 -- >>> toAckInfo [9]
 -- AckInfo 9 0 []
