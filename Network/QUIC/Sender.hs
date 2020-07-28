@@ -168,8 +168,7 @@ sendOutput conn send (OutControl lvl frames) = do
     construct conn lvl frames >>= sendPacket conn send
 sendOutput conn send (OutHandshake x) = do
     sendCryptoFragments conn send x
-sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
-    let lvl = packetEncryptionLevel hdr0
+sendOutput conn send (OutRetrans lvl (PlainPacket _ plain0)) = do
     let frames = filter retransmittable $ plainFrames plain0
     construct conn lvl frames >>= sendPacket conn send
 

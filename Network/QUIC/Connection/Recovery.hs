@@ -506,7 +506,7 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
     -- fixme: converting RTT0 to Short
     mapM_ put $ Seq.filter (spAckEliciting . spSentPacketI) lostPackets
   where
-    put spkt = putOutput conn $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
+    put spkt = putOutput conn $ OutRetrans lvl $ spPlainPacket $ spSentPacketI spkt
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do

@@ -447,7 +447,7 @@ data   Crypto = InpHandshake EncryptionLevel ByteString deriving Show
 
 data Output = OutControl   EncryptionLevel [Frame]
             | OutHandshake [(EncryptionLevel,ByteString)]
-            | OutRetrans   PlainPacket
+            | OutRetrans   EncryptionLevel PlainPacket
             deriving Show
 
 type InputQ  = TQueue Input

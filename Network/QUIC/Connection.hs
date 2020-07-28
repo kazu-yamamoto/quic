@@ -119,7 +119,6 @@ module Network.QUIC.Connection (
   , takeOutputSTM
   , tryPeekOutput
   , putOutput
-  , putOutputPP
   , takeSendStreamQSTM
   , readMigrationQ
   , writeMigrationQ
