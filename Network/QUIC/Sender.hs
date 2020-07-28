@@ -32,10 +32,16 @@ sendPacket conn send spktis = do
     maxSiz <- getMaxPacketSize conn
     waitWindowOpen conn maxSiz
     (sentPackets, bss) <- loop maxSiz spktis id id
-    send bss
+    -- w <- getRandomOneByte
+    -- let dropPacket = (w `mod` 20) == 0
+    let dropPacket = False
+    if dropPacket then
+        putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
+      else
+        send bss
     forM_ sentPackets $ \x -> do
         onPacketSent conn x
-        qlogSent conn $ spPlainPacket $ spSentPacketI x
+        unless dropPacket $ qlogSent conn $ spPlainPacket $ spSentPacketI x
   where
     loop _ [] _ _ = error "sendPacket: loop"
     loop siz [spkti] build0 build1 = do
