@@ -390,7 +390,7 @@ kInitialWindow pktSiz = min 14720 (10 * pktSiz)
 kMinimumWindow :: Connection -> IO Int
 kMinimumWindow Connection{..} = do
     siz <- readIORef maxPacketSize
-    return (siz .<<. 1 )
+    return (siz .<<. 3) -- 2 is not good enough
 
 -- | Reduction in congestion window when a new loss event is detected.
 kLossReductionFactor :: Int -> Int
