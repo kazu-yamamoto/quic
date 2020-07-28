@@ -14,9 +14,6 @@ module Network.QUIC.Packet.Header (
   , retryPacketType
   ) where
 
-import Crypto.Random (getRandomBytes)
-import qualified Data.ByteString as BS
-
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -89,9 +86,6 @@ retryPacketType = do
     r <- getRandomOneByte
     let flags = 0b11110000 .|. (r .&. 0b00001111)
     return $ Flags flags
-
-getRandomOneByte :: IO Word8
-getRandomOneByte = BS.head <$> getRandomBytes 1
 
 versionNegotiationPacketType :: IO (Flags Raw)
 versionNegotiationPacketType = do
