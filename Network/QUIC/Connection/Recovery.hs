@@ -94,6 +94,7 @@ onAckReceived conn@Connection{..} lvl acks@(AckInfo largestAcked _ _) ackDelay =
 
         lostPackets <- detectAndRemoveLostPackets conn lvl
         onPacketsLost conn lvl lostPackets
+        retransmit conn lvl lostPackets
 
         onPacketsAcked conn newlyAckedPackets
 
@@ -345,6 +346,7 @@ onLossDetectionTimeout conn@Connection{..} = do
               lostPackets <- detectAndRemoveLostPackets conn lvl
               when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
               onPacketsLost conn lvl lostPackets
+              retransmit conn lvl lostPackets
               setLossDetectionTimer conn
           Nothing -> do
               CC{..} <- readTVarIO recoveryCC
@@ -506,7 +508,9 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
             congestionWindow = minWindow
           , bytesAcked = 0
           }
-    -- fixme: converting RTT0 to Short
+
+retransmit :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
+retransmit conn lvl lostPackets =
     mapM_ put $ Seq.filter (spAckEliciting . spSentPacketI) lostPackets
   where
     put spkt = putOutput conn $ OutRetrans lvl $ spPlainPacket $ spSentPacketI spkt
