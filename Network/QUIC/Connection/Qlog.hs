@@ -4,6 +4,7 @@ module Network.QUIC.Connection.Qlog where
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Qlog
+import Network.QUIC.Types
 
 qlogReceived :: Qlog a => Connection -> a -> IO ()
 qlogReceived Connection{..} pkt = connQLog $ QReceived $ qlog pkt
@@ -22,3 +23,6 @@ qlogSentRetry Connection{..} = connQLog QSentRetry
 
 qlogMetricsUpdated :: Qlog a => Connection -> a -> IO ()
 qlogMetricsUpdated Connection{..} m = connQLog $ QMetricsUpdated $ qlog m
+
+qlogPacketLost :: Connection -> SentPacket -> IO ()
+qlogPacketLost Connection{..} spkt = connQLog $ QPacketLost $ qlog spkt

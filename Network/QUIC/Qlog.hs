@@ -31,6 +31,14 @@ instance Qlog CryptPacket where
 instance Qlog PlainPacket where
     qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"}}"
 
+instance Qlog SentPacket where
+    qlog (SentPacket SentPacketI{..} _ _) =
+        "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\"" <>
+        ",\"packet_number\":" <> sw spPacketNumber <>
+        "}"
+      where
+        PlainPacket hdr _ = spPlainPacket
+
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"packet_type\":\"stateless_reset\",\"header\":{\"packet_number\":\"\"}}"
 
@@ -148,6 +156,7 @@ data QlogMsg = QRecvInitial
              | QReceived LogStr
              | QDropped LogStr
              | QMetricsUpdated LogStr
+             | QPacketLost LogStr
 
 toLogStrTime :: QlogMsg -> Milliseconds -> LogStr
 toLogStrTime QRecvInitial _ =
@@ -162,6 +171,8 @@ toLogStrTime (QDropped msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_dropped\","  <> msg <> "],\n"
 toLogStrTime (QMetricsUpdated msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"metrics_updated\","  <> msg <> "],\n"
+toLogStrTime (QPacketLost msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"recovery\",\"packet_lost\","  <> msg <> "],\n"
 
 ----------------------------------------------------------------
 
