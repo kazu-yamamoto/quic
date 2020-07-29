@@ -124,11 +124,30 @@ chop xxs@(x:xs) = frst : rest
 
 ----------------------------------------------------------------
 
+instance Qlog RTT where
+    qlog RTT{..} = "{\"min_rtt\":"      <> sw minRTT <>
+                   ",\"smoothed_rtt\":" <> sw smoothedRTT <>
+                   ",\"latest_rtt\":"   <> sw latestRTT <>
+                   ",\"rtt_variance\":" <> sw rttvar <>
+                   ",\"pto_count\":"    <> sw ptoCount <>
+                   "}"
+instance Qlog CC where
+    qlog CC{..} = "{\"bytes_in_flight\":"   <> sw bytesInFlight <>
+                  ",\"congestion_window\":" <> sw congestionWindow <>
+                  ",\"ssthresh\":"          <> ssthresh' <>
+                  "}"
+      where
+        ssthresh' | ssthresh == maxBound = "-1"
+                  | otherwise            = sw ssthresh
+
+----------------------------------------------------------------
+
 data QlogMsg = QRecvInitial
              | QSentRetry
              | QSent LogStr
              | QReceived LogStr
              | QDropped LogStr
+             | QMetricsUpdated LogStr
 
 toLogStrTime :: QlogMsg -> Milliseconds -> LogStr
 toLogStrTime QRecvInitial _ =
@@ -141,6 +160,8 @@ toLogStrTime (QSent msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_sent\","     <> msg <> "],\n"
 toLogStrTime (QDropped msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_dropped\","  <> msg <> "],\n"
+toLogStrTime (QMetricsUpdated msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"recovery\",\"metrics_updated\","  <> msg <> "],\n"
 
 ----------------------------------------------------------------
 

@@ -20,3 +20,5 @@ qlogRecvInitial Connection{..} = connQLog QRecvInitial
 qlogSentRetry :: Connection -> IO ()
 qlogSentRetry Connection{..} = connQLog QSentRetry
 
+qlogMetricsUpdated :: Qlog a => Connection -> a -> IO ()
+qlogMetricsUpdated Connection{..} m = connQLog $ QMetricsUpdated $ qlog m

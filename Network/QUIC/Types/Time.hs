@@ -28,8 +28,11 @@ import Network.QUIC.Imports
 ----------------------------------------------------------------
 
 newtype Seconds = Seconds Int64 deriving (Eq, Ord, Show)
-newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Show, Num, Bits)
+newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Num, Bits)
 newtype Microseconds = Microseconds Int deriving (Eq, Ord, Show)
+
+instance Show Milliseconds where
+  show (Milliseconds n) = show n
 
 {-# INLINE milliToMicro #-}
 milliToMicro :: Milliseconds -> Microseconds
