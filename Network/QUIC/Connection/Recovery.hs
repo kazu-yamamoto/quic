@@ -46,7 +46,7 @@ onPacketSent conn@Connection{..} sentPacket = do
     let lvl0 = spEncryptionLevel $ spSentPacketI sentPacket
     let lvl | lvl0 == RTT0Level = RTT1Level
             | otherwise         = lvl0
-    onPacketSentCC conn $ spSentBytes sentPacket
+    onPacketSentCC conn sentPacket
     when (spAckEliciting $ spSentPacketI sentPacket) $
         atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
             timeOfLastAckElicitingPacket = spTimeSent sentPacket
@@ -319,7 +319,7 @@ setLossDetectionTimer conn@Connection{..} = do
             else do
               CC{..} <- readTVarIO recoveryCC
               validated <- peerCompletedAddressValidation conn
-              if bytesInFlight <= 0 && validated then
+              if numOfAckEliciting <= 0 && validated then
                   -- There is nothing to detect lost, so no timer is set.
                   -- However, the client needs to arm the timer if the
                   -- server might be blocked by the anti-amplification limit.
@@ -402,11 +402,19 @@ kLossReductionFactor = (.>>. 1) -- 0.5
 kPersistentCongestionThreshold :: Milliseconds -> Milliseconds
 kPersistentCongestionThreshold (Milliseconds ms) = Milliseconds (3 * ms)
 
-onPacketSentCC :: Connection -> Int -> IO ()
-onPacketSentCC Connection{..} bytesSent = atomically $
+onPacketSentCC :: Connection -> SentPacket -> IO ()
+onPacketSentCC Connection{..} sentPacket = atomically $
     modifyTVar' recoveryCC $ \cc -> cc {
         bytesInFlight = bytesInFlight cc + bytesSent
+      , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
       }
+  where
+   bytesSent = spSentBytes sentPacket
+
+countAckEli :: SentPacket -> Int
+countAckEli sentPacket
+  | spAckEliciting (spSentPacketI sentPacket) = 1
+  | otherwise                                 = 0
 
 inCongestionRecovery :: TimeMillisecond -> Maybe TimeMillisecond -> Bool
 inCongestionRecovery _ Nothing = False -- checkme
@@ -422,15 +430,17 @@ onPacketsAcked Connection{..} ackedPackets = do
          , congestionWindow = congestionWindow'
          , bytesAcked = bytesAcked'
          , ccMode = ccMode'
+         , numOfAckEliciting = numOfAckEliciting'
          }
       where
-        (bytesInFlight',congestionWindow',bytesAcked',ccMode') =
-              foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked,ccMode) ackedPackets
-        (bytes,cwin,acked,_) .+ SentPacket{..} = (bytes',cwin',acked',mode')
+        (bytesInFlight',congestionWindow',bytesAcked',ccMode',numOfAckEliciting') =
+              foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked,ccMode,numOfAckEliciting) ackedPackets
+        (bytes,cwin,acked,_,cnt) .+ sp@SentPacket{..} = (bytes',cwin',acked',mode',cnt')
           where
             isRecovery = inCongestionRecovery spTimeSent congestionRecoveryStartTime
             bytes' = bytes - spSentBytes
             ackedA = acked + spSentBytes
+            cnt' = cnt - countAckEli sp
             (cwin',acked',mode')
               -- Do not increase congestion window in recovery period.
               | isRecovery      = (cwin, acked, Recovery)
@@ -484,18 +494,22 @@ inPersistentCongestion Connection{..} lvl lostPackets' lstPkt =
               duration = end `diffUnixTime ` beg
           return (duration >= threshold)
 
-decreaseBytesInFlight :: Connection -> Seq SentPacket -> IO ()
-decreaseBytesInFlight Connection{..} packets = do
+decreaseCC :: Connection -> Seq SentPacket -> IO ()
+decreaseCC Connection{..} packets = do
     let sentBytes = sum (spSentBytes <$> packets)
+        num = sum (countAckEli <$> packets)
     atomically $ modifyTVar' recoveryCC $ \cc ->
-      cc { bytesInFlight = bytesInFlight cc - sentBytes }
+      cc {
+        bytesInFlight = bytesInFlight cc - sentBytes
+      , numOfAckEliciting = numOfAckEliciting cc - num
+      }
 
 onPacketsLost :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
   lostPackets' :> lastPkt -> do
     -- Remove lost packets from bytesInFlight.
-    decreaseBytesInFlight conn lostPackets
+    decreaseCC conn lostPackets
     onNewCongestionEvent conn $ spTimeSent lastPkt
 
     -- Collapse congestion window if persistent congestion
@@ -519,7 +533,7 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     clearPeerPacketNumbers conn lvl
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- releaseByClear conn lvl
-    decreaseBytesInFlight conn clearedPackets
+    decreaseCC conn clearedPackets
     -- Reset the loss detection and PTO timer
     writeIORef (lossDetection ! lvl) initialLossDetection
     atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
@@ -559,7 +573,7 @@ releaseByClear Connection{..} lvl = do
 releaseByRetry :: Connection -> IO (Seq PlainPacket)
 releaseByRetry conn@Connection{..} = do
     packets <- releaseByClear conn InitialLevel
-    decreaseBytesInFlight conn packets
+    decreaseCC conn packets
     writeIORef (lossDetection ! InitialLevel) initialLossDetection
     atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     return (spPlainPacket . spSentPacketI <$> packets)

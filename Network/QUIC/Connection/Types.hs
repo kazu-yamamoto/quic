@@ -132,6 +132,7 @@ data CC = CC {
   -- | Records number of bytes acked, and used for incrementing
   --   the congestion window during congestion avoidance.
   , bytesAcked :: Int
+  , numOfAckEliciting :: Int
   , ccMode :: CCMode
   } deriving Show
 
@@ -142,6 +143,7 @@ initialCC = CC {
   , congestionRecoveryStartTime = Nothing
   , ssthresh = maxBound
   , bytesAcked = 0
+  , numOfAckEliciting = 0
   , ccMode = SlowStart
   }
 
