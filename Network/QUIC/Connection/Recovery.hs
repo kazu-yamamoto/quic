@@ -95,7 +95,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
 
           lostPackets <- detectAndRemoveLostPackets conn lvl
           onPacketsLost conn lvl lostPackets
-          retransmit conn lvl lostPackets
+          retransmit conn lostPackets
 
           onPacketsAcked conn newlyAckedPackets
 
@@ -346,7 +346,7 @@ onLossDetectionTimeout conn@Connection{..} = do
               lostPackets <- detectAndRemoveLostPackets conn lvl
               when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
               onPacketsLost conn lvl lostPackets
-              retransmit conn lvl lostPackets
+              retransmit conn lostPackets
               setLossDetectionTimer conn
           Nothing -> do
               CC{..} <- readTVarIO recoveryCC
@@ -509,11 +509,11 @@ onPacketsLost conn@Connection{..} lvl lostPackets = case Seq.viewr lostPackets o
           , bytesAcked = 0
           }
 
-retransmit :: Connection -> EncryptionLevel -> Seq SentPacket -> IO ()
-retransmit conn lvl lostPackets =
+retransmit :: Connection -> Seq SentPacket -> IO ()
+retransmit conn lostPackets =
     mapM_ put $ Seq.filter (spAckEliciting . spSentPacketI) lostPackets
   where
-    put spkt = putOutput conn $ OutRetrans lvl $ spPlainPacket $ spSentPacketI spkt
+    put spkt = putOutput conn $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do

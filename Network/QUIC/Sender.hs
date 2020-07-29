@@ -174,14 +174,21 @@ sendOutput conn send (OutControl lvl frames) = do
     construct conn lvl frames >>= sendPacket conn send
 sendOutput conn send (OutHandshake x) = do
     sendCryptoFragments conn send x
-sendOutput conn send (OutRetrans lvl (PlainPacket _ plain0)) = do
+sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
+    let lvl0 = packetEncryptionLevel hdr0
+    let lvl | lvl0 == RTT0Level = RTT1Level
+            | otherwise         = lvl0
     frames <- adjustForRetransmit conn $ plainFrames plain0
-    construct conn lvl frames >>= sendPacket conn send
+    -- Ping coems here because it is ack-eliciting.
+    -- But it results in null frames.
+    unless (null frames) $
+        construct conn lvl frames >>= sendPacket conn send
 
 adjustForRetransmit :: Connection -> [Frame] -> IO [Frame]
 adjustForRetransmit _    [] = return []
 adjustForRetransmit conn (Padding{}:xs) = adjustForRetransmit conn xs
 adjustForRetransmit conn (Ack{}:xs)     = adjustForRetransmit conn xs
+adjustForRetransmit conn (Ping{}:xs)    = adjustForRetransmit conn xs
 adjustForRetransmit conn (MaxStreamData sid _:xs) = do
     mstrm <- findStream conn sid
     case mstrm of
