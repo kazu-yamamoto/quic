@@ -295,9 +295,8 @@ updateLossDetectionTimer conn@Connection{..} tms = do
         mgr <- getSystemTimerManager
         Microseconds us <- getTimeoutInMicrosecond tms
         if us <= 0 then do
-            -- Do nothing. Let PTO expire so that PING is sent
-            -- and timeOfLastAckElicitingPacket is updated.
-            return ()
+            connDebugLog "updateLossDetectionTimer: minus"
+            cancelLossDetectionTimer conn
           else do
             key <- registerTimeout mgr us (onLossDetectionTimeout conn)
             mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Just key, oldkey)
