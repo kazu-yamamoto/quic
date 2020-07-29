@@ -72,6 +72,7 @@ library
                        Network.QUIC.Types.Integer
                        Network.QUIC.Types.Packet
                        Network.QUIC.Types.Queue
+                       Network.QUIC.Types.Recovery
                        Network.QUIC.Types.Resumption
                        Network.QUIC.Types.Time
                        Network.QUIC.Types.UserError

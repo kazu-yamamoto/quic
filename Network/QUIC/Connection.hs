@@ -8,12 +8,10 @@ module Network.QUIC.Connection (
   , connDebugLog
   , connQLog
   -- * Packet numbers
-  , PeerPacketNumbers
   , setPacketNumber
   , getPacketNumber
   , setPeerPacketNumber
   , getPeerPacketNumber
-  , emptyPeerPacketNumbers
   , getPeerPacketNumbers
   , addPeerPacketNumbers
   , clearPeerPacketNumbers
@@ -161,8 +159,6 @@ module Network.QUIC.Connection (
   , Input(..)
   , Crypto(..)
   , Output(..)
-  , SentPacketI(..)
-  , SentPacket(..)
   ) where
 
 import Network.QUIC.Connection.Crypto

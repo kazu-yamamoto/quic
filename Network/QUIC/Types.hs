@@ -12,6 +12,7 @@ module Network.QUIC.Types (
   , module Network.QUIC.Types.Integer
   , module Network.QUIC.Types.Packet
   , module Network.QUIC.Types.Queue
+  , module Network.QUIC.Types.Recovery
   , module Network.QUIC.Types.Resumption
   , module Network.QUIC.Types.Time
   , module Network.QUIC.Types.UserError
@@ -26,6 +27,7 @@ import Network.QUIC.Types.Frame
 import Network.QUIC.Types.Integer
 import Network.QUIC.Types.Packet
 import Network.QUIC.Types.Queue
+import Network.QUIC.Types.Recovery
 import Network.QUIC.Types.Resumption
 import Network.QUIC.Types.Time
 import Network.QUIC.Types.UserError
