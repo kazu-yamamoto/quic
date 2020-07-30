@@ -54,15 +54,15 @@ receiver conn recv = handleLog logAction $ do
 
 processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
 processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
-    let level = packetEncryptionLevel hdr
-    decryptable <- checkEncryptionLevel conn level cpkt
+    let lvl = packetEncryptionLevel hdr
+    decryptable <- checkEncryptionLevel conn lvl cpkt
     when decryptable $ do
-        when (isClient conn && level == InitialLevel) $ do
+        when (isClient conn && lvl == InitialLevel) $ do
             peercid <- getPeerCID conn
             let newPeerCID = headerPeerCID hdr
             when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
             setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
-        when (isServer conn && level == HandshakeLevel) $ do
+        when (isServer conn && lvl == HandshakeLevel) $ do
             dropSecrets conn InitialLevel
             onPacketNumberSpaceDiscarded conn InitialLevel
         onPacketReceived conn
@@ -70,17 +70,17 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
 
 processCryptPacket :: Connection -> Header -> Crypt -> IO ()
 processCryptPacket conn hdr crypt = do
-    let level = packetEncryptionLevel hdr
-    mplain <- decryptCrypt conn crypt level
+    let lvl = packetEncryptionLevel hdr
+    mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@(Plain _ pn frames) -> do
           -- For Ping, record PPN first, then send an ACK.
-          addPeerPacketNumbers conn level pn
-          when (level == RTT1Level) $ setPeerPacketNumber conn pn
+          addPeerPacketNumbers conn lvl pn
+          when (lvl == RTT1Level) $ setPeerPacketNumber conn pn
           unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain
-          mapM_ (processFrame conn level) frames
-          when (any ackEliciting frames && level == RTT1Level) $
+          mapM_ (processFrame conn lvl) frames
+          when (any ackEliciting frames && lvl == RTT1Level) $
               delayedAck conn
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
@@ -91,7 +91,7 @@ processCryptPacket conn hdr crypt = do
               E.throwTo (connThreadId conn) ConnectionIsReset
             else do
               qlogDropped conn hdr
-              connDebugLog conn $ "Cannot decrypt: " <> bhow level
+              connDebugLog conn $ "Cannot decrypt: " <> bhow lvl
               -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
