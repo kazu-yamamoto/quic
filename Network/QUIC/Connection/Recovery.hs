@@ -429,8 +429,12 @@ inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
 onPacketsAcked conn@Connection{..} ackedPackets = do
     maxPktSiz <- readIORef maxPacketSize
+    oldcc <- readTVarIO recoveryCC
     atomically $ modifyTVar' recoveryCC $ modify maxPktSiz
-    readTVarIO recoveryCC >>= qlogMetricsUpdated conn
+    newcc <- readTVarIO recoveryCC
+    qlogMetricsUpdated conn newcc
+    when (ccMode oldcc /= ccMode newcc) $
+      qlogContestionStateUpdated conn $ ccMode newcc
   where
     modify maxPktSiz cc@CC{..} = cc {
            bytesInFlight = bytesInFlight'

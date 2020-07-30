@@ -148,6 +148,9 @@ instance Qlog CC where
         ssthresh' | ssthresh == maxBound = "-1"
                   | otherwise            = sw ssthresh
 
+instance Qlog CCMode where
+    qlog mode = "{\"new\":\"" <> sw mode <> "\"}"
+
 ----------------------------------------------------------------
 
 data QlogMsg = QRecvInitial
@@ -157,6 +160,7 @@ data QlogMsg = QRecvInitial
              | QDropped LogStr
              | QMetricsUpdated LogStr
              | QPacketLost LogStr
+             | QCongestionStateUpdated LogStr
 
 toLogStrTime :: QlogMsg -> Milliseconds -> LogStr
 toLogStrTime QRecvInitial _ =
@@ -172,7 +176,9 @@ toLogStrTime (QDropped msg) (Milliseconds tim) =
 toLogStrTime (QMetricsUpdated msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"metrics_updated\","  <> msg <> "],\n"
 toLogStrTime (QPacketLost msg) (Milliseconds tim) =
-    "[" <> sw tim <> ",\"recovery\",\"packet_lost\","  <> msg <> "],\n"
+    "[" <> sw tim <> ",\"recovery\",\"packet_lost\","      <> msg <> "],\n"
+toLogStrTime (QCongestionStateUpdated msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"recovery\",\"congestion_state_updated\"," <> msg <> "],\n"
 
 ----------------------------------------------------------------
 

@@ -82,7 +82,12 @@ initialRTT = RTT {
 data CCMode = SlowStart
             | Avoidance
             | Recovery
-            deriving Show
+            deriving (Eq)
+
+instance Show CCMode where
+    show SlowStart = "slow_start"
+    show Avoidance = "congestion_avoidance"
+    show Recovery  = "recovery"
 
 data CC = CC {
   -- | The sum of the size in bytes of all sent packets that contain

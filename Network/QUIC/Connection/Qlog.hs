@@ -26,3 +26,6 @@ qlogMetricsUpdated Connection{..} m = connQLog $ QMetricsUpdated $ qlog m
 
 qlogPacketLost :: Connection -> SentPacket -> IO ()
 qlogPacketLost Connection{..} spkt = connQLog $ QPacketLost $ qlog spkt
+
+qlogContestionStateUpdated :: Connection -> CCMode -> IO ()
+qlogContestionStateUpdated Connection{..} mode = connQLog $ QCongestionStateUpdated $ qlog mode
