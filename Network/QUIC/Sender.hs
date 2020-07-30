@@ -110,9 +110,12 @@ construct conn lvl frames = do
             if nullPeerPacketNumbers ppns then
                 return []
               else do
-                -- This packet will not be acknowledged.
-                clearPeerPacketNumbers conn lvl'
                 mypn <- getPacketNumber conn
+                -- clearPeerPacketNumbers should be called in
+                -- Connection.Recovery. However, this is a necessary
+                -- workaround to not send ACK which the peer cannot
+                -- decrypt.
+                clearPeerPacketNumbers conn lvl'
                 let header
                       | lvl' == InitialLevel = Initial   ver peercid mycid token
                       | otherwise            = Handshake ver peercid mycid
@@ -123,7 +126,7 @@ construct conn lvl frames = do
     constructTargetPacket ver mycid peercid token
       | null frames = do -- ACK only packet
             resetDealyedAck conn
-            ppns <- getPeerPacketNumbers conn lvl -- don't clear
+            ppns <- getPeerPacketNumbers conn lvl
             if nullPeerPacketNumbers ppns then
                 return []
               else do
@@ -139,7 +142,7 @@ construct conn lvl frames = do
             -- peerPacketNumber is not clear here. See section 13.2.3
             -- of transport.
             resetDealyedAck conn
-            ppns <- getPeerPacketNumbers conn lvl -- don't clear
+            ppns <- getPeerPacketNumbers conn lvl
             let frames' | nullPeerPacketNumbers ppns = frames
                         | otherwise                  = toAck ppns : frames
             mypn <- getPacketNumber conn

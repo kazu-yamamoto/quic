@@ -60,8 +60,9 @@ onPacketSent conn@Connection{..} sentPacket = do
 serverIsAtAntiAmplificationLimit :: Bool
 serverIsAtAntiAmplificationLimit = False
 
-onPacketReceived :: Connection -> IO ()
-onPacketReceived conn = do
+onPacketReceived :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
+onPacketReceived conn lvl pn = do
+  addPeerPacketNumbers conn lvl pn
   -- If this datagram unblocks the server, arm the
   -- PTO timer to avoid deadlock.
   when serverIsAtAntiAmplificationLimit $ setLossDetectionTimer conn
@@ -553,7 +554,6 @@ retransmit conn lostPackets =
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
-    clearPeerPacketNumbers conn lvl
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- releaseByClear conn lvl
     decreaseCC conn clearedPackets
@@ -588,7 +588,8 @@ releaseByPredicate conn@Connection{..} lvl predicate = do
 ----------------------------------------------------------------
 
 releaseByClear :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
-releaseByClear Connection{..} lvl = do
+releaseByClear conn@Connection{..} lvl = do
+    clearPeerPacketNumbers conn lvl
     atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
         (emptySentPackets, db)
 
