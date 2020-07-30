@@ -138,3 +138,33 @@ data LossDetection = LossDetection {
 
 initialLossDetection :: LossDetection
 initialLossDetection = LossDetection (-1) ackInfo0 timeMillisecond0 Nothing
+
+----------------------------------------------------------------
+
+data TimerType = LossTime
+               | PTO
+               deriving Eq
+
+instance Show TimerType where
+    show LossTime = "loss_time"
+    show PTO      = "pto"
+
+data TimerEvent = TimerSet
+                | TimerExpired
+                | TimerCancelled
+                deriving Eq
+
+instance Show TimerEvent where
+    show TimerSet       = "set"
+    show TimerExpired   = "expired"
+    show TimerCancelled = "cancelled"
+
+data TimerInfo = TimerInfo {
+    timerTime  :: TimeMillisecond
+  , timerLevel :: EncryptionLevel
+  , timerType  :: TimerType
+  , timerEvent :: TimerEvent
+  } deriving Eq
+
+timerInfo0 :: TimerInfo
+timerInfo0 = TimerInfo timeMillisecond0 InitialLevel LossTime TimerCancelled

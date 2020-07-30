@@ -286,37 +286,39 @@ peerCompletedAddressValidation conn = isConnectionEstablished conn
 
 cancelLossDetectionTimer :: Connection -> IO ()
 cancelLossDetectionTimer Connection{..} = do
-    mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Nothing, oldkey)
+    mk <- atomicModifyIORef' timerKey $ \oldkey -> (Nothing, oldkey)
     case mk of
       Nothing -> return ()
       Just k -> do
           mgr <- getSystemTimerManager
           unregisterTimeout mgr k
+          writeIORef timerInfo timerInfo0
 
-updateLossDetectionTimer :: Connection -> TimeMillisecond -> IO ()
-updateLossDetectionTimer conn@Connection{..} tms = do
-    oldtms <- readIORef timeoutTime
-    when (oldtms /= Just tms) $ do
+updateLossDetectionTimer :: Connection -> TimerInfo -> IO ()
+updateLossDetectionTimer conn@Connection{..} tmi = do
+    oldtmi <- readIORef timerInfo
+    when (timerTime oldtmi /= timerTime tmi) $ do
         mgr <- getSystemTimerManager
-        Microseconds us <- getTimeoutInMicrosecond tms
+        Microseconds us <- getTimeoutInMicrosecond $ timerTime tmi
         if us <= 0 then do
             connDebugLog "updateLossDetectionTimer: minus"
             cancelLossDetectionTimer conn
           else do
             key <- registerTimeout mgr us (onLossDetectionTimeout conn)
-            mk <- atomicModifyIORef' timeoutKey $ \oldkey -> (Just key, oldkey)
+            mk <- atomicModifyIORef' timerKey $ \oldkey -> (Just key, oldkey)
             case mk of
               Nothing -> return ()
               Just k -> unregisterTimeout mgr k
-            writeIORef timeoutTime $ Just tms
+            writeIORef timerInfo tmi
 
 setLossDetectionTimer :: Connection -> IO ()
 setLossDetectionTimer conn@Connection{..} = do
     mtl <- getLossTimeAndSpace conn
     case mtl of
-      Just (earliestLossTime,_) -> do
+      Just (earliestLossTime,lvl) -> do
           -- Time threshold loss detection.
-          updateLossDetectionTimer conn earliestLossTime
+          let tmi = TimerInfo earliestLossTime lvl LossTime TimerSet
+          updateLossDetectionTimer conn tmi
       Nothing ->
           if serverIsAtAntiAmplificationLimit then -- server is at anti-amplification limit
             -- The server's timer is not set if nothing can be sent.
@@ -334,7 +336,9 @@ setLossDetectionTimer conn@Connection{..} = do
                   mx <- getPtoTimeAndSpace conn
                   case mx of
                     Nothing -> cancelLossDetectionTimer conn
-                    Just (timeout, _) -> updateLossDetectionTimer conn timeout
+                    Just (ptoTime, lvl) -> do
+                        let tmi = TimerInfo ptoTime lvl PTO TimerSet
+                        updateLossDetectionTimer conn tmi
 
 -- The only time the PTO is armed when there are no bytes in flight is
 -- when it's a client and it's unsure if the server has completed
@@ -343,47 +347,44 @@ onLossDetectionTimeout :: Connection -> IO ()
 onLossDetectionTimeout conn@Connection{..} = do
     open <- isConnectionOpen conn
     when open $ do
-        mtl <- getLossTimeAndSpace conn
-        case mtl of
-          Just (_, lvl) -> do
+        tmi <- readIORef timerInfo
+        let lvl = timerLevel tmi
+        case timerType tmi of
+          LossTime -> do
               -- Time threshold loss Detection
               lostPackets <- detectAndRemoveLostPackets conn lvl
               when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
               onPacketsLost conn lostPackets
               retransmit conn lostPackets
               setLossDetectionTimer conn
-          Nothing -> do
+          PTO -> do
               CC{..} <- readTVarIO recoveryCC
               if bytesInFlight > 0 then do
                   -- PTO. Send new data if available, else retransmit old data.
                   -- If neither is available, send a single PING frame.
-                  mx <- getPtoTimeAndSpace conn
-                  case mx of
-                    Nothing -> connDebugLog "onLossDetectionTimeout: Nothing"
-                    Just (_, lvl) -> do
-                        now <- getTimeMillisecond
-                        atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-                            timeOfLastAckElicitingPacket = now
-                          }
-                        putOutput conn $ OutControl lvl [Ping]
-                        putOutput conn $ OutControl lvl [Ping]
+                  sendPing conn lvl True
                 else do
                   -- Client sends an anti-deadlock packet: Initial is padded
                   -- to earn more anti-amplification credit,
                   -- a Handshake packet proves address ownership.
                   validated <- peerCompletedAddressValidation conn
                   when (validated) $ connDebugLog "onLossDetectionTimeout: RTT1"
-                  lvl <- getEncryptionLevel conn
-                  now <- getTimeMillisecond
-                  atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-                      timeOfLastAckElicitingPacket = now
-                    }
-                  putOutput conn $ OutControl lvl [Ping]
+                  lvl' <- getEncryptionLevel conn -- fixme
+                  sendPing conn lvl' False
 
               atomicModifyIORef'' recoveryRTT $ \rtt ->
                 rtt { ptoCount = ptoCount rtt + 1 }
               readIORef recoveryRTT >>= qlogMetricsUpdated conn
               setLossDetectionTimer conn
+
+sendPing :: Connection -> EncryptionLevel -> Bool -> IO ()
+sendPing conn@Connection{..} lvl twice = do
+    now <- getTimeMillisecond
+    atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
+        timeOfLastAckElicitingPacket = now
+      }
+    putOutput conn $ OutControl lvl [Ping]
+    when twice $ putOutput conn $ OutControl lvl [Ping]
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
