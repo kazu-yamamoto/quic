@@ -29,3 +29,6 @@ qlogPacketLost Connection{..} spkt = connQLog $ QPacketLost $ qlog spkt
 
 qlogContestionStateUpdated :: Connection -> CCMode -> IO ()
 qlogContestionStateUpdated Connection{..} mode = connQLog $ QCongestionStateUpdated $ qlog mode
+
+qlogLossTimerUpdated :: Connection -> TimerInfo -> IO ()
+qlogLossTimerUpdated Connection{..} tmi = connQLog $ QLossTimerUpdated $ qlog tmi

@@ -285,21 +285,25 @@ peerCompletedAddressValidation conn
 peerCompletedAddressValidation conn = isConnectionEstablished conn
 
 cancelLossDetectionTimer :: Connection -> IO ()
-cancelLossDetectionTimer Connection{..} = do
+cancelLossDetectionTimer conn@Connection{..} = do
     mk <- atomicModifyIORef' timerKey $ \oldkey -> (Nothing, oldkey)
     case mk of
       Nothing -> return ()
       Just k -> do
           mgr <- getSystemTimerManager
           unregisterTimeout mgr k
-          writeIORef timerInfo timerInfo0
+          oldtmi <- readIORef timerInfo
+          let tmi = oldtmi { timerEvent = TimerCancelled }
+          writeIORef timerInfo tmi
+          qlogLossTimerUpdated conn tmi
 
 updateLossDetectionTimer :: Connection -> TimerInfo -> IO ()
 updateLossDetectionTimer conn@Connection{..} tmi = do
     oldtmi <- readIORef timerInfo
     when (timerTime oldtmi /= timerTime tmi) $ do
         mgr <- getSystemTimerManager
-        Microseconds us <- getTimeoutInMicrosecond $ timerTime tmi
+        let Left tim = timerTime tmi
+        Microseconds us <- getTimeoutInMicrosecond tim
         if us <= 0 then do
             connDebugLog "updateLossDetectionTimer: minus"
             cancelLossDetectionTimer conn
@@ -309,7 +313,10 @@ updateLossDetectionTimer conn@Connection{..} tmi = do
             case mk of
               Nothing -> return ()
               Just k -> unregisterTimeout mgr k
-            writeIORef timerInfo tmi
+            let duration = Milliseconds (fromIntegral us `div` 1000)
+                newtmi = tmi { timerTime = Right duration }
+            writeIORef timerInfo newtmi
+            qlogLossTimerUpdated conn newtmi
 
 setLossDetectionTimer :: Connection -> IO ()
 setLossDetectionTimer conn@Connection{..} = do
@@ -317,7 +324,7 @@ setLossDetectionTimer conn@Connection{..} = do
     case mtl of
       Just (earliestLossTime,lvl) -> do
           -- Time threshold loss detection.
-          let tmi = TimerInfo earliestLossTime lvl LossTime TimerSet
+          let tmi = TimerInfo (Left earliestLossTime) lvl LossTime TimerSet
           updateLossDetectionTimer conn tmi
       Nothing ->
           if serverIsAtAntiAmplificationLimit then -- server is at anti-amplification limit
@@ -337,7 +344,7 @@ setLossDetectionTimer conn@Connection{..} = do
                   case mx of
                     Nothing -> cancelLossDetectionTimer conn
                     Just (ptoTime, lvl) -> do
-                        let tmi = TimerInfo ptoTime lvl PTO TimerSet
+                        let tmi = TimerInfo (Left ptoTime) lvl PTO TimerSet
                         updateLossDetectionTimer conn tmi
 
 -- The only time the PTO is armed when there are no bytes in flight is

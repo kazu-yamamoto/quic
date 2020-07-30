@@ -160,11 +160,11 @@ instance Show TimerEvent where
     show TimerCancelled = "cancelled"
 
 data TimerInfo = TimerInfo {
-    timerTime  :: TimeMillisecond
+    timerTime  :: Either TimeMillisecond Milliseconds
   , timerLevel :: EncryptionLevel
   , timerType  :: TimerType
   , timerEvent :: TimerEvent
   } deriving Eq
 
 timerInfo0 :: TimerInfo
-timerInfo0 = TimerInfo timeMillisecond0 InitialLevel LossTime TimerCancelled
+timerInfo0 = TimerInfo (Right 0) InitialLevel LossTime TimerCancelled

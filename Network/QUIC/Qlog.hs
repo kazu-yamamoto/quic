@@ -151,6 +151,23 @@ instance Qlog CC where
 instance Qlog CCMode where
     qlog mode = "{\"new\":\"" <> sw mode <> "\"}"
 
+instance Qlog TimerInfo where
+    qlog TimerInfo{..} = "{\"timer_type\":\"" <> sw timerType <> "\"" <>
+                         ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
+                         ",\"event_type\":\"" <> sw timerEvent <> "\"" <>
+                         ",\"delta\":" <> delta timerTime <>
+                         "}"
+
+packetNumberSpace :: EncryptionLevel -> LogStr
+packetNumberSpace InitialLevel   = "initial"
+packetNumberSpace RTT0Level      = "application_data"
+packetNumberSpace HandshakeLevel = "handshake"
+packetNumberSpace RTT1Level      = "application_data"
+
+delta :: Either TimeMillisecond Milliseconds -> LogStr
+delta (Left _)                 = "0"
+delta (Right (Milliseconds n)) = sw n
+
 ----------------------------------------------------------------
 
 data QlogMsg = QRecvInitial
@@ -161,6 +178,7 @@ data QlogMsg = QRecvInitial
              | QMetricsUpdated LogStr
              | QPacketLost LogStr
              | QCongestionStateUpdated LogStr
+             | QLossTimerUpdated LogStr
 
 toLogStrTime :: QlogMsg -> Milliseconds -> LogStr
 toLogStrTime QRecvInitial _ =
@@ -179,6 +197,8 @@ toLogStrTime (QPacketLost msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"packet_lost\","      <> msg <> "],\n"
 toLogStrTime (QCongestionStateUpdated msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"congestion_state_updated\"," <> msg <> "],\n"
+toLogStrTime (QLossTimerUpdated msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"recovery\",\"loss_timer_updated\"," <> msg <> "],\n"
 
 ----------------------------------------------------------------
 
