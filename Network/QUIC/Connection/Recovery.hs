@@ -10,13 +10,14 @@ module Network.QUIC.Connection.Recovery (
   , releaseByRetry
   , waitWindowOpen
   , setInitialCongestionWindow
+  , resender
   ) where
 
 import Control.Concurrent.STM
-import Data.Sequence (Seq, (|>), ViewL(..), ViewR(..))
+import Data.Sequence (Seq, (|>), (><), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
 import Data.UnixTime
-import GHC.Event
+import GHC.Event hiding (new)
 
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.PacketNumber
@@ -25,6 +26,7 @@ import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | Maximum reordering in packets before packet threshold loss
@@ -70,7 +72,10 @@ onPacketReceived conn lvl pn = do
 onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Milliseconds -> IO ()
 onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
     changed <- atomicModifyIORef' (lossDetection ! lvl) update
-    when changed $ releaseByAcks conn lvl ackInfo >>= process
+    when changed $ do
+        let predicate = fromAckInfoToPred ackInfo . spPacketNumber . spSentPacketI
+        releaseLostCandidates conn lvl predicate >>= updateCC
+        releaseByPredicate    conn lvl predicate >>= detectLossUpdateCC
   where
     update ld@LossDetection{..} = (ld', changed)
       where
@@ -78,7 +83,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
                  , previousAckInfo = ackInfo
                  }
         changed = previousAckInfo /= ackInfo
-    process newlyAckedPackets = case Seq.viewr newlyAckedPackets of
+    detectLossUpdateCC newlyAckedPackets = case Seq.viewr newlyAckedPackets of
       EmptyR -> return ()
       _ :> lastPkt -> do
           -- If the largest acknowledged is newly acked and
@@ -96,9 +101,12 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
           -}
 
           lostPackets <- detectAndRemoveLostPackets conn lvl
-          onPacketsLost conn lostPackets
-          retransmit conn lostPackets
+          appendLostCandidates conn lostPackets
+          updateCC newlyAckedPackets
 
+    updateCC newlyAckedPackets
+      | newlyAckedPackets == Seq.empty = return ()
+      | otherwise = do
           onPacketsAcked conn newlyAckedPackets
 
           -- Sec 6.2.1. Computing PTO
@@ -213,17 +221,17 @@ getLossTimeAndSpace Connection{..} =
                | otherwise -> loop ls r
 
 getMaxAckDelay :: Maybe EncryptionLevel -> Milliseconds -> Milliseconds
-getMaxAckDelay Nothing delay = delay
-getMaxAckDelay (Just lvl) delay
+getMaxAckDelay Nothing n = n
+getMaxAckDelay (Just lvl) n
   | lvl `elem` [InitialLevel,HandshakeLevel] = 0
-  | otherwise                                = delay
+  | otherwise                                = n
 
 -- Sec 6.2.1. Computing PTO
 -- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
 calcPTO :: RTT -> Maybe EncryptionLevel -> Milliseconds
-calcPTO RTT{..} mlvl = smoothedRTT + max (rttvar .<<. 2) kGranularity + delay
+calcPTO RTT{..} mlvl = smoothedRTT + max (rttvar .<<. 2) kGranularity + dly
   where
-    delay = getMaxAckDelay mlvl maxAckDelay1RTT
+    dly = getMaxAckDelay mlvl maxAckDelay1RTT
 
 backOff :: Milliseconds -> Int -> Milliseconds
 backOff n cnt = n * (2 ^ cnt)
@@ -566,20 +574,50 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
-releaseByAcks :: Connection -> EncryptionLevel -> AckInfo -> IO (Seq SentPacket)
-releaseByAcks conn lvl ackinfo = do
-    let predicate = fromAckInfoToPred ackinfo . spPacketNumber . spSentPacketI
-    releaseByPredicate conn lvl predicate
+resender :: Connection -> IO ()
+resender conn@Connection{..} = forever $ do
+    atomically $ do
+        lostPackets <- readTVar lostCandidates
+        check (lostPackets /= emptySentPackets)
+    delay $ Microseconds 10000 -- fixme
+    packets0 <- atomically $ do
+        SentPackets pkts <- readTVar lostCandidates
+        writeTVar lostCandidates emptySentPackets
+        return pkts
+    when (packets0 /= Seq.empty) $ do
+        let packets = Seq.sort packets0
+        onPacketsLost conn packets
+        retransmit conn packets
 
+appendLostCandidates :: Connection -> Seq SentPacket -> IO ()
+appendLostCandidates Connection{..} lostPackets = atomically $ do
+    SentPackets old <- readTVar lostCandidates
+    let new = old >< lostPackets
+    writeTVar lostCandidates $ SentPackets new
+
+releaseLostCandidates :: Connection -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
+releaseLostCandidates conn@Connection{..} lvl predicate = do
+    packets <- atomically $ do
+        SentPackets db <- readTVar lostCandidates
+        let (pkts, db') = Seq.partition predicate db
+        writeTVar lostCandidates $ SentPackets db'
+        return pkts
+    removePacketNumbers conn lvl packets
+    return packets
+
+----------------------------------------------------------------
 ----------------------------------------------------------------
 
 releaseByPredicate :: Connection -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
 releaseByPredicate conn@Connection{..} lvl predicate = do
     packets <- atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
-       let (lostPackets, db') = Seq.partition predicate db
-       in (SentPackets db', lostPackets)
-    mapM_ reduce packets
+       let (pkts, db') = Seq.partition predicate db
+       in (SentPackets db', pkts)
+    removePacketNumbers conn lvl packets
     return $ packets
+
+removePacketNumbers :: Foldable t => Connection -> EncryptionLevel -> t SentPacket -> IO ()
+removePacketNumbers conn lvl packets = mapM_ reduce packets
   where
     reduce x = reducePeerPacketNumbers conn lvl ppns
       where

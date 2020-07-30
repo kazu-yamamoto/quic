@@ -106,8 +106,10 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = E.ha
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
+    tid2 <- forkIO $ resender conn
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
+    addThreadIdResource conn tid2
     handshakeClient conf conn myAuthCIDs `E.onException` freeResources conn
   where
     handler (E.SomeException e) = do
@@ -197,8 +199,10 @@ handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -
 handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
+    tid2 <- forkIO $ resender conn
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
+    addThreadIdResource conn tid2
     handshakeServer conf conn myAuthCIDs `E.onException` freeResources conn
     --
     cidInfo <- getNewMyCID conn

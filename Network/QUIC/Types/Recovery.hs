@@ -20,7 +20,7 @@ emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
 
 ----------------------------------------------------------------
 
-newtype SentPackets = SentPackets (Seq SentPacket)
+newtype SentPackets = SentPackets (Seq SentPacket) deriving Eq
 
 emptySentPackets :: SentPackets
 emptySentPackets = SentPackets Seq.empty
@@ -33,13 +33,16 @@ data SentPacketI = SentPacketI {
   , spPlainPacket       :: PlainPacket
   , spPeerPacketNumbers :: PeerPacketNumbers
   , spAckEliciting      :: Bool
-  } deriving Show
+  } deriving (Eq, Show)
 
 data SentPacket = SentPacket {
     spSentPacketI :: SentPacketI
   , spTimeSent    :: TimeMillisecond
   , spSentBytes   :: Int
-  } deriving Show
+  } deriving (Eq, Show)
+
+instance Ord SentPacket where
+    x <= y = spPacketNumber (spSentPacketI x) <= spPacketNumber (spSentPacketI y)
 
 ----------------------------------------------------------------
 

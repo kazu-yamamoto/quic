@@ -150,6 +150,7 @@ module Network.QUIC.Connection (
   , releaseByRetry
   , waitWindowOpen
   , setInitialCongestionWindow
+  , resender
   -- Types
   , connThreadId
   , connHooks
