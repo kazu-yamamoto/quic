@@ -174,13 +174,15 @@ updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = do
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
     lae <- timeOfLastAckElicitingPacket <$> readIORef (lossDetection ! lvl)
-    when (lae == timeMillisecond0) $ connDebugLog "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: 0"
+    when (lae == timeMillisecond0) $
+        qlogDebug conn $ Debug "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: 0"
     atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
           lossTime = Nothing
         }
     RTT{..} <- readIORef recoveryRTT
     LossDetection{..} <- readIORef (lossDetection ! lvl)
-    when (largestAckedPacket == -1) $ connDebugLog "detectAndRemoveLostPackets: largestAckedPacket: -1"
+    when (largestAckedPacket == -1) $
+        qlogDebug conn $ Debug "detectAndRemoveLostPackets: largestAckedPacket: -1"
     -- Sec 6.1.2. Time Threshold
     -- max(kTimeThreshold * max(smoothed_rtt, latest_rtt), kGranularity)
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
