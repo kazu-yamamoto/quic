@@ -32,3 +32,6 @@ qlogContestionStateUpdated Connection{..} mode = connQLog $ QCongestionStateUpda
 
 qlogLossTimerUpdated :: Connection -> TimerInfo -> IO ()
 qlogLossTimerUpdated Connection{..} tmi = connQLog $ QLossTimerUpdated $ qlog tmi
+
+qlogDebug :: Connection -> Debug -> IO ()
+qlogDebug Connection{..} msg = connQLog $ QDebug $ qlog msg

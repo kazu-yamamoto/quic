@@ -171,3 +171,8 @@ data TimerInfo = TimerInfo {
 
 timerInfo0 :: TimerInfo
 timerInfo0 = TimerInfo (Right 0) InitialLevel LossTime TimerCancelled
+
+newtype Debug = Debug String
+
+instance Show Debug where
+    show (Debug msg) = msg

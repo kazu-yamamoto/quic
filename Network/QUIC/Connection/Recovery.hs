@@ -315,7 +315,7 @@ updateLossDetectionTimer conn@Connection{..} tmi = do
         let Left tim = timerTime tmi
         Microseconds us <- getTimeoutInMicrosecond tim
         if us <= 0 then do
-            connDebugLog "updateLossDetectionTimer: minus"
+            qlogDebug conn $ Debug "updateLossDetectionTimer: minus"
             cancelLossDetectionTimer conn
           else do
             key <- registerTimeout mgr us (onLossDetectionTimeout conn)

@@ -168,6 +168,9 @@ delta :: Either TimeMillisecond Milliseconds -> LogStr
 delta (Left _)                 = "0"
 delta (Right (Milliseconds n)) = sw n
 
+instance Qlog Debug where
+    qlog (Debug msg) = "{\"message\":" <> sw msg <> "}"
+
 ----------------------------------------------------------------
 
 data QlogMsg = QRecvInitial
@@ -179,6 +182,7 @@ data QlogMsg = QRecvInitial
              | QPacketLost LogStr
              | QCongestionStateUpdated LogStr
              | QLossTimerUpdated LogStr
+             | QDebug LogStr
 
 toLogStrTime :: QlogMsg -> Milliseconds -> LogStr
 toLogStrTime QRecvInitial _ =
@@ -199,6 +203,8 @@ toLogStrTime (QCongestionStateUpdated msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"congestion_state_updated\"," <> msg <> "],\n"
 toLogStrTime (QLossTimerUpdated msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"loss_timer_updated\"," <> msg <> "],\n"
+toLogStrTime (QDebug msg) (Milliseconds tim) =
+    "[" <> sw tim <> ",\"debug\"," <> msg <> "],\n"
 
 ----------------------------------------------------------------
 
