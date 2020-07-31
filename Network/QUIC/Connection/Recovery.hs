@@ -378,7 +378,7 @@ onLossDetectionTimeout conn@Connection{..} = do
               if bytesInFlight > 0 then do
                   -- PTO. Send new data if available, else retransmit old data.
                   -- If neither is available, send a single PING frame.
-                  sendPing conn lvl True
+                  sendPing conn lvl
                 else do
                   -- Client sends an anti-deadlock packet: Initial is padded
                   -- to earn more anti-amplification credit,
@@ -386,21 +386,20 @@ onLossDetectionTimeout conn@Connection{..} = do
                   validated <- peerCompletedAddressValidation conn
                   when (validated) $ connDebugLog "onLossDetectionTimeout: RTT1"
                   lvl' <- getEncryptionLevel conn -- fixme
-                  sendPing conn lvl' False
+                  sendPing conn lvl'
 
               atomicModifyIORef'' recoveryRTT $ \rtt ->
                 rtt { ptoCount = ptoCount rtt + 1 }
               readIORef recoveryRTT >>= qlogMetricsUpdated conn
               setLossDetectionTimer conn
 
-sendPing :: Connection -> EncryptionLevel -> Bool -> IO ()
-sendPing conn@Connection{..} lvl twice = do
+sendPing :: Connection -> EncryptionLevel -> IO ()
+sendPing Connection{..} lvl = do
     now <- getTimeMillisecond
     atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
         timeOfLastAckElicitingPacket = now
       }
-    putOutput conn $ OutControl lvl [Ping]
-    when twice $ putOutput conn $ OutControl lvl [Ping]
+    atomically $ writeTVar ptoPing $ Just lvl
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
@@ -661,10 +660,19 @@ noInFlightPacket Connection{..} lvl = do
 
 ----------------------------------------------------------------
 
-waitWindowOpen :: Connection -> Int -> IO ()
-waitWindowOpen Connection{..} siz = atomically $ do
-    CC{..} <- readTVar recoveryCC
-    check (siz <= congestionWindow - bytesInFlight)
+waitWindowOpen :: Connection -> Int -> IO (Maybe EncryptionLevel)
+waitWindowOpen Connection{..} siz =
+    atomically (checkPing `orElse` checkWindow)
+  where
+    checkPing = do
+        mx <- readTVar ptoPing
+        check $ isJust mx
+        writeTVar ptoPing Nothing
+        return mx
+    checkWindow = do
+        CC{..} <- readTVar recoveryCC
+        check (siz <= congestionWindow - bytesInFlight)
+        return Nothing
 
 setInitialCongestionWindow :: Connection -> Int -> IO ()
 setInitialCongestionWindow conn@Connection{..} pktSiz = do

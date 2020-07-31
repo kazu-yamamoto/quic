@@ -28,21 +28,27 @@ cryptoFrame conn crypto lvl = do
 
 sendPacket :: Connection -> SendMany -> [SentPacketI] -> IO ()
 sendPacket _ _ [] = return ()
-sendPacket conn send spktis = do
-    maxSiz <- getMaxPacketSize conn
-    waitWindowOpen conn maxSiz
-    (sentPackets, bss) <- loop maxSiz spktis id id
-    -- w <- getRandomOneByte
-    -- let dropPacket = (w `mod` 20) == 0
-    let dropPacket = False
-    if dropPacket then
-        putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
-      else
-        send bss
-    forM_ sentPackets $ \x -> do
-        onPacketSent conn x
-        unless dropPacket $ qlogSent conn $ spPlainPacket $ spSentPacketI x
+sendPacket conn send spktis = getMaxPacketSize conn >>= go
   where
+    go maxSiz = do
+        mx <- waitWindowOpen conn maxSiz
+        case mx of
+          Just lvl -> do
+              [ping] <- construct conn lvl [Ping]
+              encodePlainPacket conn (spPlainPacket ping) (Just maxSiz) >>= send
+              go maxSiz
+          Nothing -> do
+            (sentPackets, bss) <- loop maxSiz spktis id id
+            -- w <- getRandomOneByte
+            -- let dropPacket = (w `mod` 20) == 0
+            let dropPacket = False
+            if dropPacket then
+                putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
+              else
+                send bss
+            forM_ sentPackets $ \x -> do
+                onPacketSent conn x
+                unless dropPacket $ qlogSent conn $ spPlainPacket $ spSentPacketI x
     loop _ [] _ _ = error "sendPacket: loop"
     loop siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
