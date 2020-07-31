@@ -364,6 +364,7 @@ onLossDetectionTimeout conn@Connection{..} = do
     open <- isConnectionOpen conn
     when open $ do
         tmi <- readIORef timerInfo
+        qlogLossTimerUpdated conn tmi { timerEvent = TimerExpired }
         let lvl = timerLevel tmi
         case timerType tmi of
           LossTime -> do
