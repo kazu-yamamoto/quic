@@ -34,8 +34,10 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
         mx <- waitWindowOpen conn maxSiz
         case mx of
           Just lvl -> do
-              [ping] <- construct conn lvl [Ping]
-              encodePlainPacket conn (spPlainPacket ping) (Just maxSiz) >>= send
+              xs <- construct conn lvl [Ping]
+              let ping = spPlainPacket $ last xs
+              encodePlainPacket conn ping (Just maxSiz) >>= send
+              qlogSent conn ping
               go maxSiz
           Nothing -> do
             (sentPackets, bss) <- loop maxSiz spktis id id
