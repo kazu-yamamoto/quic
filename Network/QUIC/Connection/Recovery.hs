@@ -426,13 +426,14 @@ kPersistentCongestionThreshold :: Milliseconds -> Milliseconds
 kPersistentCongestionThreshold (Milliseconds ms) = Milliseconds (3 * ms)
 
 onPacketSentCC :: Connection -> SentPacket -> IO ()
-onPacketSentCC Connection{..} sentPacket = atomically $
-    modifyTVar' recoveryCC $ \cc -> cc {
+onPacketSentCC conn@Connection{..} sentPacket = do
+    atomically $ modifyTVar' recoveryCC $ \cc -> cc {
         bytesInFlight = bytesInFlight cc + bytesSent
       , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
       }
+    readTVarIO recoveryCC >>= qlogMetricsUpdated conn
   where
-   bytesSent = spSentBytes sentPacket
+    bytesSent = spSentBytes sentPacket
 
 countAckEli :: SentPacket -> Int
 countAckEli sentPacket
