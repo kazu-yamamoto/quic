@@ -204,7 +204,7 @@ toLogStrTime (QCongestionStateUpdated msg) (Milliseconds tim) =
 toLogStrTime (QLossTimerUpdated msg) (Milliseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"loss_timer_updated\"," <> msg <> "],\n"
 toLogStrTime (QDebug msg) (Milliseconds tim) =
-    "[" <> sw tim <> ",\"debug\"," <> msg <> "],\n"
+    "[" <> sw tim <> ",\"debug\",\"debug\"," <> msg <> "],\n"
 
 ----------------------------------------------------------------
 
