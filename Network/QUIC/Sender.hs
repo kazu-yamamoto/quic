@@ -26,18 +26,24 @@ cryptoFrame conn crypto lvl = do
 
 ----------------------------------------------------------------
 
+sendPing :: Connection -> EncryptionLevel -> SendMany ->  IO ()
+sendPing conn lvl send = do
+    maxSiz <- getMaxPacketSize conn
+    xs <- construct conn lvl [Ping]
+    let ping = spPlainPacket $ last xs
+    encodePlainPacket conn ping (Just maxSiz) >>= send
+    qlogSent conn ping
+
 sendPacket :: Connection -> SendMany -> [SentPacketI] -> IO ()
 sendPacket _ _ [] = return ()
 sendPacket conn send spktis = getMaxPacketSize conn >>= go
   where
     go maxSiz = do
-        mx <- waitWindowOpen conn maxSiz
+        mx <- atomically ((Just    <$> takePingSTM conn)
+                 `orElse` (Nothing <$  checkWindowOpenSTM conn maxSiz))
         case mx of
           Just lvl -> do
-              xs <- construct conn lvl [Ping]
-              let ping = spPlainPacket $ last xs
-              encodePlainPacket conn ping (Just maxSiz) >>= send
-              qlogSent conn ping
+              sendPing conn lvl send
               go maxSiz
           Nothing -> do
             (sentPackets, bss) <- loop maxSiz spktis id id
@@ -170,13 +176,19 @@ construct conn lvl frames = do
 
 ----------------------------------------------------------------
 
+data Switch = SwPing EncryptionLevel
+            | SwOut  Output
+            | SwStrm TxStreamData
+
 sender :: Connection -> SendMany -> IO ()
 sender conn send = handleLog logAction $ forever $ do
-    ex <- atomically ((Left  <$> takeOutputSTM conn)
-             `orElse` (Right <$> takeSendStreamQSTM conn))
-    case ex of
-      Left  out -> sendOutput conn send out
-      Right tx  -> sendTxStreamData conn send tx
+    x <- atomically ((SwPing <$> takePingSTM conn)
+            `orElse` (SwOut  <$> takeOutputSTM conn)
+            `orElse` (SwStrm <$> takeSendStreamQSTM conn))
+    case x of
+      SwPing lvl -> sendPing conn lvl send
+      SwOut  out -> sendOutput conn send out
+      SwStrm tx  -> sendTxStreamData conn send tx
   where
     logAction msg = connDebugLog conn ("sender: " <> msg)
 

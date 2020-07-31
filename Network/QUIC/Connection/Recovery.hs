@@ -8,7 +8,8 @@ module Network.QUIC.Connection.Recovery (
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
   , releaseByRetry
-  , waitWindowOpen
+  , checkWindowOpenSTM
+  , takePingSTM
   , setInitialCongestionWindow
   , resender
   ) where
@@ -662,19 +663,17 @@ noInFlightPacket Connection{..} lvl = do
 
 ----------------------------------------------------------------
 
-waitWindowOpen :: Connection -> Int -> IO (Maybe EncryptionLevel)
-waitWindowOpen Connection{..} siz =
-    atomically (checkPing `orElse` checkWindow)
-  where
-    checkPing = do
-        mx <- readTVar ptoPing
-        check $ isJust mx
-        writeTVar ptoPing Nothing
-        return mx
-    checkWindow = do
-        CC{..} <- readTVar recoveryCC
-        check (siz <= congestionWindow - bytesInFlight)
-        return Nothing
+takePingSTM :: Connection -> STM EncryptionLevel
+takePingSTM Connection{..} = do
+    mx <- readTVar ptoPing
+    check $ isJust mx
+    writeTVar ptoPing Nothing
+    return $ fromJust mx
+
+checkWindowOpenSTM :: Connection -> Int -> STM ()
+checkWindowOpenSTM Connection{..} siz = do
+    CC{..} <- readTVar recoveryCC
+    check (siz <= congestionWindow - bytesInFlight)
 
 setInitialCongestionWindow :: Connection -> Int -> IO ()
 setInitialCongestionWindow conn@Connection{..} pktSiz = do

@@ -148,7 +148,8 @@ module Network.QUIC.Connection (
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
   , releaseByRetry
-  , waitWindowOpen
+  , checkWindowOpenSTM
+  , takePingSTM
   , setInitialCongestionWindow
   , resender
   -- Types
