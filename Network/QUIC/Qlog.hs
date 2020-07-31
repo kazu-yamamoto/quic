@@ -32,7 +32,13 @@ instance Qlog PlainPacket where
     qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"}}"
 
 instance Qlog SentPacket where
-    qlog (SentPacket SentPacketI{..} _ _) =
+    qlog SentPacket{..} = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\",\"packet_size\":" <> sw spSentBytes <> "}}"
+      where
+        SentPacketI _ _ (PlainPacket hdr Plain{..}) _ _ = spSentPacketI
+
+-- for lost
+instance Qlog SentPacketI where
+    qlog SentPacketI{..} =
         "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\"" <>
         ",\"packet_number\":" <> sw spPacketNumber <>
         "}"

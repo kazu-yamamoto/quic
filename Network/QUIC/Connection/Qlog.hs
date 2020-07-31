@@ -9,7 +9,7 @@ import Network.QUIC.Types
 qlogReceived :: Qlog a => Connection -> a -> IO ()
 qlogReceived Connection{..} pkt = connQLog $ QReceived $ qlog pkt
 
-qlogSent :: Qlog a => Connection -> a -> IO ()
+qlogSent :: Connection -> SentPacket -> IO ()
 qlogSent Connection{..} pkt = connQLog $ QSent $ qlog pkt
 
 qlogDropped :: Qlog a => Connection -> a -> IO ()
@@ -24,7 +24,7 @@ qlogSentRetry Connection{..} = connQLog QSentRetry
 qlogMetricsUpdated :: Qlog a => Connection -> a -> IO ()
 qlogMetricsUpdated Connection{..} m = connQLog $ QMetricsUpdated $ qlog m
 
-qlogPacketLost :: Connection -> SentPacket -> IO ()
+qlogPacketLost :: Connection -> SentPacketI -> IO ()
 qlogPacketLost Connection{..} spkt = connQLog $ QPacketLost $ qlog spkt
 
 qlogContestionStateUpdated :: Connection -> CCMode -> IO ()

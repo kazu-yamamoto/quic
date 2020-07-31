@@ -30,9 +30,14 @@ sendPing :: Connection -> EncryptionLevel -> SendMany ->  IO ()
 sendPing conn lvl send = do
     maxSiz <- getMaxPacketSize conn
     xs <- construct conn lvl [Ping]
-    let ping = spPlainPacket $ last xs
-    encodePlainPacket conn ping (Just maxSiz) >>= send
-    qlogSent conn ping
+    let spkti = last xs
+        ping = spPlainPacket spkti
+    bss <- encodePlainPacket conn ping (Just maxSiz)
+    send bss
+    now <- getTimeMillisecond
+    let siz = totalLen bss
+        spkt = SentPacket spkti now siz
+    qlogSent conn spkt
 
 sendPacket :: Connection -> SendMany -> [SentPacketI] -> IO ()
 sendPacket _ _ [] = return ()
@@ -56,7 +61,7 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
                 send bss
             forM_ sentPackets $ \x -> do
                 onPacketSent conn x
-                unless dropPacket $ qlogSent conn $ spPlainPacket $ spSentPacketI x
+                unless dropPacket $ qlogSent conn x
     loop _ [] _ _ = error "sendPacket: loop"
     loop siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz

@@ -544,7 +544,7 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
     -- Remove lost packets from bytesInFlight.
     decreaseCC conn lostPackets
     onNewCongestionEvent conn $ spTimeSent lastPkt
-    mapM_ (qlogPacketLost conn) lostPackets
+    mapM_ (qlogPacketLost conn . spSentPacketI) lostPackets
 
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lostPackets' lastPkt
