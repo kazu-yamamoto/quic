@@ -38,12 +38,12 @@ kPacketThreshold = 3
 -- | Maximum reordering in time before time threshold loss detection
 --   considers a packet lost.  Specified as an RTT multiplier.
 
-kTimeThreshold :: Milliseconds -> Milliseconds
+kTimeThreshold :: Microseconds -> Microseconds
 kTimeThreshold x = x + (x .>>. 3) -- 9/8
 
 -- | Timer granularity.
-kGranularity :: Milliseconds
-kGranularity = Milliseconds 5
+kGranularity :: Microseconds
+kGranularity = Microseconds 5000
 
 onPacketSent :: Connection -> SentPacket -> IO ()
 onPacketSent conn@Connection{..} sentPacket = do
@@ -70,7 +70,7 @@ onPacketReceived conn lvl pn = do
   -- PTO timer to avoid deadlock.
   when serverIsAtAntiAmplificationLimit $ setLossDetectionTimer conn
 
-onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Milliseconds -> IO ()
+onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Microseconds -> IO ()
 onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
     changed <- atomicModifyIORef' (lossDetection ! lvl) update
     when changed $ do
@@ -98,7 +98,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
           -- at least one ack-eliciting was newly acked, update the RTT.
           when (spPacketNumber (spSentPacketI lastPkt) == largestAcked
              && any (spAckEliciting . spSentPacketI) newlyAckedPackets) $ do
-              rtt <- getElapsedTimeMillisecond $ spTimeSent lastPkt
+              rtt <- getElapsedTimeMicrosecond $ spTimeSent lastPkt
               let latestRtt = max rtt kGranularity
               updateRTT conn lvl latestRtt ackDelay
 
@@ -124,11 +124,11 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
 
           setLossDetectionTimer conn
 
-updateRTT :: Connection -> EncryptionLevel -> Milliseconds -> Milliseconds -> IO ()
+updateRTT :: Connection -> EncryptionLevel -> Microseconds -> Microseconds -> IO ()
 updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = do
   atomicModifyIORef'' recoveryRTT $ \rtt@RTT{..} ->
     -- don't use latestRTT, use latestRTT0 instead
-    if latestRTT == Milliseconds 0 then -- first time
+    if latestRTT == Microseconds 0 then -- first time
         -- Overwriting the initial value with the first sample.
         -- Initial value was used to calculate PTO.
         --
@@ -174,7 +174,7 @@ updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = do
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
     lae <- timeOfLastAckElicitingPacket <$> readIORef (lossDetection ! lvl)
-    when (lae == timeMillisecond0) $
+    when (lae == timeMicrosecond0) $
         qlogDebug conn $ Debug "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: 0"
     atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
           lossTime = Nothing
@@ -188,7 +188,7 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
     let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
     let lossDelay = max lossDelay0 kGranularity
 
-    tm <- getPastTimeMillisecond lossDelay
+    tm <- getPastTimeMicrosecond lossDelay
     let predicate ent = (spPacketNumber (spSentPacketI ent) <= largestAckedPacket - kPacketThreshold)
                      || (spTimeSent ent <= tm)
     lostPackets <- releaseByPredicate conn lvl predicate
@@ -200,14 +200,14 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
       -- There are gap packets which are not declared lost.
       -- Set lossTime to next.
       Just x  -> do
-          let next = spTimeSent x `addMillisecond` lossDelay
+          let next = spTimeSent x `addMicroseconds` lossDelay
           atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
                 lossTime = Just next
               }
 
     return lostPackets
 
-getLossTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond,EncryptionLevel))
+getLossTimeAndSpace :: Connection -> IO (Maybe (TimeMicrosecond,EncryptionLevel))
 getLossTimeAndSpace Connection{..} =
     loop [InitialLevel, HandshakeLevel, RTT1Level] Nothing
   where
@@ -222,7 +222,7 @@ getLossTimeAndSpace Connection{..} =
                | t < t0    -> loop ls $ Just (t,l)
                | otherwise -> loop ls r
 
-getMaxAckDelay :: Maybe EncryptionLevel -> Milliseconds -> Milliseconds
+getMaxAckDelay :: Maybe EncryptionLevel -> Microseconds -> Microseconds
 getMaxAckDelay Nothing n = n
 getMaxAckDelay (Just lvl) n
   | lvl `elem` [InitialLevel,HandshakeLevel] = 0
@@ -230,15 +230,15 @@ getMaxAckDelay (Just lvl) n
 
 -- Sec 6.2.1. Computing PTO
 -- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
-calcPTO :: RTT -> Maybe EncryptionLevel -> Milliseconds
+calcPTO :: RTT -> Maybe EncryptionLevel -> Microseconds
 calcPTO RTT{..} mlvl = smoothedRTT + max (rttvar .<<. 2) kGranularity + dly
   where
     dly = getMaxAckDelay mlvl maxAckDelay1RTT
 
-backOff :: Milliseconds -> Int -> Milliseconds
+backOff :: Microseconds -> Int -> Microseconds
 backOff n cnt = n * (2 ^ cnt)
 
-getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMillisecond, EncryptionLevel))
+getPtoTimeAndSpace :: Connection -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
 getPtoTimeAndSpace conn@Connection{..} = do
     -- Arm PTO from now when there are no inflight packets.
     CC{..} <- readTVarIO recoveryCC
@@ -251,7 +251,7 @@ getPtoTimeAndSpace conn@Connection{..} = do
             rtt <- readIORef recoveryRTT
             lvl <- getEncryptionLevel conn
             let pto = backOff (calcPTO rtt $ Just lvl) (ptoCount rtt)
-            ptoTime <- getFutureTimeMillisecond pto
+            ptoTime <- getFutureTimeMicrosecond pto
             return $ Just (ptoTime, lvl)
       else do
         completed <- isConnectionEstablished conn
@@ -259,7 +259,7 @@ getPtoTimeAndSpace conn@Connection{..} = do
                  | otherwise = [InitialLevel, HandshakeLevel]
         loop lvls Nothing
   where
-    loop :: [EncryptionLevel] -> (Maybe (TimeMillisecond, EncryptionLevel)) -> IO (Maybe (TimeMillisecond, EncryptionLevel))
+    loop :: [EncryptionLevel] -> (Maybe (TimeMicrosecond, EncryptionLevel)) -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
     loop [] r = return r
     loop (l:ls) r = do
         notInFlight <- noInFlightPacket conn l
@@ -267,12 +267,12 @@ getPtoTimeAndSpace conn@Connection{..} = do
             loop ls r
           else do
             LossDetection{..} <- readIORef (lossDetection ! l)
-            if timeOfLastAckElicitingPacket == timeMillisecond0 then
+            if timeOfLastAckElicitingPacket == timeMicrosecond0 then
                 loop ls r
               else do
                   rtt <- readIORef recoveryRTT
                   let pto = backOff (calcPTO rtt $ Just l) (ptoCount rtt)
-                  let ptoTime = timeOfLastAckElicitingPacket `addMillisecond` pto
+                  let ptoTime = timeOfLastAckElicitingPacket `addMicroseconds` pto
                   case r of
                     Nothing -> loop ls $ Just (ptoTime,l)
                     Just (ptoTime0,_)
@@ -314,7 +314,7 @@ updateLossDetectionTimer conn@Connection{..} tmi = do
     when (timerTime oldtmi /= timerTime tmi) $ do
         mgr <- getSystemTimerManager
         let Left tim = timerTime tmi
-        Microseconds us <- getTimeoutInMicrosecond tim
+        duration@(Microseconds us) <- getTimeoutInMicrosecond tim
         if us <= 0 then do
             qlogDebug conn $ Debug "updateLossDetectionTimer: minus"
             cancelLossDetectionTimer conn
@@ -324,8 +324,7 @@ updateLossDetectionTimer conn@Connection{..} tmi = do
             case mk of
               Nothing -> return ()
               Just k -> unregisterTimeout mgr k
-            let duration = Milliseconds (fromIntegral us `div` 1000)
-                newtmi = tmi { timerTime = Right duration }
+            let newtmi = tmi { timerTime = Right duration }
             writeIORef timerInfo newtmi
             qlogLossTimerUpdated conn newtmi
 
@@ -398,7 +397,7 @@ onLossDetectionTimeout conn@Connection{..} = do
 
 sendPing :: Connection -> EncryptionLevel -> IO ()
 sendPing Connection{..} lvl = do
-    now <- getTimeMillisecond
+    now <- getTimeMicrosecond
     atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
         timeOfLastAckElicitingPacket = now
       }
@@ -424,8 +423,8 @@ kLossReductionFactor = (.>>. 1) -- 0.5
 
 -- | Period of time for persistent congestion to be established,
 -- specified as a PTO multiplier.
-kPersistentCongestionThreshold :: Milliseconds -> Milliseconds
-kPersistentCongestionThreshold (Milliseconds ms) = Milliseconds (3 * ms)
+kPersistentCongestionThreshold :: Microseconds -> Microseconds
+kPersistentCongestionThreshold (Microseconds us) = Microseconds (3 * us)
 
 onPacketSentCC :: Connection -> SentPacket -> IO ()
 onPacketSentCC conn@Connection{..} sentPacket = do
@@ -442,7 +441,7 @@ countAckEli sentPacket
   | spAckEliciting (spSentPacketI sentPacket) = 1
   | otherwise                                 = 0
 
-inCongestionRecovery :: TimeMillisecond -> Maybe TimeMillisecond -> Bool
+inCongestionRecovery :: TimeMicrosecond -> Maybe TimeMicrosecond -> Bool
 inCongestionRecovery _ Nothing = False -- checkme
 inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 
@@ -487,13 +486,13 @@ onPacketsAcked conn@Connection{..} ackedPackets = do
               | ackedA >= cwin  = (cwin + maxPktSiz, ackedA - cwin, Avoidance)
               | otherwise       = (cwin, ackedA, Avoidance)
 
-onNewCongestionEvent :: Connection -> TimeMillisecond -> IO ()
+onNewCongestionEvent :: Connection -> TimeMicrosecond -> IO ()
 onNewCongestionEvent conn@Connection{..} sentTime = do
     CC{congestionRecoveryStartTime} <- readTVarIO recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
     unless (inCongestionRecovery sentTime congestionRecoveryStartTime) $ do
-        now <- getTimeMillisecond
+        now <- getTimeMicrosecond
         minWindow <- kMinimumWindow conn
         -- A packet can be sent to speed up loss recovery.
         atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow,bytesAcked} ->
@@ -519,7 +518,7 @@ inPersistentCongestion Connection{..} lostPackets' lstPkt =
           -- https://github.com/quicwg/base-drafts/pull/3290#discussion_r355089680
           -- congestion_period <= largest_lost_packet.time_sent - earliest_lost_packet.time_sent
           let pto = calcPTO rtt Nothing
-              Milliseconds congestionPeriod = kPersistentCongestionThreshold pto
+              Microseconds congestionPeriod = kPersistentCongestionThreshold pto
               threshold = microSecondsToUnixDiffTime congestionPeriod
               beg = spTimeSent fstPkt
               end = spTimeSent lstPkt

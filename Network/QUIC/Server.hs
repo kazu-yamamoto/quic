@@ -269,9 +269,9 @@ dispatch Dispatch{..} ServerConfig{..}
         pushToAcceptQ myAuthCIDs peerAuthCIDs o
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
-        diff <- getElapsedTimeSecond tim
+        diff <- getElapsedTimeMicrosecond tim
         return $ tver == ver
-              && diff <= Seconds 30 -- fixme
+              && diff <= Microseconds 30000000 -- fixme
               && dCID == l
               && sCID == r
     isRetryTokenValid _ = return False

@@ -1,23 +1,18 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Network.QUIC.Types.Time (
-    Seconds(..)
-  , Milliseconds(..)
+    Milliseconds(..)
   , Microseconds(..)
-  , timeMillisecond0
   , milliToMicro
-  , fromTimeSecond
-  , toTimeSecond
-  , TimeSecond
-  , TimeMillisecond
-  , getTimeSecond
-  , getTimeMillisecond
-  , getElapsedTimeSecond
-  , getElapsedTimeMillisecond
+  , microToMilli
+  , TimeMicrosecond
+  , timeMicrosecond0
+  , getTimeMicrosecond
+  , getElapsedTimeMicrosecond
   , getTimeoutInMicrosecond
-  , getPastTimeMillisecond
-  , getFutureTimeMillisecond
-  , addMillisecond
+  , getPastTimeMicrosecond
+  , getFutureTimeMicrosecond
+  , addMicroseconds
   ) where
 
 import Data.UnixTime
@@ -27,80 +22,65 @@ import Network.QUIC.Imports
 
 ----------------------------------------------------------------
 
-newtype Seconds = Seconds Int64 deriving (Eq, Ord, Show)
 newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Num, Bits)
-newtype Microseconds = Microseconds Int deriving (Eq, Ord, Show)
+newtype Microseconds = Microseconds Int deriving (Eq, Ord, Num, Bits)
 
 instance Show Milliseconds where
   show (Milliseconds n) = show n
+
+instance Show Microseconds where
+  show (Microseconds n) = show n
 
 {-# INLINE milliToMicro #-}
 milliToMicro :: Milliseconds -> Microseconds
 milliToMicro (Milliseconds n) = Microseconds (fromIntegral n * 1000)
 
-----------------------------------------------------------------
-
-newtype TimeSecond = TimeSecond Seconds deriving (Eq, Ord, Show)
-type TimeMillisecond = UnixTime
-
-timeMillisecond0 :: UnixTime
-timeMillisecond0 = UnixTime 0 0
-
-fromTimeSecond :: TimeSecond -> Int64
-fromTimeSecond (TimeSecond (Seconds t)) = t
-
-toTimeSecond :: Int64 -> TimeSecond
-toTimeSecond = TimeSecond . Seconds
+microToMilli :: Microseconds -> Milliseconds
+microToMilli (Microseconds n) = Milliseconds (fromIntegral n `div` 1000)
 
 ----------------------------------------------------------------
 
-getTimeSecond :: IO TimeSecond
-getTimeSecond = do
-    CTime s <- utSeconds <$> getUnixTime
-    return $ toTimeSecond s
+type TimeMicrosecond = UnixTime
 
-getTimeMillisecond :: IO TimeMillisecond
-getTimeMillisecond = getUnixTime
+timeMicrosecond0 :: UnixTime
+timeMicrosecond0 = UnixTime 0 0
 
 ----------------------------------------------------------------
 
-getElapsedTimeSecond :: TimeSecond -> IO Seconds
-getElapsedTimeSecond base = do
-    c <- getTimeSecond
-    let elapsed = fromTimeSecond c - fromTimeSecond base
-    return $ Seconds elapsed
+getTimeMicrosecond :: IO TimeMicrosecond
+getTimeMicrosecond = getUnixTime
 
-getElapsedTimeMillisecond :: TimeMillisecond -> IO Milliseconds
-getElapsedTimeMillisecond base = do
-    c <- getTimeMillisecond
+----------------------------------------------------------------
+
+getElapsedTimeMicrosecond :: TimeMicrosecond -> IO Microseconds
+getElapsedTimeMicrosecond base = do
+    c <- getTimeMicrosecond
     let UnixDiffTime (CTime s) u = c `diffUnixTime` base
-        elapsed = fromIntegral (s * 1000 + (fromIntegral u `div` 1000))
-    return $ Milliseconds elapsed
+        elapsed = fromIntegral (s * 1000000 + (fromIntegral u))
+    return $ Microseconds elapsed
 
-getTimeoutInMicrosecond :: TimeMillisecond -> IO Microseconds
+getTimeoutInMicrosecond :: TimeMicrosecond -> IO Microseconds
 getTimeoutInMicrosecond tmout = do
-    c <- getTimeMillisecond
+    c <- getTimeMicrosecond
     let UnixDiffTime (CTime s) u = tmout `diffUnixTime` c
         timeout = fromIntegral s * 1000000 + fromIntegral u
     return $ Microseconds timeout
 
 ----------------------------------------------------------------
 
-getPastTimeMillisecond :: Milliseconds -> IO TimeMillisecond
-getPastTimeMillisecond (Milliseconds m) = do
-    let diff = microSecondsToUnixDiffTime $ negate (m * 1000)
-    c <- getTimeMillisecond
+getPastTimeMicrosecond :: Microseconds -> IO TimeMicrosecond
+getPastTimeMicrosecond (Microseconds us) = do
+    let diff = microSecondsToUnixDiffTime $ negate us
+    c <- getTimeMicrosecond
     let past = c `addUnixDiffTime` diff
     return past
 
-getFutureTimeMillisecond :: Milliseconds -> IO TimeMillisecond
-getFutureTimeMillisecond (Milliseconds m) = do
-    let diff = microSecondsToUnixDiffTime (m * 1000)
-    c <- getTimeMillisecond
+getFutureTimeMicrosecond :: Microseconds -> IO TimeMicrosecond
+getFutureTimeMicrosecond (Microseconds us) = do
+    let diff = microSecondsToUnixDiffTime us
+    c <- getTimeMicrosecond
     let future = c `addUnixDiffTime` diff
     return future
 
-addMillisecond :: TimeMillisecond -> Milliseconds -> TimeMillisecond
-addMillisecond tm (Milliseconds ms) = tm `addUnixDiffTime` delta
-  where
-    delta = microSecondsToUnixDiffTime (ms * 1000)
+addMicroseconds :: TimeMicrosecond -> Microseconds -> TimeMicrosecond
+addMicroseconds t (Microseconds n) = t `addUnixDiffTime` (microSecondsToUnixDiffTime n)

@@ -34,7 +34,7 @@ sendPing conn lvl send = do
         ping = spPlainPacket spkti
     bss <- encodePlainPacket conn ping (Just maxSiz)
     send bss
-    now <- getTimeMillisecond
+    now <- getTimeMicrosecond
     let siz = totalLen bss
         spkt = SentPacket spkti now siz
     qlogSent conn spkt
@@ -65,7 +65,7 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
     loop _ [] _ _ = error "sendPacket: loop"
     loop siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
-        now <- getTimeMillisecond
+        now <- getTimeMicrosecond
         let sentBytes = totalLen bss
         let sentPacket = SentPacket {
                 spSentPacketI  = addPadding spkti
@@ -75,7 +75,7 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
         return (build0 [sentPacket], build1 bss)
     loop siz (spkti:ss) build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) Nothing
-        now <- getTimeMillisecond
+        now <- getTimeMicrosecond
         let sentBytes = totalLen bss
         let sentPacket = SentPacket {
                 spSentPacketI  = spkti

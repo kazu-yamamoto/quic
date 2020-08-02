@@ -170,9 +170,9 @@ packetNumberSpace RTT0Level      = "application_data"
 packetNumberSpace HandshakeLevel = "handshake"
 packetNumberSpace RTT1Level      = "application_data"
 
-delta :: Either TimeMillisecond Milliseconds -> LogStr
+delta :: Either TimeMicrosecond Microseconds -> LogStr
 delta (Left _)                 = "0"
-delta (Right (Milliseconds n)) = sw n
+delta (Right (Microseconds n)) = sw n
 
 instance Qlog Debug where
     qlog (Debug msg) = "{\"message\":" <> sw msg <> "}"
@@ -190,26 +190,26 @@ data QlogMsg = QRecvInitial
              | QLossTimerUpdated LogStr
              | QDebug LogStr
 
-toLogStrTime :: QlogMsg -> Milliseconds -> LogStr
+toLogStrTime :: QlogMsg -> Microseconds -> LogStr
 toLogStrTime QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
 toLogStrTime QSentRetry _ =
     "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],\n"
-toLogStrTime (QReceived msg) (Milliseconds tim) =
+toLogStrTime (QReceived msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_received\"," <> msg <> "],\n"
-toLogStrTime (QSent msg) (Milliseconds tim) =
+toLogStrTime (QSent msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_sent\","     <> msg <> "],\n"
-toLogStrTime (QDropped msg) (Milliseconds tim) =
+toLogStrTime (QDropped msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_dropped\","  <> msg <> "],\n"
-toLogStrTime (QMetricsUpdated msg) (Milliseconds tim) =
+toLogStrTime (QMetricsUpdated msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"metrics_updated\","  <> msg <> "],\n"
-toLogStrTime (QPacketLost msg) (Milliseconds tim) =
+toLogStrTime (QPacketLost msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"packet_lost\","      <> msg <> "],\n"
-toLogStrTime (QCongestionStateUpdated msg) (Milliseconds tim) =
+toLogStrTime (QCongestionStateUpdated msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"congestion_state_updated\"," <> msg <> "],\n"
-toLogStrTime (QLossTimerUpdated msg) (Milliseconds tim) =
+toLogStrTime (QLossTimerUpdated msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"loss_timer_updated\"," <> msg <> "],\n"
-toLogStrTime (QDebug msg) (Milliseconds tim) =
+toLogStrTime (QDebug msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"debug\",\"debug\"," <> msg <> "],\n"
 
 ----------------------------------------------------------------
@@ -223,9 +223,9 @@ type QLogger = QlogMsg -> IO ()
 
 newQlogger :: ByteString -> CID -> FastLogger -> IO QLogger
 newQlogger rl ocid fastLogger = do
-    getTime <- getElapsedTimeMillisecond <$> getTimeMillisecond
+    getTime <- getElapsedTimeMicrosecond <$> getTimeMicrosecond
     let ocid' = toLogStr $ enc16 $ fromCID ocid
-    fastLogger $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" <> toLogStr rl <> "\"}\n  ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" <> ocid' <> "\",\"ODCID\":\"" <> ocid' <> "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
+    fastLogger $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" <> toLogStr rl <> "\"}\n ,\"configuration\":{\"time_units\":\"us\"}\n ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" <> ocid' <> "\",\"ODCID\":\"" <> ocid' <> "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
     let qlogger qmsg = do
             tim <- getTime
             let msg = toLogStrTime qmsg tim

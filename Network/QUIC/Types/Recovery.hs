@@ -37,7 +37,7 @@ data SentPacketI = SentPacketI {
 
 data SentPacket = SentPacket {
     spSentPacketI :: SentPacketI
-  , spTimeSent    :: TimeMillisecond
+  , spTimeSent    :: TimeMicrosecond
   , spSentBytes   :: Int
   } deriving (Eq, Show)
 
@@ -49,34 +49,34 @@ instance Ord SentPacket where
 data RTT = RTT {
   -- | The most recent RTT measurement made when receiving an ack for
   --   a previously unacked packet.
-    latestRTT   :: Milliseconds
+    latestRTT   :: Microseconds
   -- | The smoothed RTT of the connection.
-  , smoothedRTT :: Milliseconds
+  , smoothedRTT :: Microseconds
   -- | The RTT variation.
-  , rttvar      :: Milliseconds
+  , rttvar      :: Microseconds
   -- | The minimum RTT seen in the connection, ignoring ack delay.
-  , minRTT      :: Milliseconds
+  , minRTT      :: Microseconds
   -- | The maximum amount of time by which the receiver intends to
   --   delay acknowledgments for packets in the ApplicationData packet
   --   number space.  The actual ack_delay in a received ACK frame may
   --   be larger due to late timers, reordering, or lost ACK frames.
-  , maxAckDelay1RTT :: Milliseconds
+  , maxAckDelay1RTT :: Microseconds
   -- | The number of times a PTO has been sent without receiving
   --  an ack.
   , ptoCount :: Int
   } deriving Show
 
 -- | The RTT used before an RTT sample is taken.
-kInitialRTT :: Milliseconds
-kInitialRTT = Milliseconds 333
+kInitialRTT :: Microseconds
+kInitialRTT = Microseconds 333000
 
 initialRTT :: RTT
 initialRTT = RTT {
-    latestRTT       = Milliseconds 0
+    latestRTT       = Microseconds 0
   , smoothedRTT     = kInitialRTT
   , rttvar          = kInitialRTT .>>. 1
-  , minRTT          = Milliseconds 0
-  , maxAckDelay1RTT = Milliseconds 0
+  , minRTT          = Microseconds 0
+  , maxAckDelay1RTT = Microseconds 0
   , ptoCount        = 0
   }
 
@@ -107,7 +107,7 @@ data CC = CC {
   --   causing it to enter congestion recovery.  When a packet sent
   --   after this time is acknowledged, QUIC exits congestion
   --   recovery.
-  , congestionRecoveryStartTime :: Maybe TimeMillisecond
+  , congestionRecoveryStartTime :: Maybe TimeMicrosecond
   -- | Slow start threshold in bytes.  When the congestion window is
   --   below ssthresh, the mode is slow start and the window grows by
   --   the number of bytes acknowledged.
@@ -135,12 +135,12 @@ initialCC = CC {
 data LossDetection = LossDetection {
     largestAckedPacket           :: PacketNumber
   , previousAckInfo              :: AckInfo
-  , timeOfLastAckElicitingPacket :: TimeMillisecond
-  , lossTime                     :: Maybe TimeMillisecond
+  , timeOfLastAckElicitingPacket :: TimeMicrosecond
+  , lossTime                     :: Maybe TimeMicrosecond
   } deriving Show
 
 initialLossDetection :: LossDetection
-initialLossDetection = LossDetection (-1) ackInfo0 timeMillisecond0 Nothing
+initialLossDetection = LossDetection (-1) ackInfo0 timeMicrosecond0 Nothing
 
 ----------------------------------------------------------------
 
@@ -163,14 +163,14 @@ instance Show TimerEvent where
     show TimerCancelled = "cancelled"
 
 data TimerInfo = TimerInfo {
-    timerTime  :: Either TimeMillisecond Milliseconds
+    timerTime  :: Either TimeMicrosecond Microseconds
   , timerLevel :: EncryptionLevel
   , timerType  :: TimerType
   , timerEvent :: TimerEvent
   } deriving Eq
 
 timerInfo0 :: TimerInfo
-timerInfo0 = TimerInfo (Right 0) InitialLevel LossTime TimerCancelled
+timerInfo0 = TimerInfo (Right (Microseconds 0)) InitialLevel LossTime TimerCancelled
 
 newtype Debug = Debug String
 

@@ -27,7 +27,7 @@ receiver conn recv = handleLog logAction $ do
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
-        ito <- milliToMicro <$> readMinIdleTimeout conn
+        ito <- readMinIdleTimeout conn
         mx <- timeout ito recv -- fixme: taking minimum with peer's one
         case mx of
           Nothing -> do
@@ -98,7 +98,7 @@ processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping =
     putOutput conn $ OutControl lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) =
-    onAckReceived conn lvl ackInfo ackDelay
+    onAckReceived conn lvl ackInfo $ milliToMicro ackDelay
 processFrame _ _ ResetStream{} = return ()
 processFrame _ _ StopSending{} = return ()
 processFrame conn lvl (CryptoF off cdat) = do

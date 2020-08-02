@@ -156,18 +156,18 @@ clearThread wtid = do
 
 ----------------------------------------------------------------
 
-readMinIdleTimeout :: Connection -> IO Milliseconds
+readMinIdleTimeout :: Connection -> IO Microseconds
 readMinIdleTimeout Connection{..} = readIORef minIdleTimeout
 
-setMinIdleTimeout :: Connection -> Milliseconds -> IO ()
-setMinIdleTimeout Connection{..} ms
-  | ms == Milliseconds 0 = return ()
+setMinIdleTimeout :: Connection -> Microseconds -> IO ()
+setMinIdleTimeout Connection{..} us
+  | us == Microseconds 0 = return ()
   | otherwise            = atomicModifyIORef'' minIdleTimeout modify
   where
-    modify ms0 = min ms ms0
+    modify us0 = min us us0
 
 ----------------------------------------------------------------
 
-setMaxAckDaley :: Connection -> Milliseconds -> IO ()
+setMaxAckDaley :: Connection -> Microseconds -> IO ()
 setMaxAckDaley Connection{..} delay0 =
     atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }

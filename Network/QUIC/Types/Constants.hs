@@ -28,5 +28,5 @@ maximumQUICHeaderSize = 256
 
 ----------------------------------------------------------------
 
-idleTimeout :: Milliseconds
-idleTimeout = Milliseconds 30000
+idleTimeout :: Microseconds
+idleTimeout = Microseconds 30000000

@@ -268,7 +268,7 @@ decodeParameterList bs = unsafeDupablePerformIO
 -- | An example parameters obsoleted in the near future.
 defaultParameters :: Parameters
 defaultParameters = baseParameters {
-    maxIdleTimeout                 = idleTimeout           -- 30000
+    maxIdleTimeout                 = microToMilli idleTimeout -- 30000
   , maxUdpPayloadSize              = maximumUdpPayloadSize -- 2048
   , initialMaxData                 = 655360
   , initialMaxStreamDataBidiLocal  =  65536
