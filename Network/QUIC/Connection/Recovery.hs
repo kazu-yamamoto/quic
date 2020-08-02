@@ -76,14 +76,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
     when changed $ do
         let predicate = fromAckInfoToPred ackInfo . spPacketNumber . spSentPacketI
         releaseLostCandidates conn lvl predicate >>= updateCC
-        releaseByPredicate    conn lvl predicate >>= updateRTTandCC
-    {- fimxe
-    -- Process ECN information if present.
-       if (ACK frame contains ECN information):
-         ProcessECN(ack, lvl)
-    -}
-    lostPackets <- detectAndRemoveLostPackets conn lvl
-    appendLostCandidates conn lostPackets
+        releaseByPredicate    conn lvl predicate >>= detectLossUpdateCC
   where
     update ld@LossDetection{..} = (ld', changed)
       where
@@ -91,7 +84,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
                  , previousAckInfo = ackInfo
                  }
         changed = previousAckInfo /= ackInfo
-    updateRTTandCC newlyAckedPackets = case Seq.viewr newlyAckedPackets of
+    detectLossUpdateCC newlyAckedPackets = case Seq.viewr newlyAckedPackets of
       EmptyR -> return ()
       _ :> lastPkt -> do
           -- If the largest acknowledged is newly acked and
@@ -102,6 +95,14 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
               let latestRtt = max rtt kGranularity
               updateRTT conn lvl latestRtt ackDelay
 
+          {- fimxe
+          -- Process ECN information if present.
+          if (ACK frame contains ECN information):
+             ProcessECN(ack, lvl)
+          -}
+
+          lostPackets <- detectAndRemoveLostPackets conn lvl
+          appendLostCandidates conn lostPackets
           updateCC newlyAckedPackets
 
     updateCC newlyAckedPackets
