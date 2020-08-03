@@ -57,8 +57,8 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
           else
             send bss
         forM_ sentPackets $ \x -> do
-            onPacketSent conn x
             unless dropPacket $ qlogSent conn x
+            onPacketSent conn x
     loop _ [] _ _ = error "sendPacket: loop"
     loop siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
