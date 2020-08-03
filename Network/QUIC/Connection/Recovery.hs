@@ -318,7 +318,7 @@ updateLossDetectionTimer conn@Connection{..} tmi = do
         duration@(Microseconds us) <- getTimeoutInMicrosecond tim
         if us <= 0 then do
             qlogDebug conn $ Debug "updateLossDetectionTimer: minus"
-            cancelLossDetectionTimer conn
+            -- cancelLossDetectionTimer conn -- don't cancel
           else do
             key <- registerTimeout mgr us (onLossDetectionTimeout conn)
             mk <- atomicModifyIORef' timerKey $ \oldkey -> (Just key, oldkey)
