@@ -57,7 +57,7 @@ onPacketSent conn@Connection{..} sentPacket = do
           }
     atomicModifyIORef'' (sentPackets ! lvl) $
         \(SentPackets db) -> SentPackets (db |> sentPacket)
-    setLossDetectionTimer conn
+    setLossDetectionTimer conn lvl
 
 -- fixme
 serverIsAtAntiAmplificationLimit :: Bool
@@ -68,7 +68,7 @@ onPacketReceived conn lvl pn = do
   addPeerPacketNumbers conn lvl pn
   -- If this datagram unblocks the server, arm the
   -- PTO timer to avoid deadlock.
-  when serverIsAtAntiAmplificationLimit $ setLossDetectionTimer conn
+  when serverIsAtAntiAmplificationLimit $ setLossDetectionTimer conn lvl
 
 onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Microseconds -> IO ()
 onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
@@ -123,7 +123,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
               atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
               readIORef recoveryRTT >>= qlogMetricsUpdated conn
 
-          setLossDetectionTimer conn
+          setLossDetectionTimer conn lvl
 
 updateRTT :: Connection -> EncryptionLevel -> Microseconds -> Microseconds -> IO ()
 updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = do
@@ -258,27 +258,23 @@ getPtoTimeAndSpace conn@Connection{..} = do
         completed <- isConnectionEstablished conn
         let lvls | completed = [InitialLevel, HandshakeLevel, RTT1Level]
                  | otherwise = [InitialLevel, HandshakeLevel]
-        loop lvls Nothing
+        loop lvls
   where
-    loop :: [EncryptionLevel] -> (Maybe (TimeMicrosecond, EncryptionLevel)) -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
-    loop [] r = return r
-    loop (l:ls) r = do
+    loop :: [EncryptionLevel] -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
+    loop [] = return Nothing
+    loop (l:ls) = do
         notInFlight <- noInFlightPacket conn l
         if notInFlight then
-            loop ls r
+            loop ls
           else do
             LossDetection{..} <- readIORef (lossDetection ! l)
             if timeOfLastAckElicitingPacket == timeMicrosecond0 then
-                loop ls r
+                loop ls
               else do
                   rtt <- readIORef recoveryRTT
                   let pto = backOff (calcPTO rtt $ Just l) (ptoCount rtt)
                   let ptoTime = timeOfLastAckElicitingPacket `addMicroseconds` pto
-                  case r of
-                    Nothing -> loop ls $ Just (ptoTime,l)
-                    Just (ptoTime0,_)
-                      | ptoTime < ptoTime0 -> loop ls $ Just (ptoTime, l)
-                      | otherwise          -> loop ls r
+                  return $ Just (ptoTime, l)
 
 -- Sec 6.2.1. Computing PTO
 -- "That is, a client does not reset the PTO backoff factor on
@@ -329,14 +325,15 @@ updateLossDetectionTimer conn@Connection{..} tmi = do
             writeIORef timerInfo newtmi
             qlogLossTimerUpdated conn newtmi
 
-setLossDetectionTimer :: Connection -> IO ()
-setLossDetectionTimer conn@Connection{..} = do
+setLossDetectionTimer :: Connection -> EncryptionLevel -> IO ()
+setLossDetectionTimer conn@Connection{..} lvl0 = do
     mtl <- getLossTimeAndSpace conn
     case mtl of
       Just (earliestLossTime,lvl) -> do
-          -- Time threshold loss detection.
-          let tmi = TimerInfo (Left earliestLossTime) lvl LossTime TimerSet
-          updateLossDetectionTimer conn tmi
+          when (lvl0 == lvl) $ do
+              -- Time threshold loss detection.
+              let tmi = TimerInfo (Left earliestLossTime) lvl LossTime TimerSet
+              updateLossDetectionTimer conn tmi
       Nothing ->
           if serverIsAtAntiAmplificationLimit then -- server is at anti-amplification limit
             -- The server's timer is not set if nothing can be sent.
@@ -355,8 +352,9 @@ setLossDetectionTimer conn@Connection{..} = do
                   case mx of
                     Nothing -> cancelLossDetectionTimer conn
                     Just (ptoTime, lvl) -> do
-                        let tmi = TimerInfo (Left ptoTime) lvl PTO TimerSet
-                        updateLossDetectionTimer conn tmi
+                        when (lvl0 == lvl) $ do
+                            let tmi = TimerInfo (Left ptoTime) lvl PTO TimerSet
+                            updateLossDetectionTimer conn tmi
 
 -- The only time the PTO is armed when there are no bytes in flight is
 -- when it's a client and it's unsure if the server has completed
@@ -375,7 +373,7 @@ onLossDetectionTimeout conn@Connection{..} = do
               when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
               onPacketsLost conn lostPackets
               retransmit conn lostPackets
-              setLossDetectionTimer conn
+              setLossDetectionTimer conn lvl
           PTO -> do
               CC{..} <- readTVarIO recoveryCC
               if bytesInFlight > 0 then do
@@ -394,7 +392,7 @@ onLossDetectionTimeout conn@Connection{..} = do
               atomicModifyIORef'' recoveryRTT $ \rtt ->
                 rtt { ptoCount = ptoCount rtt + 1 }
               readIORef recoveryRTT >>= qlogMetricsUpdated conn
-              setLossDetectionTimer conn
+              setLossDetectionTimer conn lvl
 
 sendPing :: Connection -> EncryptionLevel -> IO ()
 sendPing Connection{..} lvl = do
@@ -572,7 +570,10 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     writeIORef (lossDetection ! lvl) initialLossDetection
     atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     readIORef recoveryRTT >>= qlogMetricsUpdated conn
-    setLossDetectionTimer conn
+    let lvl' = case lvl of
+          InitialLevel -> HandshakeLevel
+          _            -> RTT1Level
+    setLossDetectionTimer conn lvl'
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
