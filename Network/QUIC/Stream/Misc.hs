@@ -73,7 +73,7 @@ setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
   where
     set flow
      | flowMaxData flow < n = flow { flowMaxData = n }
-     |otherwise             = flow
+     | otherwise            = flow
 
 ----------------------------------------------------------------
 
