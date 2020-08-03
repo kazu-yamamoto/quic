@@ -138,21 +138,12 @@ chop xxs@(x:xs) = frst : rest
 
 ----------------------------------------------------------------
 
-instance Qlog RTT where
-    qlog RTT{..} = "{\"min_rtt\":"      <> sw minRTT <>
-                   ",\"smoothed_rtt\":" <> sw smoothedRTT <>
-                   ",\"latest_rtt\":"   <> sw latestRTT <>
-                   ",\"rtt_variance\":" <> sw rttvar <>
-                   ",\"pto_count\":"    <> sw ptoCount <>
-                   "}"
-instance Qlog CC where
-    qlog CC{..} = "{\"bytes_in_flight\":"   <> sw bytesInFlight <>
-                  ",\"congestion_window\":" <> sw congestionWindow <>
-                  ",\"ssthresh\":"          <> ssthresh' <>
-                  "}"
+instance Qlog MetricsDiff where
+    qlog (MetricsDiff []) = "{}"
+    qlog (MetricsDiff (x:xs)) = "{" <> tv0 x <> foldr tv "" xs <> "}"
       where
-        ssthresh' | ssthresh == maxBound = "-1"
-                  | otherwise            = sw ssthresh
+        tv0 (tag,val)    =  "\"" <> toLogStr tag <> "\":" <> sw val
+        tv (tag,val) pre = ",\"" <> toLogStr tag <> "\":" <> sw val <> pre
 
 instance Qlog CCMode where
     qlog mode = "{\"new\":\"" <> sw mode <> "\"}"

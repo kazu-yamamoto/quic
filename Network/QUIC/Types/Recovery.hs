@@ -144,6 +144,10 @@ initialLossDetection = LossDetection (-1) ackInfo0 timeMicrosecond0 Nothing
 
 ----------------------------------------------------------------
 
+data MetricsDiff = MetricsDiff [(String,Int)]
+
+----------------------------------------------------------------
+
 data TimerType = LossTime
                | PTO
                deriving Eq

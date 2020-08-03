@@ -119,14 +119,13 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
           --  that is not yet certain that the server has finished
           --  validating the client's address."
           completed <- peerCompletedAddressValidation conn
-          when completed $ do
+          when completed $ metricsUpdated conn $
               atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-              readIORef recoveryRTT >>= qlogMetricsUpdated conn
 
           setLossDetectionTimer conn lvl
 
 updateRTT :: Connection -> EncryptionLevel -> Microseconds -> Microseconds -> IO ()
-updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = do
+updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = metricsUpdated conn $
   atomicModifyIORef'' recoveryRTT $ \rtt@RTT{..} ->
     -- don't use latestRTT, use latestRTT0 instead
     if latestRTT == Microseconds 0 then -- first time
@@ -170,7 +169,6 @@ updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = do
               , rttvar = rttvar'
               }
         in rtt'
-  readIORef recoveryRTT >>= qlogMetricsUpdated conn
 
 detectAndRemoveLostPackets :: Connection -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets conn@Connection{..} lvl = do
@@ -389,9 +387,9 @@ onLossDetectionTimeout conn@Connection{..} = do
                   lvl' <- getEncryptionLevel conn -- fixme
                   sendPing conn lvl'
 
-              atomicModifyIORef'' recoveryRTT $ \rtt ->
-                rtt { ptoCount = ptoCount rtt + 1 }
-              readIORef recoveryRTT >>= qlogMetricsUpdated conn
+              metricsUpdated conn $
+                  atomicModifyIORef'' recoveryRTT $
+                      \rtt -> rtt { ptoCount = ptoCount rtt + 1 }
               setLossDetectionTimer conn lvl
 
 sendPing :: Connection -> EncryptionLevel -> IO ()
@@ -426,12 +424,11 @@ kPersistentCongestionThreshold :: Microseconds -> Microseconds
 kPersistentCongestionThreshold (Microseconds us) = Microseconds (3 * us)
 
 onPacketSentCC :: Connection -> SentPacket -> IO ()
-onPacketSentCC conn@Connection{..} sentPacket = do
+onPacketSentCC conn@Connection{..} sentPacket = metricsUpdated conn $
     atomically $ modifyTVar' recoveryCC $ \cc -> cc {
         bytesInFlight = bytesInFlight cc + bytesSent
       , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
       }
-    readTVarIO recoveryCC >>= qlogMetricsUpdated conn
   where
     bytesSent = spSentBytes sentPacket
 
@@ -445,12 +442,11 @@ inCongestionRecovery _ Nothing = False -- checkme
 inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 
 onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
-onPacketsAcked conn@Connection{..} ackedPackets = do
+onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
     maxPktSiz <- readIORef maxPacketSize
     oldcc <- readTVarIO recoveryCC
     atomically $ modifyTVar' recoveryCC $ modify maxPktSiz
     newcc <- readTVarIO recoveryCC
-    qlogMetricsUpdated conn newcc
     when (ccMode oldcc /= ccMode newcc) $
       qlogContestionStateUpdated conn $ ccMode newcc
   where
@@ -494,18 +490,18 @@ onNewCongestionEvent conn@Connection{..} sentTime = do
         now <- getTimeMicrosecond
         minWindow <- kMinimumWindow conn
         -- A packet can be sent to speed up loss recovery.
-        atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow,bytesAcked} ->
-            let window0 = kLossReductionFactor congestionWindow
-                window = max window0 minWindow
-                acked = kLossReductionFactor bytesAcked
-            in cc {
-                congestionRecoveryStartTime = Just now
-              , congestionWindow = window
-              , ssthresh = window
-              , bytesAcked = acked
-              }
+        metricsUpdated conn $
+            atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow,bytesAcked} ->
+                let window0 = kLossReductionFactor congestionWindow
+                    window = max window0 minWindow
+                    acked = kLossReductionFactor bytesAcked
+                in cc {
+                    congestionRecoveryStartTime = Just now
+                  , congestionWindow = window
+                  , ssthresh = window
+                  , bytesAcked = acked
+                  }
         -- maybeSendOnePacket conn -- fixme
-        readTVarIO recoveryCC >>= qlogMetricsUpdated conn
 
 -- Sec 7.8. Persistent Congestion
 inPersistentCongestion :: Connection -> Seq SentPacket -> SentPacket -> IO Bool
@@ -528,12 +524,12 @@ decreaseCC :: Connection -> Seq SentPacket -> IO ()
 decreaseCC conn@Connection{..} packets = do
     let sentBytes = sum (spSentBytes <$> packets)
         num = sum (countAckEli <$> packets)
-    atomically $ modifyTVar' recoveryCC $ \cc ->
-      cc {
-        bytesInFlight = bytesInFlight cc - sentBytes
-      , numOfAckEliciting = numOfAckEliciting cc - num
-      }
-    readTVarIO recoveryCC >>= qlogMetricsUpdated conn
+    metricsUpdated conn $
+        atomically $ modifyTVar' recoveryCC $ \cc ->
+          cc {
+            bytesInFlight = bytesInFlight cc - sentBytes
+          , numOfAckEliciting = numOfAckEliciting cc - num
+          }
 
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
@@ -548,12 +544,12 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
     persistent <- inPersistentCongestion conn lostPackets' lastPkt
     when persistent $ do
         minWindow <- kMinimumWindow conn
-        atomically $ modifyTVar' recoveryCC $ \cc ->
-          cc {
-            congestionWindow = minWindow
-          , bytesAcked = 0
-          }
-        readTVarIO recoveryCC >>= qlogMetricsUpdated conn
+        metricsUpdated conn $
+            atomically $ modifyTVar' recoveryCC $ \cc ->
+              cc {
+                congestionWindow = minWindow
+              , bytesAcked = 0
+              }
 
 retransmit :: Connection -> Seq SentPacket -> IO ()
 retransmit conn lostPackets =
@@ -568,8 +564,8 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     decreaseCC conn clearedPackets
     -- Reset the loss detection and PTO timer
     writeIORef (lossDetection ! lvl) initialLossDetection
-    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-    readIORef recoveryRTT >>= qlogMetricsUpdated conn
+    metricsUpdated conn $
+        atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     let lvl' = case lvl of
           InitialLevel -> HandshakeLevel
           _            -> RTT1Level
@@ -642,8 +638,8 @@ releaseByRetry conn@Connection{..} = do
     packets <- releaseByClear conn InitialLevel
     decreaseCC conn packets
     writeIORef (lossDetection ! InitialLevel) initialLossDetection
-    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-    readIORef recoveryRTT >>= qlogMetricsUpdated conn
+    metricsUpdated conn $
+        atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     return (spPlainPacket . spSentPacketI <$> packets)
 
 ----------------------------------------------------------------
@@ -678,8 +674,35 @@ checkWindowOpenSTM Connection{..} siz = do
     check (siz <= congestionWindow - bytesInFlight)
 
 setInitialCongestionWindow :: Connection -> Int -> IO ()
-setInitialCongestionWindow conn@Connection{..} pktSiz = do
+setInitialCongestionWindow conn@Connection{..} pktSiz = metricsUpdated conn $
     atomically $ do modifyTVar' recoveryCC $ \cc -> cc {
         congestionWindow = kInitialWindow pktSiz
       }
-    readTVarIO recoveryCC >>= qlogMetricsUpdated conn
+
+----------------------------------------------------------------
+
+metricsUpdated :: Connection -> IO () -> IO ()
+metricsUpdated conn@Connection{..} body = do
+    rtt0 <- readIORef recoveryRTT
+    cc0 <- readTVarIO recoveryCC
+    body
+    rtt1 <- readIORef recoveryRTT
+    cc1 <- readTVarIO recoveryCC
+    let diff = catMaybes [
+            time "min_rtt"      (minRTT      rtt0) (minRTT      rtt1)
+          , time "smoothed_rtt" (smoothedRTT rtt0) (smoothedRTT rtt1)
+          , time "latest_rtt"   (latestRTT   rtt0) (latestRTT   rtt1)
+          , time "rtt_variance" (rttvar      rtt0) (rttvar      rtt1)
+          , numb "pto_count"    (ptoCount    rtt0) (ptoCount    rtt1)
+          , numb "bytes_in_flight"   (bytesInFlight cc0) (bytesInFlight cc1)
+          , numb "congestion_window" (congestionWindow cc0) (congestionWindow cc1)
+          , numb "ssthresh"          (ssthresh cc0) (ssthresh cc1)
+          ]
+    unless (null diff) $ qlogMetricsUpdated conn $ MetricsDiff diff
+  where
+    time tag (Microseconds v0) (Microseconds v1)
+      | v0 == v1  = Nothing
+      | otherwise = Just (tag,v1)
+    numb tag v0 v1
+      | v0 == v1  = Nothing
+      | otherwise = Just (tag,v1)
