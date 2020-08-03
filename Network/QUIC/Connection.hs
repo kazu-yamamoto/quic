@@ -142,6 +142,7 @@ module Network.QUIC.Connection (
   , qlogDropped
   , qlogRecvInitial
   , qlogSentRetry
+  , qlogDebug
   -- Recovery
   , onAckReceived
   , onPacketSent

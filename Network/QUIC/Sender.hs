@@ -46,22 +46,19 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
     go maxSiz = do
         mx <- atomically ((Just    <$> takePingSTM conn)
                  `orElse` (Nothing <$  checkWindowOpenSTM conn maxSiz))
-        case mx of
-          Just lvl -> do
-              sendPing conn lvl send
-              go maxSiz
-          Nothing -> do
-            (sentPackets, bss) <- loop maxSiz spktis id id
-            -- w <- getRandomOneByte
-            -- let dropPacket = (w `mod` 20) == 0
-            let dropPacket = False
-            if dropPacket then
-                putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
-              else
-                send bss
-            forM_ sentPackets $ \x -> do
-                onPacketSent conn x
-                unless dropPacket $ qlogSent conn x
+        when (isJust mx) $ qlogDebug conn $ Debug "probe sent"
+        (sentPackets, bss) <- loop maxSiz spktis id id
+        -- w <- getRandomOneByte
+        -- let dropPacket = (w `mod` 20) == 0
+        let dropPacket = False
+        if dropPacket then do
+            putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
+            qlogDebug conn $ Debug "randomly dropped"
+          else
+            send bss
+        forM_ sentPackets $ \x -> do
+            onPacketSent conn x
+            unless dropPacket $ qlogSent conn x
     loop _ [] _ _ = error "sendPacket: loop"
     loop siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
