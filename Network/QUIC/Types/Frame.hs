@@ -26,9 +26,9 @@ data Frame = Padding Int
            | MaxData Int
            | MaxStreamData StreamId Int
            | MaxStreams Direction Int
-           | DataBlocked -- fixme
-           | StreamDataBlocked -- fixme
-           | StreamsBlocked -- fixme
+           | DataBlocked Int
+           | StreamDataBlocked StreamId Int
+           | StreamsBlocked Direction Int
            | NewConnectionID CIDInfo Int
            | RetireConnectionID Int
            | PathChallenge PathData

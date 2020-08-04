@@ -26,3 +26,7 @@ tryPeekSendStreamQ strm = atomically $ tryPeekTBQueue $ sharedSendStreamQ $ stre
 
 putSendStreamQ :: Stream -> TxStreamData -> IO ()
 putSendStreamQ strm out = atomically $ writeTBQueue (sharedSendStreamQ $ streamShared strm) out
+
+putSendBlockedQ :: Stream -> Blocked -> IO ()
+putSendBlockedQ strm blk = atomically $ writeTQueue (sharedSendBlockedQ $ streamShared strm) blk
+

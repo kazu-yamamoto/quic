@@ -117,6 +117,7 @@ module Network.QUIC.Connection (
   , tryPeekOutput
   , putOutput
   , takeSendStreamQSTM
+  , takeSendBlockQSTM
   , readMigrationQ
   , writeMigrationQ
   -- * Role

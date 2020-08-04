@@ -27,10 +27,13 @@ module Network.QUIC.Stream (
   , is1RTTReady
   , waitWindowIsOpen
   , flowWindow
+  , Blocked(..)
+  , isBlocked
   -- * Queue
   , takeSendStreamQ
   , tryPeekSendStreamQ
   , putSendStreamQ
+  , putSendBlockedQ
   -- * Reass
   , takeRecvStreamQwithSize
   , putRxStreamData

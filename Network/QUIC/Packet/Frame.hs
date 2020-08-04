@@ -77,6 +77,18 @@ encodeFrame wbuf (MaxStreams dir ms) = do
       Bidirectional  -> write8 wbuf 0x12
       Unidirectional -> write8 wbuf 0x13
     encodeInt' wbuf $ fromIntegral ms
+encodeFrame wbuf (DataBlocked n) = do
+    write8 wbuf 0x14
+    encodeInt' wbuf $ fromIntegral n
+encodeFrame wbuf (StreamDataBlocked sid n) = do
+    write8 wbuf 0x15
+    encodeInt' wbuf $ fromIntegral sid
+    encodeInt' wbuf $ fromIntegral n
+encodeFrame wbuf (StreamsBlocked dir ms) = do
+    case dir of
+      Bidirectional  -> write8 wbuf 0x16
+      Unidirectional -> write8 wbuf 0x17
+    encodeInt' wbuf $ fromIntegral ms
 encodeFrame wbuf (NewConnectionID cidInfo rpt) = do
     write8 wbuf 0x18
     encodeInt' wbuf $ fromIntegral $ cidInfoSeq cidInfo
@@ -130,6 +142,7 @@ decodeFrame rbuf = do
       0x00 -> decodePaddingFrames rbuf
       0x01 -> return Ping
       0x02 -> decodeAckFrame rbuf
+   -- 0x03 -> Ack with ECN Counts
       0x04 -> decodeResetStreamFrame rbuf
       0x05 -> decodeStopSending rbuf
       0x06 -> decodeCryptoFrame rbuf
@@ -143,6 +156,10 @@ decodeFrame rbuf = do
       0x11 -> decodeMaxStreamData rbuf
       0x12 -> decodeMaxStreams rbuf Bidirectional
       0x13 -> decodeMaxStreams rbuf Unidirectional
+      0x14 -> decodeDataBlocked rbuf
+      0x15 -> decodeStreamDataBlocked rbuf
+      0x16 -> decodeStreamsBlocked rbuf Bidirectional
+      0x17 -> decodeStreamsBlocked rbuf Unidirectional
       0x18 -> decodeNewConnectionID rbuf
       0x19 -> decodeRetireConnectionID rbuf
       0x1a -> decodePathChallenge rbuf
@@ -219,6 +236,8 @@ decodeStreamFrame rbuf hasOff hasLen fin = do
              extractByteString rbuf len
     return $ StreamF sID off [dat] fin
 
+----------------------------------------------------------------
+
 decodeMaxData :: ReadBuffer -> IO Frame
 decodeMaxData rbuf = MaxData . fromIntegral <$> decodeInt' rbuf
 
@@ -230,6 +249,22 @@ decodeMaxStreamData rbuf = do
 
 decodeMaxStreams :: ReadBuffer -> Direction -> IO Frame
 decodeMaxStreams rbuf dir = MaxStreams dir . fromIntegral <$> decodeInt' rbuf
+
+----------------------------------------------------------------
+
+decodeDataBlocked :: ReadBuffer -> IO Frame
+decodeDataBlocked rbuf = DataBlocked . fromIntegral <$> decodeInt' rbuf
+
+decodeStreamDataBlocked :: ReadBuffer -> IO Frame
+decodeStreamDataBlocked rbuf = do
+    sID <- fromIntegral <$> decodeInt' rbuf
+    msd <- fromIntegral <$> decodeInt' rbuf
+    return $ StreamDataBlocked sID msd
+
+decodeStreamsBlocked :: ReadBuffer -> Direction -> IO Frame
+decodeStreamsBlocked rbuf dir = StreamsBlocked dir . fromIntegral <$> decodeInt' rbuf
+
+----------------------------------------------------------------
 
 decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameQUIC rbuf = do

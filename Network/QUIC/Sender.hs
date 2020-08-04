@@ -26,19 +26,6 @@ cryptoFrame conn crypto lvl = do
 
 ----------------------------------------------------------------
 
-sendPing :: Connection -> EncryptionLevel -> SendMany ->  IO ()
-sendPing conn lvl send = do
-    maxSiz <- getMaxPacketSize conn
-    xs <- construct conn lvl [Ping]
-    let spkti = last xs
-        ping = spPlainPacket spkti
-    bss <- encodePlainPacket conn ping (Just maxSiz)
-    send bss
-    now <- getTimeMicrosecond
-    let siz = totalLen bss
-        spkt = SentPacket spkti now siz
-    qlogSent conn spkt
-
 sendPacket :: Connection -> SendMany -> [SentPacketI] -> IO ()
 sendPacket _ _ [] = return ()
 sendPacket conn send spktis = getMaxPacketSize conn >>= go
@@ -179,20 +166,50 @@ construct conn lvl frames = do
 ----------------------------------------------------------------
 
 data Switch = SwPing EncryptionLevel
+            | SwBlck Blocked
             | SwOut  Output
             | SwStrm TxStreamData
 
 sender :: Connection -> SendMany -> IO ()
 sender conn send = handleLog logAction $ forever $ do
     x <- atomically ((SwPing <$> takePingSTM conn)
+            `orElse` (SwBlck <$> takeSendBlockQSTM conn)
             `orElse` (SwOut  <$> takeOutputSTM conn)
             `orElse` (SwStrm <$> takeSendStreamQSTM conn))
     case x of
-      SwPing lvl -> sendPing conn lvl send
+      SwPing lvl -> sendPing conn send lvl
+      SwBlck blk -> sendBlocked conn send blk
       SwOut  out -> sendOutput conn send out
       SwStrm tx  -> sendTxStreamData conn send tx
   where
     logAction msg = connDebugLog conn ("sender: " <> msg)
+
+----------------------------------------------------------------
+
+sendPing :: Connection -> SendMany -> EncryptionLevel -> IO ()
+sendPing conn send lvl = do
+    maxSiz <- getMaxPacketSize conn
+    xs <- construct conn lvl [Ping]
+    let spkti = last xs
+        ping = spPlainPacket spkti
+    bss <- encodePlainPacket conn ping (Just maxSiz)
+    send bss
+    now <- getTimeMicrosecond
+    let siz = totalLen bss
+        spkt = SentPacket spkti now siz
+    qlogSent conn spkt
+
+----------------------------------------------------------------
+
+sendBlocked :: Connection -> SendMany -> Blocked -> IO ()
+sendBlocked conn send blocked = do
+    let frames = case blocked of
+          StrmBlocked strm n -> [StreamDataBlocked (streamId strm) n]
+          ConnBlocked n      -> [DataBlocked n]
+          BothBlocked strm n m -> [StreamDataBlocked (streamId strm) n, DataBlocked m]
+    construct conn RTT1Level frames >>= sendPacket conn send
+
+----------------------------------------------------------------
 
 sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutControl lvl frames) = do

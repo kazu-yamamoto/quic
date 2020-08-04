@@ -40,7 +40,13 @@ sendStreamMany s dats = do
     let len = sum $ map B.length dats
     -- fixme: size check for 0RTT
     ready <- is1RTTReady s
-    when ready $ waitWindowIsOpen s len
+    when ready $ do
+        mblocked <- isBlocked s len
+        case mblocked of
+          Nothing -> return ()
+          Just blocked -> do
+              putSendBlockedQ s blocked
+              waitWindowIsOpen s len
     addTxStreamData s len
     putSendStreamQ s $ TxStreamData s dats len False
 

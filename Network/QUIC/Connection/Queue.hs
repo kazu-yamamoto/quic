@@ -30,6 +30,9 @@ putOutput conn out = atomically $ writeTQueue (outputQ conn) out
 takeSendStreamQSTM :: Connection -> STM TxStreamData
 takeSendStreamQSTM conn = readTBQueue $ sharedSendStreamQ $ shared conn
 
+takeSendBlockQSTM :: Connection -> STM Blocked
+takeSendBlockQSTM conn = readTQueue $ sharedSendBlockedQ $ shared conn
+
 readMigrationQ :: Connection -> IO CryptPacket
 readMigrationQ conn = atomically $ readTQueue $ migrationQ conn
 

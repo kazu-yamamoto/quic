@@ -10,6 +10,7 @@ module Network.QUIC.Stream.Types (
   , StreamState(..)
   , RecvStreamQ(..)
   , RxStreamData(..)
+  , Blocked(..)
   ) where
 
 import Control.Concurrent.STM
@@ -49,17 +50,24 @@ data TxStreamData = TxStreamData Stream [StreamData] Length Fin
 data RxStreamData = RxStreamData StreamData Offset Length Fin deriving (Eq, Show)
 
 type SendStreamQ = TBQueue TxStreamData
+type SendBlockedQ = TQueue Blocked
 
 data Shared = Shared {
     sharedCloseSent     :: IORef Bool
   , sharedCloseReceived :: IORef Bool
   , shared1RTTReady     :: IORef Bool
   , sharedSendStreamQ   :: SendStreamQ
+  , sharedSendBlockedQ  :: SendBlockedQ
   , sharedConnFlowTx    :: TVar Flow
   }
 
 newShared :: TVar Flow -> IO Shared
-newShared tvar = Shared <$> newIORef False <*> newIORef False <*> newIORef False <*> newTBQueueIO 6 <*> return tvar
+newShared tvar = Shared <$> newIORef False
+                        <*> newIORef False
+                        <*> newIORef False
+                        <*> newTBQueueIO 10
+                        <*> newTQueueIO
+                        <*> return tvar
 
 ----------------------------------------------------------------
 
@@ -91,3 +99,9 @@ data RecvStreamQ = RecvStreamQ {
 
 newRecvStreamQ :: IO RecvStreamQ
 newRecvStreamQ = RecvStreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
+
+----------------------------------------------------------------
+
+data Blocked = BothBlocked Stream Int Int
+             | ConnBlocked Int
+             | StrmBlocked Stream Int
