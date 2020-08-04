@@ -7,6 +7,7 @@ module Network.QUIC.Sender (
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.ByteString as B
+import Data.List (intercalate)
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
@@ -40,7 +41,8 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
         let dropPacket = False
         if dropPacket then do
             putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
-            qlogDebug conn $ Debug "randomly dropped"
+            let dpckts = intercalate "," $ map (show . spPacketNumber) spktis
+            qlogDebug conn $ Debug $ "randomly dropped: " ++ dpckts
           else
             send bss
         forM_ sentPackets $ \x -> do
