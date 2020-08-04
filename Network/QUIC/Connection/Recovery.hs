@@ -340,9 +340,10 @@ setLossDetectionTimer conn@Connection{..} lvl0 = do
               CC{..} <- readTVarIO recoveryCC
               validated <- peerCompletedAddressValidation conn
               if numOfAckEliciting <= 0 && validated then
-                  -- There is nothing to detect lost, so no timer is set.
-                  -- However, the client needs to arm the timer if the
-                  -- server might be blocked by the anti-amplification limit.
+                  -- There is nothing to detect lost, so no timer is
+                  -- set. However, we only do this if the peer has
+                  -- been validated, to prevent the server from being
+                  -- blocked by the anti-amplification limit.
                   cancelLossDetectionTimer conn
                 else do
                   -- Determine which PN space to arm PTO for.
