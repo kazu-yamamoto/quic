@@ -102,7 +102,12 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
           -}
 
           lostPackets <- detectAndRemoveLostPackets conn lvl
-          appendLostCandidates conn lostPackets
+          unless (null lostPackets) $ case lvl of
+            RTT1Level -> appendLostCandidates conn lostPackets
+            _         -> do
+                onPacketsLost conn lostPackets
+                retransmit conn lostPackets
+                -- setLossDetectionTimer in updateCC
           updateCC newlyAckedPackets
 
     updateCC newlyAckedPackets
