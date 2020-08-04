@@ -207,4 +207,4 @@ putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO ()
 putRxCrypto conn lvl rx = do
     strm <- getCryptoStream conn lvl
     dats <- fst <$> tryReassemble strm rx
-    mapM_ (putCrypto conn . InpHandshake lvl) dats
+    unless (null dats) $ mapM_ (putCrypto conn . InpHandshake lvl) dats
