@@ -38,6 +38,9 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
         (sentPackets, bss) <- loop maxSiz spktis id id
         -- w <- getRandomOneByte
         -- let dropPacket = (w `mod` 20) == 0
+        -- let dropPacket
+        --      | isServer conn && spPacketNumber (head spktis) == 0 = True
+        --      | otherwise                                          = False
         let dropPacket = False
         if dropPacket then do
             putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
