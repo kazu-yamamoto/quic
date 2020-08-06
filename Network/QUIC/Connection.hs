@@ -13,7 +13,6 @@ module Network.QUIC.Connection (
   , setPeerPacketNumber
   , getPeerPacketNumber
   , getPeerPacketNumbers
-  , clearPeerPacketNumbers
   , nullPeerPacketNumbers
   , fromPeerPacketNumbers
   -- * Crypto

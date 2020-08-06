@@ -116,11 +116,6 @@ construct conn lvl frames = do
                 return []
               else do
                 mypn <- getPacketNumber conn
-                -- clearPeerPacketNumbers should be called in
-                -- Connection.Recovery. However, this is a necessary
-                -- workaround to not send ACK which the peer cannot
-                -- decrypt.
-                clearPeerPacketNumbers conn lvl'
                 let header
                       | lvl' == InitialLevel = Initial   ver peercid mycid token
                       | otherwise            = Handshake ver peercid mycid
@@ -141,11 +136,6 @@ construct conn lvl frames = do
                     ppkt = toPlainPakcet lvl plain
                 return [SentPacketI mypn lvl ppkt ppns False]
       | otherwise = do
-            -- If packets are acked only once, packet loss of ACKs
-            -- causes spurious retransmits. So, Packets should be
-            -- acked mutliple times. For this purpose,
-            -- peerPacketNumber is not clear here. See section 13.2.3
-            -- of transport.
             resetDealyedAck conn
             ppns <- getPeerPacketNumbers conn lvl
             let frames' | nullPeerPacketNumbers ppns = frames
@@ -222,6 +212,9 @@ sendBlocked conn send blocked = do
 sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutControl lvl frames) = do
     construct conn lvl frames >>= sendPacket conn send
+    when (isClient conn && lvl == HandshakeLevel) $ do
+        dropSecrets conn InitialLevel
+        onPacketNumberSpaceDiscarded conn InitialLevel
 sendOutput conn send (OutHandshake x) = do
     sendCryptoFragments conn send x
 sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
