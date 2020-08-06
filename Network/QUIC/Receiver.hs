@@ -56,7 +56,7 @@ processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
 processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
     let lvl = packetEncryptionLevel hdr
     decryptable <- checkEncryptionLevel conn lvl cpkt
-    when decryptable $ do
+    if decryptable then do
         when (isClient conn && lvl == InitialLevel) $ do
             peercid <- getPeerCID conn
             let newPeerCID = headerPeerCID hdr
@@ -66,6 +66,10 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
             dropSecrets conn InitialLevel
             onPacketNumberSpaceDiscarded conn InitialLevel
         processCryptPacket conn hdr crypt
+     else do
+       when (isClient conn) $ do
+           lvl' <- getEncryptionLevel conn
+           speedup conn lvl'
 
 processCryptPacket :: Connection -> Header -> Crypt -> IO ()
 processCryptPacket conn hdr crypt = do

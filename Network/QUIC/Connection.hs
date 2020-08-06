@@ -154,6 +154,7 @@ module Network.QUIC.Connection (
   , takePingSTM
   , setInitialCongestionWindow
   , resender
+  , speedup
   -- Types
   , connThreadId
   , connHooks

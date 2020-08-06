@@ -13,6 +13,7 @@ module Network.QUIC.Connection.Recovery (
   , takePingSTM
   , setInitialCongestionWindow
   , resender
+  , speedup
   ) where
 
 import Control.Concurrent.STM
@@ -648,6 +649,16 @@ releaseByRetry conn@Connection{..} = do
     metricsUpdated conn $
         atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     return (spPlainPacket . spSentPacketI <$> packets)
+
+----------------------------------------------------------------
+
+speedup :: Connection -> EncryptionLevel -> IO ()
+speedup conn lvl = do
+    packets <- releaseByClear conn lvl
+    unless (null packets) $ do
+        onPacketsLost conn packets
+        retransmit conn packets
+        setLossDetectionTimer conn lvl
 
 ----------------------------------------------------------------
 
