@@ -150,6 +150,7 @@ module Network.QUIC.Connection (
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
   , releaseByRetry
+  , releaseOldest
   , checkWindowOpenSTM
   , takePingSTM
   , setInitialCongestionWindow

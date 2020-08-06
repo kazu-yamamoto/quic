@@ -8,6 +8,7 @@ module Network.QUIC.Connection.Recovery (
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
   , releaseByRetry
+  , releaseOldest
   , checkWindowOpenSTM
   , takePingSTM
   , setInitialCongestionWindow
@@ -526,7 +527,7 @@ inPersistentCongestion Connection{..} lostPackets' lstPkt =
               duration = end `diffUnixTime ` beg
           return (duration >= threshold)
 
-decreaseCC :: Connection -> Seq SentPacket -> IO ()
+decreaseCC :: (Functor m, Foldable m) => Connection -> m SentPacket -> IO ()
 decreaseCC conn@Connection{..} packets = do
     let sentBytes = sum (spSentBytes <$> packets)
         num = sum (countAckEli <$> packets)
@@ -649,6 +650,20 @@ releaseByRetry conn@Connection{..} = do
     return (spPlainPacket . spSentPacketI <$> packets)
 
 ----------------------------------------------------------------
+
+releaseOldest :: Connection -> EncryptionLevel -> IO (Maybe SentPacket)
+releaseOldest conn@Connection{..} lvl = do
+    mr <- atomicModifyIORef' (sentPackets ! lvl) oldest
+    case mr of
+      Nothing   -> return ()
+      Just spkt -> do
+          delPeerPacketNumbers conn lvl $ spPacketNumber $ spSentPacketI spkt
+          decreaseCC conn [spkt]
+    return mr
+  where
+    oldest (SentPackets db) = case Seq.viewl db of
+      EmptyL   -> (SentPackets db, Nothing)
+      x :< db' -> (SentPackets db', Just x)
 
 findOldest :: Connection -> EncryptionLevel -> (SentPacket -> Bool)
            -> IO (Maybe SentPacket)

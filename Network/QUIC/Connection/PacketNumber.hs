@@ -7,6 +7,7 @@ module Network.QUIC.Connection.PacketNumber (
   , getPeerPacketNumber
   , getPeerPacketNumbers
   , addPeerPacketNumbers
+  , delPeerPacketNumbers
   , reducePeerPacketNumbers
   , clearPeerPacketNumbers
   , nullPeerPacketNumbers
@@ -53,6 +54,11 @@ addPeerPacketNumbers :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
 addPeerPacketNumbers Connection{..} lvl pn = atomicModifyIORef'' peerPacketNumbers add
   where
     add (PeerPacketNumbers pns) = PeerPacketNumbers $ Set.insert (convert lvl pn) pns
+
+delPeerPacketNumbers :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
+delPeerPacketNumbers Connection{..} lvl pn = atomicModifyIORef'' peerPacketNumbers del
+  where
+    del (PeerPacketNumbers pns) = PeerPacketNumbers $ Set.delete (convert lvl pn) pns
 
 clearPeerPacketNumbers :: Connection -> EncryptionLevel -> IO ()
 clearPeerPacketNumbers Connection{..} lvl = atomicModifyIORef'' peerPacketNumbers clear

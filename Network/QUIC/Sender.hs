@@ -34,7 +34,7 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
     go maxSiz = do
         mx <- atomically ((Just    <$> takePingSTM conn)
                  `orElse` (Nothing <$  checkWindowOpenSTM conn maxSiz))
-        when (isJust mx) $ qlogDebug conn $ Debug "probe sent"
+        when (isJust mx) $ qlogDebug conn $ Debug "probe new"
         (sentPackets, bss) <- loop maxSiz spktis id id
         -- w <- getRandomOneByte
         -- let dropPacket = (w `mod` 20) == 0
@@ -179,7 +179,13 @@ sender conn send = handleLog logAction $ forever $ do
             `orElse` (SwOut  <$> takeOutputSTM conn)
             `orElse` (SwStrm <$> takeSendStreamQSTM conn))
     case x of
-      SwPing lvl -> sendPing conn send lvl
+      SwPing lvl -> do
+          mp <- releaseOldest conn lvl
+          case mp of
+            Nothing  -> sendPing conn send lvl
+            Just spkt -> do
+                sendOutput conn send $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
+                qlogDebug conn $ Debug "probe old"
       SwBlck blk -> sendBlocked conn send blk
       SwOut  out -> sendOutput conn send out
       SwStrm tx  -> sendTxStreamData conn send tx
