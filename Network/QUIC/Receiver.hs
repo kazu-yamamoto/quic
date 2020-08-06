@@ -110,14 +110,18 @@ processFrame conn lvl (CryptoF off cdat) = do
         rx = RxStreamData cdat off len False
     case lvl of
       InitialLevel   -> do
-          putRxCrypto conn lvl rx
+          dup <- putRxCrypto conn lvl rx
+          when dup $ do
+              putStrLn "DUPLICATED"
+              speedup conn lvl
       RTT0Level -> do
           connDebugLog conn $ "processFrame: invalid packet type " <> bhow lvl
-      HandshakeLevel ->
-          putRxCrypto conn lvl rx
+      HandshakeLevel -> do
+          dup <- putRxCrypto conn lvl rx
+          when dup $ speedup conn lvl
       RTT1Level
         | isClient conn ->
-              putRxCrypto conn lvl rx
+              void $ putRxCrypto conn lvl rx
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token) =
@@ -207,8 +211,9 @@ isStateessReset conn header Crypt{..} = do
              Nothing    -> return False
              Just token -> isStatelessRestTokenValid conn token
 
-putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO ()
+putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO Bool
 putRxCrypto conn lvl rx = do
     strm <- getCryptoStream conn lvl
-    dats <- fst <$> tryReassemble strm rx
+    (dats,_,duplicated) <- tryReassemble strm rx
     unless (null dats) $ mapM_ (putCrypto conn . InpHandshake lvl) dats
+    return duplicated

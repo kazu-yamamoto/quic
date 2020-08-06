@@ -653,8 +653,10 @@ releaseByRetry conn@Connection{..} = do
 ----------------------------------------------------------------
 
 speedup :: Connection -> EncryptionLevel -> IO ()
-speedup conn lvl = do
-    packets <- releaseByClear conn lvl
+speedup conn@Connection{..} lvl = do
+    packets <- atomicModifyIORef' (sentPackets ! lvl) $
+                  \(SentPackets db) -> (emptySentPackets, db)
+    -- don't clear PeerPacketNumbers.
     unless (null packets) $ do
         onPacketsLost conn packets
         retransmit conn packets

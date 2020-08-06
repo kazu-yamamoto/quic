@@ -84,7 +84,7 @@ takeRecvStreamQwithSize strm siz0 = do
 
 putRxStreamData :: Stream -> RxStreamData -> IO ()
 putRxStreamData s rx = do
-    (dats,fin1) <- tryReassemble s rx
+    (dats,fin1,_) <- tryReassemble s rx
     loop fin1 dats
   where
     loop False []    = return ()
@@ -93,26 +93,28 @@ putRxStreamData s rx = do
         when (d /= "") $ putRecvStreamQ s d
         loop fin1 ds
 
-tryReassemble :: Stream -> RxStreamData -> IO ([StreamData], Fin)
-tryReassemble Stream{}   (RxStreamData "" _  _ False) = return ([], False)
+tryReassemble :: Stream -> RxStreamData -> IO ([StreamData], Fin, Bool) -- dup
+tryReassemble Stream{}   (RxStreamData "" _  _ False) = return ([], False, False)
 tryReassemble Stream{..} (RxStreamData "" off _ True) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     if fin0 then do
         stdoutLogger "Illegal Fin" -- fixme
-        return ([], False)
+        return ([], False, False)
       else case off0 `compare` off of
         LT -> do
             let si1 = si0 { streamFin = True }
             writeIORef streamStateRx si1
-            return   ([], False)
-        EQ -> return ([], True)  -- would ignore succeeding fragments
-        GT -> return ([], False) -- ignoring ""
+            return   ([], False, False)
+        EQ -> return ([], True,  False) -- would ignore succeeding fragments
+        GT -> return ([], False, True)  -- ignoring ""
 tryReassemble Stream{..} x@(RxStreamData dat off len False) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     case off0 `compare` off of
       LT -> do
+          len0 <- length <$> readIORef streamReass
           atomicModifyIORef'' streamReass (push x)
-          return ([], False)
+          len1 <- length <$> readIORef streamReass
+          return ([], False, len0 == len1)
       EQ -> do
           let off1 = off0 + len
           xs0 <- readIORef streamReass
@@ -120,26 +122,28 @@ tryReassemble Stream{..} x@(RxStreamData dat off len False) = do
           writeIORef streamStateRx si0 { streamOffset = off2 }
           writeIORef streamReass xs
           let fin1 = null xs && fin0
-          return (dat:dats, fin1)
+          return (dat:dats, fin1, False)
       GT ->
-          return ([], False)  -- ignoring
+          return ([], False, True)  -- ignoring
 tryReassemble Stream{..} x@(RxStreamData dat off len True) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0 { streamFin = True }
     if fin0 then do
         stdoutLogger "Illegal Fin" -- fixme
-        return ([], False)
+        return ([], False, False)
       else case off0 `compare` off of
         LT -> do
             writeIORef streamStateRx si1
             atomicModifyIORef'' streamReass (push x)
-            return ([], False)
+            return ([], False, False)
         EQ -> do
             let off1 = off0 + len
+            len0 <- length <$> readIORef streamReass
             writeIORef streamStateRx si1 { streamOffset = off1 }
-            return ([dat], True) -- would ignore succeeding fragments
+            len1 <- length <$> readIORef streamReass
+            return ([dat], True, len0 == len1) -- would ignore succeeding fragments
         GT ->
-            return ([], False)  -- ignoring
+            return ([], False, True)  -- ignoring
 
 push :: RxStreamData -> [RxStreamData] -> [RxStreamData]
 push x0@(RxStreamData _ off0 len0 _) xs0 = loop xs0
