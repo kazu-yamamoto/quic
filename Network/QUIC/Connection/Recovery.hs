@@ -414,13 +414,13 @@ sendPing Connection{..} lvl = do
 -- | Default limit on the initial bytes in flight.
 kInitialWindow :: Int -> Int
 --kInitialWindow pktSiz = min 14720 (10 * pktSiz)
-kInitialWindow pktSiz = pktSiz .<<. 1
+kInitialWindow pktSiz = pktSiz .<<. 2 --  .<<. 1 is not good enough
 
 -- | Minimum congestion window in bytes.
 kMinimumWindow :: Connection -> IO Int
 kMinimumWindow Connection{..} = do
     siz <- readIORef maxPacketSize
-    return (siz .<<. 1)
+    return (siz .<<. 2) -- .<<. 1 is not good enough
 
 -- | Reduction in congestion window when a new loss event is detected.
 kLossReductionFactor :: Int -> Int
