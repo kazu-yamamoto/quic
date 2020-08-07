@@ -111,12 +111,16 @@ processFrame conn lvl (CryptoF off cdat) = do
     case lvl of
       InitialLevel   -> do
           dup <- putRxCrypto conn lvl rx
-          when dup $ speedup conn lvl
+          when dup $ do
+              qlogDebug conn $ Debug "duplicated"
+              speedup conn lvl
       RTT0Level -> do
           connDebugLog conn $ "processFrame: invalid packet type " <> bhow lvl
       HandshakeLevel -> do
           dup <- putRxCrypto conn lvl rx
-          when dup $ speedup conn lvl
+          when dup $ do
+              qlogDebug conn $ Debug "duplicated"
+              speedup conn lvl
       RTT1Level
         | isClient conn ->
               void $ putRxCrypto conn lvl rx
