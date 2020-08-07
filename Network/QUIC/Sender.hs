@@ -175,7 +175,9 @@ sender conn send = handleLog logAction $ forever $ do
       SwPing lvl -> do
           mp <- releaseOldest conn lvl
           case mp of
-            Nothing  -> sendPing conn send lvl
+            Nothing  -> do
+                qlogDebug conn $ Debug "probe ping"
+                sendPing conn send lvl
             Just spkt -> do
                 sendOutput conn send $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
                 qlogDebug conn $ Debug "probe old"
