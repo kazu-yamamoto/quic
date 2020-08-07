@@ -560,9 +560,11 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
               }
 
 retransmit :: Connection -> Seq SentPacket -> IO ()
-retransmit conn lostPackets =
-    mapM_ put $ Seq.filter (spAckEliciting . spSentPacketI) lostPackets
+retransmit conn lostPackets
+  | null packetsTobeResent = getEncryptionLevel conn >>= sendPing conn
+  | otherwise              = mapM_ put packetsTobeResent
   where
+    packetsTobeResent = Seq.filter (spAckEliciting . spSentPacketI) lostPackets
     put spkt = putOutput conn $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
