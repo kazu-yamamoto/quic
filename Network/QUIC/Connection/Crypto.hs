@@ -4,7 +4,8 @@
 module Network.QUIC.Connection.Crypto (
     setEncryptionLevel
   , getEncryptionLevel
-  , checkEncryptionLevel
+  , waitEncryptionLevel
+  , putOffCrypto
   --
   , getCipher
   , setCipher
@@ -45,14 +46,14 @@ setEncryptionLevel conn@Connection{..} lvl = do
 getEncryptionLevel :: Connection -> IO EncryptionLevel
 getEncryptionLevel Connection{..} = readTVarIO encryptionLevel
 
-checkEncryptionLevel :: Connection -> EncryptionLevel -> CryptPacket -> IO Bool
-checkEncryptionLevel Connection{..} lvl cpkt = atomically $ do
+putOffCrypto :: Connection -> EncryptionLevel -> CryptPacket -> IO ()
+putOffCrypto Connection{..} lvl cpkt =
+    atomically $ modifyTVar' (pendingQ ! lvl) (cpkt :)
+
+waitEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
+waitEncryptionLevel Connection{..} lvl = atomically $ do
     l <- readTVar encryptionLevel
-    if l >= lvl then
-        return True
-      else do
-        modifyTVar' (pendingQ ! lvl) (cpkt :)
-        return False
+    check (l >= lvl)
 
 ----------------------------------------------------------------
 

@@ -18,7 +18,8 @@ module Network.QUIC.Connection (
   -- * Crypto
   , getEncryptionLevel
   , setEncryptionLevel
-  , checkEncryptionLevel
+  , waitEncryptionLevel
+  , putOffCrypto
   , getCipher
   , setCipher
   , getApplicationProtocol

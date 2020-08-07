@@ -55,21 +55,24 @@ receiver conn recv = handleLog logAction $ do
 processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
 processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
     let lvl = packetEncryptionLevel hdr
-    decryptable <- checkEncryptionLevel conn lvl cpkt
-    if decryptable then do
-        when (isClient conn && lvl == InitialLevel) $ do
-            peercid <- getPeerCID conn
-            let newPeerCID = headerPeerCID hdr
-            when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
-            setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
-        when (isServer conn && lvl == HandshakeLevel) $ do
-            dropSecrets conn InitialLevel
-            onPacketNumberSpaceDiscarded conn InitialLevel
-        processCryptPacket conn hdr crypt
-     else do
-       when (isClient conn) $ do
-           lvl' <- getEncryptionLevel conn
-           speedup conn lvl'
+    mx <- timeout (Microseconds 10000) $ waitEncryptionLevel conn lvl
+    case mx of
+      Nothing -> do
+          putOffCrypto conn lvl cpkt
+          when (isClient conn) $ do
+              qlogDebug conn $ Debug "not decryptable"
+              lvl' <- getEncryptionLevel conn
+              speedup conn lvl'
+      Just () -> do
+          when (isClient conn && lvl == InitialLevel) $ do
+              peercid <- getPeerCID conn
+              let newPeerCID = headerPeerCID hdr
+              when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
+              setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
+          when (isServer conn && lvl == HandshakeLevel) $ do
+              dropSecrets conn InitialLevel
+              onPacketNumberSpaceDiscarded conn InitialLevel
+          processCryptPacket conn hdr crypt
 
 processCryptPacket :: Connection -> Header -> Crypt -> IO ()
 processCryptPacket conn hdr crypt = do
