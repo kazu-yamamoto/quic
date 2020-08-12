@@ -551,6 +551,7 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lostPackets' lastPkt
     when persistent $ do
+        qlogDebug conn $ Debug "persistent congestion"
         minWindow <- kMinimumWindow conn
         metricsUpdated conn $
             atomically $ modifyTVar' recoveryCC $ \cc ->
@@ -654,8 +655,9 @@ releaseByRetry conn@Connection{..} = do
 
 ----------------------------------------------------------------
 
-speedup :: Connection -> EncryptionLevel -> IO ()
-speedup conn@Connection{..} lvl = do
+speedup :: Connection -> EncryptionLevel -> String -> IO ()
+speedup conn@Connection{..} lvl desc = do
+    qlogDebug conn $ Debug desc
     packets <- atomicModifyIORef' (sentPackets ! lvl) $
                   \(SentPackets db) -> (emptySentPackets, db)
     -- don't clear PeerPacketNumbers.

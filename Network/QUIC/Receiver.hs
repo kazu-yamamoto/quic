@@ -60,9 +60,8 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
       Nothing -> do
           putOffCrypto conn lvl cpkt
           when (isClient conn) $ do
-              qlogDebug conn $ Debug "not decryptable"
               lvl' <- getEncryptionLevel conn
-              speedup conn lvl'
+              speedup conn lvl' "not decryptable"
       Just () -> do
           when (isClient conn && lvl == InitialLevel) $ do
               peercid <- getPeerCID conn
@@ -114,16 +113,12 @@ processFrame conn lvl (CryptoF off cdat) = do
     case lvl of
       InitialLevel   -> do
           dup <- putRxCrypto conn lvl rx
-          when dup $ do
-              qlogDebug conn $ Debug "duplicated"
-              speedup conn lvl
+          when dup $ speedup conn lvl "duplicated"
       RTT0Level -> do
           connDebugLog conn $ "processFrame: invalid packet type " <> bhow lvl
       HandshakeLevel -> do
           dup <- putRxCrypto conn lvl rx
-          when dup $ do
-              qlogDebug conn $ Debug "duplicated"
-              speedup conn lvl
+          when dup $ speedup conn lvl "duplicated"
       RTT1Level
         | isClient conn ->
               void $ putRxCrypto conn lvl rx
