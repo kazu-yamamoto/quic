@@ -85,8 +85,15 @@ processCryptPacket conn hdr crypt = do
           unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain
           mapM_ (processFrame conn lvl) frames
-          when (any ackEliciting frames && lvl == RTT1Level) $
-              delayedAck conn
+          when (any ackEliciting frames) $ do
+              case lvl of
+                RTT0Level -> return ()
+                RTT1Level -> delayedAck conn
+                _         -> do
+                    sup <- getSpeedingUp conn
+                    when sup $ do
+                        qlogDebug conn $ Debug "ping for speedup"
+                        putOutput conn $ OutControl lvl [Ping]
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do

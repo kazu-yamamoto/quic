@@ -94,17 +94,21 @@ construct :: Connection
           -> [Frame]
           -> IO [SentPacketI]
 construct conn lvl frames = do
-    ver <- getVersion conn
-    token <- getToken conn
-    mycid <- getMyCID conn
-    peercid <- getPeerCID conn
-    established <- isConnectionEstablished conn
-    if established || (isServer conn && lvl == HandshakeLevel) then do
-        constructTargetPacket ver mycid peercid token
+    discarded <- getPacketNumberSpaceDiscarded conn lvl
+    if discarded then
+        return []
       else do
-        ppkt0 <- constructLowerAckPacket ver mycid peercid token
-        ppkt1 <- constructTargetPacket ver mycid peercid token
-        return (ppkt0 ++ ppkt1)
+        ver <- getVersion conn
+        token <- getToken conn
+        mycid <- getMyCID conn
+        peercid <- getPeerCID conn
+        established <- isConnectionEstablished conn
+        if established || (isServer conn && lvl == HandshakeLevel) then do
+            constructTargetPacket ver mycid peercid token
+          else do
+            ppkt0 <- constructLowerAckPacket ver mycid peercid token
+            ppkt1 <- constructTargetPacket ver mycid peercid token
+            return (ppkt0 ++ ppkt1)
   where
     constructLowerAckPacket ver mycid peercid token = do
         let lvl' = case lvl of

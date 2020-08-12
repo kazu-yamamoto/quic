@@ -166,17 +166,20 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     -- payload
     coder <- getCoder conn lvl
     let ciphertext = encrypt coder plaintext header pn
-    -- protecting header
-    let makeMask = protect coder
-    protectHeader headerBeg pnBeg epnLen cipher makeMask ciphertext
-    hdr <- toByteString wbuf
-    return (hdr:ciphertext)
+    if null ciphertext then
+        return []
+      else do
+        -- protecting header
+        let makeMask = protect coder
+        protectHeader headerBeg pnBeg epnLen cipher makeMask ciphertext
+        hdr <- toByteString wbuf
+        return (hdr:ciphertext)
 
 ----------------------------------------------------------------
 
 -- fixme
 protectHeader :: Buffer -> Buffer -> Int -> Cipher -> (Sample -> Mask) -> [CipherText] -> IO ()
-protectHeader headerBeg pnBeg epnLen cipher makeMask ctxttag0 = do
+protectHeader headerBeg pnBeg epnLen cipher makeMask [ctxt0,tag0] = do
     flags <- Flags <$> peek8 headerBeg 0
     let Flags proFlags = protectFlags flags (mask `B.index` 0)
     poke8 proFlags headerBeg 0
@@ -185,7 +188,6 @@ protectHeader headerBeg pnBeg epnLen cipher makeMask ctxttag0 = do
     when (epnLen >= 3) $ shuffle 2
     when (epnLen == 4) $ shuffle 3
   where
-    [ctxt0,tag0] = ctxttag0
     ctxt
       | epnLen == 1 = B.drop 3 ctxt0
       | epnLen == 2 = B.drop 2 ctxt0
@@ -202,3 +204,4 @@ protectHeader headerBeg pnBeg epnLen cipher makeMask ctxttag0 = do
         p0 <- peek8 pnBeg n
         let pp0 = p0 `xor` (mask `B.index` (n + 1))
         poke8 pp0 pnBeg n
+protectHeader _ _ _ _ _ _ = return ()
