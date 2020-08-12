@@ -23,6 +23,7 @@ import Data.UnixTime
 import GHC.Event hiding (new)
 
 import Network.QUIC.Connection.Crypto
+import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.PacketNumber
 import Network.QUIC.Connection.Qlog
 import Network.QUIC.Connection.Queue
@@ -570,6 +571,7 @@ retransmit conn lostPackets
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
+    discardPacketNumberSpace conn lvl
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- releaseByClear conn lvl
     decreaseCC conn clearedPackets
@@ -657,6 +659,7 @@ releaseByRetry conn@Connection{..} = do
 
 speedup :: Connection -> EncryptionLevel -> String -> IO ()
 speedup conn@Connection{..} lvl desc = do
+    setSpeedingUp conn
     qlogDebug conn $ Debug desc
     packets <- atomicModifyIORef' (sentPackets ! lvl) $
                   \(SentPackets db) -> (emptySentPackets, db)

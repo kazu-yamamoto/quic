@@ -74,6 +74,10 @@ module Network.QUIC.Connection (
   , readMinIdleTimeout
   , setMinIdleTimeout
   , setMaxAckDaley
+  , setSpeedingUp
+  , getSpeedingUp
+  , discardPacketNumberSpace
+  , getPacketNumberSpaceDiscarded
   -- * State
   , isConnectionOpen
   , isConnectionEstablished

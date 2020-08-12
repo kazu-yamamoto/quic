@@ -24,6 +24,10 @@ module Network.QUIC.Connection.Misc (
   , readMinIdleTimeout
   , setMinIdleTimeout
   , setMaxAckDaley
+  , setSpeedingUp
+  , getSpeedingUp
+  , discardPacketNumberSpace
+  , getPacketNumberSpaceDiscarded
   ) where
 
 import Control.Concurrent
@@ -171,3 +175,19 @@ setMinIdleTimeout Connection{..} us
 setMaxAckDaley :: Connection -> Microseconds -> IO ()
 setMaxAckDaley Connection{..} delay0 =
     atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }
+
+----------------------------------------------------------------
+
+setSpeedingUp :: Connection -> IO ()
+setSpeedingUp Connection{..} = writeIORef speedingUp True
+
+getSpeedingUp :: Connection -> IO Bool
+getSpeedingUp Connection{..} = readIORef speedingUp
+
+----------------------------------------------------------------
+
+discardPacketNumberSpace :: Connection -> EncryptionLevel -> IO ()
+discardPacketNumberSpace Connection{..} lvl = writeArray spaceDiscarded lvl True
+
+getPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO Bool
+getPacketNumberSpaceDiscarded Connection{..} lvl = readArray spaceDiscarded lvl

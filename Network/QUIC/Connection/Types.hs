@@ -165,6 +165,7 @@ data Connection = Connection {
   , closeState        :: TVar CloseState
   , packetNumber      :: IORef PacketNumber      -- squeezing three to one
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
+  , spaceDiscarded    :: IOArray EncryptionLevel Bool
   , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
   , streamTable       :: IORef StreamTable
   , myStreamId        :: IORef StreamId
@@ -193,6 +194,7 @@ data Connection = Connection {
   , timerInfo         :: IORef TimerInfo
   , lostCandidates    :: TVar SentPackets
   , ptoPing           :: TVar (Maybe EncryptionLevel)
+  , speedingUp        :: IORef Bool
   }
 
 makePendingQ :: IO (Array EncryptionLevel (TVar [CryptPacket]))
@@ -262,6 +264,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTVarIO CloseState { closeSent = False, closeReceived = False }
         <*> newIORef 0
         <*> newIORef 0
+        <*> newArray (InitialLevel,RTT1Level) False
         <*> newIORef emptyPeerPacketNumbers
         <*> newIORef emptyStreamTable
         <*> newIORef (if isclient then 0 else 1)
@@ -290,6 +293,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef timerInfo0
         <*> newTVarIO emptySentPackets
         <*> newTVarIO Nothing
+        <*> newIORef False
   where
     isclient = rl == Client
     initialRoleInfo
