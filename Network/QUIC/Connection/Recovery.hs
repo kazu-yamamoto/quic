@@ -679,6 +679,7 @@ speedup conn@Connection{..} lvl desc = do
 
 ----------------------------------------------------------------
 
+-- Returning the oldest if it is ack-eliciting.
 releaseOldest :: Connection -> EncryptionLevel -> IO (Maybe SentPacket)
 releaseOldest conn@Connection{..} lvl = do
     mr <- atomicModifyIORef' (sentPackets ! lvl) oldest
@@ -690,8 +691,8 @@ releaseOldest conn@Connection{..} lvl = do
     return mr
   where
     oldest (SentPackets db) = case Seq.viewl db of
-      EmptyL   -> (SentPackets db, Nothing)
-      x :< db' -> (SentPackets db', Just x)
+      x :< db' | spAckEliciting (spSentPacketI x) -> (SentPackets db', Just x)
+      _                                           -> (SentPackets db, Nothing)
 
 findOldest :: Connection -> EncryptionLevel -> (SentPacket -> Bool)
            -> IO (Maybe SentPacket)
