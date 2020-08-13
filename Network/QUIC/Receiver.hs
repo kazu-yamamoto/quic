@@ -164,8 +164,16 @@ processFrame conn _ (MaxStreamData sid n) = do
       Nothing   -> return ()
       Just strm -> setTxMaxStreamData strm n
 processFrame _ _ MaxStreams{} = return ()
-processFrame _ _ DataBlocked{} = return ()
-processFrame _ _ StreamDataBlocked{} = return ()
+processFrame conn _ DataBlocked{} = do
+    newMax <- addRxMaxData conn 0
+    putOutput conn $ OutControl RTT1Level [MaxData newMax]
+processFrame conn _ (StreamDataBlocked sid _) = do
+    mstrm <- findStream conn sid
+    case mstrm of
+      Nothing   -> return ()
+      Just strm -> do
+          newMax <- addRxMaxStreamData strm 0
+          putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
 processFrame _ _ StreamsBlocked{} = return ()
 processFrame conn _ (NewConnectionID cidInfo rpt) = do
     addPeerCID conn cidInfo
