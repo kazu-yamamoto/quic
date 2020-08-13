@@ -508,15 +508,15 @@ onNewCongestionEvent conn@Connection{..} sentTime = do
         minWindow <- kMinimumWindow conn
         -- A packet can be sent to speed up loss recovery.
         metricsUpdated conn $
-            atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow,bytesAcked} ->
+            -- https://github.com/quicwg/base-drafts/pull/3917
+            atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow} ->
                 let window0 = kLossReductionFactor congestionWindow
                     window = max window0 minWindow
-                    acked = kLossReductionFactor bytesAcked
                 in cc {
                     congestionRecoveryStartTime = Just now
                   , congestionWindow = window
                   , ssthresh = window
-                  , bytesAcked = acked
+                  , bytesAcked = 0
                   }
         -- maybeSendOnePacket conn -- fixme
 
