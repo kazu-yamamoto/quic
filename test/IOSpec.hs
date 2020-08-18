@@ -14,12 +14,12 @@ import Config
 
 spec :: Spec
 spec = do
-    sc0 <- runIO makeTestServerConfigR
     describe "send & recv" $ do
         it "can exchange data" $ do
+            sc0 <- makeTestServerConfigR
             let cc = testClientConfigR
                 sc = sc0
-            testSendRecv cc sc
+            withPipe $ testSendRecv cc sc
 
 testSendRecv :: ClientConfig -> ServerConfig -> IO ()
 testSendRecv cc sc = do
