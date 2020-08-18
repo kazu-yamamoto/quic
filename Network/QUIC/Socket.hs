@@ -41,13 +41,12 @@ udpServerConnectedSocket mysa peersa = E.bracketOnError open close $ \s -> do
 udpClientConnectedSocket :: HostName -> ServiceName -> IO (Socket,SockAddr)
 udpClientConnectedSocket host port = do
     addr <- head <$> getAddrInfo (Just hints) (Just host) (Just port)
-    E.bracketOnError (open addr) close $ \s -> do
+    E.bracketOnError (openSocket addr) close $ \s -> do
         let sa = addrAddress addr
         connect s sa
         return (s,sa)
  where
     hints = defaultHints { addrSocketType = Datagram }
-    open addr = socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
 
 udpNATRebindingSocket :: SockAddr -> IO Socket
 udpNATRebindingSocket peersa = E.bracketOnError open close $ \s -> do
