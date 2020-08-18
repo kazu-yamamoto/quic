@@ -571,10 +571,10 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
 
 retransmit :: Connection -> Seq SentPacket -> IO ()
 retransmit conn lostPackets
-  | null packetsTobeResent = getEncryptionLevel conn >>= sendPing conn
-  | otherwise              = mapM_ put packetsTobeResent
+  | null packetsToBeResent = getEncryptionLevel conn >>= sendPing conn
+  | otherwise              = mapM_ put packetsToBeResent
   where
-    packetsTobeResent = Seq.filter (spAckEliciting . spSentPacketI) lostPackets
+    packetsToBeResent = Seq.filter (spAckEliciting . spSentPacketI) lostPackets
     put spkt = putOutput conn $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
