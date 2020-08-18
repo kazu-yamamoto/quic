@@ -90,7 +90,7 @@ library
                      , filepath
                      , iproute >= 1.7.8
                      , memory
-                     , network
+                     , network >= 3.1.2
                      , network-byte-order >= 0.1.5
                      , psqueues
                      , stm
@@ -120,7 +120,7 @@ test-suite spec
                       , base16-bytestring
                       , bytestring
                       , hspec
-                      , network
+                      , network >= 3.1.2
                       , quic
                       , tls
 
