@@ -13,12 +13,14 @@ import Test.Hspec
 
 import Network.QUIC
 
+import Config
+
 spec :: Spec
 spec = do
     cred <- runIO $ either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
     smgr <- runIO $ newSessionManager
     let credentials = Credentials [cred]
-        sc0 = defaultServerConfig {
+        sc0 = testServerConfig {
                scSessionManager = smgr
              , scConfig = defaultConfig {
                    confCredentials = credentials
@@ -26,11 +28,11 @@ spec = do
              }
     describe "handshake" $ do
         it "can handshake in the normal case" $ do
-            let cc = defaultClientConfig
+            let cc = testClientConfig
                 sc = sc0
             testHandshake cc sc FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
-            let cc = defaultClientConfig
+            let cc = testClientConfig
                 sc = sc0 {
                        scConfig = (scConfig sc0) {
                                     confGroups = [P256]
@@ -38,36 +40,36 @@ spec = do
                      }
             testHandshake cc sc HelloRetryRequest
         it "can handshake in the case of QUIC retry" $ do
-            let cc = defaultClientConfig
+            let cc = testClientConfig
                 sc = sc0 {
                        scRequireRetry = True
                      }
             testHandshake cc sc FullHandshake
         it "can handshake in the case of resumption" $ do
-            let cc = defaultClientConfig
+            let cc = testClientConfig
                 sc = sc0
             testHandshake2 cc sc (FullHandshake, PreSharedKey) False
         it "can handshake in the case of 0-RTT" $ do
-            let cc = defaultClientConfig
+            let cc = testClientConfig
                 sc = sc0 {
                        scEarlyDataSize  = 1024
                      }
             testHandshake2 cc sc (FullHandshake, RTT0) True
         it "fails with unknown server certificate" $ do
-            let cc1 = defaultClientConfig {
+            let cc1 = testClientConfig {
                         ccValidate = True  -- ouch, default should be reversed
                       }
-                cc2 = defaultClientConfig
+                cc2 = testClientConfig
                 sc  = sc0
                 certificateRejected e
                     | HandshakeFailed TLS.CertificateUnknown <- e = True
                     | otherwise = False
             testHandshake3 cc1 cc2 sc certificateRejected
         it "fails with no group in common" $ do
-            let cc1 = defaultClientConfig {
+            let cc1 = testClientConfig {
                         ccConfig = defaultConfig { confGroups = [X25519] }
                       }
-                cc2 = defaultClientConfig {
+                cc2 = testClientConfig {
                         ccConfig = defaultConfig { confGroups = [P256] }
                       }
                 sc  = sc0 {

@@ -11,18 +11,20 @@ import Test.Hspec
 
 import Network.QUIC
 
+import Config
+
 spec :: Spec
 spec = do
     cred <- runIO $ either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
     let credentials = Credentials [cred]
-        sc0 = defaultServerConfig {
+        sc0 = testServerConfig {
                scConfig = defaultConfig {
                    confCredentials = credentials
                  }
              }
     describe "send & recv" $ do
         it "can exchange data" $ do
-            let cc = defaultClientConfig
+            let cc = testClientConfig
                 sc = sc0
             testSendRecv cc sc
 

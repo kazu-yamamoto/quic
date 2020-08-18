@@ -108,7 +108,8 @@ test-suite spec
   hs-source-dirs:       test
   ghc-options:          -Wall -threaded
   main-is:              Spec.hs
-  other-modules:        HandshakeSpec
+  other-modules:        Config
+                        HandshakeSpec
                         IOSpec
                         PacketSpec
                         TLSSpec

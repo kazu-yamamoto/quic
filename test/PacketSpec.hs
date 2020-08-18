@@ -12,6 +12,8 @@ import Network.TLS (Credentials(..), credentialLoadX509)
 import Network.QUIC
 import Network.QUIC.Internal
 
+import Config
+
 spec :: Spec
 spec = do
     cred <- runIO $ either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
@@ -27,14 +29,14 @@ spec = do
                                                  }
                 clientAuthCIDs = defaultAuthCIDs { initSrcCID = Just clientCID }
                 -- dummy
-            let clientConf = defaultClientConfig
+            let clientConf = testClientConfig
                 ver = head $ confVersions $ ccConfig clientConf
             s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
             q <- newRecvQ
             sref <- newIORef (s,q)
             clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
-            let serverConf = defaultServerConfig {
+            let serverConf = testServerConfig {
                        scConfig = defaultConfig {
                            confCredentials = credentials
                          }
