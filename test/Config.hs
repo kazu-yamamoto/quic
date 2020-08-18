@@ -6,12 +6,13 @@ module Config (
   , testClientConfig
   , testClientConfigR
   , withPipe
+  , Scenario(..)
   ) where
-
 
 import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
+import Data.IORef
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS (Credentials(..), credentialLoadX509)
@@ -66,37 +67,55 @@ testClientConfigR = defaultClientConfig {
       }
   }
 
-withPipe :: IO () -> IO ()
-withPipe body = do
-    let hints = defaultHints {
-            addrSocketType = Datagram
-          }
-    addrC <- head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just "8002")
+data Scenario = Randomly Int
+              | DropClientPacket [Int]
+              | DropServerPacket [Int]
+
+withPipe :: Scenario -> IO () -> IO ()
+withPipe scenario body = do
+    addrC <- resolve "8002"
     let saC = addrAddress addrC
-    addrS <- head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just "8003")
+    addrS <- resolve "8003"
     let saS = addrAddress addrS
+    irefC <- newIORef 0
+    irefS <- newIORef 0
     E.bracket (openSocket addrC) close $ \sockC ->
       E.bracket (openSocket addrS) close $ \sockS -> do
         setSocketOption sockC ReuseAddr 1
         setSocketOption sockS ReuseAddr 1
         bind sockC saC
         connect sockS saS
-        tid0 <- forkIO $ forever $ do
-            bs <- recv sockS 2048
-            dropPacket <- shouldDrop
-            unless dropPacket $ void $ send sockC bs
-        tid1 <- forkIO $ do
+        -- from client
+        tid0 <- forkIO $ do
             (bs,saO) <- recvFrom sockC 2048
             connect sockC saO
-            void $ send sockS bs
+            n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+            dropPacket0 <- shouldDrop scenario True n0
+            unless dropPacket0 $ void $ send sockS bs
             forever $ do
                 bs1 <- recv sockC 2048
-                dropPacket <- shouldDrop
+                n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+                dropPacket <- shouldDrop scenario True n
                 unless dropPacket $ void $ send sockS bs1
+        -- to server
+        tid1 <- forkIO $ forever $ do
+            bs <- recv sockS 2048
+            n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
+            dropPacket <- shouldDrop scenario False n
+            unless dropPacket $ void $ send sockC bs
         body
         killThread tid0
         killThread tid1
   where
-    shouldDrop = do
+    hints = defaultHints { addrSocketType = Datagram }
+    resolve port =
+        head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just port)
+    shouldDrop (Randomly n) _ _ = do
         w <- getRandomOneByte
-        return ((w `mod` 20) == 0)
+        return ((w `mod` fromIntegral n) == 0)
+    shouldDrop (DropClientPacket ns) isC pn
+      | isC       = return (pn `elem` ns)
+      | otherwise = return False
+    shouldDrop (DropServerPacket ns) isC pn
+      | isC       = return False
+      | otherwise = return (pn `elem` ns)

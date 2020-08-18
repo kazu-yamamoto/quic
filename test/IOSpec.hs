@@ -14,12 +14,17 @@ import Config
 
 spec :: Spec
 spec = do
+    sc <- runIO $ makeTestServerConfigR
+    let cc = testClientConfigR
     describe "send & recv" $ do
-        it "can exchange data" $ do
-            sc0 <- makeTestServerConfigR
-            let cc = testClientConfigR
-                sc = sc0
-            withPipe $ testSendRecv cc sc
+        it "can exchange data on random dropping" $ do
+            withPipe (Randomly 20) $ testSendRecv cc sc
+        it "can exchange data on server 0" $ do
+            withPipe (DropServerPacket [0]) $ testSendRecv cc sc
+{-
+        it "can exchange data on server 2" $ do
+            withPipe (DropServerPacket [2]) $ testSendRecv cc sc
+-}
 
 testSendRecv :: ClientConfig -> ServerConfig -> IO ()
 testSendRecv cc sc = do
@@ -29,7 +34,7 @@ testSendRecv cc sc = do
     client mvar = runQUICClient cc $ \conn -> do
         strm <- stream conn
         let bs = B.replicate 10000 0
-        replicateM_ 1000 $ sendStream strm bs
+        replicateM_ 20 $ sendStream strm bs
         shutdownStream strm
         takeMVar mvar
     server mvar = runQUICServer sc $ \conn -> do
@@ -37,7 +42,7 @@ testSendRecv cc sc = do
         bs <- recvStream strm 1024
         let len = B.length bs
         n <- loop strm bs len
-        n `shouldBe` (10000 * 1000)
+        n `shouldBe` (10000 * 20)
         putMVar mvar ()
         stopQUICServer conn
       where
