@@ -7,7 +7,6 @@ module Network.QUIC.Sender (
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.ByteString as B
-import Data.List (intercalate)
 
 import Network.QUIC.Connection
 import Network.QUIC.Exception
@@ -34,25 +33,20 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
     go maxSiz = do
         mx <- atomically ((Just    <$> takePingSTM conn)
                  `orElse` (Nothing <$  checkWindowOpenSTM conn maxSiz))
-        when (isJust mx) $ qlogDebug conn $ Debug "probe new"
-        (sentPackets, bss) <- loop maxSiz spktis id id
-        -- w <- getRandomOneByte
-        -- let dropPacket = (w `mod` 20) == 0
-        -- let dropPacket
-        --      | isServer conn && spPacketNumber (head spktis) == 0 = True
-        --      | otherwise                                          = False
-        let dropPacket = False
-        if dropPacket then do
-            putStrLn $ "Randomly dropped: " ++ show (map spPacketNumber spktis)
-            let dpckts = intercalate "," $ map (show . spPacketNumber) spktis
-            qlogDebug conn $ Debug $ "random drop: " ++ dpckts
-          else
+        case mx of
+          Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
+            qlogDebug conn $ Debug "probe ping"
+            sendPing conn send lvl
+            go maxSiz
+          _ -> do
+            when (isJust mx) $ qlogDebug conn $ Debug "probe new"
+            (sentPackets, bss) <- buildPackets maxSiz spktis id id
             send bss
-        forM_ sentPackets $ \x -> do
-            unless dropPacket $ qlogSent conn x
-            onPacketSent conn x
-    loop _ [] _ _ = error "sendPacket: loop"
-    loop siz [spkti] build0 build1 = do
+            forM_ sentPackets $ \x -> do
+                qlogSent conn x
+                onPacketSent conn x
+    buildPackets _ [] _ _ = error "sendPacket: buildPackets"
+    buildPackets siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
         now <- getTimeMicrosecond
         let sentBytes = totalLen bss
@@ -62,7 +56,7 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
               , spSentBytes    = sentBytes
               }
         return (build0 [sentPacket], build1 bss)
-    loop siz (spkti:ss) build0 build1 = do
+    buildPackets siz (spkti:ss) build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) Nothing
         now <- getTimeMicrosecond
         let sentBytes = totalLen bss
@@ -74,7 +68,7 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
         let build0' = (build0 . (sentPacket :))
             build1' = build1 . (bss ++)
             siz' = siz - sentBytes
-        loop siz' ss build0' build1'
+        buildPackets siz' ss build0' build1'
 
 addPadding :: SentPacketI -> SentPacketI
 addPadding spi = spi {
