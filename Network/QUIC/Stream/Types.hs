@@ -3,6 +3,7 @@ module Network.QUIC.Stream.Types (
   , newStream
   , TxStreamData(..)
   , SendStreamQ
+  , SendBlockedQ
   , Shared(..)
   , newShared
   , Flow(..)
@@ -11,6 +12,7 @@ module Network.QUIC.Stream.Types (
   , RecvStreamQ(..)
   , RxStreamData(..)
   , Blocked(..)
+  , Length
   ) where
 
 import Control.Concurrent.STM

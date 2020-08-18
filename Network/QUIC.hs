@@ -33,6 +33,7 @@ module Network.QUIC (
   , defaultHooks
   -- * Types
   , connDebugLog
+  , DebugLogger
   , isClientInitiatedBidirectional
   , isServerInitiatedBidirectional
   , isClientInitiatedUnidirectional
@@ -69,6 +70,7 @@ import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.IO
 import Network.QUIC.Info
+import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Run

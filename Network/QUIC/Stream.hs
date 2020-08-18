@@ -4,12 +4,16 @@ module Network.QUIC.Stream (
   , newStream
   , TxStreamData(..)
   , SendStreamQ
+  , SendBlockedQ
   , Shared(..)
   , newShared
   , Flow(..)
   , defaultFlow
   , StreamState(..)
+  , RecvStreamQ(..)
   , RxStreamData(..)
+  , Blocked(..)
+  , Length
   -- * Misc
   , getTxStreamOffset
   , isTxStreamClosed
@@ -27,7 +31,6 @@ module Network.QUIC.Stream (
   , is1RTTReady
   , waitWindowIsOpen
   , flowWindow
-  , Blocked(..)
   , isBlocked
   -- * Queue
   , takeSendStreamQ
