@@ -6,7 +6,6 @@ import qualified Data.ByteString as B
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
-import Network.TLS (Credentials(..), credentialLoadX509)
 import Test.Hspec
 
 import Network.QUIC
@@ -15,16 +14,10 @@ import Config
 
 spec :: Spec
 spec = do
-    cred <- runIO $ either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
-    let credentials = Credentials [cred]
-        sc0 = testServerConfig {
-               scConfig = defaultConfig {
-                   confCredentials = credentials
-                 }
-             }
+    sc0 <- runIO makeTestServerConfigR
     describe "send & recv" $ do
         it "can exchange data" $ do
-            let cc = testClientConfig
+            let cc = testClientConfigR
                 sc = sc0
             testSendRecv cc sc
 

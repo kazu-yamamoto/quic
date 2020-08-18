@@ -7,7 +7,7 @@ import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Control.Monad
 import Data.IORef
-import Network.TLS (HandshakeMode13(..), SessionManager(..), SessionData, SessionID, Credentials(..), credentialLoadX509, Group(..))
+import Network.TLS (HandshakeMode13(..), SessionManager(..), SessionData, SessionID, Group(..))
 import qualified Network.TLS as TLS
 import Test.Hspec
 
@@ -17,15 +17,9 @@ import Config
 
 spec :: Spec
 spec = do
-    cred <- runIO $ either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
+    sc0' <- runIO $ makeTestServerConfig
     smgr <- runIO $ newSessionManager
-    let credentials = Credentials [cred]
-        sc0 = testServerConfig {
-               scSessionManager = smgr
-             , scConfig = defaultConfig {
-                   confCredentials = credentials
-                 }
-             }
+    let sc0 = sc0' { scSessionManager = smgr }
     describe "handshake" $ do
         it "can handshake in the normal case" $ do
             let cc = testClientConfig
@@ -67,10 +61,10 @@ spec = do
             testHandshake3 cc1 cc2 sc certificateRejected
         it "fails with no group in common" $ do
             let cc1 = testClientConfig {
-                        ccConfig = defaultConfig { confGroups = [X25519] }
+                        ccConfig = (ccConfig testClientConfig) { confGroups = [X25519] }
                       }
                 cc2 = testClientConfig {
-                        ccConfig = defaultConfig { confGroups = [P256] }
+                        ccConfig = (ccConfig testClientConfig) { confGroups = [P256] }
                       }
                 sc  = sc0 {
                         scConfig = (scConfig sc0) {

@@ -7,7 +7,6 @@ import qualified Data.ByteString as B
 import Data.IORef
 import qualified Network.Socket as NS
 import Test.Hspec
-import Network.TLS (Credentials(..), credentialLoadX509)
 
 import Network.QUIC
 import Network.QUIC.Internal
@@ -16,9 +15,8 @@ import Config
 
 spec :: Spec
 spec = do
-    cred <- runIO $ either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
     -- https://quicwg.org/base-drafts/draft-ietf-quic-tls.html#test-vectors-initial
-    let credentials = Credentials [cred]
+    serverConf <- runIO makeTestServerConfig
     describe "test vector" $ do
         it "describes example of Client Initial draft 29" $ do
             let noLog _ = return ()
@@ -36,11 +34,6 @@ spec = do
             sref <- newIORef (s,q)
             clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
-            let serverConf = testServerConfig {
-                       scConfig = defaultConfig {
-                           confCredentials = credentials
-                         }
-                     }
             serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref
             initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
             (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
