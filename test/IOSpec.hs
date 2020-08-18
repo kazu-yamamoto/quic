@@ -35,8 +35,8 @@ spec = do
             withPipe (DropClientPacket [0]) $ testSendRecv cc sc
         it "can exchange data on client 1" $ do
             withPipe (DropClientPacket [1]) $ testSendRecv cc sc
---        it "can exchange data on client 2" $ do
---            withPipe (DropClientPacket [2]) $ testSendRecv cc sc
+        it "can exchange data on client 2" $ do
+            withPipe (DropClientPacket [2]) $ testSendRecv cc sc
         it "can exchange data on client 3" $ do
             withPipe (DropClientPacket [3]) $ testSendRecv cc sc
         it "can exchange data on client 4" $ do

@@ -681,7 +681,8 @@ speedup conn@Connection{..} lvl desc = do
 
 -- Returning the oldest if it is ack-eliciting.
 releaseOldest :: Connection -> EncryptionLevel -> IO (Maybe SentPacket)
-releaseOldest conn@Connection{..} lvl = do
+releaseOldest conn@Connection{..} RTT1Level = do
+    let lvl = RTT1Level
     mr <- atomicModifyIORef' (sentPackets ! lvl) oldest
     case mr of
       Nothing   -> return ()
@@ -693,6 +694,21 @@ releaseOldest conn@Connection{..} lvl = do
     oldest (SentPackets db) = case Seq.viewl db of
       x :< db' | spAckEliciting (spSentPacketI x) -> (SentPackets db', Just x)
       _                                           -> (SentPackets db, Nothing)
+releaseOldest conn@Connection{..} lvl = do
+    mr <- atomicModifyIORef' (sentPackets ! lvl) oldest
+    case mr of
+      Nothing   -> return ()
+      Just spkt -> do
+          delPeerPacketNumbers conn lvl $ spPacketNumber $ spSentPacketI spkt
+          decreaseCC conn [spkt]
+    return mr
+  where
+    oldest (SentPackets db) = case Seq.viewl db1 of
+      x :< db1' -> let db' = Seq.sort (db1' >< db2)
+                   in (SentPackets db', Just x)
+      _         ->    (SentPackets db, Nothing)
+      where
+        (db1, db2) = Seq.partition (spAckEliciting . spSentPacketI) db
 
 findOldest :: Connection -> EncryptionLevel -> (SentPacket -> Bool)
            -> IO (Maybe SentPacket)

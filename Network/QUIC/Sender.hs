@@ -35,7 +35,6 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
                  `orElse` (Nothing <$  checkWindowOpenSTM conn maxSiz))
         case mx of
           Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
-            qlogDebug conn $ Debug "probe ping"
             sendPing conn send lvl
             go maxSiz
           _ -> do
@@ -170,15 +169,7 @@ sender conn send = handleLog logAction $ forever $ do
             `orElse` (SwOut  <$> takeOutputSTM conn)
             `orElse` (SwStrm <$> takeSendStreamQSTM conn))
     case x of
-      SwPing lvl -> do
-          mp <- releaseOldest conn lvl
-          case mp of
-            Nothing  -> do
-                qlogDebug conn $ Debug "probe ping"
-                sendPing conn send lvl
-            Just spkt -> do
-                sendOutput conn send $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
-                qlogDebug conn $ Debug "probe old"
+      SwPing lvl -> sendPing conn send lvl
       SwBlck blk -> sendBlocked conn send blk
       SwOut  out -> sendOutput conn send out
       SwStrm tx  -> sendTxStreamData conn send tx
@@ -190,7 +181,16 @@ sender conn send = handleLog logAction $ forever $ do
 sendPing :: Connection -> SendMany -> EncryptionLevel -> IO ()
 sendPing conn send lvl = do
     maxSiz <- getMaxPacketSize conn
-    xs <- construct conn lvl [Ping]
+    mp <- releaseOldest conn lvl
+    frames <- case mp of
+      Nothing -> do
+          qlogDebug conn $ Debug "probe ping"
+          return [Ping]
+      Just spkt -> do
+          qlogDebug conn $ Debug "probe old"
+          let PlainPacket _ plain0 = spPlainPacket $ spSentPacketI spkt
+          adjustForRetransmit conn $ plainFrames plain0
+    xs <- construct conn lvl frames
     let spkti = last xs
         ping = spPlainPacket spkti
     bss <- encodePlainPacket conn ping (Just maxSiz)
@@ -221,20 +221,21 @@ sendOutput conn send (OutControl lvl frames) = do
 sendOutput conn send (OutHandshake x) = do
     sendCryptoFragments conn send x
 sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
-    let lvl0 = packetEncryptionLevel hdr0
-    let lvl | lvl0 == RTT0Level = RTT1Level
-            | otherwise         = lvl0
     frames <- adjustForRetransmit conn $ plainFrames plain0
-    -- Ping coems here because it is ack-eliciting.
-    -- But it results in null frames.
-    unless (null frames) $
-        construct conn lvl frames >>= sendPacket conn send
+    let lvl = levelFromHeader hdr0
+    construct conn lvl frames >>= sendPacket conn send
+
+levelFromHeader :: Header -> EncryptionLevel
+levelFromHeader hdr
+    | lvl == RTT0Level = RTT1Level
+    | otherwise        = lvl
+  where
+    lvl = packetEncryptionLevel hdr
 
 adjustForRetransmit :: Connection -> [Frame] -> IO [Frame]
 adjustForRetransmit _    [] = return []
 adjustForRetransmit conn (Padding{}:xs) = adjustForRetransmit conn xs
 adjustForRetransmit conn (Ack{}:xs)     = adjustForRetransmit conn xs
-adjustForRetransmit conn (Ping{}:xs)    = adjustForRetransmit conn xs
 adjustForRetransmit conn (MaxStreamData sid _:xs) = do
     mstrm <- findStream conn sid
     case mstrm of
