@@ -53,14 +53,16 @@ onPacketSent conn@Connection{..} sentPacket = do
     let lvl0 = spEncryptionLevel $ spSentPacketI sentPacket
     let lvl | lvl0 == RTT0Level = RTT1Level
             | otherwise         = lvl0
-    onPacketSentCC conn sentPacket
-    when (spAckEliciting $ spSentPacketI sentPacket) $
-        atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-            timeOfLastAckElicitingPacket = spTimeSent sentPacket
-          }
-    atomicModifyIORef'' (sentPackets ! lvl) $
-        \(SentPackets db) -> SentPackets (db |> sentPacket)
-    setLossDetectionTimer conn lvl
+    discarded <- getPacketNumberSpaceDiscarded conn lvl
+    unless discarded $ do
+        onPacketSentCC conn sentPacket
+        when (spAckEliciting $ spSentPacketI sentPacket) $
+            atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
+                timeOfLastAckElicitingPacket = spTimeSent sentPacket
+              }
+        atomicModifyIORef'' (sentPackets ! lvl) $
+            \(SentPackets db) -> SentPackets (db |> sentPacket)
+        setLossDetectionTimer conn lvl
 
 -- fixme
 serverIsAtAntiAmplificationLimit :: Bool
