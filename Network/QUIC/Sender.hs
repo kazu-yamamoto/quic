@@ -199,6 +199,7 @@ sendPing conn send lvl = do
     let siz = totalLen bss
         spkt = SentPacket spkti now siz
     qlogSent conn spkt
+    onPacketSent conn spkt
 
 ----------------------------------------------------------------
 
