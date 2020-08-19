@@ -152,12 +152,16 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when (window <= (initialWindow .>>. 1)) $ do
         newMax <- addRxMaxStreamData strm initialWindow
         putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
+        fire (Microseconds 50000) $
+            putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
     addRxData conn $ BS.length dat
     cwindow <- getRxDataWindow conn
     let cinitialWindow = initialMaxData $ getMyParameters conn
     when (cwindow <= (cinitialWindow .>>. 1)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         putOutput conn $ OutControl RTT1Level [MaxData newMax]
+        fire (Microseconds 50000) $
+            putOutput conn $ OutControl RTT1Level [MaxData newMax]
 processFrame conn _ (MaxData n) =
     setTxMaxData conn n
 processFrame conn _ (MaxStreamData sid n) = do
@@ -169,6 +173,8 @@ processFrame _ _ MaxStreams{} = return ()
 processFrame conn _ DataBlocked{} = do
     newMax <- addRxMaxData conn 0
     putOutput conn $ OutControl RTT1Level [MaxData newMax]
+    fire (Microseconds 50000) $
+        putOutput conn $ OutControl RTT1Level [MaxData newMax]
 processFrame conn _ (StreamDataBlocked sid _) = do
     mstrm <- findStream conn sid
     case mstrm of
@@ -176,6 +182,8 @@ processFrame conn _ (StreamDataBlocked sid _) = do
       Just strm -> do
           newMax <- addRxMaxStreamData strm 0
           putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
+          fire (Microseconds 50000) $
+              putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
 processFrame _ _ StreamsBlocked{} = return ()
 processFrame conn _ (NewConnectionID cidInfo rpt) = do
     addPeerCID conn cidInfo
