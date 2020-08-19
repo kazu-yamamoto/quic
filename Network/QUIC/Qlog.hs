@@ -1,5 +1,6 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Qlog where
 
@@ -11,6 +12,7 @@ import Data.List (intersperse)
 import System.Log.FastLogger
 
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 class Qlog a where
@@ -138,6 +140,17 @@ chop xxs@(x:xs) = frst : rest
 
 ----------------------------------------------------------------
 
+instance Qlog (Parameters,String) where
+    qlog (Parameters{..},owner) =
+               "{\"owner\":\"" <> toLogStr owner
+          <> "\",\"initial_max_data\":\"" <> sw initialMaxData
+          <> "\",\"initial_max_stream_data_bidi_local\":\"" <> sw initialMaxStreamDataBidiLocal
+          <> "\",\"initial_max_stream_data_bidi_remote\":\"" <> sw initialMaxStreamDataBidiRemote
+          <> "\",\"initial_max_stream_data_uni\":\"" <> sw initialMaxStreamDataUni
+          <> "\"}"
+
+----------------------------------------------------------------
+
 instance Qlog MetricsDiff where
     qlog (MetricsDiff []) = "{}"
     qlog (MetricsDiff (x:xs)) = "{" <> tv0 x <> foldr tv "" xs <> "}"
@@ -180,6 +193,7 @@ data QlogMsg = QRecvInitial
              | QCongestionStateUpdated LogStr
              | QLossTimerUpdated LogStr
              | QDebug LogStr
+             | QParamsSet LogStr
 
 toLogStrTime :: QlogMsg -> Microseconds -> LogStr
 toLogStrTime QRecvInitial _ =
@@ -192,6 +206,8 @@ toLogStrTime (QSent msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_sent\","     <> msg <> "],\n"
 toLogStrTime (QDropped msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"transport\",\"packet_dropped\","  <> msg <> "],\n"
+toLogStrTime (QParamsSet msg) (Microseconds tim) =
+    "[" <> sw tim <> ",\"transport\",\"parameters_set\","  <> msg <> "],\n"
 toLogStrTime (QMetricsUpdated msg) (Microseconds tim) =
     "[" <> sw tim <> ",\"recovery\",\"metrics_updated\","  <> msg <> "],\n"
 toLogStrTime (QPacketLost msg) (Microseconds tim) =

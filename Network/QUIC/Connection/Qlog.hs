@@ -3,6 +3,7 @@
 module Network.QUIC.Connection.Qlog where
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Types
 
@@ -20,6 +21,9 @@ qlogRecvInitial Connection{..} = connQLog QRecvInitial
 
 qlogSentRetry :: Connection -> IO ()
 qlogSentRetry Connection{..} = connQLog QSentRetry
+
+qlogParamsSet :: Connection -> (Parameters,String) -> IO ()
+qlogParamsSet Connection{..} params = connQLog $ QParamsSet $ qlog params
 
 qlogMetricsUpdated :: Connection -> MetricsDiff -> IO ()
 qlogMetricsUpdated Connection{..} m = connQLog $ QMetricsUpdated $ qlog m

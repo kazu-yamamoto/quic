@@ -150,6 +150,7 @@ module Network.QUIC.Connection (
   , qlogRecvInitial
   , qlogSentRetry
   , qlogDebug
+  , qlogParamsSet
   -- Recovery
   , onAckReceived
   , onPacketSent

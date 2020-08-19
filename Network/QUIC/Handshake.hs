@@ -105,6 +105,7 @@ handshakeClient conf conn myAuthCIDs = do
         setter = setResumptionSession conn
         handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT
     tid <- forkIO (handshaker `E.catch` tell)
+    qlogParamsSet conn (confParameters (ccConfig conf), "local")
     setKillHandshaker conn tid
     if use0RTT then
        wait0RTTReady conn
@@ -196,6 +197,7 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
           Just params -> do
               checkAuthCIDs params
               setParams params
+              qlogParamsSet conn (params,"remote")
   where
     err = E.throwIO TransportParameterError
     checkAuthCIDs params = do
