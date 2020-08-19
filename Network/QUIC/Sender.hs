@@ -151,23 +151,16 @@ construct conn lvl frames = do
             ppns <- getPeerPacketNumbers conn lvl
             if nullPeerPacketNumbers ppns then
                 return []
-              else do
-                mypn <- getPacketNumber conn
+              else
                 if lvl == RTT1Level then do
                     prevppns <- getPreviousRTT1PPNs conn
                     if ppns /= prevppns then do
                         setPreviousRTT1PPNs conn ppns
-                        let frames' = [toAck ppns]
-                            plain = Plain (Flags 0) mypn frames'
-                            ppkt = toPlainPakcet lvl plain
-                        return [SentPacketI mypn lvl ppkt ppns False]
+                        makeAck ppns
                      else
                        return []
-                  else do
-                    let frames' = [toAck ppns]
-                        plain = Plain (Flags 0) mypn frames'
-                        ppkt = toPlainPakcet lvl plain
-                    return [SentPacketI mypn lvl ppkt ppns False]
+                  else
+                    makeAck ppns
       | otherwise = do
             resetDealyedAck conn
             ppns <- getPeerPacketNumbers conn lvl
@@ -178,7 +171,6 @@ construct conn lvl frames = do
                 ppkt = toPlainPakcet lvl plain
             return [SentPacketI mypn lvl ppkt ppns True]
       where
-        toAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
         toPlainPakcet InitialLevel   plain =
             PlainPacket (Initial   ver peercid mycid token) plain
         toPlainPakcet RTT0Level      plain =
@@ -187,6 +179,13 @@ construct conn lvl frames = do
             PlainPacket (Handshake ver peercid mycid)       plain
         toPlainPakcet RTT1Level      plain =
             PlainPacket (Short         peercid)             plain
+        toAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
+        makeAck ppns = do
+            mypn <- getPacketNumber conn
+            let frames' = [toAck ppns]
+                plain = Plain (Flags 0) mypn frames'
+                ppkt = toPlainPakcet lvl plain
+            return [SentPacketI mypn lvl ppkt ppns False]
 
 ----------------------------------------------------------------
 
