@@ -131,10 +131,21 @@ construct conn lvl frames = do
                 return []
               else do
                 mypn <- getPacketNumber conn
-                let frames' = [toAck ppns]
-                    plain = Plain (Flags 0) mypn frames'
-                    ppkt = toPlainPakcet lvl plain
-                return [SentPacketI mypn lvl ppkt ppns False]
+                if lvl == RTT1Level then do
+                    prevppns <- getPreviousRTT1PPNs conn
+                    if ppns /= prevppns then do
+                        setPreviousRTT1PPNs conn ppns
+                        let frames' = [toAck ppns]
+                            plain = Plain (Flags 0) mypn frames'
+                            ppkt = toPlainPakcet lvl plain
+                        return [SentPacketI mypn lvl ppkt ppns False]
+                     else
+                       return []
+                  else do
+                    let frames' = [toAck ppns]
+                        plain = Plain (Flags 0) mypn frames'
+                        ppkt = toPlainPakcet lvl plain
+                    return [SentPacketI mypn lvl ppkt ppns False]
       | otherwise = do
             resetDealyedAck conn
             ppns <- getPeerPacketNumbers conn lvl

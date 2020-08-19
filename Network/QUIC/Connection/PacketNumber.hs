@@ -12,6 +12,8 @@ module Network.QUIC.Connection.PacketNumber (
   , clearPeerPacketNumbers
   , nullPeerPacketNumbers
   , fromPeerPacketNumbers
+  , setPreviousRTT1PPNs
+  , getPreviousRTT1PPNs
   ) where
 
 import qualified Data.Set as Set
@@ -70,6 +72,12 @@ reducePeerPacketNumbers Connection{..} lvl (PeerPacketNumbers pns) = atomicModif
   where
     pns' = Set.map (convert lvl) pns
     reduce (PeerPacketNumbers pns0) = PeerPacketNumbers (pns0 Set.\\ pns')
+
+setPreviousRTT1PPNs :: Connection -> PeerPacketNumbers -> IO ()
+setPreviousRTT1PPNs Connection{..} ppns = writeIORef previousRTT1PPNs ppns
+
+getPreviousRTT1PPNs :: Connection -> IO PeerPacketNumbers
+getPreviousRTT1PPNs Connection{..} = readIORef previousRTT1PPNs
 
 ----------------------------------------------------------------
 

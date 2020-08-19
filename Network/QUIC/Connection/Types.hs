@@ -167,6 +167,7 @@ data Connection = Connection {
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , spaceDiscarded    :: IOArray EncryptionLevel Bool
   , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
+  , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
   , streamTable       :: IORef StreamTable
   , myStreamId        :: IORef StreamId
   , myUniStreamId     :: IORef StreamId
@@ -265,6 +266,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef 0
         <*> newIORef 0
         <*> newArray (InitialLevel,RTT1Level) False
+        <*> newIORef emptyPeerPacketNumbers
         <*> newIORef emptyPeerPacketNumbers
         <*> newIORef emptyStreamTable
         <*> newIORef (if isclient then 0 else 1)

@@ -15,6 +15,8 @@ module Network.QUIC.Connection (
   , getPeerPacketNumbers
   , nullPeerPacketNumbers
   , fromPeerPacketNumbers
+  , setPreviousRTT1PPNs
+  , getPreviousRTT1PPNs
   -- * Crypto
   , getEncryptionLevel
   , setEncryptionLevel
