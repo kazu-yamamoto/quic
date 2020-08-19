@@ -212,12 +212,19 @@ sendBlocked conn send blocked = do
 
 ----------------------------------------------------------------
 
+discardInitialPacketNumberSpace :: Connection -> IO ()
+discardInitialPacketNumberSpace conn
+  | isClient conn = do
+        discarded <- getPacketNumberSpaceDiscarded conn InitialLevel
+        unless discarded $ do
+            dropSecrets conn InitialLevel
+            onPacketNumberSpaceDiscarded conn InitialLevel
+  | otherwise = return ()
+
 sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutControl lvl frames) = do
     construct conn lvl frames >>= sendPacket conn send
-    when (isClient conn && lvl == HandshakeLevel) $ do
-        dropSecrets conn InitialLevel
-        onPacketNumberSpaceDiscarded conn InitialLevel
+    when (lvl == HandshakeLevel) $ discardInitialPacketNumberSpace conn
 sendOutput conn send (OutHandshake x) = do
     sendCryptoFragments conn send x
 sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
@@ -268,9 +275,8 @@ thresholdC = 200
 sendCryptoFragments :: Connection -> SendMany -> [(EncryptionLevel, CryptoData)] -> IO ()
 sendCryptoFragments conn send lcs = do
     loop limitationC id lcs
-    when (isClient conn && any (\(l,_) -> l == HandshakeLevel) lcs) $ do
-        dropSecrets conn InitialLevel
-        onPacketNumberSpaceDiscarded conn InitialLevel
+    when (any (\(l,_) -> l == HandshakeLevel) lcs) $
+        discardInitialPacketNumberSpace conn
   where
     loop :: Int -> ([SentPacketI] -> [SentPacketI]) -> [(EncryptionLevel, CryptoData)] -> IO ()
     loop _ build0 [] = do

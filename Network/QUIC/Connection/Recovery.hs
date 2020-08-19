@@ -587,10 +587,11 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     writeIORef (lossDetection ! lvl) initialLossDetection
     metricsUpdated conn $
         atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-    let lvl' = case lvl of
-          InitialLevel -> HandshakeLevel
-          _            -> RTT1Level
+    let (lvl',label) = case lvl of
+          InitialLevel -> (HandshakeLevel,"initial")
+          _            -> (RTT1Level, "handshake")
     setLossDetectionTimer conn lvl'
+    qlogDebug conn $ Debug (label ++ " discarded")
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
