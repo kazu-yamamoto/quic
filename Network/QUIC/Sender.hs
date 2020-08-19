@@ -35,39 +35,38 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
                  `orElse` (Nothing <$  checkWindowOpenSTM conn maxSiz))
         case mx of
           Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
-            sendPing conn send lvl
+            sendPingPacket conn send lvl
             go maxSiz
           _ -> do
             when (isJust mx) $ qlogDebug conn $ Debug "probe new"
             (sentPackets, bss) <- buildPackets maxSiz spktis id id
             send bss
-            forM_ sentPackets $ \x -> do
-                qlogSent conn x
-                onPacketSent conn x
+            forM_ sentPackets $ \sentPacket -> do
+                qlogSent conn sentPacket
+                onPacketSent conn sentPacket
     buildPackets _ [] _ _ = error "sendPacket: buildPackets"
     buildPackets siz [spkti] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
-        now <- getTimeMicrosecond
-        let sentBytes = totalLen bss
-        let sentPacket = SentPacket {
-                spSentPacketI  = addPadding spkti
-              , spTimeSent     = now
-              , spSentBytes    = sentBytes
-              }
+        sentPacket <- makeSentPacket spkti bss
         return (build0 [sentPacket], build1 bss)
     buildPackets siz (spkti:ss) build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkti) Nothing
-        now <- getTimeMicrosecond
-        let sentBytes = totalLen bss
-        let sentPacket = SentPacket {
-                spSentPacketI  = spkti
-              , spTimeSent     = now
-              , spSentBytes    = sentBytes
-              }
+        sentPacket <- makeSentPacket spkti bss
         let build0' = (build0 . (sentPacket :))
             build1' = build1 . (bss ++)
-            siz' = siz - sentBytes
+            siz' = siz - spSentBytes sentPacket
         buildPackets siz' ss build0' build1'
+
+makeSentPacket :: SentPacketI -> [ByteString] -> IO SentPacket
+makeSentPacket spkti bss = do
+    now <- getTimeMicrosecond
+    return SentPacket {
+            spSentPacketI  = addPadding spkti
+          , spTimeSent     = now
+          , spSentBytes    = sentBytes
+          }
+  where
+    sentBytes = totalLen bss
 
 addPadding :: SentPacketI -> SentPacketI
 addPadding spi = spi {
@@ -79,6 +78,29 @@ addPadding spi = spi {
         plain' = plain {
           plainFrames = plainFrames plain ++ [Padding 0]
         }
+
+----------------------------------------------------------------
+
+sendPingPacket :: Connection -> SendMany -> EncryptionLevel -> IO ()
+sendPingPacket conn send lvl = do
+    maxSiz <- getMaxPacketSize conn
+    mp <- releaseOldest conn lvl
+    frames <- case mp of
+      Nothing -> do
+          qlogDebug conn $ Debug "probe ping"
+          return [Ping]
+      Just spkt -> do
+          qlogDebug conn $ Debug "probe old"
+          let PlainPacket _ plain0 = spPlainPacket $ spSentPacketI spkt
+          adjustForRetransmit conn $ plainFrames plain0
+    xs <- construct conn lvl frames
+    let spkti = last xs
+        ping = spPlainPacket spkti
+    bss <- encodePlainPacket conn ping (Just maxSiz)
+    send bss
+    sentPacket <- makeSentPacket spkti bss
+    qlogSent conn sentPacket
+    onPacketSent conn sentPacket
 
 ----------------------------------------------------------------
 
@@ -180,37 +202,12 @@ sender conn send = handleLog logAction $ forever $ do
             `orElse` (SwOut  <$> takeOutputSTM conn)
             `orElse` (SwStrm <$> takeSendStreamQSTM conn))
     case x of
-      SwPing lvl -> sendPing conn send lvl
+      SwPing lvl -> sendPingPacket conn send lvl
       SwBlck blk -> sendBlocked conn send blk
       SwOut  out -> sendOutput conn send out
       SwStrm tx  -> sendTxStreamData conn send tx
   where
     logAction msg = connDebugLog conn ("sender: " <> msg)
-
-----------------------------------------------------------------
-
-sendPing :: Connection -> SendMany -> EncryptionLevel -> IO ()
-sendPing conn send lvl = do
-    maxSiz <- getMaxPacketSize conn
-    mp <- releaseOldest conn lvl
-    frames <- case mp of
-      Nothing -> do
-          qlogDebug conn $ Debug "probe ping"
-          return [Ping]
-      Just spkt -> do
-          qlogDebug conn $ Debug "probe old"
-          let PlainPacket _ plain0 = spPlainPacket $ spSentPacketI spkt
-          adjustForRetransmit conn $ plainFrames plain0
-    xs <- construct conn lvl frames
-    let spkti = last xs
-        ping = spPlainPacket spkti
-    bss <- encodePlainPacket conn ping (Just maxSiz)
-    send bss
-    now <- getTimeMicrosecond
-    let siz = totalLen bss
-        spkt = SentPacket spkti now siz
-    qlogSent conn spkt
-    onPacketSent conn spkt
 
 ----------------------------------------------------------------
 
