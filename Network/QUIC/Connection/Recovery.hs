@@ -581,6 +581,10 @@ retransmit conn lostPackets
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
+    let (lvl',label) = case lvl of
+          InitialLevel -> (HandshakeLevel,"initial")
+          _            -> (RTT1Level, "handshake")
+    qlogDebug conn $ Debug (label ++ " discarded")
     discardPacketNumberSpace conn lvl
     -- Remove any unacknowledged packets from flight.
     clearedPackets <- releaseByClear conn lvl
@@ -589,11 +593,7 @@ onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
     writeIORef (lossDetection ! lvl) initialLossDetection
     metricsUpdated conn $
         atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-    let (lvl',label) = case lvl of
-          InitialLevel -> (HandshakeLevel,"initial")
-          _            -> (RTT1Level, "handshake")
     setLossDetectionTimer conn lvl'
-    qlogDebug conn $ Debug (label ++ " discarded")
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
