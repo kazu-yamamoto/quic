@@ -42,10 +42,10 @@ instance Qlog SentPacket where
 instance Qlog SentPacketI where
     qlog SentPacketI{..} =
         "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\"" <>
-        ",\"packet_number\":" <> sw spPacketNumber <>
+        ",\"packet_number\":" <> sw spiPacketNumber <>
         "}"
       where
-        PlainPacket hdr _ = spPlainPacket
+        PlainPacket hdr _ = spiPlainPacket
 
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"packet_type\":\"stateless_reset\",\"header\":{\"packet_number\":\"\"}}"

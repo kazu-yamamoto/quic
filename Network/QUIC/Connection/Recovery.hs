@@ -50,13 +50,13 @@ kGranularity = Microseconds 5000
 
 onPacketSent :: Connection -> SentPacket -> IO ()
 onPacketSent conn@Connection{..} sentPacket = do
-    let lvl0 = spEncryptionLevel $ spSentPacketI sentPacket
+    let lvl0 = spEncryptionLevel sentPacket
     let lvl | lvl0 == RTT0Level = RTT1Level
             | otherwise         = lvl0
     discarded <- getPacketNumberSpaceDiscarded conn lvl
     unless discarded $ do
         onPacketSentCC conn sentPacket
-        when (spAckEliciting $ spSentPacketI sentPacket) $
+        when (spAckEliciting sentPacket) $
             atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
                 timeOfLastAckElicitingPacket = spTimeSent sentPacket
               }
@@ -79,7 +79,7 @@ onAckReceived :: Connection -> EncryptionLevel -> AckInfo -> Microseconds -> IO 
 onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
     changed <- atomicModifyIORef' (lossDetection ! lvl) update
     when changed $ do
-        let predicate = fromAckInfoToPred ackInfo . spPacketNumber . spSentPacketI
+        let predicate = fromAckInfoToPred ackInfo . spPacketNumber
         releaseLostCandidates conn lvl predicate >>= updateCC
         releaseByPredicate    conn lvl predicate >>= detectLossUpdateCC
   where
@@ -94,8 +94,8 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
       _ :> lastPkt -> do
           -- If the largest acknowledged is newly acked and
           -- at least one ack-eliciting was newly acked, update the RTT.
-          when (spPacketNumber (spSentPacketI lastPkt) == largestAcked
-             && any (spAckEliciting . spSentPacketI) newlyAckedPackets) $ do
+          when (spPacketNumber lastPkt == largestAcked
+             && any spAckEliciting newlyAckedPackets) $ do
               rtt <- getElapsedTimeMicrosecond $ spTimeSent lastPkt
               let latestRtt = max rtt kGranularity
               updateRTT conn lvl latestRtt ackDelay
@@ -198,11 +198,11 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
     let lossDelay = max lossDelay0 kGranularity
 
     tm <- getPastTimeMicrosecond lossDelay
-    let predicate ent = (spPacketNumber (spSentPacketI ent) <= largestAckedPacket - kPacketThreshold)
-                     || (spPacketNumber (spSentPacketI ent) <= largestAckedPacket && spTimeSent ent <= tm)
+    let predicate ent = (spPacketNumber ent <= largestAckedPacket - kPacketThreshold)
+                     || (spPacketNumber ent <= largestAckedPacket && spTimeSent ent <= tm)
     lostPackets <- releaseByPredicate conn lvl predicate
 
-    mx <- findOldest conn lvl (\x -> spPacketNumber (spSentPacketI x) <= largestAckedPacket)
+    mx <- findOldest conn lvl (\x -> spPacketNumber x <= largestAckedPacket)
     case mx of
       -- No gap packet. PTO turn.
       Nothing -> return ()
@@ -453,8 +453,8 @@ onPacketSentCC conn@Connection{..} sentPacket = metricsUpdated conn $
 
 countAckEli :: SentPacket -> Int
 countAckEli sentPacket
-  | spAckEliciting (spSentPacketI sentPacket) = 1
-  | otherwise                                 = 0
+  | spAckEliciting sentPacket = 1
+  | otherwise                 = 0
 
 inCongestionRecovery :: TimeMicrosecond -> Maybe TimeMicrosecond -> Bool
 inCongestionRecovery _ Nothing = False -- checkme
@@ -576,8 +576,8 @@ retransmit conn lostPackets
   | null packetsToBeResent = getEncryptionLevel conn >>= sendPing conn
   | otherwise              = mapM_ put packetsToBeResent
   where
-    packetsToBeResent = Seq.filter (spAckEliciting . spSentPacketI) lostPackets
-    put spkt = putOutput conn $ OutRetrans $ spPlainPacket $ spSentPacketI spkt
+    packetsToBeResent = Seq.filter spAckEliciting lostPackets
+    put spkt = putOutput conn $ OutRetrans $ spPlainPacket spkt
 
 onPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded conn@Connection{..} lvl = do
@@ -624,10 +624,8 @@ merge s1 s2 = case Seq.viewl s1 of
   x :< s1' -> case Seq.viewl s2 of
     EmptyL  -> s1
     y :< s2'
-      | pknum x < pknum y -> x <| (merge s1' s2)
-      | otherwise         -> y <| (merge s1 s2')
-  where
-    pknum = spPacketNumber . spSentPacketI
+      | spPacketNumber x < spPacketNumber y -> x <| merge s1' s2
+      | otherwise                           -> y <| merge s1 s2'
 
 releaseLostCandidates :: Connection -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
 releaseLostCandidates conn@Connection{..} lvl predicate = do
@@ -655,7 +653,7 @@ removePacketNumbers conn lvl packets = mapM_ reduce packets
   where
     reduce x = reducePeerPacketNumbers conn lvl ppns
       where
-        ppns = spPeerPacketNumbers $ spSentPacketI x
+        ppns = spPeerPacketNumbers x
 
 ----------------------------------------------------------------
 
@@ -674,7 +672,7 @@ releaseByRetry conn@Connection{..} = do
     writeIORef (lossDetection ! InitialLevel) initialLossDetection
     metricsUpdated conn $
         atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-    return (spPlainPacket . spSentPacketI <$> packets)
+    return (spPlainPacket <$> packets)
 
 ----------------------------------------------------------------
 
@@ -699,7 +697,7 @@ releaseOldest conn@Connection{..} lvl = do
     case mr of
       Nothing   -> return ()
       Just spkt -> do
-          delPeerPacketNumbers conn lvl $ spPacketNumber $ spSentPacketI spkt
+          delPeerPacketNumbers conn lvl $ spPacketNumber spkt
           decreaseCC conn [spkt]
     return mr
   where
@@ -708,7 +706,7 @@ releaseOldest conn@Connection{..} lvl = do
                    in (SentPackets db', Just x)
       _         ->    (SentPackets db, Nothing)
       where
-        (db1, db2) = Seq.breakl (spAckEliciting . spSentPacketI) db
+        (db1, db2) = Seq.breakl spAckEliciting db
 
 findOldest :: Connection -> EncryptionLevel -> (SentPacket -> Bool)
            -> IO (Maybe SentPacket)

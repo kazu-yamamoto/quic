@@ -46,11 +46,11 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
                 onPacketSent conn sentPacket
     buildPackets _ [] _ _ = error "sendPacket: buildPackets"
     buildPackets siz [spkti] build0 build1 = do
-        bss <- encodePlainPacket conn (spPlainPacket spkti) $ Just siz
+        bss <- encodePlainPacket conn (spiPlainPacket spkti) $ Just siz
         sentPacket <- makeSentPacket spkti bss
         return (build0 [sentPacket], build1 bss)
     buildPackets siz (spkti:ss) build0 build1 = do
-        bss <- encodePlainPacket conn (spPlainPacket spkti) Nothing
+        bss <- encodePlainPacket conn (spiPlainPacket spkti) Nothing
         sentPacket <- makeSentPacket spkti bss
         let build0' = (build0 . (sentPacket :))
             build1' = build1 . (bss ++)
@@ -70,7 +70,7 @@ makeSentPacket spkti bss = do
 
 addPadding :: SentPacketI -> SentPacketI
 addPadding spi = spi {
-      spPlainPacket = modify $ spPlainPacket spi
+      spiPlainPacket = modify $ spiPlainPacket spi
     }
   where
     modify (PlainPacket hdr plain) = PlainPacket hdr plain'
@@ -91,11 +91,11 @@ sendPingPacket conn send lvl = do
           return [Ping]
       Just spkt -> do
           qlogDebug conn $ Debug "probe old"
-          let PlainPacket _ plain0 = spPlainPacket $ spSentPacketI spkt
+          let PlainPacket _ plain0 = spPlainPacket spkt
           adjustForRetransmit conn $ plainFrames plain0
     xs <- construct conn lvl frames
     let spkti = last xs
-        ping = spPlainPacket spkti
+        ping = spiPlainPacket spkti
     bss <- encodePlainPacket conn ping (Just maxSiz)
     send bss
     sentPacket <- makeSentPacket spkti bss
