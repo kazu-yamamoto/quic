@@ -500,8 +500,8 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
               | ackedA >= cwin  = (cwin + maxPktSiz, ackedA - cwin, Avoidance)
               | otherwise       = (cwin, ackedA, Avoidance)
 
-onNewCongestionEvent :: Connection -> TimeMicrosecond -> IO ()
-onNewCongestionEvent conn@Connection{..} sentTime = do
+onCongestionEvent :: Connection -> TimeMicrosecond -> IO ()
+onCongestionEvent conn@Connection{..} sentTime = do
     CC{congestionRecoveryStartTime} <- readTVarIO recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
@@ -556,7 +556,7 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
   lostPackets' :> lastPkt -> do
     -- Remove lost packets from bytesInFlight.
     decreaseCC conn lostPackets
-    onNewCongestionEvent conn $ spTimeSent lastPkt
+    onCongestionEvent conn $ spTimeSent lastPkt
     mapM_ (qlogPacketLost conn . spSentPacketI) lostPackets
 
     -- Collapse congestion window if persistent congestion
