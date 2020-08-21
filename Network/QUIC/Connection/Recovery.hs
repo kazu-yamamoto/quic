@@ -17,7 +17,7 @@ module Network.QUIC.Connection.Recovery (
   ) where
 
 import Control.Concurrent.STM
-import Data.Sequence (Seq, (|>), (><), ViewL(..), ViewR(..))
+import Data.Sequence (Seq, (<|), (|>), (><), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
 import Data.UnixTime
 import GHC.Event hiding (new)
@@ -108,7 +108,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
 
           lostPackets <- detectAndRemoveLostPackets conn lvl
           unless (null lostPackets) $ case lvl of
-            RTT1Level -> appendLostCandidates conn lostPackets
+            RTT1Level -> mergedLostCandidates conn lostPackets
             _         -> do
                 onPacketsLost conn lostPackets
                 retransmit conn lostPackets
@@ -604,20 +604,30 @@ resender conn@Connection{..} = forever $ do
         lostPackets <- readTVar lostCandidates
         check (lostPackets /= emptySentPackets)
     delay $ Microseconds 10000 -- fixme
-    packets0 <- atomically $ do
+    packets <- atomically $ do
         SentPackets pkts <- readTVar lostCandidates
         writeTVar lostCandidates emptySentPackets
         return pkts
-    when (packets0 /= Seq.empty) $ do
-        let packets = Seq.sort packets0
+    when (packets /= Seq.empty) $ do
         onPacketsLost conn packets
         retransmit conn packets
 
-appendLostCandidates :: Connection -> Seq SentPacket -> IO ()
-appendLostCandidates Connection{..} lostPackets = atomically $ do
+mergedLostCandidates :: Connection -> Seq SentPacket -> IO ()
+mergedLostCandidates Connection{..} lostPackets = atomically $ do
     SentPackets old <- readTVar lostCandidates
-    let new = old >< lostPackets
+    let new = merge old lostPackets
     writeTVar lostCandidates $ SentPackets new
+
+merge :: Seq SentPacket -> Seq SentPacket -> Seq SentPacket
+merge s1 s2 = case Seq.viewl s1 of
+  EmptyL   -> s2
+  x :< s1' -> case Seq.viewl s2 of
+    EmptyL  -> s1
+    y :< s2'
+      | pknum x < pknum y -> x <| (merge s1' s2)
+      | otherwise         -> y <| (merge s1 s2')
+  where
+    pknum = spPacketNumber . spSentPacketI
 
 releaseLostCandidates :: Connection -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
 releaseLostCandidates conn@Connection{..} lvl predicate = do
