@@ -523,21 +523,51 @@ onCongestionEvent conn@Connection{..} sentTime = do
         -- maybeSendOnePacket conn -- fixme
 
 -- Sec 7.8. Persistent Congestion
-inPersistentCongestion :: Connection -> Seq SentPacket -> SentPacket -> IO Bool
-inPersistentCongestion Connection{..} lostPackets' lstPkt =
-    case Seq.viewl lostPackets' of
-      EmptyL -> return False
-      fstPkt :< _ -> do
+-- fixme: after the first sample
+inPersistentCongestion :: Connection -> Seq SentPacket -> IO Bool
+inPersistentCongestion Connection{..} lostPackets = do
+    let mduration = findDuration lostPackets
+    case mduration of
+      Nothing -> return False
+      Just duration -> do
           rtt <- readIORef recoveryRTT
-          -- https://github.com/quicwg/base-drafts/pull/3290#discussion_r355089680
-          -- congestion_period <= largest_lost_packet.time_sent - earliest_lost_packet.time_sent
           let pto = calcPTO rtt Nothing
               Microseconds congestionPeriod = kPersistentCongestionThreshold pto
               threshold = microSecondsToUnixDiffTime congestionPeriod
-              beg = spTimeSent fstPkt
-              end = spTimeSent lstPkt
-              duration = end `diffUnixTime ` beg
-          return (duration >= threshold)
+          return (duration > threshold)
+
+diff0 :: UnixDiffTime
+diff0 = UnixDiffTime 0 0
+
+findDuration :: Seq SentPacket -> Maybe UnixDiffTime
+findDuration pkts0 = leftEdge pkts0 diff0
+  where
+    leftEdge pkts diff = case Seq.viewl pkts' of
+        EmptyL      -> Nothing
+        l :< pkts'' -> case rightEdge (spPacketNumber l) pkts'' Nothing of
+          (Nothing, pkts''') -> leftEdge pkts''' diff
+          (Just r,  pkts''') -> let diff' = spTimeSent r `diffUnixTime` spTimeSent l
+                                in leftEdge pkts''' diff'
+      where
+        (_, pkts') = Seq.breakl spAckEliciting pkts
+    rightEdge n pkts Nothing = case Seq.viewl pkts of
+        EmptyL -> (Nothing, Seq.empty)
+        r :< pkts'
+          | spPacketNumber r == n + 1 ->
+              if spAckEliciting r then
+                  rightEdge (n + 1) pkts' (Just r)
+                else
+                  rightEdge (n + 1) pkts' Nothing
+          | otherwise -> (Nothing, pkts')
+    rightEdge n pkts mr0 = case Seq.viewl pkts of
+        EmptyL -> (mr0, Seq.empty)
+        r :< pkts'
+          | spPacketNumber r == n + 1 ->
+              if spAckEliciting r then
+                  rightEdge (n + 1) pkts' (Just r)
+                else
+                  rightEdge (n + 1) pkts' mr0
+          | otherwise -> (mr0, pkts')
 
 decreaseCC :: (Functor m, Foldable m) => Connection -> m SentPacket -> IO ()
 decreaseCC conn@Connection{..} packets = do
@@ -553,14 +583,14 @@ decreaseCC conn@Connection{..} packets = do
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
-  lostPackets' :> lastPkt -> do
+  _ :> lastPkt -> do
     -- Remove lost packets from bytesInFlight.
     decreaseCC conn lostPackets
     onCongestionEvent conn $ spTimeSent lastPkt
     mapM_ (qlogPacketLost conn . spSentPacketI) lostPackets
 
     -- Collapse congestion window if persistent congestion
-    persistent <- inPersistentCongestion conn lostPackets' lastPkt
+    persistent <- inPersistentCongestion conn lostPackets
     when persistent $ do
         qlogDebug conn $ Debug "persistent congestion"
         minWindow <- kMinimumWindow conn
