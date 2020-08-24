@@ -500,28 +500,32 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
               | ackedA >= cwin  = (cwin + maxPktSiz, ackedA - cwin, Avoidance)
               | otherwise       = (cwin, ackedA, Avoidance)
 
-onCongestionEvent :: Connection -> TimeMicrosecond -> IO ()
-onCongestionEvent conn@Connection{..} sentTime = do
-    CC{ccMode,congestionRecoveryStartTime} <- readTVarIO recoveryCC
+onCongestionEvent :: Connection -> IO ()
+onCongestionEvent conn@Connection{..} = do
+    CC{ccMode} <- readTVarIO recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
-    unless (ccMode == Avoidance
-         && inCongestionRecovery sentTime congestionRecoveryStartTime) $ do
-        now <- getTimeMicrosecond
-        minWindow <- kMinimumWindow conn
-        -- A packet can be sent to speed up loss recovery.
-        metricsUpdated conn $
-            -- https://github.com/quicwg/base-drafts/pull/3917
-            atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow} ->
-                let window0 = kLossReductionFactor congestionWindow
-                    window = max window0 minWindow
-                in cc {
-                    congestionRecoveryStartTime = Just now
-                  , congestionWindow = window
-                  , ssthresh = window
-                  , bytesAcked = 0
-                  }
-        -- maybeSendOnePacket conn -- fixme
+    case ccMode of
+      SlowStart -> do
+          atomically $ modifyTVar' recoveryCC $ \cc -> cc { ccMode = Avoidance }
+          qlogContestionStateUpdated conn Avoidance
+      Avoidance -> do
+          now <- getTimeMicrosecond
+          minWindow <- kMinimumWindow conn
+          -- A packet can be sent to speed up loss recovery.
+          metricsUpdated conn $
+              -- https://github.com/quicwg/base-drafts/pull/3917
+              atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow} ->
+                  let window0 = kLossReductionFactor congestionWindow
+                      window = max window0 minWindow
+                  in cc {
+                      congestionRecoveryStartTime = Just now
+                    , congestionWindow = window
+                    , ssthresh = window
+                    , bytesAcked = 0
+                    }
+          qlogContestionStateUpdated conn Recovery
+      Recovery -> return ()
 
 -- Sec 7.8. Persistent Congestion
 -- fixme: after the first sample
@@ -584,23 +588,24 @@ decreaseCC conn@Connection{..} packets = do
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
 onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
-  _ :> lastPkt -> do
+  _ -> do
     -- Remove lost packets from bytesInFlight.
     decreaseCC conn lostPackets
-    onCongestionEvent conn $ spTimeSent lastPkt
+    onCongestionEvent conn
     mapM_ (qlogPacketLost conn . spSentPacketI) lostPackets
 
     -- Collapse congestion window if persistent congestion
     persistent <- inPersistentCongestion conn lostPackets
     when persistent $ do
-        qlogDebug conn $ Debug "persistent congestion"
         minWindow <- kMinimumWindow conn
         metricsUpdated conn $
             atomically $ modifyTVar' recoveryCC $ \cc ->
               cc {
                 congestionWindow = minWindow
               , bytesAcked = 0
+              , ccMode = SlowStart
               }
+        qlogContestionStateUpdated conn SlowStart
 
 retransmit :: Connection -> Seq SentPacket -> IO ()
 retransmit conn lostPackets
