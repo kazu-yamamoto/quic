@@ -506,26 +506,27 @@ onCongestionEvent conn@Connection{..} = do
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
     case ccMode of
-      SlowStart -> do
-          atomically $ modifyTVar' recoveryCC $ \cc -> cc { ccMode = Avoidance }
-          qlogContestionStateUpdated conn Avoidance
-      Avoidance -> do
-          now <- getTimeMicrosecond
-          minWindow <- kMinimumWindow conn
-          -- A packet can be sent to speed up loss recovery.
-          metricsUpdated conn $
-              -- https://github.com/quicwg/base-drafts/pull/3917
-              atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow} ->
-                  let window0 = kLossReductionFactor congestionWindow
-                      window = max window0 minWindow
-                  in cc {
-                      congestionRecoveryStartTime = Just now
-                    , congestionWindow = window
-                    , ssthresh = window
-                    , bytesAcked = 0
-                    }
-          qlogContestionStateUpdated conn Recovery
-      Recovery -> return ()
+      SlowStart -> reduce Avoidance Nothing
+      Avoidance -> getTimeMicrosecond >>= reduce Recovery . Just
+      Recovery  -> return ()
+  where
+    reduce mode mcrst = do
+        minWindow <- kMinimumWindow conn
+        -- A packet can be sent to speed up loss recovery.
+        metricsUpdated conn $
+            -- https://github.com/quicwg/base-drafts/pull/3917
+            atomically $ modifyTVar' recoveryCC $ \cc@CC{congestionWindow} ->
+                let window0 = kLossReductionFactor congestionWindow
+                    window = max window0 minWindow
+                in cc {
+                    congestionRecoveryStartTime = mcrst
+                  , congestionWindow = window
+                  , ssthresh = window
+                  , bytesAcked = 0
+                  , ccMode = mode
+                  }
+        qlogContestionStateUpdated conn mode
+
 
 -- Sec 7.8. Persistent Congestion
 -- fixme: after the first sample
