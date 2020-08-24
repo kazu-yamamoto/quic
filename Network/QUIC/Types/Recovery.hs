@@ -100,13 +100,13 @@ initialRTT = RTT {
 
 data CCMode = SlowStart
             | Avoidance
-            | Recovery
+            | Recovery TimeMicrosecond
             deriving (Eq)
 
 instance Show CCMode where
-    show SlowStart = "slow_start"
-    show Avoidance = "congestion_avoidance"
-    show Recovery  = "recovery"
+    show SlowStart    = "slow_start"
+    show Avoidance    = "congestion_avoidance"
+    show (Recovery _) = "recovery"
 
 data CC = CC {
   -- | The sum of the size in bytes of all sent packets that contain
@@ -119,11 +119,6 @@ data CC = CC {
     bytesInFlight :: Int
   -- | Maximum number of bytes-in-flight that may be sent.
   , congestionWindow :: Int
-  -- | The time when QUIC first detects congestion due to loss or ECN,
-  --   causing it to enter congestion recovery.  When a packet sent
-  --   after this time is acknowledged, QUIC exits congestion
-  --   recovery.
-  , congestionRecoveryStartTime :: Maybe TimeMicrosecond
   -- | Slow start threshold in bytes.  When the congestion window is
   --   below ssthresh, the mode is slow start and the window grows by
   --   the number of bytes acknowledged.
@@ -139,7 +134,6 @@ initialCC :: CC
 initialCC = CC {
     bytesInFlight = 0
   , congestionWindow = 0
-  , congestionRecoveryStartTime = Nothing
   , ssthresh = maxBound
   , bytesAcked = 0
   , numOfAckEliciting = 0
