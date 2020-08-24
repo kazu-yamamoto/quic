@@ -502,10 +502,11 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
 
 onCongestionEvent :: Connection -> TimeMicrosecond -> IO ()
 onCongestionEvent conn@Connection{..} sentTime = do
-    CC{congestionRecoveryStartTime} <- readTVarIO recoveryCC
+    CC{ccMode,congestionRecoveryStartTime} <- readTVarIO recoveryCC
     -- Start a new congestion event if packet was sent after the
     -- start of the previous congestion recovery period.
-    unless (inCongestionRecovery sentTime congestionRecoveryStartTime) $ do
+    unless (ccMode == Avoidance
+         && inCongestionRecovery sentTime congestionRecoveryStartTime) $ do
         now <- getTimeMicrosecond
         minWindow <- kMinimumWindow conn
         -- A packet can be sent to speed up loss recovery.
