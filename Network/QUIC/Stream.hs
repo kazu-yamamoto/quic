@@ -26,6 +26,7 @@ module Network.QUIC.Stream (
   , addRxStreamData
   , setRxMaxStreamData
   , addRxMaxStreamData
+  , getRxMaxStreamData
   , getRxStreamWindow
   , isClosed
   , is1RTTReady

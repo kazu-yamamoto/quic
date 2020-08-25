@@ -22,6 +22,7 @@ module Network.QUIC.Connection.State (
   , addRxData
   , getRxData
   , addRxMaxData
+  , getRxMaxData
   , getRxDataWindow
   ) where
 
@@ -143,6 +144,9 @@ addRxMaxData Connection{..} n = atomicModifyIORef' flowRx add
     add flow = (flow { flowMaxData = m }, m)
       where
         m = flowMaxData flow + n
+
+getRxMaxData :: Connection -> IO Int
+getRxMaxData Connection{..} = flowMaxData <$> readIORef flowRx
 
 getRxDataWindow :: Connection -> IO Int
 getRxDataWindow Connection{..} = flowWindow <$> readIORef flowRx

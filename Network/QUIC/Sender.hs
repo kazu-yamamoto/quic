@@ -256,12 +256,12 @@ adjustForRetransmit conn (MaxStreamData sid _:xs) = do
     case mstrm of
       Nothing   -> adjustForRetransmit conn xs
       Just strm -> do
-          newMax <- addRxMaxStreamData strm 0
+          newMax <- getRxMaxStreamData strm
           let r = MaxStreamData sid newMax
           rs <- adjustForRetransmit conn xs
           return (r : rs)
 adjustForRetransmit conn (MaxData{}:xs) = do
-    newMax <- addRxMaxData conn 0
+    newMax <- getRxMaxData conn
     let r = MaxData newMax
     rs <- adjustForRetransmit conn xs
     return (r : rs)

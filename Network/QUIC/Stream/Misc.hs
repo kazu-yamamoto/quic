@@ -13,6 +13,7 @@ module Network.QUIC.Stream.Misc (
   , addRxStreamData
   , setRxMaxStreamData
   , addRxMaxStreamData
+  , getRxMaxStreamData
   , getRxStreamWindow
   -- Shared
   , isClosed
@@ -94,6 +95,9 @@ addRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add
     add flow = (flow { flowMaxData = m }, m)
       where
         m = flowMaxData flow + n
+
+getRxMaxStreamData :: Stream -> IO Int
+getRxMaxStreamData Stream{..} = flowMaxData <$> readIORef streamFlowRx
 
 getRxStreamWindow :: Stream -> IO Int
 getRxStreamWindow Stream{..} = flowWindow <$> readIORef streamFlowRx
