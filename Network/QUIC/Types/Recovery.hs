@@ -108,6 +108,10 @@ instance Show CCMode where
     show Avoidance    = "congestion_avoidance"
     show (Recovery _) = "recovery"
 
+isRecovery :: CCMode -> Bool
+isRecovery (Recovery _) = True
+isRecovery _            = False
+
 data CC = CC {
   -- | The sum of the size in bytes of all sent packets that contain
   --   at least one ack-eliciting or PADDING frame, and have not been

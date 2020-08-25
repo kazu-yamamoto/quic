@@ -481,13 +481,13 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
               foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked,ccMode,numOfAckEliciting) ackedPackets
         (bytes,cwin,acked,_,cnt) .+ sp@SentPacket{..} = (bytes',cwin',acked',mode',cnt')
           where
-            isRecovery = inCongestionRecovery spTimeSent ccMode
+            inRecovery = inCongestionRecovery spTimeSent ccMode
             bytes' = bytes - spSentBytes
             ackedA = acked + spSentBytes
             cnt' = cnt - countAckEli sp
             (cwin',acked',mode')
               -- Do not increase congestion window in recovery period.
-              | isRecovery      = (cwin, acked, ccMode)
+              | inRecovery      = (cwin, acked, ccMode)
               -- fixme: Do not increase congestion_window if application
               -- limited or flow control limited.
               --
@@ -506,21 +506,26 @@ onCongestionEvent conn@Connection{..} lostPackets = do
     minWindow <- kMinimumWindow conn
     now <- getTimeMicrosecond
     metricsUpdated conn $ atomically $ modifyTVar' recoveryCC $ \cc@CC{..} ->
-        let halfWindow = kLossReductionFactor congestionWindow
-            sst = max halfWindow minWindow
+        let halfWindow = max minWindow $ kLossReductionFactor congestionWindow
+            inRecovery = isRecovery ccMode
             cwin
               | persistent = minWindow
-              | otherwise  = sst
+              | inRecovery = congestionWindow
+              | otherwise  = halfWindow
+            sst
+              | inRecovery = ssthresh
+              | otherwise  = halfWindow
             mode
               | cwin < sst =   SlowStart
               | otherwise = case ccMode of
                   SlowStart -> Avoidance
-                  _         -> Recovery now
+                  Avoidance -> Recovery now
+                  recpast   -> recpast
         in cc {
             congestionWindow = cwin
-          , ssthresh = sst
-          , bytesAcked = 0
-          , ccMode = mode
+          , ssthresh         = sst
+          , ccMode           = mode
+          , bytesAcked       = 0
           }
     CC{ccMode} <- atomically $ readTVar recoveryCC
     qlogContestionStateUpdated conn ccMode
