@@ -135,8 +135,9 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
           setLossDetectionTimer conn lvl
 
 updateRTT :: Connection -> EncryptionLevel -> Microseconds -> Microseconds -> IO ()
-updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 =
-    metricsUpdated conn $ atomicModifyIORef'' recoveryRTT update
+updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = metricsUpdated conn $ do
+    firstTime <- atomicModifyIORef' recoveryRTT update
+    when firstTime $ qlogDebug conn $ Debug "RTT first sample"
   where
     -- don't use latestRTT, use latestRTT0 instead
     --
@@ -146,19 +147,19 @@ updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 =
     --
     -- smoothed_rtt = rtt_sample
     -- rttvar = rtt_sample / 2
-    update rtt@RTT{..} | latestRTT == Microseconds 0 = rtt {
+    update rtt@RTT{..} | latestRTT == Microseconds 0 = (rtt {
         latestRTT   = latestRTT0
       , minRTT      = latestRTT0
       , smoothedRTT = latestRTT0
       , rttvar      = latestRTT0 `unsafeShiftR` 1
-      }
+      }, True)
     -- Others:
-    update rtt@RTT{..} = rtt {
+    update rtt@RTT{..} = (rtt {
         latestRTT   = latestRTT0
       , minRTT      = minRTT'
       , smoothedRTT = smoothedRTT'
       , rttvar      = rttvar'
-      }
+      }, False)
       where
         -- minRTT ignores ack delay.
         minRTT' = min minRTT latestRTT0
