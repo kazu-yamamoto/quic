@@ -483,13 +483,13 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
               foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked,ccMode,numOfAckEliciting) ackedPackets
         (bytes,cwin,acked,_,cnt) .+ sp@SentPacket{..} = (bytes',cwin',acked',mode',cnt')
           where
-            inRecovery = inCongestionRecovery spTimeSent congestionRecoveryStartTime
+            isRecovery = inCongestionRecovery spTimeSent congestionRecoveryStartTime
             bytes' = bytes - spSentBytes
             ackedA = acked + spSentBytes
             cnt' = cnt - countAckEli sp
             (cwin',acked',mode')
               -- Do not increase congestion window in recovery period.
-              | inRecovery      = (cwin, acked, Recovery)
+              | isRecovery      = (cwin, acked, Recovery)
               -- fixme: Do not increase congestion_window if application
               -- limited or flow control limited.
               --
@@ -502,12 +502,10 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
               | ackedA >= cwin  = (cwin + maxPktSiz, ackedA - cwin, Avoidance)
               | otherwise       = (cwin, ackedA, Avoidance)
 
-onCongestionEvent :: Connection -> Seq SentPacket -> TimeMicrosecond -> IO ()
-onCongestionEvent conn@Connection{..} lostPackets sentTime = do
+onCongestionEvent :: Connection -> Seq SentPacket -> Bool -> IO ()
+onCongestionEvent conn@Connection{..} lostPackets isRecovery = do
     persistent <- inPersistentCongestion conn lostPackets
-    mcrst <- congestionRecoveryStartTime <$> readTVarIO recoveryCC
-    let inRecovery = inCongestionRecovery sentTime mcrst
-    when (persistent || not inRecovery) $ do
+    when (persistent || not isRecovery) $ do
         minWindow <- kMinimumWindow conn
         now <- getTimeMicrosecond
         metricsUpdated conn $ atomically $ modifyTVar' recoveryCC $ \cc@CC{..} ->
@@ -515,8 +513,7 @@ onCongestionEvent conn@Connection{..} lostPackets sentTime = do
                 cwin
                   | persistent = minWindow
                   | otherwise  = halfWindow
-                sst
-                  | otherwise  = halfWindow
+                sst            = halfWindow
                 mode
                   | cwin < sst = SlowStart -- persistent
                   | otherwise  = Recovery
@@ -589,11 +586,12 @@ decreaseCC conn@Connection{..} packets = do
           }
 
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
-onPacketsLost conn lostPackets = case Seq.viewr lostPackets of
+onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
   _ :> lastPkt -> do
     decreaseCC conn lostPackets
-    onCongestionEvent conn lostPackets $ spTimeSent lastPkt
+    isRecovery <- inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime <$> readTVarIO recoveryCC
+    onCongestionEvent conn lostPackets isRecovery
     mapM_ (qlogPacketLost conn . spSentPacketI) lostPackets
 
 retransmit :: Connection -> Seq SentPacket -> IO ()
