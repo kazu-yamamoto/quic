@@ -512,17 +512,17 @@ onCongestionEvent conn@Connection{..} lostPackets = do
             inRecovery = isRecovery ccMode
             cwin
               | persistent = minWindow
-              | inRecovery = congestionWindow
+              | inRecovery = congestionWindow -- unchanged
               | otherwise  = halfWindow
             sst
-              | inRecovery = ssthresh
+              | inRecovery = ssthresh         -- unchanged
               | otherwise  = halfWindow
             mode
-              | cwin < sst =   SlowStart
+              | cwin < sst =   SlowStart      -- persistent
               | otherwise = case ccMode of
                   SlowStart -> Avoidance
                   Avoidance -> Recovery now
-                  recpast   -> recpast
+                  recpast   -> recpast        -- unchanged
         in cc {
             congestionWindow = cwin
           , ssthresh         = sst
