@@ -215,6 +215,7 @@ detectAndRemoveLostPackets conn@Connection{..} lvl = do
                 lossTime = Just next
               }
 
+    unless (Seq.null lostPackets) $ qlogDebug conn $ Debug "loss detected"
     return lostPackets
 
 getLossTimeAndSpace :: Connection -> IO (Maybe (TimeMicrosecond,EncryptionLevel))
