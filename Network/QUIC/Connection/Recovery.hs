@@ -458,9 +458,9 @@ countAckEli sentPacket
   | spAckEliciting sentPacket = 1
   | otherwise                 = 0
 
-inCongestionRecovery :: TimeMicrosecond -> CCMode -> Bool
-inCongestionRecovery sentTime (Recovery crst) = sentTime <= crst
-inCongestionRecovery _ _ = False
+inCongestionRecovery :: TimeMicrosecond -> Maybe TimeMicrosecond -> Bool
+inCongestionRecovery _ Nothing = False
+inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 
 onPacketsAcked :: Connection -> Seq SentPacket -> IO ()
 onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
@@ -483,13 +483,13 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
               foldl' (.+) (bytesInFlight,congestionWindow,bytesAcked,ccMode,numOfAckEliciting) ackedPackets
         (bytes,cwin,acked,_,cnt) .+ sp@SentPacket{..} = (bytes',cwin',acked',mode',cnt')
           where
-            inRecovery = inCongestionRecovery spTimeSent ccMode
+            inRecovery = inCongestionRecovery spTimeSent congestionRecoveryStartTime
             bytes' = bytes - spSentBytes
             ackedA = acked + spSentBytes
             cnt' = cnt - countAckEli sp
             (cwin',acked',mode')
               -- Do not increase congestion window in recovery period.
-              | inRecovery      = (cwin, acked, ccMode)
+              | inRecovery      = (cwin, acked, Recovery)
               -- fixme: Do not increase congestion_window if application
               -- limited or flow control limited.
               --
@@ -502,35 +502,33 @@ onPacketsAcked conn@Connection{..} ackedPackets = metricsUpdated conn $ do
               | ackedA >= cwin  = (cwin + maxPktSiz, ackedA - cwin, Avoidance)
               | otherwise       = (cwin, ackedA, Avoidance)
 
-onCongestionEvent :: Connection -> Seq SentPacket -> IO ()
-onCongestionEvent conn@Connection{..} lostPackets = do
+onCongestionEvent :: Connection -> Seq SentPacket -> TimeMicrosecond -> IO ()
+onCongestionEvent conn@Connection{..} lostPackets sentTime = do
     persistent <- inPersistentCongestion conn lostPackets
-    minWindow <- kMinimumWindow conn
-    now <- getTimeMicrosecond
-    metricsUpdated conn $ atomically $ modifyTVar' recoveryCC $ \cc@CC{..} ->
-        let halfWindow = max minWindow $ kLossReductionFactor congestionWindow
-            inRecovery = isRecovery ccMode
-            cwin
-              | persistent = minWindow
-              | inRecovery = congestionWindow -- unchanged
-              | otherwise  = halfWindow
-            sst
-              | inRecovery = ssthresh         -- unchanged
-              | otherwise  = halfWindow
-            mode
-              | cwin < sst =   SlowStart      -- persistent
-              | otherwise = case ccMode of
-                  SlowStart -> Avoidance
-                  Avoidance -> Recovery now
-                  recpast   -> recpast        -- unchanged
-        in cc {
-            congestionWindow = cwin
-          , ssthresh         = sst
-          , ccMode           = mode
-          , bytesAcked       = 0
-          }
-    CC{ccMode} <- atomically $ readTVar recoveryCC
-    qlogContestionStateUpdated conn ccMode
+    mcrst <- congestionRecoveryStartTime <$> readTVarIO recoveryCC
+    let inRecovery = inCongestionRecovery sentTime mcrst
+    when (persistent || not inRecovery) $ do
+        minWindow <- kMinimumWindow conn
+        now <- getTimeMicrosecond
+        metricsUpdated conn $ atomically $ modifyTVar' recoveryCC $ \cc@CC{..} ->
+            let halfWindow = max minWindow $ kLossReductionFactor congestionWindow
+                cwin
+                  | persistent = minWindow
+                  | otherwise  = halfWindow
+                sst
+                  | otherwise  = halfWindow
+                mode
+                  | cwin < sst = SlowStart -- persistent
+                  | otherwise  = Recovery
+            in cc {
+                congestionRecoveryStartTime = Just now
+              , congestionWindow = cwin
+              , ssthresh         = sst
+              , ccMode           = mode
+              , bytesAcked       = 0
+              }
+        CC{ccMode} <- atomically $ readTVar recoveryCC
+        qlogContestionStateUpdated conn ccMode
 
 -- Sec 7.8. Persistent Congestion
 -- fixme: after the first sample
@@ -593,9 +591,9 @@ decreaseCC conn@Connection{..} packets = do
 onPacketsLost :: Connection -> Seq SentPacket -> IO ()
 onPacketsLost conn lostPackets = case Seq.viewr lostPackets of
   EmptyR -> return ()
-  _ -> do
+  _ :> lastPkt -> do
     decreaseCC conn lostPackets
-    onCongestionEvent conn lostPackets
+    onCongestionEvent conn lostPackets $ spTimeSent lastPkt
     mapM_ (qlogPacketLost conn . spSentPacketI) lostPackets
 
 retransmit :: Connection -> Seq SentPacket -> IO ()
