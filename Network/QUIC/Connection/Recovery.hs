@@ -110,8 +110,10 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
           unless (null lostPackets) $ case lvl of
             RTT1Level -> mergeLostCandidates conn lostPackets
             _         -> do
-                onPacketsLost conn lostPackets
-                retransmit conn lostPackets
+                -- just in case
+                lostPackets' <- mergeLostCandidatesAndClear conn lostPackets
+                onPacketsLost conn lostPackets'
+                retransmit conn lostPackets'
                 -- setLossDetectionTimer in updateCC
           updateCC newlyAckedPackets
 
@@ -390,8 +392,9 @@ onLossDetectionTimeout conn@Connection{..} = do
               -- Time threshold loss Detection
               lostPackets <- detectAndRemoveLostPackets conn lvl
               when (null lostPackets) $ connDebugLog "onLossDetectionTimeout: null"
-              onPacketsLost conn lostPackets
-              retransmit conn lostPackets
+              lostPackets' <- mergeLostCandidatesAndClear conn lostPackets
+              onPacketsLost conn lostPackets'
+              retransmit conn lostPackets'
               setLossDetectionTimer conn lvl
           PTO -> do
               CC{..} <- readTVarIO recoveryCC
@@ -640,6 +643,12 @@ mergeLostCandidates Connection{..} lostPackets = atomically $ do
     SentPackets old <- readTVar lostCandidates
     let new = merge old lostPackets
     writeTVar lostCandidates $ SentPackets new
+
+mergeLostCandidatesAndClear :: Connection -> Seq SentPacket -> IO (Seq SentPacket)
+mergeLostCandidatesAndClear Connection{..} lostPackets = atomically $ do
+    SentPackets old <- readTVar lostCandidates
+    writeTVar lostCandidates emptySentPackets
+    return $ merge old lostPackets
 
 merge :: Seq SentPacket -> Seq SentPacket -> Seq SentPacket
 merge s1 s2 = case Seq.viewl s1 of
