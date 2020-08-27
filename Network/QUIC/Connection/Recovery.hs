@@ -141,7 +141,9 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
 updateRTT :: Connection -> EncryptionLevel -> Microseconds -> Microseconds -> IO ()
 updateRTT conn@Connection{..} lvl latestRTT0 ackDelay0 = metricsUpdated conn $ do
     firstTime <- atomicModifyIORef' recoveryRTT update
-    when firstTime $ qlogDebug conn $ Debug "RTT first sample"
+    when firstTime $ do
+        setPktNumPersistent conn
+        qlogDebug conn $ Debug "RTT first sample"
   where
     -- don't use latestRTT, use latestRTT0 instead
     --
@@ -535,8 +537,9 @@ onCongestionEvent conn@Connection{..} lostPackets isRecovery = do
 -- Sec 7.8. Persistent Congestion
 -- fixme: after the first sample
 inPersistentCongestion :: Connection -> Seq SentPacket -> IO Bool
-inPersistentCongestion Connection{..} lostPackets = do
-    let mduration = findDuration lostPackets
+inPersistentCongestion conn@Connection{..} lostPackets = do
+    pn <- getPktNumPersistent conn
+    let mduration = findDuration lostPackets pn
     case mduration of
       Nothing -> return False
       Just duration -> do
@@ -549,8 +552,8 @@ inPersistentCongestion Connection{..} lostPackets = do
 diff0 :: UnixDiffTime
 diff0 = UnixDiffTime 0 0
 
-findDuration :: Seq SentPacket -> Maybe UnixDiffTime
-findDuration pkts0 = leftEdge pkts0 diff0
+findDuration :: Seq SentPacket -> PacketNumber -> Maybe UnixDiffTime
+findDuration pkts0 pn = leftEdge pkts0 diff0
   where
     leftEdge pkts diff = case Seq.viewl pkts' of
         EmptyL      -> Nothing
@@ -559,7 +562,7 @@ findDuration pkts0 = leftEdge pkts0 diff0
           (Just r,  pkts''') -> let diff' = spTimeSent r `diffUnixTime` spTimeSent l
                                 in leftEdge pkts''' diff'
       where
-        (_, pkts') = Seq.breakl spAckEliciting pkts
+        (_, pkts') = Seq.breakl (\x -> spAckEliciting x && spPacketNumber x >= pn) pkts
     rightEdge n pkts Nothing = case Seq.viewl pkts of
         EmptyL -> (Nothing, Seq.empty)
         r :< pkts'

@@ -196,6 +196,7 @@ data Connection = Connection {
   , lostCandidates    :: TVar SentPackets
   , ptoPing           :: TVar (Maybe EncryptionLevel)
   , speedingUp        :: IORef Bool
+  , pktNumPersistent  :: IORef PacketNumber
   }
 
 makePendingQ :: IO (Array EncryptionLevel (TVar [CryptPacket]))
@@ -296,6 +297,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTVarIO emptySentPackets
         <*> newTVarIO Nothing
         <*> newIORef False
+        <*> newIORef maxBound
   where
     isclient = rl == Client
     initialRoleInfo

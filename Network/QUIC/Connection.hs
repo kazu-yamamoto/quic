@@ -10,6 +10,8 @@ module Network.QUIC.Connection (
   -- * Packet numbers
   , setPacketNumber
   , getPacketNumber
+  , setPktNumPersistent
+  , getPktNumPersistent
   , setPeerPacketNumber
   , getPeerPacketNumber
   , getPeerPacketNumbers
