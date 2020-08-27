@@ -107,14 +107,16 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
           -}
 
           lostPackets <- detectAndRemoveLostPackets conn lvl
-          unless (null lostPackets) $ case lvl of
-            RTT1Level -> mergeLostCandidates conn lostPackets
-            _         -> do
-                -- just in case
-                lostPackets' <- mergeLostCandidatesAndClear conn lostPackets
-                onPacketsLost conn lostPackets'
-                retransmit conn lostPackets'
-                -- setLossDetectionTimer in updateCC
+          unless (null lostPackets) $ do
+              mode <- ccMode <$> readTVarIO recoveryCC
+              if lvl == RTT1Level && mode /= SlowStart then
+                  mergeLostCandidates conn lostPackets
+                else do
+                  -- just in case
+                  lostPackets' <- mergeLostCandidatesAndClear conn lostPackets
+                  onPacketsLost conn lostPackets'
+                  retransmit conn lostPackets'
+          -- setLossDetectionTimer in updateCC
           updateCC newlyAckedPackets
 
     updateCC newlyAckedPackets
