@@ -36,16 +36,15 @@ instance Qlog PlainPacket where
 instance Qlog SentPacket where
     qlog SentPacket{..} = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\",\"packet_size\":" <> sw spSentBytes <> "}}"
       where
-        SentPacketI _ _ (PlainPacket hdr Plain{..}) _ _ = spSentPacketI
+        PlainPacket hdr Plain{..} = spPlainPacket
 
--- for lost
-instance Qlog SentPacketI where
-    qlog SentPacketI{..} =
+instance Qlog LostPacket where
+    qlog (LostPacket SentPacket{..}) =
         "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\"" <>
-        ",\"packet_number\":" <> sw spiPacketNumber <>
+        ",\"packet_number\":" <> sw spPacketNumber <>
         "}"
       where
-        PlainPacket hdr _ = spiPlainPacket
+        PlainPacket hdr _ = spPlainPacket
 
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"packet_type\":\"stateless_reset\",\"header\":{\"packet_number\":\"\"}}"

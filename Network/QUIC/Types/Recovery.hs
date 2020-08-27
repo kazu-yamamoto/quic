@@ -27,38 +27,20 @@ emptySentPackets = SentPackets Seq.empty
 
 ----------------------------------------------------------------
 
-data SentPacketI = SentPacketI {
-    spiPacketNumber      :: PacketNumber
-  , spiEncryptionLevel   :: EncryptionLevel
-  , spiPlainPacket       :: PlainPacket
-  , spiPeerPacketNumbers :: PeerPacketNumbers
-  , spiAckEliciting      :: Bool
-  } deriving (Eq, Show)
-
 data SentPacket = SentPacket {
-    spSentPacketI :: SentPacketI
-  , spTimeSent    :: TimeMicrosecond
-  , spSentBytes   :: Int
+    spPacketNumber      :: PacketNumber
+  , spEncryptionLevel   :: EncryptionLevel
+  , spPlainPacket       :: PlainPacket
+  , spPeerPacketNumbers :: PeerPacketNumbers
+  , spAckEliciting      :: Bool
+  , spTimeSent          :: TimeMicrosecond
+  , spSentBytes         :: Int
   } deriving (Eq, Show)
-
-
-spPacketNumber :: SentPacket -> PacketNumber
-spPacketNumber = spiPacketNumber . spSentPacketI
-
-spEncryptionLevel :: SentPacket -> EncryptionLevel
-spEncryptionLevel = spiEncryptionLevel. spSentPacketI
-
-spPlainPacket :: SentPacket -> PlainPacket
-spPlainPacket = spiPlainPacket . spSentPacketI
-
-spPeerPacketNumbers :: SentPacket -> PeerPacketNumbers
-spPeerPacketNumbers = spiPeerPacketNumbers . spSentPacketI
-
-spAckEliciting :: SentPacket -> Bool
-spAckEliciting = spiAckEliciting . spSentPacketI
 
 instance Ord SentPacket where
     x <= y = spPacketNumber x <= spPacketNumber y
+
+newtype LostPacket = LostPacket SentPacket
 
 ----------------------------------------------------------------
 

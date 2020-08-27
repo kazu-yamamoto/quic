@@ -595,7 +595,7 @@ onPacketsLost conn@Connection{..} lostPackets = case Seq.viewr lostPackets of
     decreaseCC conn lostPackets
     isRecovery <- inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime <$> readTVarIO recoveryCC
     onCongestionEvent conn lostPackets isRecovery
-    mapM_ (qlogPacketLost conn . spSentPacketI) lostPackets
+    mapM_ (qlogPacketLost conn . LostPacket) lostPackets
 
 retransmit :: Connection -> Seq SentPacket -> IO ()
 retransmit conn lostPackets

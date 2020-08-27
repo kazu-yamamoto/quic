@@ -26,9 +26,9 @@ cryptoFrame conn crypto lvl = do
 
 ----------------------------------------------------------------
 
-sendPacket :: Connection -> SendMany -> [SentPacketI] -> IO ()
+sendPacket :: Connection -> SendMany -> [SentPacket] -> IO ()
 sendPacket _ _ [] = return ()
-sendPacket conn send spktis = getMaxPacketSize conn >>= go
+sendPacket conn send spkts = getMaxPacketSize conn >>= go
   where
     go maxSiz = do
         mx <- atomically ((Just    <$> takePingSTM conn)
@@ -39,45 +39,54 @@ sendPacket conn send spktis = getMaxPacketSize conn >>= go
             go maxSiz
           _ -> do
             when (isJust mx) $ qlogDebug conn $ Debug "probe new"
-            (sentPackets, bss) <- buildPackets maxSiz spktis id id
+            (sentPackets, bss) <- buildPackets maxSiz spkts id id
             send bss
             forM_ sentPackets $ \sentPacket -> do
                 qlogSent conn sentPacket
                 onPacketSent conn sentPacket
     buildPackets _ [] _ _ = error "sendPacket: buildPackets"
-    buildPackets siz [spkti] build0 build1 = do
-        bss <- encodePlainPacket conn (spiPlainPacket spkti) $ Just siz
-        sentPacket <- makeSentPacket spkti bss
+    buildPackets siz [spkt] build0 build1 = do
+        bss <- encodePlainPacket conn (spPlainPacket spkt) $ Just siz
+        sentPacket <- fixSentPacket spkt bss
         return (build0 [sentPacket], build1 bss)
-    buildPackets siz (spkti:ss) build0 build1 = do
-        bss <- encodePlainPacket conn (spiPlainPacket spkti) Nothing
-        sentPacket <- makeSentPacket spkti bss
+    buildPackets siz (spkt:ss) build0 build1 = do
+        bss <- encodePlainPacket conn (spPlainPacket spkt) Nothing
+        sentPacket <- fixSentPacket spkt bss
         let build0' = (build0 . (sentPacket :))
             build1' = build1 . (bss ++)
             siz' = siz - spSentBytes sentPacket
         buildPackets siz' ss build0' build1'
 
-makeSentPacket :: SentPacketI -> [ByteString] -> IO SentPacket
-makeSentPacket spkti bss = do
+----------------------------------------------------------------
+
+mkSentPacket :: PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> Bool -> SentPacket
+mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
+    spPacketNumber      = mypn
+  , spEncryptionLevel   = lvl
+  , spPlainPacket       = ppkt
+  , spPeerPacketNumbers = ppns
+  , spAckEliciting      = ackeli
+  , spTimeSent          = timeMicrosecond0
+  , spSentBytes         = 0
+  }
+
+fixSentPacket :: SentPacket -> [ByteString] -> IO SentPacket
+fixSentPacket spkt bss = do
     now <- getTimeMicrosecond
-    return SentPacket {
-            spSentPacketI  = addPadding spkti
-          , spTimeSent     = now
-          , spSentBytes    = sentBytes
+    return spkt {
+            spPlainPacket = addPadding $ spPlainPacket spkt
+          , spTimeSent    = now
+          , spSentBytes   = sentBytes
           }
   where
     sentBytes = totalLen bss
 
-addPadding :: SentPacketI -> SentPacketI
-addPadding spi = spi {
-      spiPlainPacket = modify $ spiPlainPacket spi
-    }
+addPadding :: PlainPacket -> PlainPacket
+addPadding (PlainPacket hdr plain) = PlainPacket hdr plain'
   where
-    modify (PlainPacket hdr plain) = PlainPacket hdr plain'
-      where
-        plain' = plain {
-          plainFrames = plainFrames plain ++ [Padding 0]
-        }
+    plain' = plain {
+        plainFrames = plainFrames plain ++ [Padding 0]
+      }
 
 ----------------------------------------------------------------
 
@@ -94,11 +103,11 @@ sendPingPacket conn send lvl = do
           let PlainPacket _ plain0 = spPlainPacket spkt
           adjustForRetransmit conn $ plainFrames plain0
     xs <- construct conn lvl frames
-    let spkti = last xs
-        ping = spiPlainPacket spkti
+    let spkt = last xs
+        ping = spPlainPacket spkt
     bss <- encodePlainPacket conn ping (Just maxSiz)
     send bss
-    sentPacket <- makeSentPacket spkti bss
+    sentPacket <- fixSentPacket spkt bss
     qlogSent conn sentPacket
     onPacketSent conn sentPacket
 
@@ -107,7 +116,7 @@ sendPingPacket conn send lvl = do
 construct :: Connection
           -> EncryptionLevel
           -> [Frame]
-          -> IO [SentPacketI]
+          -> IO [SentPacket]
 construct conn lvl frames = do
     discarded <- getPacketNumberSpaceDiscarded conn lvl
     if discarded then
@@ -144,7 +153,7 @@ construct conn lvl frames = do
                     ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
                     plain    = Plain (Flags 0) mypn [ackFrame]
                     ppkt     = PlainPacket header plain
-                return [SentPacketI mypn lvl' ppkt ppns False]
+                return [mkSentPacket mypn lvl' ppkt ppns False]
     constructTargetPacket ver mycid peercid token
       | null frames = do -- ACK only packet
             resetDealyedAck conn
@@ -169,7 +178,7 @@ construct conn lvl frames = do
             mypn <- getPacketNumber conn
             let plain = Plain (Flags 0) mypn frames'
                 ppkt = toPlainPakcet lvl plain
-            return [SentPacketI mypn lvl ppkt ppns True]
+            return [mkSentPacket mypn lvl ppkt ppns True]
       where
         toPlainPakcet InitialLevel   plain =
             PlainPacket (Initial   ver peercid mycid token) plain
@@ -185,7 +194,7 @@ construct conn lvl frames = do
             let frames' = [toAck ppns]
                 plain = Plain (Flags 0) mypn frames'
                 ppkt = toPlainPakcet lvl plain
-            return [SentPacketI mypn lvl ppkt ppns False]
+            return [mkSentPacket mypn lvl ppkt ppns False]
 
 ----------------------------------------------------------------
 
@@ -286,7 +295,7 @@ sendCryptoFragments conn send lcs = do
     when (any (\(l,_) -> l == HandshakeLevel) lcs) $
         discardInitialPacketNumberSpace conn
   where
-    loop :: Int -> ([SentPacketI] -> [SentPacketI]) -> [(EncryptionLevel, CryptoData)] -> IO ()
+    loop :: Int -> ([SentPacket] -> [SentPacket]) -> [(EncryptionLevel, CryptoData)] -> IO ()
     loop _ build0 [] = do
         let bss0 = build0 []
         unless (null bss0) $ sendPacket conn send bss0

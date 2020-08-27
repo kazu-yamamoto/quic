@@ -28,8 +28,8 @@ qlogParamsSet Connection{..} params = connQLog $ QParamsSet $ qlog params
 qlogMetricsUpdated :: Connection -> MetricsDiff -> IO ()
 qlogMetricsUpdated Connection{..} m = connQLog $ QMetricsUpdated $ qlog m
 
-qlogPacketLost :: Connection -> SentPacketI -> IO ()
-qlogPacketLost Connection{..} spkt = connQLog $ QPacketLost $ qlog spkt
+qlogPacketLost :: Connection -> LostPacket -> IO ()
+qlogPacketLost Connection{..} lpkt = connQLog $ QPacketLost $ qlog lpkt
 
 qlogContestionStateUpdated :: Connection -> CCMode -> IO ()
 qlogContestionStateUpdated Connection{..} mode = connQLog $ QCongestionStateUpdated $ qlog mode
