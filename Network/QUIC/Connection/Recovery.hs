@@ -108,7 +108,7 @@ onAckReceived conn@Connection{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDela
 
           lostPackets <- detectAndRemoveLostPackets conn lvl
           unless (null lostPackets) $ case lvl of
-            RTT1Level -> mergedLostCandidates conn lostPackets
+            RTT1Level -> mergeLostCandidates conn lostPackets
             _         -> do
                 onPacketsLost conn lostPackets
                 retransmit conn lostPackets
@@ -635,8 +635,8 @@ resender conn@Connection{..} = forever $ do
         onPacketsLost conn packets
         retransmit conn packets
 
-mergedLostCandidates :: Connection -> Seq SentPacket -> IO ()
-mergedLostCandidates Connection{..} lostPackets = atomically $ do
+mergeLostCandidates :: Connection -> Seq SentPacket -> IO ()
+mergeLostCandidates Connection{..} lostPackets = atomically $ do
     SentPackets old <- readTVar lostCandidates
     let new = merge old lostPackets
     writeTVar lostCandidates $ SentPackets new
