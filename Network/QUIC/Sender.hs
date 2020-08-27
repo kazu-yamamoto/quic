@@ -103,13 +103,16 @@ sendPingPacket conn send lvl = do
           let PlainPacket _ plain0 = spPlainPacket spkt
           adjustForRetransmit conn $ plainFrames plain0
     xs <- construct conn lvl frames
-    let spkt = last xs
-        ping = spPlainPacket spkt
-    bss <- encodePlainPacket conn ping (Just maxSiz)
-    send bss
-    sentPacket <- fixSentPacket spkt bss
-    qlogSent conn sentPacket
-    onPacketSent conn sentPacket
+    if null xs then
+        qlogDebug conn $ Debug "ping NULL"
+      else do
+        let spkt = last xs
+            ping = spPlainPacket spkt
+        bss <- encodePlainPacket conn ping (Just maxSiz)
+        send bss
+        sentPacket <- fixSentPacket spkt bss
+        qlogSent conn sentPacket
+        onPacketSent conn sentPacket
 
 ----------------------------------------------------------------
 
