@@ -87,7 +87,7 @@ data CCMode = SlowStart
 
 instance Show CCMode where
     show SlowStart = "slow_start"
-    show Avoidance = "congestion_avoidance"
+    show Avoidance = "avoidance"
     show Recovery  = "recovery"
 
 data CC = CC {
