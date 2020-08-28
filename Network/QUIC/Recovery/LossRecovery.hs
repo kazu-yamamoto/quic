@@ -25,26 +25,12 @@ import GHC.Event hiding (new)
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Qlog
+import Network.QUIC.Recovery.Constants
 import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.PeerPacketNumbers
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Timeout
 import Network.QUIC.Types
-
--- | Maximum reordering in packets before packet threshold loss
---   detection considers a packet lost.
-kPacketThreshold :: PacketNumber
-kPacketThreshold = 3
-
--- | Maximum reordering in time before time threshold loss detection
---   considers a packet lost.  Specified as an RTT multiplier.
-
-kTimeThreshold :: Microseconds -> Microseconds
-kTimeThreshold x = x + (x .>>. 3) -- 9/8
-
--- | Timer granularity.
-kGranularity :: Microseconds
-kGranularity = Microseconds 5000
 
 onPacketSent :: LDCC -> SentPacket -> IO ()
 onPacketSent ldcc@LDCC{..} sentPacket = do
@@ -427,26 +413,6 @@ sendPing LDCC{..} lvl = do
 
 ----------------------------------------------------------------
 ----------------------------------------------------------------
-
--- | Default limit on the initial bytes in flight.
-kInitialWindow :: Int -> Int
---kInitialWindow pktSiz = min 14720 (10 * pktSiz)
-kInitialWindow pktSiz = pktSiz .<<. 2 --  .<<. 1 is not good enough
-
--- | Minimum congestion window in bytes.
-kMinimumWindow :: LDCC -> IO Int
-kMinimumWindow ldcc = do
-    siz <- getMaxPacketSize ldcc
-    return (siz .<<. 2) -- .<<. 1 is not good enough
-
--- | Reduction in congestion window when a new loss event is detected.
-kLossReductionFactor :: Int -> Int
-kLossReductionFactor = (.>>. 1) -- 0.5
-
--- | Period of time for persistent congestion to be established,
--- specified as a PTO multiplier.
-kPersistentCongestionThreshold :: Microseconds -> Microseconds
-kPersistentCongestionThreshold (Microseconds us) = Microseconds (3 * us)
 
 onPacketSentCC :: LDCC -> SentPacket -> IO ()
 onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $

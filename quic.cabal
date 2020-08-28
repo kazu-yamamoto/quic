@@ -49,6 +49,7 @@ library
                        Network.QUIC.Qlog
                        Network.QUIC.Receiver
                        Network.QUIC.Recovery
+                       Network.QUIC.Recovery.Constants
                        Network.QUIC.Recovery.LossRecovery
                        Network.QUIC.Recovery.Misc
                        Network.QUIC.Recovery.PeerPacketNumbers
