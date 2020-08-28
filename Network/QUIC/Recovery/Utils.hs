@@ -44,31 +44,3 @@ merge s1 s2 = case Seq.viewl s1 of
     y :< s2'
       | spPacketNumber x < spPacketNumber y -> x <| merge s1' s2
       | otherwise                           -> y <| merge s1 s2'
-
-----------------------------------------------------------------
-
-metricsUpdated :: LDCC -> IO () -> IO ()
-metricsUpdated ldcc@LDCC{..} body = do
-    rtt0 <- readIORef recoveryRTT
-    cc0 <- readTVarIO recoveryCC
-    body
-    rtt1 <- readIORef recoveryRTT
-    cc1 <- readTVarIO recoveryCC
-    let diff = catMaybes [
-            time "min_rtt"      (minRTT      rtt0) (minRTT      rtt1)
-          , time "smoothed_rtt" (smoothedRTT rtt0) (smoothedRTT rtt1)
-          , time "latest_rtt"   (latestRTT   rtt0) (latestRTT   rtt1)
-          , time "rtt_variance" (rttvar      rtt0) (rttvar      rtt1)
-          , numb "pto_count"    (ptoCount    rtt0) (ptoCount    rtt1)
-          , numb "bytes_in_flight"   (bytesInFlight cc0) (bytesInFlight cc1)
-          , numb "congestion_window" (congestionWindow cc0) (congestionWindow cc1)
-          , numb "ssthresh"          (ssthresh cc0) (ssthresh cc1)
-          ]
-    unless (null diff) $ qlogMetricsUpdated ldcc $ MetricsDiff diff
-  where
-    time tag (Microseconds v0) (Microseconds v1)
-      | v0 == v1  = Nothing
-      | otherwise = Just (tag,v1)
-    numb tag v0 v1
-      | v0 == v1  = Nothing
-      | otherwise = Just (tag,v1)

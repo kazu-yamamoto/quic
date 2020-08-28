@@ -12,8 +12,8 @@ import GHC.Event hiding (new)
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Qlog
-import Network.QUIC.Recovery.Constants
 import Network.QUIC.Recovery.Detect
+import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Types
@@ -235,49 +235,6 @@ onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of
     mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
 
 ----------------------------------------------------------------
-
-onCongestionEvent :: LDCC -> Seq SentPacket -> Bool -> IO ()
-onCongestionEvent ldcc@LDCC{..} lostPackets isRecovery = do
-    persistent <- inPersistentCongestion ldcc lostPackets
-    when (persistent || not isRecovery) $ do
-        minWindow <- kMinimumWindow ldcc
-        now <- getTimeMicrosecond
-        metricsUpdated ldcc $ atomically $ modifyTVar' recoveryCC $ \cc@CC{..} ->
-            let halfWindow = max minWindow $ kLossReductionFactor congestionWindow
-                cwin
-                  | persistent = minWindow
-                  | otherwise  = halfWindow
-                sst            = halfWindow
-                mode
-                  | cwin < sst = SlowStart -- persistent
-                  | otherwise  = Recovery
-            in cc {
-                congestionRecoveryStartTime = Just now
-              , congestionWindow = cwin
-              , ssthresh         = sst
-              , ccMode           = mode
-              , bytesAcked       = 0
-              }
-        CC{ccMode} <- atomically $ readTVar recoveryCC
-        qlogContestionStateUpdated ldcc ccMode
-
-----------------------------------------------------------------
-
-decreaseCC :: (Functor m, Foldable m) => LDCC -> m SentPacket -> IO ()
-decreaseCC ldcc@LDCC{..} packets = do
-    let sentBytes = sum (spSentBytes <$> packets)
-        num = sum (countAckEli <$> packets)
-    metricsUpdated ldcc $
-        atomically $ modifyTVar' recoveryCC $ \cc ->
-          cc {
-            bytesInFlight = bytesInFlight cc - sentBytes
-          , numOfAckEliciting = numOfAckEliciting cc - num
-          }
-
-countAckEli :: SentPacket -> Int
-countAckEli sentPacket
-  | spAckEliciting sentPacket = 1
-  | otherwise                 = 0
 
 retransmit :: LDCC -> Seq SentPacket -> IO ()
 retransmit ldcc lostPackets

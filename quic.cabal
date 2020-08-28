@@ -52,6 +52,7 @@ library
                        Network.QUIC.Recovery.Constants
                        Network.QUIC.Recovery.Detect
                        Network.QUIC.Recovery.LossRecovery
+                       Network.QUIC.Recovery.Metrics
                        Network.QUIC.Recovery.Misc
                        Network.QUIC.Recovery.PeerPacketNumbers
                        Network.QUIC.Recovery.Persistent
