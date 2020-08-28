@@ -5,7 +5,7 @@
 module Network.QUIC.Recovery.Timer where
 
 import Control.Concurrent.STM
-import Data.Sequence (Seq, ViewR(..))
+import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import GHC.Event hiding (new)
 
@@ -16,6 +16,7 @@ import Network.QUIC.Recovery.Detect
 import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.Persistent
+import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Recovery.Utils
 import Network.QUIC.Types
@@ -218,21 +219,6 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
                   atomicModifyIORef'' recoveryRTT $
                       \rtt -> rtt { ptoCount = ptoCount rtt + 1 }
               setLossDetectionTimer ldcc lvl
-
-----------------------------------------------------------------
-
-inCongestionRecovery :: TimeMicrosecond -> Maybe TimeMicrosecond -> Bool
-inCongestionRecovery _ Nothing = False
-inCongestionRecovery sentTime (Just crst) = sentTime <= crst
-
-onPacketsLost :: LDCC -> Seq SentPacket -> IO ()
-onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of
-  EmptyR -> return ()
-  _ :> lastPkt -> do
-    decreaseCC ldcc lostPackets
-    isRecovery <- inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime <$> readTVarIO recoveryCC
-    onCongestionEvent ldcc lostPackets isRecovery
-    mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
 
 ----------------------------------------------------------------
 

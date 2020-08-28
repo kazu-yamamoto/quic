@@ -17,7 +17,7 @@ module Network.QUIC.Recovery.LossRecovery (
   ) where
 
 import Control.Concurrent.STM
-import Data.Sequence (Seq, (|>), (><), ViewL(..), ViewR(..))
+import Data.Sequence (Seq, (|>), ViewR(..))
 import qualified Data.Sequence as Seq
 
 import Network.QUIC.Connector
@@ -27,7 +27,7 @@ import Network.QUIC.Recovery.Constants
 import Network.QUIC.Recovery.Detect
 import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
-import Network.QUIC.Recovery.PeerPacketNumbers
+import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Recovery.Utils
@@ -162,22 +162,6 @@ onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
               | ackedA >= cwin  = (cwin + maxPktSiz, ackedA - cwin, Avoidance)
               | otherwise       = (cwin, ackedA, Avoidance)
 
-onPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO ()
-onPacketNumberSpaceDiscarded ldcc@LDCC{..} lvl = do
-    let (lvl',label) = case lvl of
-          InitialLevel -> (HandshakeLevel,"initial")
-          _            -> (RTT1Level, "handshake")
-    qlogDebug ldcc $ Debug (label ++ " discarded")
-    discardPacketNumberSpace ldcc lvl
-    -- Remove any unacknowledged packets from flight.
-    clearedPackets <- releaseByClear ldcc lvl
-    decreaseCC ldcc clearedPackets
-    -- Reset the loss detection and PTO timer
-    writeIORef (lossDetection ! lvl) initialLossDetection
-    metricsUpdated ldcc $
-        atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-    setLossDetectionTimer ldcc lvl'
-
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
@@ -207,22 +191,21 @@ releaseLostCandidates ldcc@LDCC{..} lvl predicate = do
 
 ----------------------------------------------------------------
 
-releaseByClear :: LDCC -> EncryptionLevel -> IO (Seq SentPacket)
-releaseByClear ldcc@LDCC{..} lvl = do
-    clearPeerPacketNumbers ldcc lvl
-    atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
-        (emptySentPackets, db)
-
-----------------------------------------------------------------
-
-releaseByRetry :: LDCC -> IO (Seq PlainPacket)
-releaseByRetry ldcc@LDCC{..} = do
-    packets <- releaseByClear ldcc InitialLevel
-    decreaseCC ldcc packets
-    writeIORef (lossDetection ! InitialLevel) initialLossDetection
-    metricsUpdated ldcc $
-        atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
-    return (spPlainPacket <$> packets)
+onPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO ()
+onPacketNumberSpaceDiscarded ldcc@LDCC{..} lvl = do
+    let (lvl',label) = case lvl of
+          InitialLevel -> (HandshakeLevel,"initial")
+          _            -> (RTT1Level, "handshake")
+    qlogDebug ldcc $ Debug (label ++ " discarded")
+    discardPacketNumberSpace ldcc lvl
+    -- Remove any unacknowledged packets from flight.
+    clearedPackets <- releaseByClear ldcc lvl
+    decreaseCC ldcc clearedPackets
+    -- Reset the loss detection and PTO timer
+    writeIORef (lossDetection ! lvl) initialLossDetection
+    metricsUpdated ldcc
+        $ atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+    setLossDetectionTimer ldcc lvl'
 
 ----------------------------------------------------------------
 
@@ -237,28 +220,6 @@ speedup ldcc@LDCC{..} lvl desc = do
         onPacketsLost ldcc packets
         retransmit ldcc packets
         setLossDetectionTimer ldcc lvl
-
-----------------------------------------------------------------
-
--- Returning the oldest if it is ack-eliciting.
-releaseOldest :: LDCC -> EncryptionLevel -> IO (Maybe SentPacket)
-releaseOldest ldcc@LDCC{..} lvl = do
-    mr <- atomicModifyIORef' (sentPackets ! lvl) oldest
-    case mr of
-      Nothing   -> return ()
-      Just spkt -> do
-          delPeerPacketNumbers ldcc lvl $ spPacketNumber spkt
-          decreaseCC ldcc [spkt]
-    return mr
-  where
-    oldest (SentPackets db) = case Seq.viewl db2 of
-      x :< db2' -> let db' = db1 >< db2'
-                   in (SentPackets db', Just x)
-      _         ->    (SentPackets db, Nothing)
-      where
-        (db1, db2) = Seq.breakl spAckEliciting db
-
-----------------------------------------------------------------
 
 ----------------------------------------------------------------
 

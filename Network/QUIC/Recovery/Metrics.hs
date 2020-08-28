@@ -89,32 +89,6 @@ onCongestionEvent ldcc@LDCC{..} lostPackets isRecovery = do
         CC{ccMode} <- atomically $ readTVar recoveryCC
         qlogContestionStateUpdated ldcc ccMode
 
-onPacketSentCC :: LDCC -> SentPacket -> IO ()
-onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
-    atomically $ modifyTVar' recoveryCC $ \cc -> cc {
-        bytesInFlight = bytesInFlight cc + bytesSent
-      , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
-      }
-  where
-    bytesSent = spSentBytes sentPacket
-
-decreaseCC :: (Functor m, Foldable m) => LDCC -> m SentPacket -> IO ()
-decreaseCC ldcc@LDCC{..} packets = do
-    let sentBytes = sum (spSentBytes <$> packets)
-        num = sum (countAckEli <$> packets)
-    metricsUpdated ldcc $
-        atomically $ modifyTVar' recoveryCC $ \cc ->
-          cc {
-            bytesInFlight = bytesInFlight cc - sentBytes
-          , numOfAckEliciting = numOfAckEliciting cc - num
-          }
-
-countAckEli :: SentPacket -> Int
-countAckEli sentPacket
-  | spAckEliciting sentPacket = 1
-  | otherwise                 = 0
-
-
 setInitialCongestionWindow :: LDCC -> Int -> IO ()
 setInitialCongestionWindow ldcc@LDCC{..} pktSiz = metricsUpdated ldcc $
     atomically $ do modifyTVar' recoveryCC $ \cc -> cc {
