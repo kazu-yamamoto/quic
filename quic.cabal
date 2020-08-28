@@ -50,9 +50,11 @@ library
                        Network.QUIC.Receiver
                        Network.QUIC.Recovery
                        Network.QUIC.Recovery.Constants
+                       Network.QUIC.Recovery.Detect
                        Network.QUIC.Recovery.LossRecovery
                        Network.QUIC.Recovery.Misc
                        Network.QUIC.Recovery.PeerPacketNumbers
+                       Network.QUIC.Recovery.Persistent
                        Network.QUIC.Recovery.Types
                        Network.QUIC.Run
                        Network.QUIC.Sender

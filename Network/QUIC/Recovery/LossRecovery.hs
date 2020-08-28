@@ -19,15 +19,16 @@ module Network.QUIC.Recovery.LossRecovery (
 import Control.Concurrent.STM
 import Data.Sequence (Seq, (<|), (|>), (><), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
-import Data.UnixTime
 import GHC.Event hiding (new)
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery.Constants
+import Network.QUIC.Recovery.Detect
 import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.PeerPacketNumbers
+import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Timeout
 import Network.QUIC.Types
@@ -170,43 +171,6 @@ updateRTT ldcc@LDCC{..} lvl latestRTT0 ackDelay0 = metricsUpdated ldcc $ do
         smoothedRTT' = smoothedRTT - (smoothedRTT .>>. 3)
                      + (adjustedRTT .>>. 3)
 
-detectAndRemoveLostPackets :: LDCC -> EncryptionLevel -> IO (Seq SentPacket)
-detectAndRemoveLostPackets ldcc@LDCC{..} lvl = do
-    lae <- timeOfLastAckElicitingPacket <$> readIORef (lossDetection ! lvl)
-    when (lae == timeMicrosecond0) $
-        qlogDebug ldcc $ Debug "detectAndRemoveLostPackets: timeOfLastAckElicitingPacket: 0"
-    atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-          lossTime = Nothing
-        }
-    RTT{..} <- readIORef recoveryRTT
-    LossDetection{..} <- readIORef (lossDetection ! lvl)
-    when (largestAckedPacket == -1) $
-        qlogDebug ldcc $ Debug "detectAndRemoveLostPackets: largestAckedPacket: -1"
-    -- Sec 6.1.2. Time Threshold
-    -- max(kTimeThreshold * max(smoothed_rtt, latest_rtt), kGranularity)
-    let lossDelay0 = kTimeThreshold $ max latestRTT smoothedRTT
-    let lossDelay = max lossDelay0 kGranularity
-
-    tm <- getPastTimeMicrosecond lossDelay
-    let predicate ent = (spPacketNumber ent <= largestAckedPacket - kPacketThreshold)
-                     || (spPacketNumber ent <= largestAckedPacket && spTimeSent ent <= tm)
-    lostPackets <- releaseByPredicate ldcc lvl predicate
-
-    mx <- findOldest ldcc lvl (\x -> spPacketNumber x <= largestAckedPacket)
-    case mx of
-      -- No gap packet. PTO turn.
-      Nothing -> return ()
-      -- There are gap packets which are not declared lost.
-      -- Set lossTime to next.
-      Just x  -> do
-          let next = spTimeSent x `addMicroseconds` lossDelay
-          atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-                lossTime = Just next
-              }
-
-    unless (Seq.null lostPackets) $ qlogDebug ldcc $ Debug "loss detected"
-    return lostPackets
-
 getLossTimeAndSpace :: LDCC -> IO (Maybe (TimeMicrosecond,EncryptionLevel))
 getLossTimeAndSpace LDCC{..} =
     loop [InitialLevel, HandshakeLevel, RTT1Level] Nothing
@@ -221,22 +185,6 @@ getLossTimeAndSpace LDCC{..} =
             Just (t0,_)
                | t < t0    -> loop ls $ Just (t,l)
                | otherwise -> loop ls r
-
-getMaxAckDelay :: Maybe EncryptionLevel -> Microseconds -> Microseconds
-getMaxAckDelay Nothing n = n
-getMaxAckDelay (Just lvl) n
-  | lvl `elem` [InitialLevel,HandshakeLevel] = 0
-  | otherwise                                = n
-
--- Sec 6.2.1. Computing PTO
--- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
-calcPTO :: RTT -> Maybe EncryptionLevel -> Microseconds
-calcPTO RTT{..} mlvl = smoothedRTT + max (rttvar .<<. 2) kGranularity + dly
-  where
-    dly = getMaxAckDelay mlvl maxAckDelay1RTT
-
-backOff :: Microseconds -> Int -> Microseconds
-backOff n cnt = n * (2 ^ cnt)
 
 getPtoTimeAndSpace :: LDCC -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
 getPtoTimeAndSpace ldcc@LDCC{..} = do
@@ -497,54 +445,6 @@ onCongestionEvent ldcc@LDCC{..} lostPackets isRecovery = do
         CC{ccMode} <- atomically $ readTVar recoveryCC
         qlogContestionStateUpdated ldcc ccMode
 
--- Sec 7.8. Persistent Congestion
--- fixme: after the first sample
-inPersistentCongestion :: LDCC -> Seq SentPacket -> IO Bool
-inPersistentCongestion ldcc@LDCC{..} lostPackets = do
-    pn <- getPktNumPersistent ldcc
-    let mduration = findDuration lostPackets pn
-    case mduration of
-      Nothing -> return False
-      Just duration -> do
-          rtt <- readIORef recoveryRTT
-          let pto = calcPTO rtt Nothing
-              Microseconds congestionPeriod = kPersistentCongestionThreshold pto
-              threshold = microSecondsToUnixDiffTime congestionPeriod
-          return (duration > threshold)
-
-diff0 :: UnixDiffTime
-diff0 = UnixDiffTime 0 0
-
-findDuration :: Seq SentPacket -> PacketNumber -> Maybe UnixDiffTime
-findDuration pkts0 pn = leftEdge pkts0 diff0
-  where
-    leftEdge pkts diff = case Seq.viewl pkts' of
-        EmptyL      -> Nothing
-        l :< pkts'' -> case rightEdge (spPacketNumber l) pkts'' Nothing of
-          (Nothing, pkts''') -> leftEdge pkts''' diff
-          (Just r,  pkts''') -> let diff' = spTimeSent r `diffUnixTime` spTimeSent l
-                                in leftEdge pkts''' diff'
-      where
-        (_, pkts') = Seq.breakl (\x -> spAckEliciting x && spPacketNumber x >= pn) pkts
-    rightEdge n pkts Nothing = case Seq.viewl pkts of
-        EmptyL -> (Nothing, Seq.empty)
-        r :< pkts'
-          | spPacketNumber r == n + 1 ->
-              if spAckEliciting r then
-                  rightEdge (n + 1) pkts' (Just r)
-                else
-                  rightEdge (n + 1) pkts' Nothing
-          | otherwise -> (Nothing, pkts')
-    rightEdge n pkts mr0 = case Seq.viewl pkts of
-        EmptyL -> (mr0, Seq.empty)
-        r :< pkts'
-          | spPacketNumber r == n + 1 ->
-              if spAckEliciting r then
-                  rightEdge (n + 1) pkts' (Just r)
-                else
-                  rightEdge (n + 1) pkts' mr0
-          | otherwise -> (mr0, pkts')
-
 decreaseCC :: (Functor m, Foldable m) => LDCC -> m SentPacket -> IO ()
 decreaseCC ldcc@LDCC{..} packets = do
     let sentBytes = sum (spSentBytes <$> packets)
@@ -638,24 +538,6 @@ releaseLostCandidates ldcc@LDCC{..} lvl predicate = do
     return packets
 
 ----------------------------------------------------------------
-----------------------------------------------------------------
-
-releaseByPredicate :: LDCC -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
-releaseByPredicate ldcc@LDCC{..} lvl predicate = do
-    packets <- atomicModifyIORef' (sentPackets ! lvl) $ \(SentPackets db) ->
-       let (pkts, db') = Seq.partition predicate db
-       in (SentPackets db', pkts)
-    removePacketNumbers ldcc lvl packets
-    return $ packets
-
-removePacketNumbers :: Foldable t => LDCC -> EncryptionLevel -> t SentPacket -> IO ()
-removePacketNumbers ldcc lvl packets = mapM_ reduce packets
-  where
-    reduce x = reducePeerPacketNumbers ldcc lvl ppns
-      where
-        ppns = spPeerPacketNumbers x
-
-----------------------------------------------------------------
 
 releaseByClear :: LDCC -> EncryptionLevel -> IO (Seq SentPacket)
 releaseByClear ldcc@LDCC{..} lvl = do
@@ -707,14 +589,6 @@ releaseOldest ldcc@LDCC{..} lvl = do
       _         ->    (SentPackets db, Nothing)
       where
         (db1, db2) = Seq.breakl spAckEliciting db
-
-findOldest :: LDCC -> EncryptionLevel -> (SentPacket -> Bool)
-           -> IO (Maybe SentPacket)
-findOldest LDCC{..} lvl p = oldest <$> readIORef (sentPackets ! lvl)
-  where
-    oldest (SentPackets db) = case Seq.viewl $ Seq.filter p db of
-      EmptyL -> Nothing
-      x :< _ -> Just x
 
 ----------------------------------------------------------------
 
