@@ -15,10 +15,13 @@ import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.Qlog
+import Network.QUIC.Recovery
 import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Timeout
@@ -56,7 +59,7 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
             initializeCoder conn InitialLevel $ initialSecrets ver sCID
             setToken conn token
             setRetried conn True
-            releaseByRetry conn >>= mapM_ put
+            releaseByRetry (connLDCC conn) >>= mapM_ put
       where
         put ppkt = putOutput conn $ OutRetrans ppkt
 

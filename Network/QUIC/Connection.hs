@@ -2,25 +2,14 @@ module Network.QUIC.Connection (
     Connection
   , clientConnection
   , serverConnection
-  , isClient
-  , isServer
   -- * IO
   , connDebugLog
   , connQLog
   -- * Packet numbers
-  , setPacketNumber
-  , getPacketNumber
-  , setPktNumPersistent
-  , getPktNumPersistent
+  , nextPacketNumber
   , setPeerPacketNumber
   , getPeerPacketNumber
-  , getPeerPacketNumbers
-  , nullPeerPacketNumbers
-  , fromPeerPacketNumbers
-  , setPreviousRTT1PPNs
-  , getPreviousRTT1PPNs
   -- * Crypto
-  , getEncryptionLevel
   , setEncryptionLevel
   , waitEncryptionLevel
   , putOffCrypto
@@ -69,7 +58,6 @@ module Network.QUIC.Connection (
   , setPeerParameters
   , delayedAck
   , resetDealyedAck
-  , getMaxPacketSize
   , setMaxPacketSize
   , exitConnection
   , addResource
@@ -77,11 +65,6 @@ module Network.QUIC.Connection (
   , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
-  , setMaxAckDaley
-  , setSpeedingUp
-  , getSpeedingUp
-  , discardPacketNumberSpace
-  , getPacketNumberSpaceDiscarded
   -- * State
   , isConnectionOpen
   , isConnectionEstablished
@@ -146,29 +129,10 @@ module Network.QUIC.Connection (
   , getMainThreadId
   , setCertificateChain
   , getCertificateChain
-  -- Qlog
-  , qlogReceived
-  , qlogSent
-  , qlogDropped
-  , qlogRecvInitial
-  , qlogSentRetry
-  , qlogDebug
-  , qlogParamsSet
-  -- Recovery
-  , onAckReceived
-  , onPacketSent
-  , onPacketReceived
-  , onPacketNumberSpaceDiscarded
-  , releaseByRetry
-  , releaseOldest
-  , checkWindowOpenSTM
-  , takePingSTM
-  , setInitialCongestionWindow
-  , resender
-  , speedup
   -- Types
   , connThreadId
   , connHooks
+  , connLDCC
   , headerBuffer
   , payloadBuffer
   , Input(..)
@@ -180,9 +144,7 @@ import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Migration
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.PacketNumber
-import Network.QUIC.Connection.Qlog
 import Network.QUIC.Connection.Queue
-import Network.QUIC.Connection.Recovery
 import Network.QUIC.Connection.Role
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Stream

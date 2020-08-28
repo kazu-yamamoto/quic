@@ -14,13 +14,16 @@ import qualified Network.Socket.ByteString as NSB
 import Network.QUIC.Client
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Exception
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.Qlog
 import Network.QUIC.Receiver
+import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Server
 import Network.QUIC.Socket
@@ -92,9 +95,9 @@ createClientConnection conf@ClientConfig{..} ver = do
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz0 = fromMaybe 0 ccPacketSize
-        pktSiz = (defaultPacketSize sa0 `max` pktSiz0) `min` maxPacketSize sa0
+        pktSiz = (defaultPacketSize sa0 `max` pktSiz0) `min` maximumPacketSize sa0
     setMaxPacketSize conn pktSiz
-    setInitialCongestionWindow conn pktSiz
+    setInitialCongestionWindow (connLDCC conn) pktSiz
     --
     mytid <- myThreadId
     --
@@ -106,7 +109,7 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = E.ha
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
-    tid2 <- forkIO $ resender conn
+    tid2 <- forkIO $ resender $ connLDCC conn
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
@@ -174,9 +177,9 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
                 Nothing   -> ocid
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz = (defaultPacketSize mysa `max` pktSiz0) `min` maxPacketSize mysa
+    let pktSiz = (defaultPacketSize mysa `max` pktSiz0) `min` maximumPacketSize mysa
     setMaxPacketSize conn pktSiz
-    setInitialCongestionWindow conn pktSiz
+    setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow pktSiz0 <> ")"
     --
     let retried = isJust $ retrySrcCID myAuthCIDs
@@ -199,7 +202,7 @@ handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -
 handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
-    tid2 <- forkIO $ resender conn
+    tid2 <- forkIO $ resender $ connLDCC conn
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
@@ -254,6 +257,6 @@ defaultPacketSize :: NS.SockAddr -> Int
 defaultPacketSize NS.SockAddrInet6{} = defaultQUICPacketSizeForIPv6
 defaultPacketSize _                  = defaultQUICPacketSizeForIPv4
 
-maxPacketSize :: NS.SockAddr -> Int
-maxPacketSize NS.SockAddrInet6{} = 1500 - 40 - 8 -- fixme
-maxPacketSize _                  = 1500 - 20 - 8 -- fixme
+maximumPacketSize :: NS.SockAddr -> Int
+maximumPacketSize NS.SockAddrInet6{} = 1500 - 40 - 8 -- fixme
+maximumPacketSize _                  = 1500 - 20 - 8 -- fixme

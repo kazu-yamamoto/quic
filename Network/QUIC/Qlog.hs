@@ -18,6 +18,14 @@ import Network.QUIC.Types
 class Qlog a where
     qlog :: a -> LogStr
 
+newtype Debug = Debug String
+
+instance Show Debug where
+    show (Debug msg) = msg
+
+instance Qlog Debug where
+    qlog (Debug msg) = "{\"message\":" <> sw msg <> "}"
+
 instance Qlog RetryPacket where
     qlog RetryPacket{} = "{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}"
 
@@ -32,19 +40,6 @@ instance Qlog CryptPacket where
 
 instance Qlog PlainPacket where
     qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"}}"
-
-instance Qlog SentPacket where
-    qlog SentPacket{..} = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\",\"packet_size\":" <> sw spSentBytes <> "}}"
-      where
-        PlainPacket hdr Plain{..} = spPlainPacket
-
-instance Qlog LostPacket where
-    qlog (LostPacket SentPacket{..}) =
-        "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\"" <>
-        ",\"packet_number\":" <> sw spPacketNumber <>
-        "}"
-      where
-        PlainPacket hdr _ = spPlainPacket
 
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"packet_type\":\"stateless_reset\",\"header\":{\"packet_number\":\"\"}}"
@@ -150,38 +145,6 @@ instance Qlog (Parameters,String) where
 
 ----------------------------------------------------------------
 
-instance Qlog MetricsDiff where
-    qlog (MetricsDiff []) = "{}"
-    qlog (MetricsDiff (x:xs)) = "{" <> tv0 x <> foldr tv "" xs <> "}"
-      where
-        tv0 (tag,val)    =  "\"" <> toLogStr tag <> "\":" <> sw val
-        tv (tag,val) pre = ",\"" <> toLogStr tag <> "\":" <> sw val <> pre
-
-instance Qlog CCMode where
-    qlog mode = "{\"new\":\"" <> sw mode <> "\"}"
-
-instance Qlog TimerInfo where
-    qlog TimerInfo{..} = "{\"timer_type\":\"" <> sw timerType <> "\"" <>
-                         ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
-                         ",\"event_type\":\"" <> sw timerEvent <> "\"" <>
-                         ",\"delta\":" <> delta timerTime <>
-                         "}"
-
-packetNumberSpace :: EncryptionLevel -> LogStr
-packetNumberSpace InitialLevel   = "initial"
-packetNumberSpace RTT0Level      = "application_data"
-packetNumberSpace HandshakeLevel = "handshake"
-packetNumberSpace RTT1Level      = "application_data"
-
-delta :: Either TimeMicrosecond Microseconds -> LogStr
-delta (Left _)                 = "0"
-delta (Right (Microseconds n)) = sw n
-
-instance Qlog Debug where
-    qlog (Debug msg) = "{\"message\":" <> sw msg <> "}"
-
-----------------------------------------------------------------
-
 data QlogMsg = QRecvInitial
              | QSentRetry
              | QSent LogStr
@@ -240,3 +203,26 @@ newQlogger rl ocid fastLogger = do
   where
     ignore :: E.SomeException -> IO ()
     ignore _ = return ()
+
+----------------------------------------------------------------
+
+class KeepQlog a where
+    keepQlog :: a -> QLogger
+
+qlogReceived :: (KeepQlog q, Qlog a) => q -> a -> IO ()
+qlogReceived q pkt = keepQlog q $ QReceived $ qlog pkt
+
+qlogDropped :: (KeepQlog q, Qlog a) => q -> a -> IO ()
+qlogDropped q pkt = keepQlog q $ QDropped $ qlog pkt
+
+qlogRecvInitial :: KeepQlog q => q -> IO ()
+qlogRecvInitial q = keepQlog q QRecvInitial
+
+qlogSentRetry :: KeepQlog q => q -> IO ()
+qlogSentRetry q = keepQlog q QSentRetry
+
+qlogParamsSet :: KeepQlog q => q -> (Parameters,String) -> IO ()
+qlogParamsSet q params = keepQlog q $ QParamsSet $ qlog params
+
+qlogDebug :: KeepQlog q => q -> Debug -> IO ()
+qlogDebug q msg = keepQlog q $ QDebug $ qlog msg

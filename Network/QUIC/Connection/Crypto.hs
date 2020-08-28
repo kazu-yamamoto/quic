@@ -3,7 +3,6 @@
 
 module Network.QUIC.Connection.Crypto (
     setEncryptionLevel
-  , getEncryptionLevel
   , waitEncryptionLevel
   , putOffCrypto
   --
@@ -24,6 +23,7 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.TLS
 import Network.QUIC.Types
@@ -34,7 +34,7 @@ setEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 setEncryptionLevel conn@Connection{..} lvl = do
     (_, q) <- getSockInfo conn
     atomically $ do
-        writeTVar encryptionLevel lvl
+        writeTVar (encryptionLevel connState) lvl
         case lvl of
           HandshakeLevel -> do
               readTVar (pendingQ ! RTT0Level)      >>= mapM_ (prependRecvQ q)
@@ -43,16 +43,13 @@ setEncryptionLevel conn@Connection{..} lvl = do
               readTVar (pendingQ ! RTT1Level)      >>= mapM_ (prependRecvQ q)
           _              -> return ()
 
-getEncryptionLevel :: Connection -> IO EncryptionLevel
-getEncryptionLevel Connection{..} = readTVarIO encryptionLevel
-
 putOffCrypto :: Connection -> EncryptionLevel -> CryptPacket -> IO ()
 putOffCrypto Connection{..} lvl cpkt =
     atomically $ modifyTVar' (pendingQ ! lvl) (cpkt :)
 
 waitEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 waitEncryptionLevel Connection{..} lvl = atomically $ do
-    l <- readTVar encryptionLevel
+    l <- readTVar $ encryptionLevel connState
     check (l >= lvl)
 
 ----------------------------------------------------------------

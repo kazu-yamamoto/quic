@@ -13,6 +13,7 @@ module Network.QUIC.Connection.StreamTable (
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Stream

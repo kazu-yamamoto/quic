@@ -9,9 +9,12 @@ import Control.Concurrent.STM
 import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
+import Network.QUIC.Qlog
+import Network.QUIC.Recovery
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
@@ -30,9 +33,10 @@ sendPacket :: Connection -> SendMany -> [SentPacket] -> IO ()
 sendPacket _ _ [] = return ()
 sendPacket conn send spkts = getMaxPacketSize conn >>= go
   where
+    ldcc = connLDCC conn
     go maxSiz = do
-        mx <- atomically ((Just    <$> takePingSTM conn)
-                 `orElse` (Nothing <$  checkWindowOpenSTM conn maxSiz))
+        mx <- atomically ((Just    <$> takePingSTM ldcc)
+                 `orElse` (Nothing <$  checkWindowOpenSTM ldcc maxSiz))
         case mx of
           Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
             sendPingPacket conn send lvl
@@ -43,7 +47,7 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
             send bss
             forM_ sentPackets $ \sentPacket -> do
                 qlogSent conn sentPacket
-                onPacketSent conn sentPacket
+                onPacketSent ldcc sentPacket
     buildPackets _ [] _ _ = error "sendPacket: buildPackets"
     buildPackets siz [spkt] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkt) $ Just siz
@@ -93,7 +97,8 @@ addPadding (PlainPacket hdr plain) = PlainPacket hdr plain'
 sendPingPacket :: Connection -> SendMany -> EncryptionLevel -> IO ()
 sendPingPacket conn send lvl = do
     maxSiz <- getMaxPacketSize conn
-    mp <- releaseOldest conn lvl
+    let ldcc = connLDCC conn
+    mp <- releaseOldest ldcc lvl
     frames <- case mp of
       Nothing -> do
           qlogDebug conn $ Debug "probe ping"
@@ -112,7 +117,7 @@ sendPingPacket conn send lvl = do
         send bss
         sentPacket <- fixSentPacket spkt bss
         qlogSent conn sentPacket
-        onPacketSent conn sentPacket
+        onPacketSent ldcc sentPacket
 
 ----------------------------------------------------------------
 
@@ -121,7 +126,7 @@ construct :: Connection
           -> [Frame]
           -> IO [SentPacket]
 construct conn lvl frames = do
-    discarded <- getPacketNumberSpaceDiscarded conn lvl
+    discarded <- getPacketNumberSpaceDiscarded ldcc lvl
     if discarded then
         return []
       else do
@@ -137,6 +142,7 @@ construct conn lvl frames = do
             ppkt1 <- constructTargetPacket ver mycid peercid token
             return (ppkt0 ++ ppkt1)
   where
+    ldcc = connLDCC conn
     constructLowerAckPacket ver mycid peercid token = do
         let lvl' = case lvl of
               HandshakeLevel -> InitialLevel
@@ -145,11 +151,11 @@ construct conn lvl frames = do
         if lvl' == RTT1Level then
             return []
           else do
-            ppns <- getPeerPacketNumbers conn lvl'
+            ppns <- getPeerPacketNumbers ldcc lvl'
             if nullPeerPacketNumbers ppns then
                 return []
               else do
-                mypn <- getPacketNumber conn
+                mypn <- nextPacketNumber conn
                 let header
                       | lvl' == InitialLevel = Initial   ver peercid mycid token
                       | otherwise            = Handshake ver peercid mycid
@@ -160,14 +166,14 @@ construct conn lvl frames = do
     constructTargetPacket ver mycid peercid token
       | null frames = do -- ACK only packet
             resetDealyedAck conn
-            ppns <- getPeerPacketNumbers conn lvl
+            ppns <- getPeerPacketNumbers ldcc lvl
             if nullPeerPacketNumbers ppns then
                 return []
               else
                 if lvl == RTT1Level then do
-                    prevppns <- getPreviousRTT1PPNs conn
+                    prevppns <- getPreviousRTT1PPNs ldcc
                     if ppns /= prevppns then do
-                        setPreviousRTT1PPNs conn ppns
+                        setPreviousRTT1PPNs ldcc ppns
                         makeAck ppns
                      else
                        return []
@@ -175,10 +181,10 @@ construct conn lvl frames = do
                     makeAck ppns
       | otherwise = do
             resetDealyedAck conn
-            ppns <- getPeerPacketNumbers conn lvl
+            ppns <- getPeerPacketNumbers ldcc lvl
             let frames' | nullPeerPacketNumbers ppns = frames
                         | otherwise                  = toAck ppns : frames
-            mypn <- getPacketNumber conn
+            mypn <- nextPacketNumber conn
             let plain = Plain (Flags 0) mypn frames'
                 ppkt = toPlainPakcet lvl plain
             return [mkSentPacket mypn lvl ppkt ppns True]
@@ -193,7 +199,7 @@ construct conn lvl frames = do
             PlainPacket (Short         peercid)             plain
         toAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
         makeAck ppns = do
-            mypn <- getPacketNumber conn
+            mypn <- nextPacketNumber conn
             let frames' = [toAck ppns]
                 plain = Plain (Flags 0) mypn frames'
                 ppkt = toPlainPakcet lvl plain
@@ -208,7 +214,7 @@ data Switch = SwPing EncryptionLevel
 
 sender :: Connection -> SendMany -> IO ()
 sender conn send = handleLog logAction $ forever $ do
-    x <- atomically ((SwPing <$> takePingSTM conn)
+    x <- atomically ((SwPing <$> takePingSTM (connLDCC conn))
             `orElse` (SwBlck <$> takeSendBlockQSTM conn)
             `orElse` (SwOut  <$> takeOutputSTM conn)
             `orElse` (SwStrm <$> takeSendStreamQSTM conn))
@@ -235,10 +241,11 @@ sendBlocked conn send blocked = do
 discardInitialPacketNumberSpace :: Connection -> IO ()
 discardInitialPacketNumberSpace conn
   | isClient conn = do
-        discarded <- getPacketNumberSpaceDiscarded conn InitialLevel
+        let ldcc = connLDCC conn
+        discarded <- getPacketNumberSpaceDiscarded ldcc InitialLevel
         unless discarded $ do
             dropSecrets conn InitialLevel
-            onPacketNumberSpaceDiscarded conn InitialLevel
+            onPacketNumberSpaceDiscarded ldcc InitialLevel
   | otherwise = return ()
 
 sendOutput :: Connection -> SendMany -> Output -> IO ()

@@ -15,7 +15,6 @@ module Network.QUIC.Connection.Misc (
   , setPeerParameters
   , delayedAck
   , resetDealyedAck
-  , getMaxPacketSize
   , setMaxPacketSize
   , exitConnection
   , addResource
@@ -23,11 +22,6 @@ module Network.QUIC.Connection.Misc (
   , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
-  , setMaxAckDaley
-  , setSpeedingUp
-  , getSpeedingUp
-  , discardPacketNumberSpace
-  , getPacketNumberSpaceDiscarded
   ) where
 
 import Control.Concurrent
@@ -37,6 +31,7 @@ import System.Mem.Weak
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Timeout
@@ -124,11 +119,8 @@ resetDealyedAck Connection{..} = do
 
 ----------------------------------------------------------------
 
-getMaxPacketSize :: Connection -> IO Int
-getMaxPacketSize Connection{..} = readIORef maxPacketSize
-
 setMaxPacketSize :: Connection -> Int -> IO ()
-setMaxPacketSize Connection{..} n = writeIORef maxPacketSize n
+setMaxPacketSize Connection{..} n = writeIORef (maxPacketSize connState) n
 
 ----------------------------------------------------------------
 
@@ -169,25 +161,3 @@ setMinIdleTimeout Connection{..} us
   | otherwise            = atomicModifyIORef'' minIdleTimeout modify
   where
     modify us0 = min us us0
-
-----------------------------------------------------------------
-
-setMaxAckDaley :: Connection -> Microseconds -> IO ()
-setMaxAckDaley Connection{..} delay0 =
-    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }
-
-----------------------------------------------------------------
-
-setSpeedingUp :: Connection -> IO ()
-setSpeedingUp Connection{..} = writeIORef speedingUp True
-
-getSpeedingUp :: Connection -> IO Bool
-getSpeedingUp Connection{..} = readIORef speedingUp
-
-----------------------------------------------------------------
-
-discardPacketNumberSpace :: Connection -> EncryptionLevel -> IO ()
-discardPacketNumberSpace Connection{..} lvl = writeArray spaceDiscarded lvl True
-
-getPacketNumberSpaceDiscarded :: Connection -> EncryptionLevel -> IO Bool
-getPacketNumberSpaceDiscarded Connection{..} lvl = readArray spaceDiscarded lvl

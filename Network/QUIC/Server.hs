@@ -39,6 +39,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.Qlog
 import Network.QUIC.Socket
 import Network.QUIC.TLS
 import Network.QUIC.Timeout

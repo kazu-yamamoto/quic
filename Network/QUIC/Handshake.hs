@@ -10,10 +10,13 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Info
 import Network.QUIC.Logger
 import Network.QUIC.Parameters
+import Network.QUIC.Qlog
+import Network.QUIC.Recovery
 import Network.QUIC.TLS
 import Network.QUIC.Timeout
 import Network.QUIC.Types
@@ -177,7 +180,7 @@ handshakeServer conf conn myAuthCIDs = do
         setEncryptionLevel conn RTT1Level
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
-        onPacketNumberSpaceDiscarded conn HandshakeLevel
+        onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
         fire (Microseconds 100000) $ do
             dropSecrets conn RTT0Level
             dropSecrets conn HandshakeLevel
@@ -220,7 +223,7 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
               Just srt -> setPeerStatelessResetToken conn srt
         setTxMaxData conn $ initialMaxData params
         setMinIdleTimeout conn $ milliToMicro $ maxIdleTimeout params
-        setMaxAckDaley conn $ milliToMicro $ maxAckDelay params
+        setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
 setPeerParams _ _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError

@@ -23,14 +23,13 @@ library
                        Network.QUIC.Connection.Migration
                        Network.QUIC.Connection.Misc
                        Network.QUIC.Connection.PacketNumber
-                       Network.QUIC.Connection.Qlog
                        Network.QUIC.Connection.Queue
-                       Network.QUIC.Connection.Recovery
                        Network.QUIC.Connection.Role
                        Network.QUIC.Connection.State
                        Network.QUIC.Connection.Stream
                        Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Types
+                       Network.QUIC.Connector
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.Info
@@ -49,6 +48,11 @@ library
                        Network.QUIC.Parameters
                        Network.QUIC.Qlog
                        Network.QUIC.Receiver
+                       Network.QUIC.Recovery
+                       Network.QUIC.Recovery.LossRecovery
+                       Network.QUIC.Recovery.Misc
+                       Network.QUIC.Recovery.PeerPacketNumbers
+                       Network.QUIC.Recovery.Types
                        Network.QUIC.Run
                        Network.QUIC.Sender
                        Network.QUIC.Server
@@ -72,7 +76,6 @@ library
                        Network.QUIC.Types.Integer
                        Network.QUIC.Types.Packet
                        Network.QUIC.Types.Queue
-                       Network.QUIC.Types.Recovery
                        Network.QUIC.Types.Resumption
                        Network.QUIC.Types.Time
                        Network.QUIC.Types.UserError

@@ -10,11 +10,14 @@ import qualified Data.ByteString as BS
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.Qlog
+import Network.QUIC.Recovery
 import Network.QUIC.Stream
 import Network.QUIC.Timeout
 import Network.QUIC.Types
@@ -61,7 +64,7 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
           putOffCrypto conn lvl cpkt
           when (isClient conn) $ do
               lvl' <- getEncryptionLevel conn
-              speedup conn lvl' "not decryptable"
+              speedup (connLDCC conn) lvl' "not decryptable"
       Just () -> do
           when (isClient conn && lvl == InitialLevel) $ do
               peercid <- getPeerCID conn
@@ -69,10 +72,10 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
               when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
               setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
           when (isServer conn && lvl == HandshakeLevel) $ do
-              discarded <- getPacketNumberSpaceDiscarded conn InitialLevel
+              discarded <- getPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
               unless discarded $ do
                   dropSecrets conn InitialLevel
-                  onPacketNumberSpaceDiscarded conn InitialLevel
+                  onPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
           processCryptPacket conn hdr crypt
 
 processCryptPacket :: Connection -> Header -> Crypt -> IO ()
@@ -82,7 +85,8 @@ processCryptPacket conn hdr crypt = do
     case mplain of
       Just plain@(Plain _ pn frames) -> do
           -- For Ping, record PPN first, then send an ACK.
-          onPacketReceived conn lvl pn
+          addPeerPacketNumbers (connLDCC conn) lvl pn
+          onPacketReceived (connLDCC conn) lvl
           when (lvl == RTT1Level) $ setPeerPacketNumber conn pn
           unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain
@@ -92,7 +96,7 @@ processCryptPacket conn hdr crypt = do
                 RTT0Level -> return ()
                 RTT1Level -> delayedAck conn
                 _         -> do
-                    sup <- getSpeedingUp conn
+                    sup <- getSpeedingUp (connLDCC conn)
                     when sup $ do
                         qlogDebug conn $ Debug "ping for speedup"
                         putOutput conn $ OutControl lvl [Ping]
@@ -113,7 +117,7 @@ processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping =
     putOutput conn $ OutControl lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) =
-    onAckReceived conn lvl ackInfo $ milliToMicro ackDelay
+    onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
 processFrame _ _ ResetStream{} = return ()
 processFrame _ _ StopSending{} = return ()
 processFrame conn lvl (CryptoF off cdat) = do
@@ -122,12 +126,12 @@ processFrame conn lvl (CryptoF off cdat) = do
     case lvl of
       InitialLevel   -> do
           dup <- putRxCrypto conn lvl rx
-          when dup $ speedup conn lvl "duplicated"
+          when dup $ speedup (connLDCC conn) lvl "duplicated"
       RTT0Level -> do
           connDebugLog conn $ "processFrame: invalid packet type " <> bhow lvl
       HandshakeLevel -> do
           dup <- putRxCrypto conn lvl rx
-          when dup $ speedup conn lvl "duplicated"
+          when dup $ speedup (connLDCC conn) lvl "duplicated"
       RTT1Level
         | isClient conn ->
               void $ putRxCrypto conn lvl rx
@@ -218,7 +222,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone = do
-    onPacketNumberSpaceDiscarded conn HandshakeLevel
+    onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
     fire (Microseconds 100000) $ do
         dropSecrets conn RTT0Level
         dropSecrets conn HandshakeLevel

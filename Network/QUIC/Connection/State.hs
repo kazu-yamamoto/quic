@@ -29,6 +29,7 @@ module Network.QUIC.Connection.State (
 import Control.Concurrent.STM
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Stream
 
@@ -36,7 +37,7 @@ import Network.QUIC.Stream
 
 setConnectionState :: Connection -> ConnectionState -> IO ()
 setConnectionState Connection{..} st =
-    atomically $ writeTVar connectionState st
+    atomically $ writeTVar (connectionState connState) st
 
 setConnection0RTTReady :: Connection -> IO ()
 setConnection0RTTReady conn = setConnectionState conn ReadyFor0RTT
@@ -51,33 +52,25 @@ setConnectionEstablished conn = setConnectionState conn Established
 
 ----------------------------------------------------------------
 
-isConnectionEstablished :: Connection -> IO Bool
-isConnectionEstablished Connection{..} = atomically $ do
-    st <- readTVar connectionState
-    case st of
-      Established -> return True
-      _           -> return False
-
-isConnectionOpen :: Connection -> IO Bool
-isConnectionOpen Connection{..} = atomically $ do
-    cs <- readTVar closeState
-    return (cs == CloseState False False)
-
 isConnection1RTTReady :: Connection -> IO Bool
 isConnection1RTTReady Connection{..} = atomically $ do
-    st <- readTVar connectionState
+    st <- readTVar $ connectionState connState
     return (st >= ReadyFor1RTT)
 
 ----------------------------------------------------------------
 
 setCloseSent :: Connection -> IO ()
 setCloseSent Connection{..} = do
-    atomically $ modifyTVar closeState $ \cs -> cs { closeSent = True }
+    atomically $ do
+        modifyTVar closeState $ \cs -> cs { closeSent = True }
+        writeTVar (connectionState connState) Closing
     writeIORef (sharedCloseSent shared) True
 
 setCloseReceived :: Connection -> IO ()
 setCloseReceived Connection{..} = do
-    atomically $ modifyTVar closeState $ \cs -> cs { closeReceived = True }
+    atomically $ do
+        modifyTVar closeState $ \cs -> cs { closeReceived = True }
+        writeTVar (connectionState connState) Closing
     writeIORef (sharedCloseReceived shared) True
 
 isCloseSent :: Connection -> IO Bool
@@ -90,17 +83,17 @@ isCloseReceived Connection{..} =
 
 wait0RTTReady :: Connection -> IO ()
 wait0RTTReady Connection{..} = atomically $ do
-    cs <- readTVar connectionState
+    cs <- readTVar $ connectionState connState
     check (cs >= ReadyFor0RTT)
 
 wait1RTTReady :: Connection -> IO ()
 wait1RTTReady Connection{..} = atomically $ do
-    cs <- readTVar connectionState
+    cs <- readTVar $ connectionState connState
     check (cs >= ReadyFor1RTT)
 
 waitEstablished :: Connection -> IO ()
 waitEstablished Connection{..} = atomically $ do
-    cs <- readTVar connectionState
+    cs <- readTVar $ connectionState connState
     check (cs >= Established)
 
 waitClosed :: Connection -> IO ()

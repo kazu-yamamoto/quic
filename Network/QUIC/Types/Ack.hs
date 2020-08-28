@@ -1,5 +1,8 @@
 module Network.QUIC.Types.Ack where
 
+import Data.Set (Set)
+import qualified Data.Set as Set
+
 import Network.QUIC.Imports
 
 type PacketNumber = Int64
@@ -90,3 +93,12 @@ fromAckInfoToPred (AckInfo lpn fr grs) =
     loop ((g,r):xs) acc@((s,_):_) = loop xs $ (z - fromIntegral r, z) : acc
       where
         z = s - fromIntegral g - 2
+
+----------------------------------------------------------------
+
+newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
+                          deriving (Eq, Show)
+
+emptyPeerPacketNumbers :: PeerPacketNumbers
+emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
+
