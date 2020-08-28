@@ -57,6 +57,7 @@ library
                        Network.QUIC.Recovery.Persistent
                        Network.QUIC.Recovery.Timer
                        Network.QUIC.Recovery.Types
+                       Network.QUIC.Recovery.Utils
                        Network.QUIC.Run
                        Network.QUIC.Sender
                        Network.QUIC.Server

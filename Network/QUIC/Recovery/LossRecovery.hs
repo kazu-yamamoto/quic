@@ -17,9 +17,8 @@ module Network.QUIC.Recovery.LossRecovery (
   ) where
 
 import Control.Concurrent.STM
-import Data.Sequence (Seq, (<|), (|>), (><), ViewL(..), ViewR(..))
+import Data.Sequence (Seq, (|>), (><), ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
-import GHC.Event hiding (new)
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports
@@ -31,6 +30,7 @@ import Network.QUIC.Recovery.PeerPacketNumbers
 import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types
+import Network.QUIC.Recovery.Utils
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 
@@ -252,12 +252,6 @@ resender ldcc@LDCC{..} = forever $ do
     when (packets /= Seq.empty) $ do
         onPacketsLost ldcc packets
         retransmit ldcc packets
-
-mergeLostCandidates :: LDCC -> Seq SentPacket -> IO ()
-mergeLostCandidates LDCC{..} lostPackets = atomically $ do
-    SentPackets old <- readTVar lostCandidates
-    let new = merge old lostPackets
-    writeTVar lostCandidates $ SentPackets new
 
 releaseLostCandidates :: LDCC -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
 releaseLostCandidates ldcc@LDCC{..} lvl predicate = do
