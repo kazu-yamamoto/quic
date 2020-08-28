@@ -55,6 +55,7 @@ library
                        Network.QUIC.Recovery.Misc
                        Network.QUIC.Recovery.PeerPacketNumbers
                        Network.QUIC.Recovery.Persistent
+                       Network.QUIC.Recovery.Timer
                        Network.QUIC.Recovery.Types
                        Network.QUIC.Run
                        Network.QUIC.Sender
