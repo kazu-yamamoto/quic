@@ -15,6 +15,16 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+retransmit :: LDCC -> Seq SentPacket -> IO ()
+retransmit ldcc lostPackets
+  | null packetsToBeResent = getEncryptionLevel ldcc >>= sendPing ldcc
+  | otherwise              = mapM_ put packetsToBeResent
+  where
+    packetsToBeResent = Seq.filter spAckEliciting lostPackets
+    put = putRetrans ldcc . spPlainPacket
+
+----------------------------------------------------------------
+
 sendPing :: LDCC -> EncryptionLevel -> IO ()
 sendPing LDCC{..} lvl = do
     now <- getTimeMicrosecond

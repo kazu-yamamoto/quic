@@ -7,11 +7,9 @@ module Network.QUIC.Recovery.Timer (
   , getPtoTimeAndSpace
   , cancelLossDetectionTimer
   , setLossDetectionTimer
-  , retransmit
   ) where
 
 import Control.Concurrent.STM
-import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import GHC.Event hiding (new)
 
@@ -205,13 +203,3 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
                   atomicModifyIORef'' recoveryRTT $
                       \rtt -> rtt { ptoCount = ptoCount rtt + 1 }
               setLossDetectionTimer ldcc lvl
-
-----------------------------------------------------------------
-
-retransmit :: LDCC -> Seq SentPacket -> IO ()
-retransmit ldcc lostPackets
-  | null packetsToBeResent = getEncryptionLevel ldcc >>= sendPing ldcc
-  | otherwise              = mapM_ put packetsToBeResent
-  where
-    packetsToBeResent = Seq.filter spAckEliciting lostPackets
-    put = putRetrans ldcc . spPlainPacket
