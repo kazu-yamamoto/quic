@@ -120,8 +120,8 @@ onAckReceived ldcc@LDCC{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
           --  client probes, the PTO backoff is not reset at a client
           --  that is not yet certain that the server has finished
           --  validating the client's address."
-          completed <- peerCompletedAddressValidation ldcc
-          when completed $ metricsUpdated ldcc $
+          validated <- peerCompletedAddressValidation ldcc
+          when validated $ metricsUpdated ldcc $
               atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
 
           setLossDetectionTimer ldcc lvl
