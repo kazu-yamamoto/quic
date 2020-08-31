@@ -84,9 +84,6 @@ peerCompletedAddressValidation ldcc
   | isServer ldcc = return True
 -- For clients: servers complete address validation when a protected
 -- packet is received.
--- has received Handshake ACK (fixme)
--- has received 1-RTT ACK     (fixme)
--- has received HANDSHAKE_DONE
 peerCompletedAddressValidation ldcc = isConnectionEstablished ldcc
 
 ----------------------------------------------------------------
