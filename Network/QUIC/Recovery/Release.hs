@@ -72,6 +72,8 @@ onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of
     isRecovery <- inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime <$> readTVarIO recoveryCC
     onCongestionEvent ldcc lostPackets isRecovery
     mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
+  where
+    onCongestionEvent = updateCC
 
 ----------------------------------------------------------------
 

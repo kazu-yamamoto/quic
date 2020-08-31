@@ -4,7 +4,7 @@
 
 module Network.QUIC.Recovery.Metrics (
     updateRTT
-  , onCongestionEvent
+  , updateCC
   , metricsUpdated
   , setInitialCongestionWindow
   ) where
@@ -69,8 +69,8 @@ updateRTT ldcc@LDCC{..} lvl latestRTT0 ackDelay0 = metricsUpdated ldcc $ do
         smoothedRTT' = smoothedRTT - (smoothedRTT .>>. 3)
                      + (adjustedRTT .>>. 3)
 
-onCongestionEvent :: LDCC -> Seq SentPacket -> Bool -> IO ()
-onCongestionEvent ldcc@LDCC{..} lostPackets isRecovery = do
+updateCC :: LDCC -> Seq SentPacket -> Bool -> IO ()
+updateCC ldcc@LDCC{..} lostPackets isRecovery = do
     persistent <- inPersistentCongestion ldcc lostPackets
     when (persistent || not isRecovery) $ do
         minWindow <- kMinimumWindow ldcc

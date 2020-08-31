@@ -68,7 +68,7 @@ onAckReceived ldcc@LDCC{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
     changed <- atomicModifyIORef' (lossDetection ! lvl) update
     when changed $ do
         let predicate = fromAckInfoToPred ackInfo . spPacketNumber
-        releaseLostCandidates ldcc lvl predicate >>= updateCC
+        releaseLostCandidates ldcc lvl predicate >>= updateCConAck
         releaseByPredicate    ldcc lvl predicate >>= detectLossUpdateCC
   where
     update ld@LossDetection{..} = (ld', changed)
@@ -104,10 +104,10 @@ onAckReceived ldcc@LDCC{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
                   lostPackets' <- mergeLostCandidatesAndClear ldcc lostPackets
                   onPacketsLost ldcc lostPackets'
                   retransmit ldcc lostPackets'
-          -- setLossDetectionTimer in updateCC
-          updateCC newlyAckedPackets
+          -- setLossDetectionTimer in updateCConAck
+          updateCConAck newlyAckedPackets
 
-    updateCC newlyAckedPackets
+    updateCConAck newlyAckedPackets
       | newlyAckedPackets == Seq.empty = return ()
       | otherwise = do
           onPacketsAcked ldcc newlyAckedPackets
