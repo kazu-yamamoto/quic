@@ -51,6 +51,7 @@ library
                        Network.QUIC.Recovery
                        Network.QUIC.Recovery.Constants
                        Network.QUIC.Recovery.Detect
+                       Network.QUIC.Recovery.Interface
                        Network.QUIC.Recovery.LossRecovery
                        Network.QUIC.Recovery.Metrics
                        Network.QUIC.Recovery.Misc

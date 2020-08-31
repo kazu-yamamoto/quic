@@ -3,14 +3,10 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
 module Network.QUIC.Recovery.LossRecovery (
-    onAckReceived
-  , onPacketSent
+    onPacketSent
   , onPacketReceived
+  , onAckReceived
   , onPacketNumberSpaceDiscarded
-  , checkWindowOpenSTM
-  , takePingSTM
-  , resender
-  , speedup
   ) where
 
 import Control.Concurrent.STM
@@ -28,8 +24,9 @@ import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Recovery.Utils
-import Network.QUIC.Timeout
 import Network.QUIC.Types
+
+----------------------------------------------------------------
 
 onPacketSent :: LDCC -> SentPacket -> IO ()
 onPacketSent ldcc@LDCC{..} sentPacket = do
@@ -47,11 +44,15 @@ onPacketSent ldcc@LDCC{..} sentPacket = do
             \(SentPackets db) -> SentPackets (db |> sentPacket)
         setLossDetectionTimer ldcc lvl
 
+----------------------------------------------------------------
+
 onPacketReceived :: LDCC -> EncryptionLevel -> IO ()
 onPacketReceived ldcc lvl = do
   -- If this datagram unblocks the server, arm the
   -- PTO timer to avoid deadlock.
   when serverIsAtAntiAmplificationLimit $ setLossDetectionTimer ldcc lvl
+
+----------------------------------------------------------------
 
 onAckReceived :: LDCC -> EncryptionLevel -> AckInfo -> Microseconds -> IO ()
 onAckReceived ldcc@LDCC{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
@@ -116,8 +117,15 @@ onAckReceived ldcc@LDCC{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
 
           setLossDetectionTimer ldcc lvl
 
-----------------------------------------------------------------
-----------------------------------------------------------------
+releaseLostCandidates :: LDCC -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
+releaseLostCandidates ldcc@LDCC{..} lvl predicate = do
+    packets <- atomically $ do
+        SentPackets db <- readTVar lostCandidates
+        let (pkts, db') = Seq.partition predicate db
+        writeTVar lostCandidates $ SentPackets db'
+        return pkts
+    removePacketNumbers ldcc lvl packets
+    return packets
 
 onPacketsAcked :: LDCC -> Seq SentPacket -> IO ()
 onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
@@ -160,33 +168,6 @@ onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
               | otherwise       = (cwin, ackedA, Avoidance)
 
 ----------------------------------------------------------------
-----------------------------------------------------------------
-
-resender :: LDCC -> IO ()
-resender ldcc@LDCC{..} = forever $ do
-    atomically $ do
-        lostPackets <- readTVar lostCandidates
-        check (lostPackets /= emptySentPackets)
-    delay $ Microseconds 10000 -- fixme
-    packets <- atomically $ do
-        SentPackets pkts <- readTVar lostCandidates
-        writeTVar lostCandidates emptySentPackets
-        return pkts
-    when (packets /= Seq.empty) $ do
-        onPacketsLost ldcc packets
-        retransmit ldcc packets
-
-releaseLostCandidates :: LDCC -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
-releaseLostCandidates ldcc@LDCC{..} lvl predicate = do
-    packets <- atomically $ do
-        SentPackets db <- readTVar lostCandidates
-        let (pkts, db') = Seq.partition predicate db
-        writeTVar lostCandidates $ SentPackets db'
-        return pkts
-    removePacketNumbers ldcc lvl packets
-    return packets
-
-----------------------------------------------------------------
 
 onPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded ldcc@LDCC{..} lvl = do
@@ -203,31 +184,3 @@ onPacketNumberSpaceDiscarded ldcc@LDCC{..} lvl = do
     metricsUpdated ldcc
         $ atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
     setLossDetectionTimer ldcc lvl'
-
-----------------------------------------------------------------
-
-speedup :: LDCC -> EncryptionLevel -> String -> IO ()
-speedup ldcc@LDCC{..} lvl desc = do
-    setSpeedingUp ldcc
-    qlogDebug ldcc $ Debug desc
-    packets <- atomicModifyIORef' (sentPackets ! lvl) $
-                  \(SentPackets db) -> (emptySentPackets, db)
-    -- don't clear PeerPacketNumbers.
-    unless (null packets) $ do
-        onPacketsLost ldcc packets
-        retransmit ldcc packets
-        setLossDetectionTimer ldcc lvl
-
-----------------------------------------------------------------
-
-takePingSTM :: LDCC -> STM EncryptionLevel
-takePingSTM LDCC{..} = do
-    mx <- readTVar ptoPing
-    check $ isJust mx
-    writeTVar ptoPing Nothing
-    return $ fromJust mx
-
-checkWindowOpenSTM :: LDCC -> Int -> STM ()
-checkWindowOpenSTM LDCC{..} siz = do
-    CC{..} <- readTVar recoveryCC
-    check (siz <= congestionWindow - bytesInFlight)

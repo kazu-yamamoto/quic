@@ -1,13 +1,14 @@
 module Network.QUIC.Recovery (
+  -- Interface
+    checkWindowOpenSTM
+  , takePingSTM
+  , speedup
+  , resender
   -- LossRecovery.hs
-    onAckReceived
   , onPacketSent
   , onPacketReceived
+  , onAckReceived
   , onPacketNumberSpaceDiscarded
-  , checkWindowOpenSTM
-  , takePingSTM
-  , resender
-  , speedup
   -- Metrics
   , setInitialCongestionWindow
   -- Misc
@@ -31,6 +32,7 @@ module Network.QUIC.Recovery (
   , qlogSent
   ) where
 
+import Network.QUIC.Recovery.Interface
 import Network.QUIC.Recovery.LossRecovery
 import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
