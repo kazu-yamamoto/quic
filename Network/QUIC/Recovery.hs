@@ -22,6 +22,8 @@ module Network.QUIC.Recovery (
   , addPeerPacketNumbers
   , fromPeerPacketNumbers
   , nullPeerPacketNumbers
+  -- Persistent
+  , findDuration
   -- Release
   , releaseByRetry
   , releaseOldest
@@ -37,5 +39,6 @@ import Network.QUIC.Recovery.LossRecovery
 import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.PeerPacketNumbers
+import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Types

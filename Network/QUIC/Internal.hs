@@ -9,6 +9,7 @@ module Network.QUIC.Internal (
   , module Network.QUIC.TLS
   , module Network.QUIC.Types
   , module Network.QUIC.Utils
+  , module Network.QUIC.Recovery
   ) where
 
 import Network.QUIC.Connection
@@ -21,3 +22,4 @@ import Network.QUIC.Stream
 import Network.QUIC.TLS
 import Network.QUIC.Types
 import Network.QUIC.Utils
+import Network.QUIC.Recovery

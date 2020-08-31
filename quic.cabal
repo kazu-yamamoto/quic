@@ -123,6 +123,7 @@ test-suite spec
                         HandshakeSpec
                         IOSpec
                         PacketSpec
+                        RecoverySpec
                         TLSSpec
                         TypesSpec
   build-depends:        base >= 4 && < 5
@@ -130,11 +131,13 @@ test-suite spec
                       , async
                       , base16-bytestring
                       , bytestring
+                      , containers
                       , cryptonite
                       , hspec
                       , network >= 3.1.2
                       , quic
                       , tls
+                      , unix-time
 
 test-suite doctests
   type:                 exitcode-stdio-1.0
