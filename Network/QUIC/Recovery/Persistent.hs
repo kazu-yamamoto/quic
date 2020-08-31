@@ -36,7 +36,6 @@ backOff :: Microseconds -> Int -> Microseconds
 backOff n cnt = n * (2 ^ cnt)
 
 -- Sec 7.8. Persistent Congestion
--- fixme: after the first sample
 inPersistentCongestion :: LDCC -> Seq SentPacket -> IO Bool
 inPersistentCongestion ldcc@LDCC{..} lostPackets = do
     pn <- getPktNumPersistent ldcc
