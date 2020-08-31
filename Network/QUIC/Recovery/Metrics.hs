@@ -2,7 +2,12 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Network.QUIC.Recovery.Metrics where
+module Network.QUIC.Recovery.Metrics (
+    updateRTT
+  , onCongestionEvent
+  , metricsUpdated
+  , setInitialCongestionWindow
+  ) where
 
 import Control.Concurrent.STM
 import Data.Sequence (Seq)

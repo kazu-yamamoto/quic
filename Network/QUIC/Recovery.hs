@@ -8,9 +8,10 @@ module Network.QUIC.Recovery (
   , releaseOldest
   , checkWindowOpenSTM
   , takePingSTM
-  , setInitialCongestionWindow
   , resender
   , speedup
+  -- Metrics
+  , setInitialCongestionWindow
   -- Misc
   , getPreviousRTT1PPNs
   , setPreviousRTT1PPNs
@@ -30,7 +31,7 @@ module Network.QUIC.Recovery (
   ) where
 
 import Network.QUIC.Recovery.LossRecovery
+import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.PeerPacketNumbers
 import Network.QUIC.Recovery.Types
-

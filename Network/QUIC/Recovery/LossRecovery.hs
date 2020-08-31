@@ -11,7 +11,6 @@ module Network.QUIC.Recovery.LossRecovery (
   , releaseOldest
   , checkWindowOpenSTM
   , takePingSTM
-  , setInitialCongestionWindow
   , resender
   , speedup
   ) where
