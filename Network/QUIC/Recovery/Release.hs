@@ -21,6 +21,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.PeerPacketNumbers
 import Network.QUIC.Recovery.Types
+import Network.QUIC.Recovery.Utils
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -99,8 +100,3 @@ decreaseCC ldcc@LDCC{..} packets = do
 
             , numOfAckEliciting = numOfAckEliciting cc - num
           }
-
-countAckEli :: SentPacket -> Int
-countAckEli sentPacket
-  | spAckEliciting sentPacket = 1
-  | otherwise                 = 0

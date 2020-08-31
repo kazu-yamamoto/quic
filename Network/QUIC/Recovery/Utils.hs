@@ -9,6 +9,7 @@ module Network.QUIC.Recovery.Utils (
   , mergeLostCandidatesAndClear
   , serverIsAtAntiAmplificationLimit
   , peerCompletedAddressValidation
+  , countAckEli
   ) where
 
 import Control.Concurrent.STM
@@ -86,3 +87,10 @@ peerCompletedAddressValidation ldcc
 -- has received 1-RTT ACK     (fixme)
 -- has received HANDSHAKE_DONE
 peerCompletedAddressValidation ldcc = isConnectionEstablished ldcc
+
+----------------------------------------------------------------
+
+countAckEli :: SentPacket -> Int
+countAckEli sentPacket
+  | spAckEliciting sentPacket = 1
+  | otherwise                 = 0
