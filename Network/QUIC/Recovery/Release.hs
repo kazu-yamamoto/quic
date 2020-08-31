@@ -4,8 +4,8 @@
 
 module Network.QUIC.Recovery.Release (
     releaseByRetry
-  , releaseByClear
   , releaseOldest
+  , discard
   , onPacketSentCC
   , onPacketsLost
   , decreaseCC
@@ -26,6 +26,15 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+discard :: LDCC -> EncryptionLevel -> IO (Seq SentPacket)
+discard ldcc@LDCC{..} lvl = do
+    packets <- releaseByClear ldcc lvl
+    decreaseCC ldcc packets
+    writeIORef (lossDetection ! lvl) initialLossDetection
+    metricsUpdated ldcc $
+        atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+    return packets
+
 releaseByClear :: LDCC -> EncryptionLevel -> IO (Seq SentPacket)
 releaseByClear ldcc@LDCC{..} lvl = do
     clearPeerPacketNumbers ldcc lvl
@@ -35,12 +44,8 @@ releaseByClear ldcc@LDCC{..} lvl = do
 ----------------------------------------------------------------
 
 releaseByRetry :: LDCC -> IO (Seq PlainPacket)
-releaseByRetry ldcc@LDCC{..} = do
-    packets <- releaseByClear ldcc InitialLevel
-    decreaseCC ldcc packets
-    writeIORef (lossDetection ! InitialLevel) initialLossDetection
-    metricsUpdated ldcc $
-        atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+releaseByRetry ldcc = do
+    packets <- discard ldcc InitialLevel
     return (spPlainPacket <$> packets)
 
 -- Returning the oldest if it is ack-eliciting.

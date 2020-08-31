@@ -170,17 +170,11 @@ onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
 ----------------------------------------------------------------
 
 onPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO ()
-onPacketNumberSpaceDiscarded ldcc@LDCC{..} lvl = do
+onPacketNumberSpaceDiscarded ldcc lvl = do
     let (lvl',label) = case lvl of
           InitialLevel -> (HandshakeLevel,"initial")
           _            -> (RTT1Level, "handshake")
     qlogDebug ldcc $ Debug (label ++ " discarded")
     discardPacketNumberSpace ldcc lvl
-    -- Remove any unacknowledged packets from flight.
-    clearedPackets <- releaseByClear ldcc lvl
-    decreaseCC ldcc clearedPackets
-    -- Reset the loss detection and PTO timer
-    writeIORef (lossDetection ! lvl) initialLossDetection
-    metricsUpdated ldcc
-        $ atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+    void $ discard ldcc lvl
     setLossDetectionTimer ldcc lvl'
