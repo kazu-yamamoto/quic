@@ -246,8 +246,6 @@ storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do
     appPro <- TLS.getNegotiatedProtocol ctx
     minfo <- TLS.contextGetInformation ctx
-    let mode = case minfo >>= TLS.infoTLS13HandshakeMode of
-          Nothing -> FullHandshake
-          Just m  -> m
+    let mode = fromMaybe FullHandshake (minfo >>= TLS.infoTLS13HandshakeMode)
     setNegotiated conn mode appPro appSecInf
 

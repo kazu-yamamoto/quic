@@ -56,7 +56,7 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
     buildPackets siz (spkt:ss) build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkt) Nothing
         sentPacket <- fixSentPacket spkt bss
-        let build0' = (build0 . (sentPacket :))
+        let build0' = build0 . (sentPacket :)
             build1' = build1 . (bss ++)
             siz' = siz - spSentBytes sentPacket
         buildPackets siz' ss build0' build1'

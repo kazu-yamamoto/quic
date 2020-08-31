@@ -172,9 +172,7 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     addResource conn cls
     addResource conn qclean
     addResource conn dclean
-    let cid = case retrySrcCID myAuthCIDs of
-                Just rcid -> rcid
-                Nothing   -> ocid
+    let cid = fromMaybe ocid $ retrySrcCID myAuthCIDs
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz = (defaultPacketSize mysa `max` pktSiz0) `min` maximumPacketSize mysa

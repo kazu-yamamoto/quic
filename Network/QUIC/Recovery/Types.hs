@@ -166,7 +166,7 @@ initialLossDetection = LossDetection (-1) ackInfo0 timeMicrosecond0 Nothing
 
 ----------------------------------------------------------------
 
-data MetricsDiff = MetricsDiff [(String,Int)]
+newtype MetricsDiff = MetricsDiff [(String,Int)]
 
 ----------------------------------------------------------------
 
