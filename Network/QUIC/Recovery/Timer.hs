@@ -2,7 +2,13 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Network.QUIC.Recovery.Timer where
+module Network.QUIC.Recovery.Timer (
+    getLossTimeAndSpace
+  , getPtoTimeAndSpace
+  , cancelLossDetectionTimer
+  , setLossDetectionTimer
+  , retransmit
+  ) where
 
 import Control.Concurrent.STM
 import Data.Sequence (Seq)
@@ -44,22 +50,6 @@ getLossTimeAndSpace LDCC{..} =
                | otherwise -> loop ls r
 
 ----------------------------------------------------------------
-
--- Sec 6.2.1. Computing PTO
--- "That is, a client does not reset the PTO backoff factor on
---  receiving acknowledgements until it receives a HANDSHAKE_DONE
---  frame or an acknowledgement for one of its Handshake or 1-RTT
---  packets."
-peerCompletedAddressValidation :: LDCC -> IO Bool
--- For servers: assume clients validate the server's address implicitly.
-peerCompletedAddressValidation ldcc
-  | isServer ldcc = return True
--- For clients: servers complete address validation when a protected
--- packet is received.
--- has received Handshake ACK (fixme)
--- has received 1-RTT ACK     (fixme)
--- has received HANDSHAKE_DONE
-peerCompletedAddressValidation ldcc = isConnectionEstablished ldcc
 
 getPtoTimeAndSpace :: LDCC -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
 getPtoTimeAndSpace ldcc@LDCC{..} = do
@@ -134,10 +124,6 @@ updateLossDetectionTimer ldcc@LDCC{..} tmi = do
             qlogLossTimerUpdated ldcc newtmi
 
 ----------------------------------------------------------------
-
--- fixme
-serverIsAtAntiAmplificationLimit :: Bool
-serverIsAtAntiAmplificationLimit = False
 
 setLossDetectionTimer :: LDCC -> EncryptionLevel -> IO ()
 setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
