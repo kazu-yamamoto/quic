@@ -4,8 +4,6 @@ module Network.QUIC.Recovery (
   , onPacketSent
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
-  , releaseByRetry
-  , releaseOldest
   , checkWindowOpenSTM
   , takePingSTM
   , resender
@@ -23,6 +21,9 @@ module Network.QUIC.Recovery (
   , addPeerPacketNumbers
   , fromPeerPacketNumbers
   , nullPeerPacketNumbers
+  -- Release
+  , releaseByRetry
+  , releaseOldest
   -- Types
   , SentPacket(..)
   , LDCC
@@ -34,4 +35,5 @@ import Network.QUIC.Recovery.LossRecovery
 import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.PeerPacketNumbers
+import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Types

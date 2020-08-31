@@ -2,7 +2,16 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Network.QUIC.Recovery.Release where
+module Network.QUIC.Recovery.Release (
+    releaseByRetry
+  , releaseByClear
+  , releaseOldest
+  , onPacketSentCC
+  , onPacketsLost
+  , decreaseCC
+  , inCongestionRecovery
+  , countAckEli
+  ) where
 
 import Control.Concurrent.STM
 import Data.Sequence (Seq, (><), ViewL(..), ViewR(..))

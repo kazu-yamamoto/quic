@@ -7,8 +7,6 @@ module Network.QUIC.Recovery.LossRecovery (
   , onPacketSent
   , onPacketReceived
   , onPacketNumberSpaceDiscarded
-  , releaseByRetry
-  , releaseOldest
   , checkWindowOpenSTM
   , takePingSTM
   , resender
