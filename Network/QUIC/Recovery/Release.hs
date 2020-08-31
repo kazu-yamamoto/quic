@@ -8,9 +8,6 @@ module Network.QUIC.Recovery.Release (
   , discard
   , onPacketSentCC
   , onPacketsLost
-  , decreaseCC
-  , inCongestionRecovery
-  , countAckEli
   ) where
 
 import Control.Concurrent.STM
@@ -67,10 +64,6 @@ releaseOldest ldcc@LDCC{..} lvl = do
         (db1, db2) = Seq.breakl spAckEliciting db
 
 ----------------------------------------------------------------
-
-inCongestionRecovery :: TimeMicrosecond -> Maybe TimeMicrosecond -> Bool
-inCongestionRecovery _ Nothing = False
-inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 
 onPacketsLost :: LDCC -> Seq SentPacket -> IO ()
 onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of

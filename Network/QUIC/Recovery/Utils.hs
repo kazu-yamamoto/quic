@@ -10,6 +10,7 @@ module Network.QUIC.Recovery.Utils (
   , serverIsAtAntiAmplificationLimit
   , peerCompletedAddressValidation
   , countAckEli
+  , inCongestionRecovery
   ) where
 
 import Control.Concurrent.STM
@@ -94,3 +95,9 @@ countAckEli :: SentPacket -> Int
 countAckEli sentPacket
   | spAckEliciting sentPacket = 1
   | otherwise                 = 0
+
+----------------------------------------------------------------
+
+inCongestionRecovery :: TimeMicrosecond -> Maybe TimeMicrosecond -> Bool
+inCongestionRecovery _ Nothing = False
+inCongestionRecovery sentTime (Just crst) = sentTime <= crst
