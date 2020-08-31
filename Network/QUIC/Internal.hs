@@ -1,5 +1,6 @@
 module Network.QUIC.Internal (
     module Network.QUIC.Connection
+  , module Network.QUIC.Connector
   , module Network.QUIC.Logger
   , module Network.QUIC.Packet
   , module Network.QUIC.Parameters
@@ -11,6 +12,7 @@ module Network.QUIC.Internal (
   ) where
 
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
