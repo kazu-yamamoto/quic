@@ -2,7 +2,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Network.QUIC.Recovery.Utils where
+module Network.QUIC.Recovery.Utils (
+    retransmit
+  , sendPing
+  , mergeLostCandidates
+  , mergeLostCandidatesAndClear
+  , serverIsAtAntiAmplificationLimit
+  , peerCompletedAddressValidation
+  ) where
 
 import Control.Concurrent.STM
 import Data.Sequence (Seq, (<|), ViewL(..))
