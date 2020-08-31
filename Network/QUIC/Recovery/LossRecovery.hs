@@ -44,6 +44,15 @@ onPacketSent ldcc@LDCC{..} sentPacket = do
             \(SentPackets db) -> SentPackets (db |> sentPacket)
         setLossDetectionTimer ldcc lvl
 
+onPacketSentCC :: LDCC -> SentPacket -> IO ()
+onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
+    atomically $ modifyTVar' recoveryCC $ \cc -> cc {
+        bytesInFlight = bytesInFlight cc + bytesSent
+      , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
+      }
+  where
+    bytesSent = spSentBytes sentPacket
+
 ----------------------------------------------------------------
 
 onPacketReceived :: LDCC -> EncryptionLevel -> IO ()

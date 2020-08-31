@@ -6,7 +6,6 @@ module Network.QUIC.Recovery.Release (
     releaseByRetry
   , releaseOldest
   , discard
-  , onPacketSentCC
   , onPacketsLost
   ) where
 
@@ -73,17 +72,6 @@ onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of
     isRecovery <- inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime <$> readTVarIO recoveryCC
     onCongestionEvent ldcc lostPackets isRecovery
     mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
-
-----------------------------------------------------------------
-
-onPacketSentCC :: LDCC -> SentPacket -> IO ()
-onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
-    atomically $ modifyTVar' recoveryCC $ \cc -> cc {
-        bytesInFlight = bytesInFlight cc + bytesSent
-      , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
-      }
-  where
-    bytesSent = spSentBytes sentPacket
 
 ----------------------------------------------------------------
 
