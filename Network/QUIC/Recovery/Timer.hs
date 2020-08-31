@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 module Network.QUIC.Recovery.Timer (
     getLossTimeAndSpace
@@ -89,7 +90,7 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
 
 cancelLossDetectionTimer :: LDCC -> IO ()
 cancelLossDetectionTimer ldcc@LDCC{..} = do
-    mk <- atomicModifyIORef' timerKey $ \oldkey -> (Nothing, oldkey)
+    mk <- atomicModifyIORef' timerKey (Nothing,)
     case mk of
       Nothing -> return ()
       Just k -> do
@@ -112,7 +113,7 @@ updateLossDetectionTimer ldcc@LDCC{..} tmi = do
             -- cancelLossDetectionTimer conn -- don't cancel
           else do
             key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
-            mk <- atomicModifyIORef' timerKey $ \oldkey -> (Just key, oldkey)
+            mk <- atomicModifyIORef' timerKey (Just key,)
             case mk of
               Nothing -> return ()
               Just k -> unregisterTimeout mgr k
@@ -194,7 +195,7 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
                   -- to earn more anti-amplification credit,
                   -- a Handshake packet proves address ownership.
                   validated <- peerCompletedAddressValidation ldcc
-                  when (validated) $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: RTT1"
+                  when validated $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: RTT1"
                   lvl' <- getEncryptionLevel ldcc -- fixme
                   sendPing ldcc lvl'
 

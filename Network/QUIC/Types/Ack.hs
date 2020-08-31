@@ -84,7 +84,7 @@ fromAckInfoWithMin (AckInfo lpn fr grs) lim
 
 fromAckInfoToPred :: AckInfo -> (PacketNumber -> Bool)
 fromAckInfoToPred (AckInfo lpn fr grs) =
-    \x -> or $ map (f x) $ loop grs [(stt,lpn)]
+    \x -> any (f x) $ loop grs [(stt,lpn)]
   where
     f x (l,u) = l <= x && x <= u
     stt = lpn - fromIntegral fr

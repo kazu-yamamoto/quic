@@ -56,7 +56,7 @@ getElapsedTimeMicrosecond :: TimeMicrosecond -> IO Microseconds
 getElapsedTimeMicrosecond base = do
     c <- getTimeMicrosecond
     let UnixDiffTime (CTime s) u = c `diffUnixTime` base
-        elapsed = fromIntegral (s * 1000000 + (fromIntegral u))
+        elapsed = fromIntegral (s * 1000000 + fromIntegral u)
     return $ Microseconds elapsed
 
 getTimeoutInMicrosecond :: TimeMicrosecond -> IO Microseconds
@@ -83,4 +83,4 @@ getFutureTimeMicrosecond (Microseconds us) = do
     return future
 
 addMicroseconds :: TimeMicrosecond -> Microseconds -> TimeMicrosecond
-addMicroseconds t (Microseconds n) = t `addUnixDiffTime` (microSecondsToUnixDiffTime n)
+addMicroseconds t (Microseconds n) = t `addUnixDiffTime` microSecondsToUnixDiffTime n
