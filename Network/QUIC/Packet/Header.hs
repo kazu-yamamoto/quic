@@ -52,7 +52,7 @@ randomizeQuicBit :: Word8 -> Bool -> IO Word8
 randomizeQuicBit flags quicBit
   | quicBit = do
         r <- getRandomOneByte
-        return $ ((flags .&. 0b10111111) .|. (r .&. 0b01000000))
+        return ((flags .&. 0b10111111) .|. (r .&. 0b01000000))
   | otherwise = return flags
 
 {-# INLINE encodeShortHeaderFlags #-}

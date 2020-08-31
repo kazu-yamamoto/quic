@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 module Network.QUIC.Recovery.Detect (
     releaseByPredicate
@@ -24,7 +23,7 @@ releaseByPredicate ldcc@LDCC{..} lvl predicate = do
        let (pkts, db') = Seq.partition predicate db
        in (SentPackets db', pkts)
     removePacketNumbers ldcc lvl packets
-    return $ packets
+    return packets
 
 detectAndRemoveLostPackets :: LDCC -> EncryptionLevel -> IO (Seq SentPacket)
 detectAndRemoveLostPackets ldcc@LDCC{..} lvl = do

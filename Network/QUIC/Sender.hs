@@ -315,7 +315,7 @@ sendCryptoFragments conn send lcs = do
         bss1 <- construct conn lvl [frame1]
         sendPacket conn send $ build0 bss1
         loop limitationC id ((lvl, rest) : xs)
-    loop _ build0 ((lvl, bs) : []) = do
+    loop _ build0 [(lvl, bs)] = do
         frame1 <- cryptoFrame conn bs lvl
         bss1 <- construct conn lvl [frame1]
         sendPacket conn send $ build0 bss1

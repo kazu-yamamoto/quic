@@ -91,7 +91,7 @@ updateCC ldcc@LDCC{..} lostPackets isRecovery = do
               , ccMode           = mode
               , bytesAcked       = 0
               }
-        CC{ccMode} <- atomically $ readTVar recoveryCC
+        CC{ccMode} <- readTVarIO recoveryCC
         qlogContestionStateUpdated ldcc ccMode
 
 setInitialCongestionWindow :: LDCC -> Int -> IO ()

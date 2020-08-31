@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 module Network.QUIC.Connection.Misc (
     setVersion
@@ -100,11 +101,11 @@ delayedAck :: Connection -> IO ()
 delayedAck conn@Connection{..} = do
     (oldcnt,send) <- atomicModifyIORef' delayedAckCount check
     when (oldcnt == 0) $ do
-        new <- cfire (Microseconds 20000) $ sendAck
-        join $ atomicModifyIORef' delayedAckCancel $ \old -> (new, old)
+        new <- cfire (Microseconds 20000) sendAck
+        join $ atomicModifyIORef' delayedAckCancel (new,)
     when send $ do
         let new = return ()
-        join $ atomicModifyIORef' delayedAckCancel $ \old -> (new, old)
+        join $ atomicModifyIORef' delayedAckCancel (new,)
         sendAck
   where
     sendAck = putOutput conn $ OutControl RTT1Level []
@@ -115,7 +116,7 @@ resetDealyedAck :: Connection -> IO ()
 resetDealyedAck Connection{..} = do
     writeIORef delayedAckCount 0
     let new = return ()
-    join $ atomicModifyIORef' delayedAckCancel $ \old -> (new, old)
+    join $ atomicModifyIORef' delayedAckCancel (new,)
 
 ----------------------------------------------------------------
 
@@ -134,7 +135,7 @@ addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f >> f
 
 freeResources :: Connection -> IO ()
 freeResources Connection{..} = do
-    doFree <- atomicModifyIORef' connResources $ \fs -> (return (), fs)
+    doFree <- atomicModifyIORef' connResources (return (),)
     doFree
 
 addThreadIdResource :: Connection -> ThreadId -> IO ()

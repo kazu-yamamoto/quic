@@ -242,7 +242,7 @@ setMigrationStarted Connection{..} =
 
 isPathValidating :: Connection -> IO Bool
 isPathValidating Connection{..} = do
-    s <- atomically $ readTVar migrationState
+    s <- readTVarIO migrationState
     case s of
       SendChallenge _  -> return True
       MigrationStarted -> return True
