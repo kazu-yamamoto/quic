@@ -15,9 +15,9 @@ module Network.QUIC.Recovery.Types (
   , initialLossDetection
   , MetricsDiff(..)
   , TimerType(..)
-  , TimerEvent(..)
-  , TimerInfo(..)
-  , timerInfo0
+  , TimerSet(..)
+  , TimerCancelled
+  , TimerExpired
   , makeSentPackets
   , makeLossDetection
   , LDCC(..)
@@ -27,6 +27,8 @@ module Network.QUIC.Recovery.Types (
   , qlogPacketLost
   , qlogContestionStateUpdated
   , qlogLossTimerUpdated
+  , qlogLossTimerCancelled
+  , qlogLossTimerExpired
   ) where
 
 import Control.Concurrent.STM
@@ -178,25 +180,13 @@ instance Show TimerType where
     show LossTime = "loss_time"
     show PTO      = "pto"
 
-data TimerEvent = TimerSet
-                | TimerExpired
-                | TimerCancelled
-                deriving Eq
-
-instance Show TimerEvent where
-    show TimerSet       = "set"
-    show TimerExpired   = "expired"
-    show TimerCancelled = "cancelled"
-
-data TimerInfo = TimerInfo {
+data TimerExpired = TimerExpired
+data TimerCancelled = TimerCancelled
+data TimerSet = TimerSet {
     timerTime  :: Either TimeMicrosecond Microseconds
   , timerLevel :: EncryptionLevel
   , timerType  :: TimerType
-  , timerEvent :: TimerEvent
-  } deriving Eq
-
-timerInfo0 :: TimerInfo
-timerInfo0 = TimerInfo (Right (Microseconds 0)) InitialLevel LossTime TimerCancelled
+  }
 
 ----------------------------------------------------------------
 
@@ -228,7 +218,7 @@ data LDCC = LDCC {
   , sentPackets       :: Array EncryptionLevel (IORef SentPackets)
   , lossDetection     :: Array EncryptionLevel (IORef LossDetection)
   , timerKey          :: IORef (Maybe TimeoutKey)
-  , timerInfo         :: IORef TimerInfo
+  , timerInfo         :: IORef (Maybe TimerSet)
   , lostCandidates    :: TVar SentPackets
   , ptoPing           :: TVar (Maybe EncryptionLevel)
   , speedingUp        :: IORef Bool
@@ -245,7 +235,7 @@ newLDCC cs qLog put = LDCC cs qLog put
     <*> makeSentPackets
     <*> makeLossDetection
     <*> newIORef Nothing
-    <*> newIORef timerInfo0
+    <*> newIORef Nothing
     <*> newTVarIO emptySentPackets
     <*> newTVarIO Nothing
     <*> newIORef False
@@ -288,12 +278,18 @@ instance Qlog MetricsDiff where
 instance Qlog CCMode where
     qlog mode = "{\"new\":\"" <> sw mode <> "\"}"
 
-instance Qlog TimerInfo where
-    qlog TimerInfo{..} = "{\"timer_type\":\"" <> sw timerType <> "\"" <>
-                         ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
-                         ",\"event_type\":\"" <> sw timerEvent <> "\"" <>
-                         ",\"delta\":" <> delta timerTime <>
-                         "}"
+instance Qlog TimerCancelled where
+    qlog TimerCancelled = "{\"event_type\":\"cancelled\"}"
+
+instance Qlog TimerExpired where
+    qlog TimerExpired   = "{\"event_type\":\"expired\"}"
+
+instance Qlog TimerSet where
+    qlog TimerSet{..}   = "{\"event_type\":\"set\"" <>
+                          ",\"timer_type\":\"" <> sw timerType <> "\"" <>
+                          ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
+                          ",\"delta\":" <> delta timerTime <>
+                          "}"
 
 packetNumberSpace :: EncryptionLevel -> LogStr
 packetNumberSpace InitialLevel   = "initial"
@@ -317,5 +313,11 @@ qlogPacketLost q lpkt = keepQlog q $ QPacketLost $ qlog lpkt
 qlogContestionStateUpdated :: KeepQlog q => q -> CCMode -> IO ()
 qlogContestionStateUpdated q mode = keepQlog q $ QCongestionStateUpdated $ qlog mode
 
-qlogLossTimerUpdated :: KeepQlog q => q -> TimerInfo -> IO ()
+qlogLossTimerUpdated :: KeepQlog q => q -> TimerSet -> IO ()
 qlogLossTimerUpdated q tmi = keepQlog q $ QLossTimerUpdated $ qlog tmi
+
+qlogLossTimerCancelled :: KeepQlog q => q -> IO ()
+qlogLossTimerCancelled q = keepQlog q $ QLossTimerUpdated $ qlog TimerCancelled
+
+qlogLossTimerExpired :: KeepQlog q => q -> IO ()
+qlogLossTimerExpired q = keepQlog q $ QLossTimerUpdated $ qlog TimerExpired

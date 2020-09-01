@@ -96,30 +96,26 @@ cancelLossDetectionTimer ldcc@LDCC{..} = do
       Just k -> do
           mgr <- getSystemTimerManager
           unregisterTimeout mgr k
-          oldtmi <- readIORef timerInfo
-          let tmi = oldtmi { timerEvent = TimerCancelled }
-          writeIORef timerInfo tmi
-          qlogLossTimerUpdated ldcc tmi
+          writeIORef timerInfo Nothing
+          qlogLossTimerCancelled ldcc
 
-updateLossDetectionTimer :: LDCC -> TimerInfo -> IO ()
+updateLossDetectionTimer :: LDCC -> TimerSet -> IO ()
 updateLossDetectionTimer ldcc@LDCC{..} tmi = do
-    oldtmi <- readIORef timerInfo
-    when (timerTime oldtmi /= timerTime tmi) $ do
-        mgr <- getSystemTimerManager
-        let Left tim = timerTime tmi
-        duration@(Microseconds us) <- getTimeoutInMicrosecond tim
-        if us <= 0 then do
-            qlogDebug ldcc $ Debug "updateLossDetectionTimer: minus"
-            -- cancelLossDetectionTimer conn -- don't cancel
-          else do
-            key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
-            mk <- atomicModifyIORef' timerKey (Just key,)
-            case mk of
-              Nothing -> return ()
-              Just k -> unregisterTimeout mgr k
-            let newtmi = tmi { timerTime = Right duration }
-            writeIORef timerInfo newtmi
-            qlogLossTimerUpdated ldcc newtmi
+    mgr <- getSystemTimerManager
+    let Left tim = timerTime tmi
+    duration@(Microseconds us) <- getTimeoutInMicrosecond tim
+    if us <= 0 then do
+        qlogDebug ldcc $ Debug "updateLossDetectionTimer: minus"
+        -- cancelLossDetectionTimer conn -- don't cancel
+      else do
+        key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
+        mk <- atomicModifyIORef' timerKey (Just key,)
+        case mk of
+          Nothing -> return ()
+          Just k -> unregisterTimeout mgr k
+        let newtmi = tmi { timerTime = Right duration }
+        writeIORef timerInfo $ Just newtmi
+        qlogLossTimerUpdated ldcc newtmi
 
 ----------------------------------------------------------------
 
@@ -130,7 +126,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
       Just (earliestLossTime,lvl) -> do
           when (lvl0 == lvl) $ do
               -- Time threshold loss detection.
-              let tmi = TimerInfo (Left earliestLossTime) lvl LossTime TimerSet
+              let tmi = TimerSet (Left earliestLossTime) lvl LossTime
               updateLossDetectionTimer ldcc tmi
       Nothing ->
           if serverIsAtAntiAmplificationLimit then -- server is at anti-amplification limit
@@ -152,7 +148,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
                     Nothing -> cancelLossDetectionTimer ldcc
                     Just (ptoTime, lvl) -> do
                         when (lvl0 == lvl) $ do
-                            let tmi = TimerInfo (Left ptoTime) lvl PTO TimerSet
+                            let tmi = TimerSet (Left ptoTime) lvl PTO
                             updateLossDetectionTimer ldcc tmi
 
 ----------------------------------------------------------------
@@ -164,17 +160,19 @@ onLossDetectionTimeout :: LDCC -> IO ()
 onLossDetectionTimeout ldcc@LDCC{..} = do
     open <- isConnectionOpen ldcc
     when open $ do
-        tmi <- readIORef timerInfo
-        let lvl = timerLevel tmi
-        discarded <- getPacketNumberSpaceDiscarded ldcc lvl
-        if discarded then do
-            qlogLossTimerUpdated ldcc tmi { timerEvent = TimerCancelled }
-            cancelLossDetectionTimer ldcc
-          else
-            lossTimeOrPTO lvl tmi
+        mtmi <- readIORef timerInfo
+        case mtmi of
+          Nothing -> return ()
+          Just tmi -> do
+            let lvl = timerLevel tmi
+            discarded <- getPacketNumberSpaceDiscarded ldcc lvl
+            if discarded then
+                cancelLossDetectionTimer ldcc
+              else
+                lossTimeOrPTO lvl tmi
   where
     lossTimeOrPTO lvl tmi = do
-        qlogLossTimerUpdated ldcc tmi { timerEvent = TimerExpired }
+        qlogLossTimerExpired ldcc
         case timerType tmi of
           LossTime -> do
               -- Time threshold loss Detection
