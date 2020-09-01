@@ -1,13 +1,12 @@
 module Network.QUIC.Utils where
 
-import Crypto.Random (getRandomBytes)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
 import Data.ByteString.Base16
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
 import Data.Char (chr)
 import Data.Word
+import System.Random (randomIO)
 
 dec16 :: ByteString -> ByteString
 dec16 = fst . decode
@@ -25,4 +24,4 @@ shortToString :: ShortByteString -> String
 shortToString = map (chr . fromIntegral) . Short.unpack
 
 getRandomOneByte :: IO Word8
-getRandomOneByte = BS.head <$> getRandomBytes 1
+getRandomOneByte = randomIO

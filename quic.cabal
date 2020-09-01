@@ -104,6 +104,7 @@ library
                      , network >= 3.1.2
                      , network-byte-order >= 0.1.5
                      , psqueues
+                     , random >= 1.2
                      , stm
                      , tls
                      , unix-time
