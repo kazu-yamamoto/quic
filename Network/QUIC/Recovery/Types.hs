@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -183,10 +184,12 @@ instance Show TimerType where
 data TimerExpired = TimerExpired
 data TimerCancelled = TimerCancelled
 data TimerSet = TimerSet {
-    timerTime  :: Either TimeMicrosecond Microseconds
+    timerTime  :: TimeMicrosecond
   , timerLevel :: EncryptionLevel
   , timerType  :: TimerType
-  }
+  } deriving (Eq, Show)
+
+type TimerQ = TQueue (Maybe TimerSet)
 
 ----------------------------------------------------------------
 
@@ -225,6 +228,7 @@ data LDCC = LDCC {
   , pktNumPersistent  :: IORef PacketNumber
   , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
   , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
+  , timerQ :: TimerQ
   }
 
 newLDCC :: ConnState -> QLogger -> (PlainPacket -> IO ()) -> IO LDCC
@@ -242,6 +246,7 @@ newLDCC cs qLog put = LDCC cs qLog put
     <*> newIORef maxBound
     <*> newIORef emptyPeerPacketNumbers
     <*> newIORef emptyPeerPacketNumbers
+    <*> newTQueueIO
 
 instance KeepQlog LDCC where
     keepQlog = ldccQlogger
@@ -284,12 +289,12 @@ instance Qlog TimerCancelled where
 instance Qlog TimerExpired where
     qlog TimerExpired   = "{\"event_type\":\"expired\"}"
 
-instance Qlog TimerSet where
-    qlog TimerSet{..}   = "{\"event_type\":\"set\"" <>
-                          ",\"timer_type\":\"" <> sw timerType <> "\"" <>
-                          ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
-                          ",\"delta\":" <> delta timerTime <>
-                          "}"
+instance Qlog (TimerSet,Microseconds) where
+    qlog (TimerSet{..},us) = "{\"event_type\":\"set\"" <>
+                             ",\"timer_type\":\"" <> sw timerType <> "\"" <>
+                             ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
+                             ",\"delta\":" <> delta us <>
+                             "}"
 
 packetNumberSpace :: EncryptionLevel -> LogStr
 packetNumberSpace InitialLevel   = "initial"
@@ -297,9 +302,8 @@ packetNumberSpace RTT0Level      = "application_data"
 packetNumberSpace HandshakeLevel = "handshake"
 packetNumberSpace RTT1Level      = "application_data"
 
-delta :: Either TimeMicrosecond Microseconds -> LogStr
-delta (Left _)                 = "0"
-delta (Right (Microseconds n)) = sw n
+delta :: Microseconds -> LogStr
+delta (Microseconds n) = sw n
 
 qlogSent :: KeepQlog q => q -> SentPacket -> IO ()
 qlogSent q pkt = keepQlog q $ QSent $ qlog pkt
@@ -313,7 +317,7 @@ qlogPacketLost q lpkt = keepQlog q $ QPacketLost $ qlog lpkt
 qlogContestionStateUpdated :: KeepQlog q => q -> CCMode -> IO ()
 qlogContestionStateUpdated q mode = keepQlog q $ QCongestionStateUpdated $ qlog mode
 
-qlogLossTimerUpdated :: KeepQlog q => q -> TimerSet -> IO ()
+qlogLossTimerUpdated :: KeepQlog q => q -> (TimerSet,Microseconds) -> IO ()
 qlogLossTimerUpdated q tmi = keepQlog q $ QLossTimerUpdated $ qlog tmi
 
 qlogLossTimerCancelled :: KeepQlog q => q -> IO ()

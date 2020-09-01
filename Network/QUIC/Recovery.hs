@@ -27,6 +27,8 @@ module Network.QUIC.Recovery (
   -- Release
   , releaseByRetry
   , releaseOldest
+  -- Timer
+  , ldccTimer
   -- Types
   , SentPacket(..)
   , LDCC
@@ -41,4 +43,5 @@ import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.PeerPacketNumbers
 import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Release
+import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types

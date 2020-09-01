@@ -7,6 +7,7 @@ module Network.QUIC.Recovery.Timer (
   , getPtoTimeAndSpace
   , cancelLossDetectionTimer
   , setLossDetectionTimer
+  , ldccTimer
   ) where
 
 import Control.Concurrent.STM
@@ -23,6 +24,7 @@ import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Recovery.Utils
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -90,6 +92,43 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
 
 cancelLossDetectionTimer :: LDCC -> IO ()
 cancelLossDetectionTimer ldcc@LDCC{..} = do
+    mtmi <- readIORef timerInfo
+    case mtmi of
+      Nothing -> cancelLossDetectionTimer' ldcc
+      Just tmi
+        | timerLevel tmi == RTT1Level -> atomically $ writeTQueue timerQ Nothing
+        | otherwise                   -> cancelLossDetectionTimer' ldcc
+
+updateLossDetectionTimer :: LDCC -> TimerSet -> IO ()
+updateLossDetectionTimer ldcc@LDCC{..} tmi = do
+    mtmi <- readIORef timerInfo
+    when (mtmi /= Just tmi) $ do
+        if timerLevel tmi == RTT1Level then
+            if timerType tmi == LossTime then do
+              void $ atomically $ flushTQueue timerQ
+              updateLossDetectionTimer' ldcc tmi
+            else
+              atomically $ writeTQueue timerQ $ Just tmi
+          else
+            updateLossDetectionTimer' ldcc tmi
+
+ldccTimer :: LDCC -> IO ()
+ldccTimer ldcc@LDCC{..} = forever $ do
+    atomically $ do
+        isEmpty <- isEmptyTQueue timerQ
+        check (not isEmpty)
+    delay $ Microseconds 10000
+    xs <- atomically $ flushTQueue timerQ
+    if null xs then
+        return ()
+      else do
+        let x = last xs
+        case x of
+          Nothing  -> cancelLossDetectionTimer' ldcc
+          Just tmi -> updateLossDetectionTimer' ldcc tmi
+
+cancelLossDetectionTimer' :: LDCC -> IO ()
+cancelLossDetectionTimer' ldcc@LDCC{..} = do
     mk <- atomicModifyIORef' timerKey (Nothing,)
     case mk of
       Nothing -> return ()
@@ -99,10 +138,10 @@ cancelLossDetectionTimer ldcc@LDCC{..} = do
           writeIORef timerInfo Nothing
           qlogLossTimerCancelled ldcc
 
-updateLossDetectionTimer :: LDCC -> TimerSet -> IO ()
-updateLossDetectionTimer ldcc@LDCC{..} tmi = do
+updateLossDetectionTimer' :: LDCC -> TimerSet -> IO ()
+updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
     mgr <- getSystemTimerManager
-    let Left tim = timerTime tmi
+    let tim = timerTime tmi
     duration@(Microseconds us) <- getTimeoutInMicrosecond tim
     if us <= 0 then do
         qlogDebug ldcc $ Debug "updateLossDetectionTimer: minus"
@@ -113,9 +152,8 @@ updateLossDetectionTimer ldcc@LDCC{..} tmi = do
         case mk of
           Nothing -> return ()
           Just k -> unregisterTimeout mgr k
-        let newtmi = tmi { timerTime = Right duration }
-        writeIORef timerInfo $ Just newtmi
-        qlogLossTimerUpdated ldcc newtmi
+        writeIORef timerInfo $ Just tmi
+        qlogLossTimerUpdated ldcc (tmi,duration)
 
 ----------------------------------------------------------------
 
@@ -126,7 +164,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
       Just (earliestLossTime,lvl) -> do
           when (lvl0 == lvl) $ do
               -- Time threshold loss detection.
-              let tmi = TimerSet (Left earliestLossTime) lvl LossTime
+              let tmi = TimerSet earliestLossTime lvl LossTime
               updateLossDetectionTimer ldcc tmi
       Nothing ->
           if serverIsAtAntiAmplificationLimit then -- server is at anti-amplification limit
@@ -148,7 +186,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
                     Nothing -> cancelLossDetectionTimer ldcc
                     Just (ptoTime, lvl) -> do
                         when (lvl0 == lvl) $ do
-                            let tmi = TimerSet (Left ptoTime) lvl PTO
+                            let tmi = TimerSet ptoTime lvl PTO
                             updateLossDetectionTimer ldcc tmi
 
 ----------------------------------------------------------------

@@ -110,9 +110,11 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = E.ha
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender $ connLDCC conn
+    tid3 <- forkIO $ ldccTimer $ connLDCC conn
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
+    addThreadIdResource conn tid3
     handshakeClient conf conn myAuthCIDs `E.onException` freeResources conn
   where
     handler (E.SomeException e) = do
@@ -201,9 +203,11 @@ handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender $ connLDCC conn
+    tid3 <- forkIO $ ldccTimer $ connLDCC conn
     addThreadIdResource conn tid0
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
+    addThreadIdResource conn tid3
     handshakeServer conf conn myAuthCIDs `E.onException` freeResources conn
     --
     cidInfo <- getNewMyCID conn
