@@ -2,7 +2,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Network.QUIC.Qlog where
+module Network.QUIC.Qlog (
+    QLogger
+  , newQlogger
+  , Qlog(..)
+  , KeepQlog(..)
+  , QlogMsg(..)
+  , qlogReceived
+  , qlogDropped
+  , qlogRecvInitial
+  , qlogSentRetry
+  , qlogParamsSet
+  , qlogDebug
+  , Debug(..)
+  , packetType
+  , sw
+  ) where
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
@@ -183,6 +198,7 @@ toLogStrTime (QDebug msg) (Microseconds tim) =
 
 ----------------------------------------------------------------
 
+{-# INLINE sw #-}
 sw :: Show a => a -> LogStr
 sw = toLogStr . show
 
