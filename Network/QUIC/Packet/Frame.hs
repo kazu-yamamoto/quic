@@ -170,19 +170,18 @@ decodeFrame rbuf = do
       x    -> return $ UnknownFrame x
 
 decodePaddingFrames :: ReadBuffer -> IO Frame
-decodePaddingFrames rbuf = loop 1
+decodePaddingFrames rbuf = do
+    room <- remainingSize rbuf
+    loop 1 room
   where
-    loop n = do
-        room <- remainingSize rbuf
-        if room == 0 then
-            return $ Padding n
+    loop n 0 = return $ Padding n
+    loop n room = do
+        ftyp <- read8 rbuf
+        if ftyp == 0x00 then
+            loop (n + 1) (room - 1)
           else do
-            ftyp <- read8 rbuf
-            if ftyp == 0x00 then
-                loop (n + 1)
-              else do
-                ff rbuf (-1)
-                return $ Padding n
+            ff rbuf (-1)
+            return $ Padding n
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
 decodeCryptoFrame rbuf = do
