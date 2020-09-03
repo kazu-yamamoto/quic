@@ -30,7 +30,7 @@ stdoutLogger b = BL.putStrLn $ toLazyByteString b
 
 dirDebugLogger :: Maybe FilePath -> CID -> IO (DebugLogger, IO ())
 dirDebugLogger Nothing _ = do
-    let dLog _  = return ()
+    let dLog ~_ = return ()
         clean = return ()
     return (dLog, clean)
 dirDebugLogger (Just dir) cid = do
@@ -41,7 +41,7 @@ dirDebugLogger (Just dir) cid = do
 
 dirQLogger :: Maybe FilePath -> CID -> ByteString -> IO (QLogger, IO ())
 dirQLogger Nothing _ _ = do
-    let qLog _  = return ()
+    let qLog ~_ = return ()
         clean = return ()
     return (qLog, clean)
 dirQLogger (Just dir) cid rl = do
