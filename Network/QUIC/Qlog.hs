@@ -92,6 +92,7 @@ frameType ConnectionCloseApp{}  = "connection_close"
 frameType HandshakeDone{}       = "handshake_done"
 frameType UnknownFrame{}        = "unknown"
 
+{-# INLINE frameExtra #-}
 frameExtra :: Frame -> LogStr
 frameExtra (Padding _) = ""
 frameExtra  Ping = ""
@@ -132,6 +133,7 @@ transportError InvalidToken            = "invalid_migration"
 transportError CryptoBufferExceeded    = "crypto_buffer_exceeded"
 transportError _                       = ""
 
+{-# INLINE ack #-}
 ack :: [PacketNumber] -> LogStr
 ack ps = "[" <> foldr1 (<>) (intersperse "," (map shw (chop ps))) <> "]"
   where
@@ -172,6 +174,7 @@ data QlogMsg = QRecvInitial
              | QDebug LogStr
              | QParamsSet LogStr
 
+{-# INLINE toLogStrTime #-}
 toLogStrTime :: QlogMsg -> Microseconds -> LogStr
 toLogStrTime QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
