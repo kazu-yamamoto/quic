@@ -8,8 +8,8 @@ module Network.QUIC.Packet.Frame (
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
-import Foreign.Ptr (plusPtr)
-import Foreign.Storable (peek)
+import Foreign.Ptr (Ptr, plusPtr, alignPtr, castPtr)
+import Foreign.Storable (peek, alignment)
 import Network.Socket.Internal (zeroMemory)
 
 import Network.QUIC.Imports
@@ -173,18 +173,43 @@ decodeFrame rbuf = do
 
 decodePaddingFrames :: ReadBuffer -> IO Frame
 decodePaddingFrames rbuf = do
-    room <- remainingSize rbuf
-    n <- withCurrentOffSet rbuf $ loop room 0
+    n <- withCurrentOffSet rbuf $ \beg -> do
+        rest <- remainingSize rbuf
+        let end = beg `plusPtr` rest
+        countZero beg end
     ff rbuf n
     return $ Padding (n + 1)
+
+countZero :: Ptr Word8 -> Ptr Word8 -> IO Int
+countZero beg0 end0 = do
+    let beg1 = alignPtr beg0 ali
+        end1' = alignPtr end0 ali
+        end1 | end0 == end1' = end1'
+             | otherwise     = end1' `plusPtr` negate ali
+    n1        <- countBy1 beg0 beg1 0
+    (n2,beg2) <- countBy8 (castPtr beg1) (castPtr end1) 0
+    n3        <- countBy1 (castPtr beg2) end0 0
+    return (n1 + n2 + n3)
   where
-    loop 0    n _   = return n
-    loop room n ptr = do
-        ftyp <- peek ptr
-        if ftyp == 0x00 then
-            loop (room - 1) (n + 1) (ptr `plusPtr` 1)
-          else do
-            return n
+    ali = alignment (0 :: Word64)
+    countBy1 :: Ptr Word8 -> Ptr Word8 -> Int -> IO Int
+    countBy1 beg end n
+      | beg < end = do
+            ftyp <- peek beg
+            if ftyp == 0 then
+                countBy1 (beg `plusPtr` 1) end (n + 1)
+              else
+                return n
+      | otherwise = return n
+    countBy8 :: Ptr Word64 -> Ptr Word64 -> Int -> IO (Int, Ptr Word64)
+    countBy8 beg end n
+      | beg < end = do
+            ftyp <- peek beg
+            if ftyp == 0 then
+                countBy8 (beg `plusPtr` ali) end (n + ali)
+              else
+                return (n, beg)
+      | otherwise = return (n, beg)
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
 decodeCryptoFrame rbuf = do
