@@ -48,10 +48,14 @@ import qualified Crypto.Cipher.ChaChaPoly1305 as ChaChaPoly
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError, maybeCryptoError)
 import qualified Crypto.MAC.Poly1305 as Poly1305
-import Data.ByteArray as Byte (convert, xor)
+import qualified Data.ByteArray as Byte (convert, xor)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Internal as B
 import qualified Data.ByteString.Short as Short
+import Foreign.ForeignPtr (withForeignPtr)
+import Foreign.Ptr (Ptr, plusPtr)
+import Foreign.Storable (peek, poke)
 import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
@@ -189,7 +193,7 @@ aes128gcmEncrypt (Key key) =
     in \(Nonce nonce) plaintext (AddDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
           (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-          tag = convert tag0
+          tag = Byte.convert tag0
       in [ciphertext,tag]
 
 aes128gcmDecrypt :: Key -> (Nonce -> CipherText -> AddDat -> Maybe PlainText)
@@ -198,7 +202,7 @@ aes128gcmDecrypt (Key key) =
     in \(Nonce nonce) ciphertag (AddDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
           (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
-          authtag = AuthTag $ convert tag
+          authtag = AuthTag $ Byte.convert tag
        in aeadSimpleDecrypt aead ad ciphertext authtag
 
 aes256gcmEncrypt :: Key -> (Nonce -> PlainText -> AddDat -> [CipherText])
@@ -207,7 +211,7 @@ aes256gcmEncrypt (Key key) =
     in \(Nonce nonce) plaintext (AddDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
           (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-          tag = convert tag0
+          tag = Byte.convert tag0
       in [ciphertext, tag]
 
 aes256gcmDecrypt :: Key -> (Nonce -> CipherText -> AddDat -> Maybe PlainText)
@@ -216,12 +220,12 @@ aes256gcmDecrypt (Key key) =
     in \ (Nonce nonce) ciphertag (AddDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
           (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
-          authtag = AuthTag $ convert tag
+          authtag = AuthTag $ Byte.convert tag
       in aeadSimpleDecrypt aead ad ciphertext authtag
 
 chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AddDat -> [CipherText]
 chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AddDat ad) =
-    [ciphertext,convert tag]
+    [ciphertext,Byte.convert tag]
   where
     st1 = throwCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
     st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st1)
@@ -235,7 +239,7 @@ chacha20poly1305Decrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
         (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
         (plaintext, st3) = ChaChaPoly.decrypt ciphertext st2
         Poly1305.Auth tag' = ChaChaPoly.finalize st3
-    if tag == convert tag' then Just plaintext else Nothing
+    if tag == Byte.convert tag' then Just plaintext else Nothing
 
 ----------------------------------------------------------------
 
@@ -329,10 +333,22 @@ bsXOR :: ByteString -> ByteString -> ByteString
 bsXOR = Byte.xor
 
 bsXORpad :: ByteString -> ByteString -> ByteString
-bsXORpad iv pn = Byte.xor iv pnl
+bsXORpad (PS fp0 off0 len0) (PS fp1 off1 len1) = B.unsafeCreate len0 $ \dst ->
+  withForeignPtr fp0 $ \p0 ->
+    withForeignPtr fp1 $ \p1 -> do
+        let src0 = p0 `plusPtr` off0
+        let src1 = p1 `plusPtr` off1
+        let diff = len0 - len1
+        B.memcpy dst src0 diff
+        loop (dst `plusPtr` diff) (src0 `plusPtr` diff) src1 len1
   where
-    diff = B.length iv - B.length pn
-    pnl =  B.replicate diff 0 `B.append` pn
+    loop :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Int -> IO ()
+    loop _ _ _ 0 = return ()
+    loop dst src0 src1 len = do
+        w1 <- peek src0
+        w2 <- peek src1
+        poke dst (w1 `xor` w2)
+        loop (dst `plusPtr` 1) (src0 `plusPtr` 1) (src1 `plusPtr` 1) (len - 1)
 
 ----------------------------------------------------------------
 
