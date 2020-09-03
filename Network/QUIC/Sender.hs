@@ -339,6 +339,7 @@ threshold  =  832
 limitation :: Int
 limitation = 1040
 
+{-# INLINE totalLen #-}
 totalLen :: [ByteString] -> Int
 totalLen = sum . map B.length
 

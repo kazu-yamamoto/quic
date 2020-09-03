@@ -109,7 +109,7 @@ metricsUpdated ldcc@LDCC{..} body = do
     body
     rtt1 <- readIORef recoveryRTT
     cc1 <- readTVarIO recoveryCC
-    let diff = catMaybes [
+    let ~diff = catMaybes [
             time "min_rtt"      (minRTT      rtt0) (minRTT      rtt1)
           , time "smoothed_rtt" (smoothedRTT rtt0) (smoothedRTT rtt1)
           , time "latest_rtt"   (latestRTT   rtt0) (latestRTT   rtt1)
