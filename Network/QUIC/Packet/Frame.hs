@@ -6,9 +6,11 @@ module Network.QUIC.Packet.Frame (
   , decodeFrames
   ) where
 
-import Network.Socket.Internal (zeroMemory)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
+import Foreign.Ptr (plusPtr)
+import Foreign.Storable (peek)
+import Network.Socket.Internal (zeroMemory)
 
 import Network.QUIC.Imports
 import Network.QUIC.Logger
@@ -172,16 +174,17 @@ decodeFrame rbuf = do
 decodePaddingFrames :: ReadBuffer -> IO Frame
 decodePaddingFrames rbuf = do
     room <- remainingSize rbuf
-    loop 1 room
+    n <- withCurrentOffSet rbuf $ loop room 0
+    ff rbuf n
+    return $ Padding (n + 1)
   where
-    loop n 0 = return $ Padding n
-    loop n room = do
-        ftyp <- read8 rbuf
+    loop 0    n _   = return n
+    loop room n ptr = do
+        ftyp <- peek ptr
         if ftyp == 0x00 then
-            loop (n + 1) (room - 1)
+            loop (room - 1) (n + 1) (ptr `plusPtr` 1)
           else do
-            ff rbuf (-1)
-            return $ Padding n
+            return n
 
 decodeCryptoFrame :: ReadBuffer -> IO Frame
 decodeCryptoFrame rbuf = do
