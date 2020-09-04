@@ -13,6 +13,7 @@ module Network.QUIC.Packet (
   -- * Frame
   , encodeFrames
   , decodeFrames
+  , countZero -- testing
   -- * Header
   , isLong
   , isShort

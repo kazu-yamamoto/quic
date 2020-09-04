@@ -4,6 +4,7 @@ module Network.QUIC.Packet.Frame (
     encodeFrames
   , encodeFramesWithPadding
   , decodeFrames
+  , countZero -- testing
   ) where
 
 import qualified Data.ByteString as B
