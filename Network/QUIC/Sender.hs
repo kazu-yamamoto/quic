@@ -309,28 +309,28 @@ sendCryptoFragments conn send lcs = do
   where
     loop :: Int -> ([SentPacket] -> [SentPacket]) -> [(EncryptionLevel, CryptoData)] -> IO ()
     loop _ build0 [] = do
-        let bss0 = build0 []
-        unless (null bss0) $ sendPacket conn send bss0
+        let spkts0 = build0 []
+        unless (null spkts0) $ sendPacket conn send spkts0
     loop len0 build0 ((lvl, bs) : xs) | B.length bs > len0 = do
         let (target, rest) = B.splitAt len0 bs
         frame1 <- cryptoFrame conn target lvl
-        bss1 <- construct conn lvl [frame1]
-        sendPacket conn send $ build0 bss1
+        spkts1 <- construct conn lvl [frame1]
+        sendPacket conn send $ build0 spkts1
         loop limitationC id ((lvl, rest) : xs)
     loop _ build0 [(lvl, bs)] = do
         frame1 <- cryptoFrame conn bs lvl
-        bss1 <- construct conn lvl [frame1]
-        sendPacket conn send $ build0 bss1
+        spkts1 <- construct conn lvl [frame1]
+        sendPacket conn send $ build0 spkts1
     loop len0 build0 ((lvl, bs) : xs) | len0 - B.length bs < thresholdC = do
         frame1 <- cryptoFrame conn bs lvl
-        bss1 <- construct conn lvl [frame1]
-        sendPacket conn send $ build0 bss1
+        spkts1 <- construct conn lvl [frame1]
+        sendPacket conn send $ build0 spkts1
         loop limitationC id xs
     loop len0 build0 ((lvl, bs) : xs) = do
         frame1 <- cryptoFrame conn bs lvl
-        bss1 <- construct conn lvl [frame1]
+        spkts1 <- construct conn lvl [frame1]
         let len1 = len0 - B.length bs
-            build1 = build0 . (bss1 ++)
+            build1 = build0 . (spkts1 ++)
         loop len1  build1 xs
 
 ----------------------------------------------------------------
