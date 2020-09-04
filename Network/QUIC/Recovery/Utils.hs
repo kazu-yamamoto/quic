@@ -6,7 +6,6 @@ module Network.QUIC.Recovery.Utils (
   , sendPing
   , mergeLostCandidates
   , mergeLostCandidatesAndClear
-  , serverIsAtAntiAmplificationLimit
   , peerCompletedAddressValidation
   , countAckEli
   , inCongestionRecovery
@@ -63,12 +62,6 @@ merge s1 s2 = case Seq.viewl s1 of
     y :< s2'
       | spPacketNumber x < spPacketNumber y -> x <| merge s1' s2
       | otherwise                           -> y <| merge s1 s2'
-
-----------------------------------------------------------------
-
--- fixme
-serverIsAtAntiAmplificationLimit :: Bool
-serverIsAtAntiAmplificationLimit = False
 
 ----------------------------------------------------------------
 

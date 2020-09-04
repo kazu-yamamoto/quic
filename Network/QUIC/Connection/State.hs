@@ -170,9 +170,18 @@ setAddressValidated :: Connection -> IO ()
 setAddressValidated Connection{..} = atomically $ writeTVar addressValidated True
 
 waitAntiAmplificationFree :: Connection -> Int -> IO ()
-waitAntiAmplificationFree Connection{..} siz = atomically $ do
-    validated <- readTVar addressValidated
-    unless validated $ do
-        tx <- readTVar bytesTx
-        rx <- readTVar bytesRx
-        check (tx + siz <= 3 * rx)
+waitAntiAmplificationFree Connection{..} siz = do
+    ok <- atomically cond
+    unless ok $ do
+        writeIORef (inAntiAmp connState) True
+        atomically (cond >>= check)
+        writeIORef (inAntiAmp connState) False
+  where
+    cond = do
+        validated <- readTVar addressValidated
+        if validated then
+            return True
+          else do
+            tx <- readTVar bytesTx
+            rx <- readTVar bytesRx
+            return (tx + siz <= 3 * rx)

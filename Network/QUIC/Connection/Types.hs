@@ -184,9 +184,10 @@ instance KeepQlog Connection where
 instance Connector Connection where
     getRole            = role . connState
     getEncryptionLevel = readTVarIO . encryptionLevel . connState
-    getMaxPacketSize   = readIORef . maxPacketSize . connState
+    getMaxPacketSize   = readIORef  . maxPacketSize   . connState
     getConnectionState = readTVarIO . connectionState . connState
-    getPacketNumber    = readIORef . packetNumber . connState
+    getPacketNumber    = readIORef  . packetNumber    . connState
+    getInAntiAmp       = readIORef  . inAntiAmp       . connState
 
 makePendingQ :: IO (Array EncryptionLevel (TVar [CryptPacket]))
 makePendingQ = do

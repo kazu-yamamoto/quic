@@ -55,10 +55,12 @@ onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
 ----------------------------------------------------------------
 
 onPacketReceived :: LDCC -> EncryptionLevel -> IO ()
-onPacketReceived ldcc lvl = do
-  -- If this datagram unblocks the server, arm the
-  -- PTO timer to avoid deadlock.
-  when serverIsAtAntiAmplificationLimit $ setLossDetectionTimer ldcc lvl
+onPacketReceived ldcc lvl = when (getRole ldcc == Server) $ do
+    -- If this datagram unblocks the server, arm the
+    -- PTO timer to avoid deadlock.
+    wasInAntiAmp <- getByAntiAmp ldcc
+    inAntiAmp <- getInAntiAmp ldcc -- fixme: timing?
+    when (wasInAntiAmp && not inAntiAmp) $ setLossDetectionTimer ldcc lvl
 
 ----------------------------------------------------------------
 
