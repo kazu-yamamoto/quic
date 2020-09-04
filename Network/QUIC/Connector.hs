@@ -5,20 +5,20 @@ import Data.IORef
 import Network.QUIC.Types
 
 class Connector a where
-    getRole :: a -> Role
+    getRole            :: a -> Role
     getEncryptionLevel :: a -> IO EncryptionLevel
-    getMaxPacketSize :: a -> IO Int
+    getMaxPacketSize   :: a -> IO Int
     getConnectionState :: a -> IO ConnectionState
-    getPacketNumber :: a -> IO PacketNumber
+    getPacketNumber    :: a -> IO PacketNumber
 
 ----------------------------------------------------------------
 
 data ConnState = ConnState {
-    role              :: Role
-  , connectionState   :: TVar ConnectionState
-  , packetNumber      :: IORef PacketNumber   -- squeezing three to one
-  , encryptionLevel   :: TVar EncryptionLevel -- to synchronize
-  , maxPacketSize     :: IORef Int
+    role            :: Role
+  , connectionState :: TVar ConnectionState
+  , packetNumber    :: IORef PacketNumber   -- squeezing three to one
+  , encryptionLevel :: TVar EncryptionLevel -- to synchronize
+  , maxPacketSize   :: IORef Int
   }
 
 newConnState :: Role -> IO ConnState
