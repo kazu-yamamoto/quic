@@ -153,37 +153,36 @@ runQUICServer conf server = handleLog debugLog $ do
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO (Connection, SendMany, Receive, AuthCIDs)
-createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
-    let Accept ver myAuthCIDs peerAuthCIDs mysa peersa0 q pktSiz0 register unregister = acc
-    s0 <- udpServerConnectedSocket mysa peersa0
-    sref <- newIORef (s0,q)
+createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = do
+    s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
+    sref <- newIORef (s0, accRecvQ)
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
         send bss = void $ do
             (s,_) <- readIORef sref
             NSB.sendMany s bss
-        recv = recvServer q
-    let Just myCID = initSrcCID myAuthCIDs
-        Just ocid  = origDstCID myAuthCIDs
+        recv = recvServer accRecvQ
+    let Just myCID = initSrcCID accMyAuthCIDs
+        Just ocid  = origDstCID accMyAuthCIDs
     (qLog, qclean)     <- dirQLogger (confQLog scConfig) ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     let hooks = confHooks scConfig
     debugLog $ "Original CID: " <> bhow ocid
-    conn <- serverConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref
+    conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog hooks sref
     addResource conn cls
     addResource conn qclean
     addResource conn dclean
-    let cid = fromMaybe ocid $ retrySrcCID myAuthCIDs
-    initializeCoder conn InitialLevel $ initialSecrets ver cid
+    let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
+    initializeCoder conn InitialLevel $ initialSecrets accVersion cid
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz = (defaultPacketSize mysa `max` pktSiz0) `min` maximumPacketSize mysa
+    let pktSiz = (defaultPacketSize accMySockAddr `max` accPacketSize) `min` maximumPacketSize accMySockAddr
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
-    debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow pktSiz0 <> ")"
-    addRxBytes conn pktSiz0
+    debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"
+    addRxBytes conn accPacketSize
     --
-    let retried = isJust $ retrySrcCID myAuthCIDs
+    let retried = isJust $ retrySrcCID accMyAuthCIDs
     when retried $ do
         qlogRecvInitial conn
         qlogSentRetry conn
@@ -193,11 +192,11 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     --
     setMainThreadId conn mainThreadId
     --
-    setRegister conn register unregister
-    register myCID conn
+    setRegister conn accRegister accUnregister
+    accRegister myCID conn
     --
-    void $ forkIO $ readerServer s0 q conn -- dies when s0 is closed.
-    return (conn, send, recv, myAuthCIDs)
+    void $ forkIO $ readerServer s0 accRecvQ conn -- dies when s0 is closed.
+    return (conn, send, recv, accMyAuthCIDs)
 
 handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()
 handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do

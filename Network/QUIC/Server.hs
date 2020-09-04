@@ -112,7 +112,17 @@ insertRecvQDict ref dcid q = atomicModifyIORef'' ref ins
 
 ----------------------------------------------------------------
 
-data Accept = Accept Version AuthCIDs AuthCIDs SockAddr SockAddr RecvQ Int (CID -> Connection -> IO ()) (CID -> IO ())
+data Accept = Accept {
+    accVersion      :: Version
+  , accMyAuthCIDs   :: AuthCIDs
+  , accPeerAuthCIDs :: AuthCIDs
+  , accMySockAddr   :: SockAddr
+  , accPeerSockAddr :: SockAddr
+  , accRecvQ        :: RecvQ
+  , accPacketSize   :: Int
+  , accRegister     :: CID -> Connection -> IO ()
+  , accUnregister   :: CID -> IO ()
+  }
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
 
@@ -222,7 +232,17 @@ dispatch Dispatch{..} ServerConfig{..}
               writeRecvQ q cpkt
               let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
-                  ent = Accept ver myAuthCIDs peerAuthCIDs mysa peersa q pktSiz reg unreg
+                  ent = Accept {
+                      accVersion      = ver
+                    , accMyAuthCIDs   = myAuthCIDs
+                    , accPeerAuthCIDs = peerAuthCIDs
+                    , accMySockAddr   = mysa
+                    , accPeerSockAddr = peersa
+                    , accRecvQ        = q
+                    , accPacketSize   = pktSiz
+                    , accRegister     = reg
+                    , accUnregister   = unreg
+                    }
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
