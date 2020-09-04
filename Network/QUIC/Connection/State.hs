@@ -28,6 +28,8 @@ module Network.QUIC.Connection.State (
   , getTxBytes
   , addRxBytes
   , getRxBytes
+  , setAddressValidated
+  , waitAntiAmplificationFree
   ) where
 
 import Control.Concurrent.STM
@@ -161,3 +163,16 @@ addRxBytes Connection{..} n = atomically $ modifyTVar' bytesRx (+ n)
 
 getRxBytes :: Connection -> IO Int
 getRxBytes Connection{..} = readTVarIO bytesRx
+
+----------------------------------------------------------------
+
+setAddressValidated :: Connection -> IO ()
+setAddressValidated Connection{..} = atomically $ writeTVar addressValidated True
+
+waitAntiAmplificationFree :: Connection -> Int -> IO ()
+waitAntiAmplificationFree Connection{..} siz = atomically $ do
+    validated <- readTVar addressValidated
+    unless validated $ do
+        tx <- readTVar bytesTx
+        rx <- readTVar bytesRx
+        check (tx + siz <= 3 * rx)

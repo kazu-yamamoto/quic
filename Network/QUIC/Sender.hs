@@ -44,8 +44,10 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
           _ -> do
             when (isJust mx) $ qlogDebug conn $ Debug "probe new"
             (sentPackets, bss) <- buildPackets maxSiz spkts id id
+            let tlen = totalLen bss
+            when (isServer conn) $ waitAntiAmplificationFree conn tlen
             send bss
-            addTxBytes conn $ totalLen bss
+            addTxBytes conn tlen
             forM_ sentPackets $ \sentPacket -> do
                 qlogSent conn sentPacket
                 onPacketSent ldcc sentPacket

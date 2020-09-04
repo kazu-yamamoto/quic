@@ -122,6 +122,7 @@ data Accept = Accept {
   , accPacketSize   :: Int
   , accRegister     :: CID -> Connection -> IO ()
   , accUnregister   :: CID -> IO ()
+  , accAddressValidated :: Bool
   }
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
@@ -206,7 +207,7 @@ dispatch Dispatch{..} ServerConfig{..}
         case mq of
           Nothing
             | scRequireRetry -> sendRetry
-            | otherwise      -> pushToAcceptFirst
+            | otherwise      -> pushToAcceptFirst False
           _                  -> stdoutLogger $ "dispatch: Just (1) " <> bhow peersa
   | otherwise = do
         mct <- decryptToken tokenMgr token
@@ -218,11 +219,11 @@ dispatch Dispatch{..} ServerConfig{..}
             | otherwise -> do
                   mq <- lookupConnectionDict dstTable dCID
                   case mq of
-                    Nothing -> pushToAcceptFirst
+                    Nothing -> pushToAcceptFirst True
                     _       -> stdoutLogger $ "dispatch: Just (2) " <> bhow peersa
           _ -> sendRetry
   where
-    pushToAcceptQ myAuthCIDs peerAuthCIDs key = do
+    pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
         mq <- lookupRecvQDict srcTable key
         case mq of
           Just q -> writeRecvQ q cpkt
@@ -242,6 +243,7 @@ dispatch Dispatch{..} ServerConfig{..}
                     , accPacketSize   = pktSiz
                     , accRegister     = reg
                     , accUnregister   = unreg
+                    , accAddressValidated = addrValid
                     }
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
@@ -257,7 +259,7 @@ dispatch Dispatch{..} ServerConfig{..}
     -- initial_source_connection_id       = S2   (newdCID)
     -- original_destination_connection_id = S1   (dCID)
     -- retry_source_connection_id         = Nothing
-    pushToAcceptFirst = do
+    pushToAcceptFirst addrValid = do
         newdCID <- newCID
         let myAuthCIDs = defaultAuthCIDs {
                 initSrcCID  = Just newdCID
@@ -266,7 +268,7 @@ dispatch Dispatch{..} ServerConfig{..}
             peerAuthCIDs = defaultAuthCIDs {
                 initSrcCID = Just sCID
               }
-        pushToAcceptQ myAuthCIDs peerAuthCIDs dCID
+        pushToAcceptQ myAuthCIDs peerAuthCIDs dCID addrValid
     -- Initial: DCID=S1, SCID=C1 ->
     --                                       <- Retry: DCID=C1, SCID=S2
     -- Initial: DCID=S2, SCID=C1 ->
@@ -287,7 +289,7 @@ dispatch Dispatch{..} ServerConfig{..}
             peerAuthCIDs = defaultAuthCIDs {
                 initSrcCID = Just sCID
               }
-        pushToAcceptQ myAuthCIDs peerAuthCIDs o
+        pushToAcceptQ myAuthCIDs peerAuthCIDs o True
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
         diff <- getElapsedTimeMicrosecond tim

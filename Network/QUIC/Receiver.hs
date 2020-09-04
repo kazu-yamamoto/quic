@@ -72,6 +72,7 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
               when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
               setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
           when (isServer conn && lvl == HandshakeLevel) $ do
+              setAddressValidated conn
               discarded <- getPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
               unless discarded $ do
                   dropSecrets conn InitialLevel

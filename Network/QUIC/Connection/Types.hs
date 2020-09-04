@@ -165,6 +165,7 @@ data Connection = Connection {
   , minIdleTimeout    :: IORef Microseconds
   , bytesTx           :: TVar Int
   , bytesRx           :: TVar Int
+  , addressValidated  :: TVar Bool
   -- TLS
   , pendingQ          :: Array   EncryptionLevel (TVar [CryptPacket])
   , ciphers           :: IOArray EncryptionLevel Cipher
@@ -247,6 +248,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
         <*> newTVarIO 0
         <*> newTVarIO 0
+        <*> newTVarIO False
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher

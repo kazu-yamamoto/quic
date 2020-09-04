@@ -92,6 +92,8 @@ module Network.QUIC.Connection (
   , getTxBytes
   , addRxBytes
   , getRxBytes
+  , setAddressValidated
+  , waitAntiAmplificationFree
   -- * Stream
   , getMyNewStreamId
   , getMyNewUniStreamId

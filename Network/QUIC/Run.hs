@@ -98,6 +98,7 @@ createClientConnection conf@ClientConfig{..} ver = do
         pktSiz = (defaultPacketSize sa0 `max` pktSiz0) `min` maximumPacketSize sa0
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
+    setAddressValidated conn
     --
     mytid <- myThreadId
     --
@@ -181,6 +182,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"
     addRxBytes conn accPacketSize
+    when accAddressValidated $ setAddressValidated conn
     --
     let retried = isJust $ retrySrcCID accMyAuthCIDs
     when retried $ do
