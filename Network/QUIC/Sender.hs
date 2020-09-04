@@ -45,6 +45,7 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
             when (isJust mx) $ qlogDebug conn $ Debug "probe new"
             (sentPackets, bss) <- buildPackets maxSiz spkts id id
             send bss
+            addTxBytes conn $ totalLen bss
             forM_ sentPackets $ \sentPacket -> do
                 qlogSent conn sentPacket
                 onPacketSent ldcc sentPacket
@@ -115,6 +116,7 @@ sendPingPacket conn send lvl = do
             ping = spPlainPacket spkt
         bss <- encodePlainPacket conn ping (Just maxSiz)
         send bss
+        addTxBytes conn $ totalLen bss
         sentPacket <- fixSentPacket spkt bss
         qlogSent conn sentPacket
         onPacketSent ldcc sentPacket

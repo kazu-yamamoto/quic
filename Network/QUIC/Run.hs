@@ -181,6 +181,7 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow pktSiz0 <> ")"
+    addRxBytes conn pktSiz0
     --
     let retried = isJust $ retrySrcCID myAuthCIDs
     when retried $ do
@@ -195,7 +196,7 @@ createServerConnection conf@ServerConfig{..} dispatch acc mainThreadId = do
     setRegister conn register unregister
     register myCID conn
     --
-    void $ forkIO $ readerServer s0 q debugLog -- dies when s0 is closed.
+    void $ forkIO $ readerServer s0 q conn -- dies when s0 is closed.
     return (conn, send, recv, myAuthCIDs)
 
 handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()

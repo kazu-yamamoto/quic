@@ -10,6 +10,7 @@ module Network.QUIC.Client (
 
 import Control.Concurrent
 import qualified Control.Exception as E
+import qualified Data.ByteString as BS
 import Data.List (intersect)
 import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
@@ -30,7 +31,9 @@ import Network.QUIC.Types
 -- | readerClient dies when the socket is closed.
 readerClient :: ThreadId -> [Version] -> Socket -> RecvQ -> Connection -> IO ()
 readerClient tid myVers s q conn = handleLog logAction $ forever $ do
-    pkts <- NSB.recv s maximumUdpPayloadSize >>= decodePackets
+    bs <- NSB.recv s maximumUdpPayloadSize
+    addRxBytes conn $ BS.length bs
+    pkts <- decodePackets bs
     mapM_ putQ pkts
   where
     logAction msg = connDebugLog conn ("readerClient: " <> msg)

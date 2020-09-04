@@ -24,6 +24,10 @@ module Network.QUIC.Connection.State (
   , addRxMaxData
   , getRxMaxData
   , getRxDataWindow
+  , addTxBytes
+  , getTxBytes
+  , addRxBytes
+  , getRxBytes
   ) where
 
 import Control.Concurrent.STM
@@ -143,3 +147,17 @@ getRxMaxData Connection{..} = flowMaxData <$> readIORef flowRx
 
 getRxDataWindow :: Connection -> IO Int
 getRxDataWindow Connection{..} = flowWindow <$> readIORef flowRx
+
+----------------------------------------------------------------
+
+addTxBytes :: Connection -> Int -> IO ()
+addTxBytes Connection{..} n = atomically $ modifyTVar' bytesTx (+ n)
+
+getTxBytes :: Connection -> IO Int
+getTxBytes Connection{..} = readTVarIO bytesTx
+
+addRxBytes :: Connection -> Int -> IO ()
+addRxBytes Connection{..} n = atomically $ modifyTVar' bytesRx (+ n)
+
+getRxBytes :: Connection -> IO Int
+getRxBytes Connection{..} = readTVarIO bytesRx

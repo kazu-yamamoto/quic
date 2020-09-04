@@ -163,6 +163,8 @@ data Connection = Connection {
   , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
   , minIdleTimeout    :: IORef Microseconds
+  , bytesTx           :: TVar Int
+  , bytesRx           :: TVar Int
   -- TLS
   , pendingQ          :: Array   EncryptionLevel (TVar [CryptPacket])
   , ciphers           :: IOArray EncryptionLevel Cipher
@@ -243,6 +245,8 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration
         <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
+        <*> newTVarIO 0
+        <*> newTVarIO 0
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher

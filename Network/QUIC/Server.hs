@@ -314,12 +314,14 @@ dispatch _ _ ipkt _ peersa _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow pe
 ----------------------------------------------------------------
 
 -- | readerServer dies when the socket is closed.
-readerServer :: Socket -> RecvQ -> DebugLogger -> IO ()
-readerServer s q logAction = handleLog logAction' $ forever $ do
-    pkts <- NSB.recv s maximumUdpPayloadSize >>= decodeCryptPackets
+readerServer :: Socket -> RecvQ -> Connection -> IO ()
+readerServer s q conn = handleLog logAction $ forever $ do
+    bs <- NSB.recv s maximumUdpPayloadSize
+    addRxBytes conn $ BS.length bs
+    pkts <- decodeCryptPackets bs
     mapM (writeRecvQ q) pkts
   where
-    logAction' msg = logAction ("readerServer: " <> msg)
+    logAction msg = connDebugLog conn ("readerServer: " <> msg)
 
 recvServer :: RecvQ -> IO CryptPacket
 recvServer q = readRecvQ q
@@ -332,7 +334,7 @@ migrator conn peersa1 dcid mcidinfo = do
     mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
     setSockInfo conn (s1,q)
-    void $ forkIO $ readerServer s1 q $ connDebugLog conn
+    void $ forkIO $ readerServer s1 q conn
     -- fixme: if cannot set
     setMyCID conn dcid
     validatePath conn mcidinfo

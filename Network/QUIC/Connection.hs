@@ -88,6 +88,10 @@ module Network.QUIC.Connection (
   , addRxMaxData
   , getRxMaxData
   , getRxDataWindow
+  , addTxBytes
+  , getTxBytes
+  , addRxBytes
+  , getRxBytes
   -- * Stream
   , getMyNewStreamId
   , getMyNewUniStreamId

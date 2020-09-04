@@ -71,8 +71,8 @@ data ConnectionStats = ConnectionStats {
 
 getConnectionStats :: Connection -> IO ConnectionStats
 getConnectionStats conn = do
-    tx <- getTxData conn
-    rx <- getRxData conn
+    tx <- getTxBytes conn
+    rx <- getRxBytes conn
     return $ ConnectionStats {
         txBytes = tx
       , rxBytes = rx
