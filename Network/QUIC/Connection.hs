@@ -97,6 +97,8 @@ module Network.QUIC.Connection (
   -- * Stream
   , getMyNewStreamId
   , getMyNewUniStreamId
+  , setMyMaxStreams
+  , setMyUniMaxStreams
   -- * StreamTable
   , getStream
   , findStream

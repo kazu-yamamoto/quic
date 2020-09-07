@@ -226,6 +226,8 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
         setTxMaxData conn $ initialMaxData params
         setMinIdleTimeout conn $ milliToMicro $ maxIdleTimeout params
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
+        setMyMaxStreams conn $ initialMaxStreamsBidi params
+        setMyUniMaxStreams conn $ initialMaxStreamsUni params
 setPeerParams _ _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError

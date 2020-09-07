@@ -177,7 +177,9 @@ processFrame conn _ (MaxStreamData sid n) = do
     case mstrm of
       Nothing   -> return ()
       Just strm -> setTxMaxStreamData strm n
-processFrame _ _ MaxStreams{} = return ()
+processFrame conn _ (MaxStreams dir n)
+  | dir == Bidirectional = setMyMaxStreams conn n
+  | otherwise            = setMyUniMaxStreams conn n
 processFrame conn _ DataBlocked{} = do
     newMax <- getRxMaxData conn
     putOutput conn $ OutControl RTT1Level [MaxData newMax]

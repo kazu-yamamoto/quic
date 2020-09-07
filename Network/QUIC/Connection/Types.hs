@@ -121,6 +121,21 @@ initialNegotiated = Negotiated {
 
 ----------------------------------------------------------------
 
+data Concurrency = Concurrency {
+    currentStream :: Int
+  , streamType    :: Int
+  , maxStreams    :: Int
+  }
+
+newConcurrency :: Role -> Direction -> Concurrency
+newConcurrency rl dir = Concurrency typ typ 0
+ where
+   bidi = dir == Bidirectional
+   typ | rl == Client = if bidi then 0 else 2
+       | otherwise    = if bidi then 1 else 3
+
+----------------------------------------------------------------
+
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     connState         :: ConnState
@@ -156,8 +171,8 @@ data Connection = Connection {
   , closeState        :: TVar CloseState
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , streamTable       :: IORef StreamTable
-  , myStreamId        :: IORef StreamId
-  , myUniStreamId     :: IORef StreamId
+  , myStreamId        :: TVar Concurrency
+  , myUniStreamId     :: TVar Concurrency
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
@@ -239,8 +254,8 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTVarIO CloseState { closeSent = False, closeReceived = False }
         <*> newIORef 0
         <*> newIORef emptyStreamTable
-        <*> newIORef (if isclient then 0 else 1)
-        <*> newIORef (if isclient then 2 else 3)
+        <*> newTVarIO (newConcurrency rl Bidirectional)
+        <*> newTVarIO (newConcurrency rl Unidirectional)
         <*> return tvarFlowTx
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration
