@@ -5,6 +5,7 @@ module Network.QUIC.Stream.Table (
   , emptyStreamTable
   , lookupStream
   , insertStream
+  , deleteStream
   , insertCryptoStreams
   , deleteCryptoStream
   , lookupCryptoStream

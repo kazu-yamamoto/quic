@@ -47,6 +47,7 @@ module Network.QUIC.Stream (
   , emptyStreamTable
   , lookupStream
   , insertStream
+  , deleteStream
   , insertCryptoStreams
   , deleteCryptoStream
   , lookupCryptoStream

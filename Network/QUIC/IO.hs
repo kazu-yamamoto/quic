@@ -59,6 +59,15 @@ shutdownStream s = do
     when sclosed $ E.throwIO StreamIsClosed
     putSendStreamQ s $ TxStreamData s [] 0 True
 
+-- | Sending a FIN if necessary and closing a stream.
+closeStream :: Connection -> Stream -> IO ()
+closeStream conn s = do
+    closed <- isClosed s
+    when closed $ E.throwIO ConnectionIsClosed
+    sclosed <- isTxStreamClosed s
+    unless sclosed $ putSendStreamQ s $ TxStreamData s [] 0 True
+    delStream conn s
+
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream
 acceptStream conn = do

@@ -12,6 +12,7 @@ module Network.QUIC (
   , unidirectionalStream
   , streamId
   , StreamId
+  , closeStream
   -- * IO
   , recvStream
   , sendStream

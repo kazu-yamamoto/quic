@@ -103,6 +103,7 @@ module Network.QUIC.Connection (
   , getStream
   , findStream
   , addStream
+  , delStream
   , initialRxMaxStreamData
   , setupCryptoStreams
   , clearCryptoStream

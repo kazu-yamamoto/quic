@@ -5,6 +5,7 @@ module Network.QUIC.Connection.StreamTable (
     getStream
   , findStream
   , addStream
+  , delStream
   , initialRxMaxStreamData
   , setupCryptoStreams
   , clearCryptoStream
@@ -45,6 +46,10 @@ addStream conn@Connection{..} sid = do
     setRxMaxStreamData strm rxMaxStreamData
     atomicModifyIORef'' streamTable $ insertStream sid strm
     return strm
+
+delStream :: Connection -> Stream -> IO ()
+delStream Connection{..} strm =
+    atomicModifyIORef'' streamTable $ deleteStream $ streamId strm
 
 initialRxMaxStreamData :: Connection -> StreamId -> Int
 initialRxMaxStreamData conn sid
