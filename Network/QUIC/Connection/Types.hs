@@ -158,7 +158,6 @@ data Connection = Connection {
   , streamTable       :: IORef StreamTable
   , myStreamId        :: IORef StreamId
   , myUniStreamId     :: IORef StreamId
-  , peerStreamId      :: IORef StreamId
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
@@ -242,7 +241,6 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef emptyStreamTable
         <*> newIORef (if isclient then 0 else 1)
         <*> newIORef (if isclient then 2 else 3)
-        <*> newIORef (if isclient then 1 else 0)
         <*> return tvarFlowTx
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration

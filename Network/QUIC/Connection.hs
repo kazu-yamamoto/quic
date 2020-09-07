@@ -97,8 +97,6 @@ module Network.QUIC.Connection (
   -- * Stream
   , getMyNewStreamId
   , getMyNewUniStreamId
-  , getPeerStreamID
-  , setPeerStreamID
   -- * StreamTable
   , getStream
   , findStream

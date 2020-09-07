@@ -3,8 +3,6 @@
 module Network.QUIC.Connection.Stream (
     getMyNewStreamId
   , getMyNewUniStreamId
-  , getPeerStreamID
-  , setPeerStreamID
   ) where
 
 import Network.QUIC.Connection.Types
@@ -19,9 +17,3 @@ getMyNewUniStreamId conn = atomicModifyIORef' (myUniStreamId conn) inc4
 
 inc4 :: StreamId -> (StreamId,StreamId)
 inc4 n = let n' = n + 4 in (n', n)
-
-getPeerStreamID :: Connection -> IO StreamId
-getPeerStreamID conn = readIORef $ peerStreamId conn
-
-setPeerStreamID :: Connection -> StreamId -> IO ()
-setPeerStreamID conn sid =  writeIORef (peerStreamId conn) sid
