@@ -48,6 +48,7 @@ module Network.QUIC.Stream (
   , lookupStream
   , insertStream
   , insertCryptoStreams
+  , deleteCryptoStream
   , lookupCryptoStream
   ) where
 

@@ -76,6 +76,7 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
               discarded <- getPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
               unless discarded $ do
                   dropSecrets conn InitialLevel
+                  clearCryptoStream conn InitialLevel
                   onPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
           processCryptPacket conn hdr crypt
 
@@ -227,6 +228,8 @@ processFrame conn _ HandshakeDone = do
     fire (Microseconds 100000) $ do
         dropSecrets conn RTT0Level
         dropSecrets conn HandshakeLevel
+        clearCryptoStream conn HandshakeLevel
+        clearCryptoStream conn RTT1Level
     setConnectionEstablished conn
     -- to receive NewSessionTicket
     fire (Microseconds 1000000) $ killHandshaker conn

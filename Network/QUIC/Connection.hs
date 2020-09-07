@@ -105,6 +105,7 @@ module Network.QUIC.Connection (
   , addStream
   , initialRxMaxStreamData
   , setupCryptoStreams
+  , clearCryptoStream
   , getCryptoStream
   -- * Queue
   , takeInput

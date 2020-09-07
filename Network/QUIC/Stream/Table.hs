@@ -6,6 +6,7 @@ module Network.QUIC.Stream.Table (
   , lookupStream
   , insertStream
   , insertCryptoStreams
+  , deleteCryptoStream
   , lookupCryptoStream
   ) where
 
@@ -30,6 +31,9 @@ lookupStream sid (StreamTable tbl) = Map.lookup sid tbl
 insertStream :: StreamId -> Stream -> StreamTable -> StreamTable
 insertStream sid strm (StreamTable tbl) = StreamTable $ Map.insert sid strm tbl
 
+deleteStream :: StreamId -> StreamTable -> StreamTable
+deleteStream sid (StreamTable tbl) = StreamTable $ Map.delete sid tbl
+
 ----------------------------------------------------------------
 
 initialCryptoStreamId,handshakeCryptoStreamId,rtt1CryptoStreamId :: StreamId
@@ -53,6 +57,12 @@ insertCryptoStreams stbl shrd = do
     return $ insertStream initialCryptoStreamId   strm1
            $ insertStream handshakeCryptoStreamId strm2
            $ insertStream rtt1CryptoStreamId      strm3 stbl
+
+deleteCryptoStream :: EncryptionLevel -> StreamTable -> StreamTable
+deleteCryptoStream InitialLevel   = deleteStream initialCryptoStreamId
+deleteCryptoStream RTT0Level      = error "deleteCryptoStream"
+deleteCryptoStream HandshakeLevel = deleteStream handshakeCryptoStreamId
+deleteCryptoStream RTT1Level      = deleteStream rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 

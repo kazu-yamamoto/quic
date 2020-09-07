@@ -7,6 +7,7 @@ module Network.QUIC.Connection.StreamTable (
   , addStream
   , initialRxMaxStreamData
   , setupCryptoStreams
+  , clearCryptoStream
   , getCryptoStream
   ) where
 
@@ -73,7 +74,9 @@ setupCryptoStreams Connection{..} = do
     stbl <- insertCryptoStreams stbl0 shared
     writeIORef streamTable stbl
 
--- FIXME:: deleteCryptoStreams
+clearCryptoStream :: Connection -> EncryptionLevel -> IO ()
+clearCryptoStream Connection{..} lvl =
+    atomicModifyIORef'' streamTable $ deleteCryptoStream lvl
 
 ----------------------------------------------------------------
 

@@ -249,6 +249,7 @@ discardInitialPacketNumberSpace conn
         discarded <- getPacketNumberSpaceDiscarded ldcc InitialLevel
         unless discarded $ do
             dropSecrets conn InitialLevel
+            clearCryptoStream conn InitialLevel
             onPacketNumberSpaceDiscarded ldcc InitialLevel
   | otherwise = return ()
 

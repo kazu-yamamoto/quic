@@ -184,6 +184,8 @@ handshakeServer conf conn myAuthCIDs = do
         fire (Microseconds 100000) $ do
             dropSecrets conn RTT0Level
             dropSecrets conn HandshakeLevel
+            clearCryptoStream conn HandshakeLevel
+            clearCryptoStream conn RTT1Level
         setConnection1RTTReady conn
         setConnectionEstablished conn
 --        putOutput conn $ OutControl RTT1Level [HandshakeDone]
