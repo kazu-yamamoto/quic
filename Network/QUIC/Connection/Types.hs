@@ -127,8 +127,8 @@ data Concurrency = Concurrency {
   , maxStreams    :: Int
   }
 
-newConcurrency :: Role -> Direction -> Concurrency
-newConcurrency rl dir = Concurrency typ typ 0
+newConcurrency :: Role -> Direction -> Int -> Concurrency
+newConcurrency rl dir n = Concurrency typ typ n
  where
    bidi = dir == Bidirectional
    typ | rl == Client = if bidi then 0 else 2
@@ -173,6 +173,7 @@ data Connection = Connection {
   , streamTable       :: IORef StreamTable
   , myStreamId        :: TVar Concurrency
   , myUniStreamId     :: TVar Concurrency
+  , peerStreamId      :: IORef Concurrency
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
@@ -254,8 +255,9 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTVarIO CloseState { closeSent = False, closeReceived = False }
         <*> newIORef 0
         <*> newIORef emptyStreamTable
-        <*> newTVarIO (newConcurrency rl Bidirectional)
-        <*> newTVarIO (newConcurrency rl Unidirectional)
+        <*> newTVarIO (newConcurrency rl Bidirectional  0)
+        <*> newTVarIO (newConcurrency rl Unidirectional 0)
+        <*> newIORef  peerConcurrency
         <*> return tvarFlowTx
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration
@@ -280,6 +282,9 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
       | otherwise = defaultServerRoleInfo
     Just myCID   = initSrcCID myAuthCIDs
     Just peerCID = initSrcCID peerAuthCIDs
+    peer | isclient  = Server
+         | otherwise = Client
+    peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")

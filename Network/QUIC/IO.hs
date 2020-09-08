@@ -6,6 +6,7 @@ import qualified Control.Exception as E
 import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Stream
 import Network.QUIC.Types
@@ -67,6 +68,11 @@ closeStream conn s = do
     sclosed <- isTxStreamClosed s
     unless sclosed $ putSendStreamQ s $ TxStreamData s [] 0 True
     delStream conn s
+    let sid = streamId s
+    when ((isClient conn && isServerInitiatedBidirectional sid)
+       || (isServer conn && isClientInitiatedBidirectional sid)) $ do
+        n <- getPeerMaxStreams conn
+        putOutput conn $ OutControl RTT1Level [MaxStreams Unidirectional n]
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream

@@ -6,11 +6,14 @@ module Network.QUIC.Connection.Stream (
   , getMyNewUniStreamId
   , setMyMaxStreams
   , setMyUniMaxStreams
+  , getPeerMaxStreams
+  , setPeerMaxStreams
   ) where
 
 import Control.Concurrent.STM
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.Types
 
 getMyNewStreamId :: Connection -> IO StreamId
@@ -35,3 +38,11 @@ setMyUniMaxStreams Connection{..} = set myUniStreamId
 
 set :: TVar Concurrency -> Int -> IO ()
 set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = mx }
+
+setPeerMaxStreams :: Connection -> Int -> IO ()
+setPeerMaxStreams Connection{..} n =
+    atomicModifyIORef'' peerStreamId $ \c -> c { maxStreams = n }
+
+getPeerMaxStreams :: Connection -> IO Int
+getPeerMaxStreams Connection{..} =
+    atomicModifyIORef' peerStreamId $ \c -> (c { maxStreams = maxStreams c + 1}, maxStreams c)

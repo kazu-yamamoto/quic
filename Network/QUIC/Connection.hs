@@ -99,6 +99,7 @@ module Network.QUIC.Connection (
   , getMyNewUniStreamId
   , setMyMaxStreams
   , setMyUniMaxStreams
+  , getPeerMaxStreams
   -- * StreamTable
   , getStream
   , findStream
