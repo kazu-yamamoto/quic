@@ -55,6 +55,7 @@ library
                        Network.QUIC.Recovery.LossRecovery
                        Network.QUIC.Recovery.Metrics
                        Network.QUIC.Recovery.Misc
+                       Network.QUIC.Recovery.Pace
                        Network.QUIC.Recovery.PeerPacketNumbers
                        Network.QUIC.Recovery.Persistent
                        Network.QUIC.Recovery.Release

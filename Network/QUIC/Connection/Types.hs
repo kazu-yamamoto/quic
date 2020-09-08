@@ -274,7 +274,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         -- Resources
         <*> newIORef freeBufs
         -- Recovery
-        <*> newLDCC connstate qLog put
+        <*> newLDCC connstate qLog put sref
   where
     isclient = rl == Client
     initialRoleInfo

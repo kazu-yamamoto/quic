@@ -10,9 +10,11 @@ module Network.QUIC.Recovery.Misc (
   , setMaxAckDaley
   , setByAntiAmp
   , getByAntiAmp
+  , getSocket
   ) where
 
 import Data.IORef
+import Network.Socket (Socket)
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports
@@ -58,3 +60,8 @@ setByAntiAmp LDCC{..} b = writeIORef byAntiAmp b
 
 getByAntiAmp :: LDCC -> IO Bool
 getByAntiAmp LDCC{..} = readIORef byAntiAmp
+
+----------------------------------------------------------------
+
+getSocket :: LDCC -> IO Socket
+getSocket LDCC{..} = fst <$> readIORef ldccSockInfo

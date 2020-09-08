@@ -149,6 +149,7 @@ onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
     newcc <- readTVarIO recoveryCC
     when (ccMode oldcc /= ccMode newcc) $
       qlogContestionStateUpdated ldcc $ ccMode newcc
+    setPace ldcc
   where
     modify maxPktSiz cc@CC{..} = cc {
            bytesInFlight = bytesInFlight'

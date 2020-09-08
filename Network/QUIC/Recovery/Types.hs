@@ -38,6 +38,7 @@ import Data.List (intersperse)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import GHC.Event
+import Network.Socket (Socket)
 import System.Log.FastLogger
 
 import Network.QUIC.Connector
@@ -230,10 +231,15 @@ data LDCC = LDCC {
   , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
   , timerQ            :: TimerQ
   , byAntiAmp         :: IORef Bool
+  , ldccSockInfo      :: IORef (Socket,RecvQ)
   }
 
-newLDCC :: ConnState -> QLogger -> (PlainPacket -> IO ()) -> IO LDCC
-newLDCC cs qLog put = LDCC cs qLog put
+newLDCC :: ConnState
+        -> QLogger
+        -> (PlainPacket -> IO ())
+        -> IORef (Socket,RecvQ)
+        -> IO LDCC
+newLDCC cs qLog put sref = LDCC cs qLog put
     <$> newIORef initialRTT
     <*> newTVarIO initialCC
     <*> newArray (InitialLevel,RTT1Level) False
@@ -249,6 +255,7 @@ newLDCC cs qLog put = LDCC cs qLog put
     <*> newIORef emptyPeerPacketNumbers
     <*> newTQueueIO
     <*> newIORef False
+    <*> return sref
 
 instance KeepQlog LDCC where
     keepQlog = ldccQlogger

@@ -1,12 +1,14 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 module Network.QUIC.Recovery.Metrics (
     updateRTT
   , updateCC
   , metricsUpdated
   , setInitialCongestionWindow
+  , setPace
   ) where
 
 import Control.Concurrent.STM
@@ -19,6 +21,14 @@ import Network.QUIC.Recovery.Misc
 import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Types
+
+-- for doctest
+#if defined(linux_HOST_OS)
+import Network.QUIC.Recovery.Pace
+#else
+setPace :: LDCC -> IO ()
+setPace _ = return ()
+#endif
 
 updateRTT :: LDCC -> EncryptionLevel -> Microseconds -> Microseconds -> IO ()
 updateRTT ldcc@LDCC{..} lvl latestRTT0 ackDelay0 = metricsUpdated ldcc $ do
@@ -93,6 +103,9 @@ updateCC ldcc@LDCC{..} lostPackets isRecovery = do
               }
         CC{ccMode} <- readTVarIO recoveryCC
         qlogContestionStateUpdated ldcc ccMode
+#if defined(linux_HOST_OS)
+        setPace ldcc
+#endif
 
 setInitialCongestionWindow :: LDCC -> Int -> IO ()
 setInitialCongestionWindow ldcc@LDCC{..} pktSiz = metricsUpdated ldcc $
