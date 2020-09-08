@@ -87,8 +87,7 @@ processCryptPacket conn hdr crypt = do
     case mplain of
       Just plain@(Plain _ pn frames) -> do
           -- For Ping, record PPN first, then send an ACK.
-          addPeerPacketNumbers (connLDCC conn) lvl pn
-          onPacketReceived (connLDCC conn) lvl
+          onPacketReceived (connLDCC conn) lvl pn
           when (lvl == RTT1Level) $ setPeerPacketNumber conn pn
           unless (isCryptLogged crypt) $
               qlogReceived conn $ PlainPacket hdr plain

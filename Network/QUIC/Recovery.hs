@@ -19,7 +19,6 @@ module Network.QUIC.Recovery (
   , setMaxAckDaley
   -- PeerPacketNumbers
   , getPeerPacketNumbers
-  , addPeerPacketNumbers
   , fromPeerPacketNumbers
   , nullPeerPacketNumbers
   -- Persistent

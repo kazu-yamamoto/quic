@@ -19,6 +19,7 @@ import Network.QUIC.Recovery.Constants
 import Network.QUIC.Recovery.Detect
 import Network.QUIC.Recovery.Metrics
 import Network.QUIC.Recovery.Misc
+import Network.QUIC.Recovery.PeerPacketNumbers
 import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types
@@ -54,13 +55,16 @@ onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
 
 ----------------------------------------------------------------
 
-onPacketReceived :: LDCC -> EncryptionLevel -> IO ()
-onPacketReceived ldcc lvl = when (getRole ldcc == Server) $ do
-    -- If this datagram unblocks the server, arm the
-    -- PTO timer to avoid deadlock.
-    wasInAntiAmp <- getByAntiAmp ldcc
-    inAntiAmp <- getInAntiAmp ldcc -- fixme: timing?
-    when (wasInAntiAmp && not inAntiAmp) $ setLossDetectionTimer ldcc lvl
+onPacketReceived :: LDCC -> EncryptionLevel -> PacketNumber -> IO ()
+onPacketReceived ldcc lvl pn = do
+    discarded <- getPacketNumberSpaceDiscarded ldcc lvl
+    unless discarded $ addPeerPacketNumbers ldcc lvl pn
+    when (getRole ldcc == Server) $ do
+        -- If this datagram unblocks the server, arm the
+        -- PTO timer to avoid deadlock.
+        wasInAntiAmp <- getByAntiAmp ldcc
+        inAntiAmp <- getInAntiAmp ldcc -- fixme: timing?
+        when (wasInAntiAmp && not inAntiAmp) $ setLossDetectionTimer ldcc lvl
 
 ----------------------------------------------------------------
 
