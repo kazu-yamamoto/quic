@@ -44,5 +44,8 @@ setPeerMaxStreams Connection{..} n =
     atomicModifyIORef'' peerStreamId $ \c -> c { maxStreams = n }
 
 getPeerMaxStreams :: Connection -> IO Int
-getPeerMaxStreams Connection{..} =
-    atomicModifyIORef' peerStreamId $ \c -> (c { maxStreams = maxStreams c + 1}, maxStreams c)
+getPeerMaxStreams Connection{..} = atomicModifyIORef' peerStreamId inc
+  where
+    inc c = (c { maxStreams = next}, next)
+      where
+        next = maxStreams c + 1
