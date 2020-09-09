@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PatternGuards #-}
@@ -10,6 +11,9 @@ import qualified Control.Exception as E
 import Data.X509 (CertificateChain)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
+#if defined(linux_HOST_OS)
+import Foreign.C.Types
+#endif
 
 import Network.QUIC.Client
 import Network.QUIC.Config
@@ -156,6 +160,9 @@ createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO (Connection, SendMany, Receive, AuthCIDs)
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = do
     s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
+#if defined(linux_HOST_OS)
+    NS.setSockOpt s0 (NS.SockOpt 1 47) (1310720 :: CInt)
+#endif
     sref <- newIORef (s0, accRecvQ)
     let cls = do
             (s,_) <- readIORef sref
