@@ -46,19 +46,21 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
             (sentPackets, bss) <- buildPackets maxSiz spkts id id
             let tlen = totalLen bss
             when (isServer conn) $ waitAntiAmplificationFree conn tlen
+            now <- getTimeMicrosecond
             send bss
             addTxBytes conn tlen
-            forM_ sentPackets $ \sentPacket -> do
+            forM_ sentPackets $ \sentPacket0 -> do
+                let sentPacket = sentPacket0 { spTimeSent = now }
                 qlogSent conn sentPacket
                 onPacketSent ldcc sentPacket
     buildPackets _ [] _ _ = error "sendPacket: buildPackets"
     buildPackets siz [spkt] build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkt) $ Just siz
-        sentPacket <- fixSentPacket spkt bss True
+        let sentPacket = fixSentPacket spkt bss True
         return (build0 [sentPacket], build1 bss)
     buildPackets siz (spkt:ss) build0 build1 = do
         bss <- encodePlainPacket conn (spPlainPacket spkt) Nothing
-        sentPacket <- fixSentPacket spkt bss False
+        let sentPacket = fixSentPacket spkt bss False
         let build0' = build0 . (sentPacket :)
             build1' = build1 . (bss ++)
             siz' = siz - spSentBytes sentPacket
@@ -77,15 +79,12 @@ mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
   , spSentBytes         = 0
   }
 
-fixSentPacket :: SentPacket -> [ByteString] -> Bool -> IO SentPacket
-fixSentPacket spkt bss addPad = do
-    now <- getTimeMicrosecond
-    return spkt {
-            spPlainPacket = if addPad then addPadding $ spPlainPacket spkt
-                                      else spPlainPacket spkt
-          , spTimeSent    = now
-          , spSentBytes   = sentBytes
-          }
+fixSentPacket :: SentPacket -> [ByteString] -> Bool -> SentPacket
+fixSentPacket spkt bss addPad = spkt {
+    spPlainPacket = if addPad then addPadding $ spPlainPacket spkt
+                              else spPlainPacket spkt
+  , spSentBytes   = sentBytes
+  }
   where
     sentBytes = totalLen bss
 
@@ -118,9 +117,11 @@ sendPingPacket conn send lvl = do
         let spkt = last xs
             ping = spPlainPacket spkt
         bss <- encodePlainPacket conn ping (Just maxSiz)
+        now <- getTimeMicrosecond
         send bss
         addTxBytes conn $ totalLen bss
-        sentPacket <- fixSentPacket spkt bss True
+        let sentPacket0 = fixSentPacket spkt bss True
+            sentPacket = sentPacket0 { spTimeSent = now }
         qlogSent conn sentPacket
         onPacketSent ldcc sentPacket
 
