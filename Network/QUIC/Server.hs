@@ -123,6 +123,7 @@ data Accept = Accept {
   , accRegister     :: CID -> Connection -> IO ()
   , accUnregister   :: CID -> IO ()
   , accAddressValidated :: Bool
+  , accTime         :: TimeMicrosecond
   }
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
@@ -155,6 +156,7 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
     forever $ do
 --        (peersa, bs0, _cmsgs, _) <- recv
         (bs0, peersa) <- recv
+        now <- getTimeMicrosecond
         -- macOS overrides the local address of the socket
         -- if in_pktinfo is used.
 -- #if defined(darwin_HOST_OS)
@@ -166,7 +168,7 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
 --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
         let send bs = void $ NSB.sendTo s bs peersa
             pktSiz = BS.length bs0 -- both Initial and 0RTT
-        dispatch d conf pkt mysa peersa send bs0RTT pktSiz
+        dispatch d conf pkt mysa peersa send bs0RTT pktSiz now
   where
     logAction msg = stdoutLogger ("dispatcher: " <> msg)
     recv = do
@@ -191,10 +193,10 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> Int -> IO ()
+dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
-         mysa peersa send bs0RTT pktSiz
+         mysa peersa send bs0RTT pktSiz tim
   | pktSiz < defaultQUICPacketSize = do
         stdoutLogger $ "dispatch: too small " <> bhow pktSiz <> ", " <> bhow peersa
   | ver `notElem` confVersions scConfig = do
@@ -226,11 +228,11 @@ dispatch Dispatch{..} ServerConfig{..}
     pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
         mq <- lookupRecvQDict srcTable key
         case mq of
-          Just q -> writeRecvQ q cpkt
+          Just q -> writeRecvQ q $ ReceivedPacket cpkt tim
           Nothing -> do
               q <- newRecvQ
               insertRecvQDict srcTable key q
-              writeRecvQ q cpkt
+              writeRecvQ q $ ReceivedPacket cpkt tim
               let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
                   ent = Accept {
@@ -244,12 +246,13 @@ dispatch Dispatch{..} ServerConfig{..}
                     , accRegister     = reg
                     , accUnregister   = unreg
                     , accAddressValidated = addrValid
+                    , accTime         = tim
                     }
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
                   (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
-                  writeRecvQ q cpktRTT0
+                  writeRecvQ q $ ReceivedPacket cpktRTT0 tim
     -- Initial: DCID=S1, SCID=C1 ->
     --                                     <- Initial: DCID=C1, SCID=S2
     --                               ...
@@ -291,8 +294,8 @@ dispatch Dispatch{..} ServerConfig{..}
               }
         pushToAcceptQ myAuthCIDs peerAuthCIDs o True
     pushToAcceptRetried _ = return ()
-    isRetryTokenValid (CryptoToken tver tim (Just (l,r,_))) = do
-        diff <- getElapsedTimeMicrosecond tim
+    isRetryTokenValid (CryptoToken tver etim (Just (l,r,_))) = do
+        diff <- getElapsedTimeMicrosecond etim
         return $ tver == ver
               && diff <= Microseconds 30000000 -- fixme
               && dCID == l
@@ -304,12 +307,12 @@ dispatch Dispatch{..} ServerConfig{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ peersa _ _ _ = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ peersa _ _ _ t = do
     mq <- lookupRecvQDict srcTable o
     case mq of
-      Just q  -> writeRecvQ q cpkt
+      Just q  -> writeRecvQ q $ ReceivedPacket cpkt t
       Nothing -> stdoutLogger $ "dispatch: orphan 0RTT: " <> bhow peersa
-dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ _ = do
+dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ _ now = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
@@ -320,9 +323,9 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
           case mplain of
             Nothing -> connDebugLog conn "dispatch: cannot decrypt"
             Just plain -> do
-                qlogReceived conn $ PlainPacket hdr plain
+                qlogReceived conn (PlainPacket hdr plain) now
                 let cpkt' = CryptPacket hdr $ setCryptLogged crypt
-                writeMigrationQ conn cpkt'
+                writeMigrationQ conn $ ReceivedPacket cpkt' now
                 migrating <- isPathValidating conn
                 unless migrating $ do
                     setMigrationStarted conn
@@ -331,7 +334,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
                     connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                     void $ forkIO $ migrator conn peersa dCID mcidinfo
 
-dispatch _ _ ipkt _ peersa _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow peersa <> ", " <> bhow ipkt
+dispatch _ _ ipkt _ peersa _ _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow peersa <> ", " <> bhow ipkt
 
 ----------------------------------------------------------------
 
@@ -339,14 +342,15 @@ dispatch _ _ ipkt _ peersa _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow pe
 readerServer :: Socket -> RecvQ -> Connection -> IO ()
 readerServer s q conn = handleLog logAction $ forever $ do
     bs <- NSB.recv s maximumUdpPayloadSize
+    now <- getTimeMicrosecond
     addRxBytes conn $ BS.length bs
     pkts <- decodeCryptPackets bs
-    mapM (writeRecvQ q) pkts
+    mapM (\p -> writeRecvQ q (ReceivedPacket p now)) pkts
   where
     logAction msg = connDebugLog conn ("readerServer: " <> msg)
 
-recvServer :: RecvQ -> IO CryptPacket
-recvServer q = readRecvQ q
+recvServer :: RecvQ -> IO ReceivedPacket
+recvServer = readRecvQ
 
 ----------------------------------------------------------------
 

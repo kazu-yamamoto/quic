@@ -308,23 +308,35 @@ packetNumberSpace RTT1Level      = "application_data"
 delta :: Microseconds -> LogStr
 delta (Microseconds n) = sw n
 
-qlogSent :: KeepQlog q => q -> SentPacket -> IO ()
-qlogSent q pkt = keepQlog q $ QSent $ qlog pkt
+qlogSent :: KeepQlog q => q -> SentPacket -> TimeMicrosecond -> IO ()
+qlogSent q pkt tim = keepQlog q $ QSent (qlog pkt) tim
 
 qlogMetricsUpdated :: KeepQlog q => q -> MetricsDiff -> IO ()
-qlogMetricsUpdated q m = keepQlog q $ QMetricsUpdated $ qlog m
+qlogMetricsUpdated q m = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QMetricsUpdated (qlog m) tim
 
 qlogPacketLost :: KeepQlog q => q -> LostPacket -> IO ()
-qlogPacketLost q lpkt = keepQlog q $ QPacketLost $ qlog lpkt
+qlogPacketLost q lpkt = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QPacketLost (qlog lpkt) tim
 
 qlogContestionStateUpdated :: KeepQlog q => q -> CCMode -> IO ()
-qlogContestionStateUpdated q mode = keepQlog q $ QCongestionStateUpdated $ qlog mode
+qlogContestionStateUpdated q mode = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QCongestionStateUpdated (qlog mode) tim
 
 qlogLossTimerUpdated :: KeepQlog q => q -> (TimerSet,Microseconds) -> IO ()
-qlogLossTimerUpdated q tmi = keepQlog q $ QLossTimerUpdated $ qlog tmi
+qlogLossTimerUpdated q tmi = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QLossTimerUpdated (qlog tmi) tim
 
 qlogLossTimerCancelled :: KeepQlog q => q -> IO ()
-qlogLossTimerCancelled q = keepQlog q $ QLossTimerUpdated $ qlog TimerCancelled
+qlogLossTimerCancelled q = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QLossTimerUpdated (qlog TimerCancelled) tim
 
 qlogLossTimerExpired :: KeepQlog q => q -> IO ()
-qlogLossTimerExpired q = keepQlog q $ QLossTimerUpdated $ qlog TimerExpired
+qlogLossTimerExpired q = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QLossTimerUpdated (qlog TimerExpired) tim

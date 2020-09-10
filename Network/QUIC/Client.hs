@@ -32,14 +32,15 @@ import Network.QUIC.Types
 readerClient :: ThreadId -> [Version] -> Socket -> RecvQ -> Connection -> IO ()
 readerClient tid myVers s q conn = handleLog logAction $ forever $ do
     bs <- NSB.recv s maximumUdpPayloadSize
+    now <- getTimeMicrosecond
     addRxBytes conn $ BS.length bs
     pkts <- decodePackets bs
-    mapM_ putQ pkts
+    mapM_ (putQ now) pkts
   where
     logAction msg = connDebugLog conn ("readerClient: " <> msg)
-    putQ (PacketIB BrokenPacket) = return ()
-    putQ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
-        qlogReceived conn pkt
+    putQ _ (PacketIB BrokenPacket) = return ()
+    putQ t (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
+        qlogReceived conn pkt t
         mver <- case myVers of
           []  -> return Nothing
           [_] -> return Nothing
@@ -52,9 +53,9 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
         case mver of
           Nothing  -> E.throwTo tid VersionNegotiationFailed
           Just ver -> E.throwTo tid $ NextVersion ver
-    putQ (PacketIC pkt) = writeRecvQ q pkt
-    putQ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
-        qlogReceived conn pkt
+    putQ t (PacketIC pkt) = writeRecvQ q $ ReceivedPacket pkt t
+    putQ t (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
+        qlogReceived conn pkt t
         ok <- checkCIDs conn dCID ex
         when ok $ do
             resetPeerCID conn sCID
@@ -78,7 +79,7 @@ checkCIDs conn dCID (Right (pseudo0,tag)) = do
     let ok = calculateIntegrityTag ver remoteCID pseudo0 == tag
     return (dCID == localCID && ok)
 
-recvClient :: RecvQ -> IO CryptPacket
+recvClient :: RecvQ -> IO ReceivedPacket
 recvClient = readRecvQ
 
 ----------------------------------------------------------------

@@ -43,9 +43,9 @@ setEncryptionLevel conn@Connection{..} lvl = do
               readTVar (pendingQ ! RTT1Level)      >>= mapM_ (prependRecvQ q)
           _              -> return ()
 
-putOffCrypto :: Connection -> EncryptionLevel -> CryptPacket -> IO ()
-putOffCrypto Connection{..} lvl cpkt =
-    atomically $ modifyTVar' (pendingQ ! lvl) (cpkt :)
+putOffCrypto :: Connection -> EncryptionLevel -> ReceivedPacket -> IO ()
+putOffCrypto Connection{..} lvl rpkt =
+    atomically $ modifyTVar' (pendingQ ! lvl) (rpkt :)
 
 waitEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 waitEncryptionLevel Connection{..} lvl = atomically $ do

@@ -51,7 +51,7 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
             addTxBytes conn tlen
             forM_ sentPackets $ \sentPacket0 -> do
                 let sentPacket = sentPacket0 { spTimeSent = now }
-                qlogSent conn sentPacket
+                qlogSent conn sentPacket now
                 onPacketSent ldcc sentPacket
     buildPackets _ [] _ _ = error "sendPacket: buildPackets"
     buildPackets siz [spkt] build0 build1 = do
@@ -122,7 +122,7 @@ sendPingPacket conn send lvl = do
         addTxBytes conn $ totalLen bss
         let sentPacket0 = fixSentPacket spkt bss True
             sentPacket = sentPacket0 { spTimeSent = now }
-        qlogSent conn sentPacket
+        qlogSent conn sentPacket now
         onPacketSent ldcc sentPacket
 
 ----------------------------------------------------------------

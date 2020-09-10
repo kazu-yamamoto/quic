@@ -182,7 +182,7 @@ data Connection = Connection {
   , bytesRx           :: TVar Int
   , addressValidated  :: TVar Bool
   -- TLS
-  , pendingQ          :: Array   EncryptionLevel (TVar [CryptPacket])
+  , pendingQ          :: Array   EncryptionLevel (TVar [ReceivedPacket])
   , ciphers           :: IOArray EncryptionLevel Cipher
   , coders            :: IOArray EncryptionLevel Coder
   , negotiated        :: IORef Negotiated
@@ -204,7 +204,7 @@ instance Connector Connection where
     getPacketNumber    = readIORef  . packetNumber    . connState
     getInAntiAmp       = readIORef  . inAntiAmp       . connState
 
-makePendingQ :: IO (Array EncryptionLevel (TVar [CryptPacket]))
+makePendingQ :: IO (Array EncryptionLevel (TVar [ReceivedPacket]))
 makePendingQ = do
     q1 <- newTVarIO []
     q2 <- newTVarIO []
@@ -324,4 +324,4 @@ data Output = OutControl   EncryptionLevel [Frame]
 type InputQ  = TQueue Input
 type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
-type MigrationQ = TQueue CryptPacket
+type MigrationQ = TQueue ReceivedPacket

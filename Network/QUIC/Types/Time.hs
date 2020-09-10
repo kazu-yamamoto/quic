@@ -9,6 +9,7 @@ module Network.QUIC.Types.Time (
   , timeMicrosecond0
   , getTimeMicrosecond
   , getElapsedTimeMicrosecond
+  , elapsedTimeMicrosecond
   , getTimeoutInMicrosecond
   , getPastTimeMicrosecond
   , getFutureTimeMicrosecond
@@ -55,9 +56,13 @@ getTimeMicrosecond = getUnixTime
 getElapsedTimeMicrosecond :: TimeMicrosecond -> IO Microseconds
 getElapsedTimeMicrosecond base = do
     c <- getTimeMicrosecond
-    let UnixDiffTime (CTime s) u = c `diffUnixTime` base
-        elapsed = fromIntegral (s * 1000000 + fromIntegral u)
-    return $ Microseconds elapsed
+    return $ elapsedTimeMicrosecond c base
+
+elapsedTimeMicrosecond :: UnixTime -> UnixTime -> Microseconds
+elapsedTimeMicrosecond c base = Microseconds elapsed
+  where
+    UnixDiffTime (CTime s) u = c `diffUnixTime` base
+    elapsed = fromIntegral (s * 1000000 + fromIntegral u)
 
 getTimeoutInMicrosecond :: TimeMicrosecond -> IO Microseconds
 getTimeoutInMicrosecond tmout = do

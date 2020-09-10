@@ -8,6 +8,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
 import Network.QUIC.Types.CID
 import Network.QUIC.Types.Frame
+import Network.QUIC.Types.Time
 
 ----------------------------------------------------------------
 
@@ -98,6 +99,11 @@ setCryptDelayed :: Crypt -> Crypt
 setCryptDelayed crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 1 }
 
 data StatelessReset = StatelessReset deriving (Eq, Show)
+
+data ReceivedPacket = ReceivedPacket {
+    rpCryptPacket  :: CryptPacket
+  , rpTimeRecevied :: TimeMicrosecond
+  } deriving (Eq, Show)
 
 ----------------------------------------------------------------
 

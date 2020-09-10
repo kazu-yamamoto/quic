@@ -31,5 +31,5 @@ import Network.QUIC.Types.Time
 import Network.QUIC.Types.UserError
 
 type SendMany = [ByteString] -> IO ()
-type Receive  = IO CryptPacket
+type Receive  = IO ReceivedPacket
 type Close = IO ()

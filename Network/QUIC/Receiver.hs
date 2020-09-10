@@ -38,30 +38,34 @@ receiver conn recv = handleLog logAction $ do
               E.throwIO ConnectionIsTimeout -- fixme
           Just x  -> return x
     loopHandshake = do
-        cpkt <- recvTimeout
-        processCryptPacketHandshake conn cpkt
+        rpkt <- recvTimeout
+        processCryptPacketHandshake conn rpkt
         established <- isConnectionEstablished conn
         unless established loopHandshake
     loopEstablished = forever $ do
-        CryptPacket hdr crypt <- recvTimeout
-        let cid = headerMyCID hdr
+        rpkt <- recvTimeout
+        let CryptPacket hdr crypt = rpCryptPacket rpkt
+            tim = rpTimeRecevied rpkt
+            cid = headerMyCID hdr
         included <- myCIDsInclude conn cid
         if included then do
             used <- isMyCID conn cid
             unless used $ setMyCID conn cid
-            processCryptPacket conn hdr crypt
+            processCryptPacket conn hdr crypt tim
           else do
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("receiver: " <> msg)
 
-processCryptPacketHandshake :: Connection -> CryptPacket -> IO ()
-processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
-    let lvl = packetEncryptionLevel hdr
+processCryptPacketHandshake :: Connection -> ReceivedPacket -> IO ()
+processCryptPacketHandshake conn rpkt = do
+    let CryptPacket hdr crypt = rpCryptPacket rpkt
+        tim = rpTimeRecevied rpkt
+        lvl = packetEncryptionLevel hdr
     mx <- timeout (Microseconds 10000) $ waitEncryptionLevel conn lvl
     case mx of
       Nothing -> do
-          putOffCrypto conn lvl cpkt
+          putOffCrypto conn lvl rpkt
           when (isClient conn) $ do
               lvl' <- getEncryptionLevel conn
               speedup (connLDCC conn) lvl' "not decryptable"
@@ -78,10 +82,10 @@ processCryptPacketHandshake conn cpkt@(CryptPacket hdr crypt) = do
                   dropSecrets conn InitialLevel
                   clearCryptoStream conn InitialLevel
                   onPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
-          processCryptPacket conn hdr crypt
+          processCryptPacket conn hdr crypt tim
 
-processCryptPacket :: Connection -> Header -> Crypt -> IO ()
-processCryptPacket conn hdr crypt = do
+processCryptPacket :: Connection -> Header -> Crypt -> TimeMicrosecond -> IO ()
+processCryptPacket conn hdr crypt tim = do
     let lvl = packetEncryptionLevel hdr
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
@@ -90,7 +94,7 @@ processCryptPacket conn hdr crypt = do
           onPacketReceived (connLDCC conn) lvl pn
           when (lvl == RTT1Level) $ setPeerPacketNumber conn pn
           unless (isCryptLogged crypt) $
-              qlogReceived conn $ PlainPacket hdr plain
+              qlogReceived conn (PlainPacket hdr plain) tim
           mapM_ (processFrame conn lvl) frames
           when (any ackEliciting frames) $ do
               case lvl of
@@ -104,7 +108,7 @@ processCryptPacket conn hdr crypt = do
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
-              qlogReceived conn StatelessReset
+              qlogReceived conn StatelessReset tim
               connDebugLog conn "Connection is reset statelessly"
               setCloseReceived conn
               E.throwTo (connThreadId conn) ConnectionIsReset

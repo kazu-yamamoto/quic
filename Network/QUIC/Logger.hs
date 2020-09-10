@@ -39,13 +39,13 @@ dirDebugLogger (Just dir) cid = do
     let dLog msg = fastlogger (toLogStr msg <> "\n")
     return (dLog, clean)
 
-dirQLogger :: Maybe FilePath -> CID -> ByteString -> IO (QLogger, IO ())
-dirQLogger Nothing _ _ = do
+dirQLogger :: Maybe FilePath -> TimeMicrosecond -> CID -> ByteString -> IO (QLogger, IO ())
+dirQLogger Nothing _ _ _ = do
     let qLog ~_ = return ()
         clean = return ()
     return (qLog, clean)
-dirQLogger (Just dir) cid rl = do
+dirQLogger (Just dir) tim cid rl = do
     let file = dir </> (show cid <> ".qlog")
     (fastlogger, clean) <- newFastLogger $ LogFileNoRotate file 4096
-    qlogger <- newQlogger rl cid fastlogger
+    qlogger <- newQlogger tim rl cid fastlogger
     return (qlogger, clean)

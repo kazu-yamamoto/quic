@@ -164,40 +164,40 @@ instance Qlog (Parameters,String) where
 
 data QlogMsg = QRecvInitial
              | QSentRetry
-             | QSent LogStr
-             | QReceived LogStr
-             | QDropped LogStr
-             | QMetricsUpdated LogStr
-             | QPacketLost LogStr
-             | QCongestionStateUpdated LogStr
-             | QLossTimerUpdated LogStr
-             | QDebug LogStr
-             | QParamsSet LogStr
+             | QSent LogStr TimeMicrosecond
+             | QReceived LogStr TimeMicrosecond
+             | QDropped LogStr TimeMicrosecond
+             | QMetricsUpdated LogStr TimeMicrosecond
+             | QPacketLost LogStr TimeMicrosecond
+             | QCongestionStateUpdated LogStr TimeMicrosecond
+             | QLossTimerUpdated LogStr TimeMicrosecond
+             | QDebug LogStr TimeMicrosecond
+             | QParamsSet LogStr TimeMicrosecond
 
 {-# INLINE toLogStrTime #-}
-toLogStrTime :: QlogMsg -> Microseconds -> LogStr
+toLogStrTime :: QlogMsg -> TimeMicrosecond -> LogStr
 toLogStrTime QRecvInitial _ =
     "[0,\"transport\",\"packet_received\",{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}],\n"
 toLogStrTime QSentRetry _ =
     "[0,\"transport\",\"packet_sent\",{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}],\n"
-toLogStrTime (QReceived msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"transport\",\"packet_received\"," <> msg <> "],\n"
-toLogStrTime (QSent msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"transport\",\"packet_sent\","     <> msg <> "],\n"
-toLogStrTime (QDropped msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"transport\",\"packet_dropped\","  <> msg <> "],\n"
-toLogStrTime (QParamsSet msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"transport\",\"parameters_set\","  <> msg <> "],\n"
-toLogStrTime (QMetricsUpdated msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"recovery\",\"metrics_updated\","  <> msg <> "],\n"
-toLogStrTime (QPacketLost msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"recovery\",\"packet_lost\","      <> msg <> "],\n"
-toLogStrTime (QCongestionStateUpdated msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"recovery\",\"congestion_state_updated\"," <> msg <> "],\n"
-toLogStrTime (QLossTimerUpdated msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"recovery\",\"loss_timer_updated\"," <> msg <> "],\n"
-toLogStrTime (QDebug msg) (Microseconds tim) =
-    "[" <> sw tim <> ",\"debug\",\"debug\"," <> msg <> "],\n"
+toLogStrTime (QReceived msg tim) base =
+    "[" <> swtim tim base <> ",\"transport\",\"packet_received\"," <> msg <> "],\n"
+toLogStrTime (QSent msg tim) base =
+    "[" <> swtim tim base <> ",\"transport\",\"packet_sent\","     <> msg <> "],\n"
+toLogStrTime (QDropped msg tim) base =
+    "[" <> swtim tim base <> ",\"transport\",\"packet_dropped\","  <> msg <> "],\n"
+toLogStrTime (QParamsSet msg tim) base =
+    "[" <> swtim tim base <> ",\"transport\",\"parameters_set\","  <> msg <> "],\n"
+toLogStrTime (QMetricsUpdated msg tim) base =
+    "[" <> swtim tim base <> ",\"recovery\",\"metrics_updated\","  <> msg <> "],\n"
+toLogStrTime (QPacketLost msg tim) base =
+    "[" <> swtim tim base <> ",\"recovery\",\"packet_lost\","      <> msg <> "],\n"
+toLogStrTime (QCongestionStateUpdated msg tim) base =
+    "[" <> swtim tim base <> ",\"recovery\",\"congestion_state_updated\"," <> msg <> "],\n"
+toLogStrTime (QLossTimerUpdated msg tim) base =
+    "[" <> swtim tim base <> ",\"recovery\",\"loss_timer_updated\"," <> msg <> "],\n"
+toLogStrTime (QDebug msg tim) base =
+    "[" <> swtim tim base <> ",\"debug\",\"debug\"," <> msg <> "],\n"
 
 ----------------------------------------------------------------
 
@@ -205,18 +205,22 @@ toLogStrTime (QDebug msg) (Microseconds tim) =
 sw :: Show a => a -> LogStr
 sw = toLogStr . show
 
+{-# INLINE swtim #-}
+swtim :: TimeMicrosecond -> TimeMicrosecond -> LogStr
+swtim tim base = toLogStr $ show x
+  where
+    Microseconds x = elapsedTimeMicrosecond tim base
+
 ----------------------------------------------------------------
 
 type QLogger = QlogMsg -> IO ()
 
-newQlogger :: ByteString -> CID -> FastLogger -> IO QLogger
-newQlogger rl ocid fastLogger = do
-    getTime <- getElapsedTimeMicrosecond <$> getTimeMicrosecond
+newQlogger :: TimeMicrosecond -> ByteString -> CID -> FastLogger -> IO QLogger
+newQlogger base rl ocid fastLogger = do
     let ocid' = toLogStr $ enc16 $ fromCID ocid
     fastLogger $ "{\"qlog_version\":\"draft-01\"\n,\"traces\":[\n  {\"vantage_point\":{\"name\":\"Haskell quic\",\"type\":\"" <> toLogStr rl <> "\"}\n ,\"configuration\":{\"time_units\":\"us\"}\n ,\"common_fields\":{\"protocol_type\":\"QUIC_HTTP3\",\"reference_time\":\"0\",\"group_id\":\"" <> ocid' <> "\",\"ODCID\":\"" <> ocid' <> "\"}\n  ,\"event_fields\":[\"relative_time\",\"category\",\"event\",\"data\"]\n  ,\"events\":[\n"
     let qlogger qmsg = do
-            tim <- getTime
-            let msg = toLogStrTime qmsg tim
+            let msg = toLogStrTime qmsg base
             fastLogger msg `E.catch` ignore
     return qlogger
   where
@@ -228,11 +232,13 @@ newQlogger rl ocid fastLogger = do
 class KeepQlog a where
     keepQlog :: a -> QLogger
 
-qlogReceived :: (KeepQlog q, Qlog a) => q -> a -> IO ()
-qlogReceived q pkt = keepQlog q $ QReceived $ qlog pkt
+qlogReceived :: (KeepQlog q, Qlog a) => q -> a -> TimeMicrosecond -> IO ()
+qlogReceived q pkt tim = keepQlog q $ QReceived (qlog pkt) tim
 
 qlogDropped :: (KeepQlog q, Qlog a) => q -> a -> IO ()
-qlogDropped q pkt = keepQlog q $ QDropped $ qlog pkt
+qlogDropped q pkt = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QDropped (qlog pkt) tim
 
 qlogRecvInitial :: KeepQlog q => q -> IO ()
 qlogRecvInitial q = keepQlog q QRecvInitial
@@ -241,7 +247,11 @@ qlogSentRetry :: KeepQlog q => q -> IO ()
 qlogSentRetry q = keepQlog q QSentRetry
 
 qlogParamsSet :: KeepQlog q => q -> (Parameters,String) -> IO ()
-qlogParamsSet q params = keepQlog q $ QParamsSet $ qlog params
+qlogParamsSet q params = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QParamsSet (qlog params) tim
 
 qlogDebug :: KeepQlog q => q -> Debug -> IO ()
-qlogDebug q msg = keepQlog q $ QDebug $ qlog msg
+qlogDebug q msg = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QDebug (qlog msg) tim

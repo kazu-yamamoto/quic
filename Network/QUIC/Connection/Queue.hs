@@ -33,8 +33,8 @@ takeSendStreamQSTM conn = readTBQueue $ sharedSendStreamQ $ shared conn
 takeSendBlockQSTM :: Connection -> STM Blocked
 takeSendBlockQSTM conn = readTQueue $ sharedSendBlockedQ $ shared conn
 
-readMigrationQ :: Connection -> IO CryptPacket
+readMigrationQ :: Connection -> IO ReceivedPacket
 readMigrationQ conn = atomically $ readTQueue $ migrationQ conn
 
-writeMigrationQ :: Connection -> CryptPacket -> IO ()
+writeMigrationQ :: Connection -> ReceivedPacket -> IO ()
 writeMigrationQ conn x = atomically $ writeTQueue (migrationQ conn) x
