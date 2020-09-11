@@ -8,8 +8,6 @@ module Network.QUIC.Recovery.Misc (
   , discardPacketNumberSpace
   , getPacketNumberSpaceDiscarded
   , setMaxAckDaley
-  , setByAntiAmp
-  , getByAntiAmp
   ) where
 
 import Data.IORef
@@ -50,11 +48,3 @@ getPacketNumberSpaceDiscarded LDCC{..} lvl = readArray spaceDiscarded lvl
 setMaxAckDaley :: LDCC -> Microseconds -> IO ()
 setMaxAckDaley LDCC{..} delay0 =
     atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }
-
-----------------------------------------------------------------
-
-setByAntiAmp :: LDCC -> Bool -> IO ()
-setByAntiAmp LDCC{..} b = writeIORef byAntiAmp b
-
-getByAntiAmp :: LDCC -> IO Bool
-getByAntiAmp LDCC{..} = readIORef byAntiAmp

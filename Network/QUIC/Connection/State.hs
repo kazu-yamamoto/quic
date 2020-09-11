@@ -37,6 +37,7 @@ import Control.Concurrent.STM
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
+import Network.QUIC.Recovery
 import Network.QUIC.Stream
 
 ----------------------------------------------------------------
@@ -173,9 +174,9 @@ waitAntiAmplificationFree :: Connection -> Int -> IO ()
 waitAntiAmplificationFree Connection{..} siz = do
     ok <- atomically cond
     unless ok $ do
-        writeIORef (inAntiAmp connState) True
+        beforeAntiAmp connLDCC
         atomically (cond >>= check)
-        writeIORef (inAntiAmp connState) False
+        -- setLossDetectionTimer is called eventually.
   where
     cond = do
         validated <- readTVar addressValidated

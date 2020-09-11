@@ -59,12 +59,6 @@ onPacketReceived :: LDCC -> EncryptionLevel -> PacketNumber -> IO ()
 onPacketReceived ldcc lvl pn = do
     discarded <- getPacketNumberSpaceDiscarded ldcc lvl
     unless discarded $ addPeerPacketNumbers ldcc lvl pn
-    when (getRole ldcc == Server) $ do
-        -- If this datagram unblocks the server, arm the
-        -- PTO timer to avoid deadlock.
-        wasInAntiAmp <- getByAntiAmp ldcc
-        inAntiAmp <- getInAntiAmp ldcc -- fixme: timing?
-        when (wasInAntiAmp && not inAntiAmp) $ setLossDetectionTimer ldcc lvl
 
 ----------------------------------------------------------------
 

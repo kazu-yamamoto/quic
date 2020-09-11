@@ -27,6 +27,7 @@ module Network.QUIC.Recovery (
   , releaseByRetry
   , releaseOldest
   -- Timer
+  , beforeAntiAmp
   , ldccTimer
   -- Types
   , SentPacket(..)

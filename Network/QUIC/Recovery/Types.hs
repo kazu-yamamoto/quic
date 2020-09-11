@@ -229,7 +229,6 @@ data LDCC = LDCC {
   , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
   , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
   , timerQ            :: TimerQ
-  , byAntiAmp         :: IORef Bool
   }
 
 newLDCC :: ConnState -> QLogger -> (PlainPacket -> IO ()) -> IO LDCC
@@ -248,7 +247,6 @@ newLDCC cs qLog put = LDCC cs qLog put
     <*> newIORef emptyPeerPacketNumbers
     <*> newIORef emptyPeerPacketNumbers
     <*> newTQueueIO
-    <*> newIORef False
 
 instance KeepQlog LDCC where
     keepQlog = ldccQlogger
@@ -259,7 +257,6 @@ instance Connector LDCC where
     getMaxPacketSize   = readIORef  . maxPacketSize   . ldccState
     getConnectionState = readTVarIO . connectionState . ldccState
     getPacketNumber    = readIORef  . packetNumber    . ldccState
-    getInAntiAmp       = readIORef  . inAntiAmp       . ldccState
 
 ----------------------------------------------------------------
 

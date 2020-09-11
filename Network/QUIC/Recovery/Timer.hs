@@ -7,6 +7,7 @@ module Network.QUIC.Recovery.Timer (
   , getPtoTimeAndSpace
   , cancelLossDetectionTimer
   , setLossDetectionTimer
+  , beforeAntiAmp
   , ldccTimer
   ) where
 
@@ -159,7 +160,6 @@ updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
 
 setLossDetectionTimer :: LDCC -> EncryptionLevel -> IO ()
 setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
-    setByAntiAmp ldcc False
     mtl <- getLossTimeAndSpace ldcc
     case mtl of
       Just (earliestLossTime,lvl) -> do
@@ -168,29 +168,26 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
               let tmi = TimerSet earliestLossTime lvl LossTime
               updateLossDetectionTimer ldcc tmi
       Nothing -> do
-          inAntiAmp <- getInAntiAmp ldcc
-          if inAntiAmp then do -- server is at anti-amplification limit
-            -- The server's timer is not set if nothing can be sent.
-              setByAntiAmp ldcc True
+          CC{..} <- readTVarIO recoveryCC
+          validated <- peerCompletedAddressValidation ldcc
+          if numOfAckEliciting <= 0 && validated then
+              -- There is nothing to detect lost, so no timer is
+              -- set. However, we only do this if the peer has
+              -- been validated, to prevent the server from being
+              -- blocked by the anti-amplification limit.
               cancelLossDetectionTimer ldcc
             else do
-              CC{..} <- readTVarIO recoveryCC
-              validated <- peerCompletedAddressValidation ldcc
-              if numOfAckEliciting <= 0 && validated then
-                  -- There is nothing to detect lost, so no timer is
-                  -- set. However, we only do this if the peer has
-                  -- been validated, to prevent the server from being
-                  -- blocked by the anti-amplification limit.
-                  cancelLossDetectionTimer ldcc
-                else do
-                  -- Determine which PN space to arm PTO for.
-                  mx <- getPtoTimeAndSpace ldcc
-                  case mx of
-                    Nothing -> cancelLossDetectionTimer ldcc
-                    Just (ptoTime, lvl) -> do
-                        when (lvl0 == lvl) $ do
-                            let tmi = TimerSet ptoTime lvl PTO
-                            updateLossDetectionTimer ldcc tmi
+              -- Determine which PN space to arm PTO for.
+              mx <- getPtoTimeAndSpace ldcc
+              case mx of
+                Nothing -> cancelLossDetectionTimer ldcc
+                Just (ptoTime, lvl) -> do
+                    when (lvl0 == lvl) $ do
+                        let tmi = TimerSet ptoTime lvl PTO
+                        updateLossDetectionTimer ldcc tmi
+
+beforeAntiAmp :: LDCC -> IO ()
+beforeAntiAmp ldcc = cancelLossDetectionTimer ldcc
 
 ----------------------------------------------------------------
 

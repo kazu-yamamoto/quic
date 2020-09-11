@@ -10,7 +10,6 @@ class Connector a where
     getMaxPacketSize   :: a -> IO Int
     getConnectionState :: a -> IO ConnectionState
     getPacketNumber    :: a -> IO PacketNumber
-    getInAntiAmp       :: a -> IO Bool
 
 ----------------------------------------------------------------
 
@@ -20,7 +19,6 @@ data ConnState = ConnState {
   , packetNumber    :: IORef PacketNumber   -- squeezing three to one
   , encryptionLevel :: TVar EncryptionLevel -- to synchronize
   , maxPacketSize   :: IORef Int
-  , inAntiAmp       :: IORef Bool
   }
 
 newConnState :: Role -> IO ConnState
@@ -29,7 +27,6 @@ newConnState rl =
                  <*> newIORef 0
                  <*> newTVarIO InitialLevel
                  <*> newIORef defaultQUICPacketSize
-                 <*> newIORef False
 
 ----------------------------------------------------------------
 
