@@ -5,6 +5,8 @@ module Config (
   , makeTestServerConfigR
   , testClientConfig
   , testClientConfigR
+  , setServerQlog
+  , setClientQlog
   , withPipe
   , Scenario(..)
   ) where
@@ -48,9 +50,6 @@ makeTestServerConfigR = do
 testServerConfigR :: ServerConfig
 testServerConfigR = defaultServerConfig {
     scAddresses = [("127.0.0.1",8003)]
-  , scConfig = (scConfig defaultServerConfig) {
-        confQLog = Just "dist"
-      }
   }
 
 testClientConfig :: ClientConfig
@@ -66,6 +65,20 @@ testClientConfigR = defaultClientConfig {
         confQLog = Just "dist/test"
       }
   }
+
+setServerQlog :: ServerConfig -> ServerConfig
+setServerQlog sc = sc {
+    scConfig = (scConfig sc) {
+        confQLog = Just "dist"
+    }
+  }
+
+setClientQlog :: ClientConfig -> ClientConfig
+setClientQlog cc = cc {
+    ccConfig = (ccConfig cc) {
+        confQLog = Just "dist/test"
+      }
+ }
 
 data Scenario = Randomly Int
               | DropClientPacket [Int]

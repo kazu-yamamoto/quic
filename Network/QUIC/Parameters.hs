@@ -238,7 +238,7 @@ encSRT _ = error "encSRT"
 
 encodeParameterList :: ParameterList -> ByteString
 encodeParameterList kvs = unsafeDupablePerformIO $
-    withWriteBuffer 2048 $ \wbuf -> do -- for grease
+    withWriteBuffer 4096 $ \wbuf -> do -- for grease
         mapM_ (put wbuf) kvs
   where
     put wbuf (k,v) = do

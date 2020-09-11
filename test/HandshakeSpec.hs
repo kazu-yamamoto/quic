@@ -6,6 +6,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Control.Monad
+import qualified Data.ByteString as BS
 import Data.IORef
 import Network.TLS (HandshakeMode13(..), SessionManager(..), SessionData, SessionID, Group(..))
 import qualified Network.TLS as TLS
@@ -75,6 +76,31 @@ spec = do
                     | TransportErrorOccurs (CryptoError TLS.HandshakeFailure) _ <- e = True
                     | otherwise = False
             testHandshake3 cc1 cc2 sc handshakeFailure
+        it "can handshake with large EE from a client" $ do
+            let cc0 = testClientConfig
+                cconf0 = ccConfig cc0
+                params = (confParameters cconf0) {
+                      greaseParameter = Just (BS.pack (replicate 2400 0))
+                    }
+                cc = setClientQlog cc0 {
+                      ccConfig = cconf0 {
+                            confParameters = params
+                          }
+                    }
+                sc = setServerQlog sc0
+            testHandshake cc sc FullHandshake
+        it "can handshake with large EE from a server (3-times rule)" $ do
+            let cc = setClientQlog testClientConfig
+                sconf0 = scConfig sc0
+                params = (confParameters sconf0) {
+                      greaseParameter = Just (BS.pack (replicate 3800 0))
+                    }
+                sc = setServerQlog sc0 {
+                      scConfig = sconf0 {
+                            confParameters = params
+                          }
+                    }
+            testHandshake cc sc FullHandshake
 
 onE :: IO b -> IO a -> IO a
 onE h b = E.onException b h
