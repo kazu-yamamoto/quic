@@ -64,17 +64,11 @@ recvTLS conn hsr level =
         if actual /= expected then
             failure $ "encryption level mismatch: expected " ++ show expected ++ " but got " ++ show actual
           else do
-            n <- recvCompleted hsr
-            case expected of
-                InitialLevel | isServer conn ->
-                    -- To prevent CI0'
-                    when (n > 0) $
-                        sendCryptoData conn $ OutControl InitialLevel []
-                HandshakeLevel | isClient conn ->
-                    -- Sending ACKs for three times rule
-                    when ((n `mod` 3) == 1) $
-                        sendCryptoData conn $ OutControl HandshakeLevel []
-                _ -> return ()
+            when (isClient conn) $ do
+                n <- recvCompleted hsr
+                -- Sending ACKs for three times rule
+                when ((n `mod` 3) == 1) $
+                    sendCryptoData conn $ OutControl HandshakeLevel []
             return (Right bs)
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
