@@ -82,20 +82,20 @@ spec = do
                 params = (confParameters cconf0) {
                       greaseParameter = Just (BS.pack (replicate 2400 0))
                     }
-                cc = setClientQlog cc0 {
+                cc = cc0 {
                       ccConfig = cconf0 {
                             confParameters = params
                           }
                     }
-                sc = setServerQlog sc0
+                sc = sc0
             testHandshake cc sc FullHandshake
         it "can handshake with large EE from a server (3-times rule)" $ do
-            let cc = setClientQlog testClientConfig
+            let cc = testClientConfig
                 sconf0 = scConfig sc0
                 params = (confParameters sconf0) {
                       greaseParameter = Just (BS.pack (replicate 3800 0))
                     }
-                sc = setServerQlog sc0 {
+                sc = sc0 {
                       scConfig = sconf0 {
                             confParameters = params
                           }
