@@ -69,20 +69,28 @@ processCryptPacketHandshake conn rpkt = do
           when (isClient conn) $ do
               lvl' <- getEncryptionLevel conn
               speedup (connLDCC conn) lvl' "not decryptable"
-      Just () -> do
-          when (isClient conn && lvl == InitialLevel) $ do
-              peercid <- getPeerCID conn
-              let newPeerCID = headerPeerCID hdr
-              when (peercid /= headerPeerCID hdr) $ resetPeerCID conn newPeerCID
-              setPeerAuthCIDs conn $ \auth -> auth { initSrcCID = Just newPeerCID }
-          when (isServer conn && lvl == HandshakeLevel) $ do
-              setAddressValidated conn
-              discarded <- getPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
-              unless discarded $ do
-                  dropSecrets conn InitialLevel
-                  clearCryptoStream conn InitialLevel
-                  onPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
-          processCryptPacket conn hdr crypt tim
+      Just ()
+        | isClient conn -> do
+              when (lvl == InitialLevel) $ do
+                  peercid <- getPeerCID conn
+                  let newPeerCID = headerPeerCID hdr
+                  when (peercid /= headerPeerCID hdr) $
+                      resetPeerCID conn newPeerCID
+                  setPeerAuthCIDs conn $ \auth ->
+                      auth { initSrcCID = Just newPeerCID }
+              processCryptPacket conn hdr crypt tim
+        | otherwise -> do
+              mycid <- getMyCID conn
+              when (lvl == HandshakeLevel
+                    || (lvl == InitialLevel && mycid == headerMyCID hdr)) $ do
+                  setAddressValidated conn
+              when (lvl == HandshakeLevel) $ do
+                  discarded <- getPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
+                  unless discarded $ do
+                      dropSecrets conn InitialLevel
+                      clearCryptoStream conn InitialLevel
+                      onPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
+              processCryptPacket conn hdr crypt tim
 
 processCryptPacket :: Connection -> Header -> Crypt -> TimeMicrosecond -> IO ()
 processCryptPacket conn hdr crypt tim = do
