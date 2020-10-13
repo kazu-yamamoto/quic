@@ -355,7 +355,7 @@ recvServer = readRecvQ
 ----------------------------------------------------------------
 
 migrator :: Connection -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
-migrator conn peersa1 dcid mcidinfo = do
+migrator conn peersa1 dcid mcidinfo = handleLog logAction $ do
     (s0,q) <- getSockInfo conn
     mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
@@ -366,3 +366,5 @@ migrator conn peersa1 dcid mcidinfo = do
     validatePath conn mcidinfo
     _ <- timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ q)
     close s0
+  where
+    logAction msg = connDebugLog conn ("migrator: " <> msg)
