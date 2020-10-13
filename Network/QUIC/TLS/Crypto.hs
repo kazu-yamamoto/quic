@@ -217,7 +217,7 @@ aes256gcmEncrypt (Key key) =
 aes256gcmDecrypt :: Key -> (Nonce -> CipherText -> AddDat -> Maybe PlainText)
 aes256gcmDecrypt (Key key) =
     let aes = throwCryptoError (cipherInit key) :: AES256
-    in \ (Nonce nonce) ciphertag (AddDat ad) ->
+    in \(Nonce nonce) ciphertag (AddDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
           (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
           authtag = AuthTag $ Byte.convert tag
