@@ -122,7 +122,7 @@ processCryptPacket conn hdr crypt tim = do
               E.throwTo (connThreadId conn) ConnectionIsReset
             else do
               qlogDropped conn hdr
-              connDebugLog conn $ "Cannot decrypt: " <> bhow lvl
+              connDebugLog conn $ "Cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)
               -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
