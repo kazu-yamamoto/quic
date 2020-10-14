@@ -35,3 +35,14 @@ spec = do
                 countZero (beg +. 3) end `shouldReturn` (siz - 5)
                 poke (end +. (-3)) (3 :: Word8)
                 countZero (beg +. 3) end `shouldReturn` (siz - 6)
+                countZero (beg +. 1) (beg +. 2) `shouldReturn` 1
+                countZero (beg +. 1) (beg +. 3) `shouldReturn` 2
+                countZero (beg +. 1) (beg +. 4) `shouldReturn` 3
+                countZero (beg +. 1) (beg +. 5) `shouldReturn` 4
+                countZero (beg +. 1) (beg +. 6) `shouldReturn` 5
+                countZero (beg +. 1) (beg +. 7) `shouldReturn` 6
+                countZero (beg +. 1) (beg +. 8) `shouldReturn` 7
+                countZero (beg +. 1) (beg +. 9) `shouldReturn` 8
+                countZero (beg +. 1) (beg +. 10) `shouldReturn` 9
+                countZero (beg +. 1) (beg +. 11) `shouldReturn` 10
+                countZero (beg +. 2) (beg +. 3) `shouldReturn` 1

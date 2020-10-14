@@ -9,7 +9,7 @@ module Network.QUIC.Packet.Frame (
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
-import Foreign.Ptr (Ptr, plusPtr, alignPtr, castPtr)
+import Foreign.Ptr (Ptr, plusPtr, minusPtr, alignPtr, castPtr)
 import Foreign.Storable (peek, alignment)
 import Network.Socket.Internal (zeroMemory)
 
@@ -182,7 +182,9 @@ decodePaddingFrames rbuf = do
     return $ Padding (n + 1)
 
 countZero :: Ptr Word8 -> Ptr Word8 -> IO Int
-countZero beg0 end0 = do
+countZero beg0 end0
+  | (end0 `minusPtr` beg0) <= ali = countBy1 beg0 end0 0
+  | otherwise = do
     let beg1 = alignPtr beg0 ali
         end1' = alignPtr end0 ali
         end1 | end0 == end1' = end1'
