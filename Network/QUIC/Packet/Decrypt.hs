@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Packet.Decrypt (
@@ -12,6 +13,7 @@ import qualified Control.Exception as E
 
 import Network.QUIC.Connection
 import Network.QUIC.Imports
+import Network.QUIC.Logger
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Number
@@ -50,7 +52,9 @@ decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
           frames <- decodeFrames payload
           return $ Just $ Plain rawFlags pn frames
   where
-    handler (E.SomeException _) = return Nothing
+    handler (E.SomeException e) = do
+        connDebugLog conn ("decryptCrypt: " <> bhow e)
+        return Nothing
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
