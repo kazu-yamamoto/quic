@@ -7,10 +7,10 @@ module Network.QUIC.Packet.Decode (
   , decodeStatelessResetToken
   ) where
 
-import qualified Control.Exception as E
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as Short
 
+import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet.Header
@@ -38,7 +38,7 @@ decodePackets bs0 = loop bs0 id
 
 -- Server uses this.
 decodePacket :: ByteString -> IO (PacketI, ByteString)
-decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
+decodePacket bs = handleLogR logAction $ withReadBuffer bs $ \rbuf -> do
     save rbuf
     proFlags <- Flags <$> read8 rbuf
     let short = isShort proFlags
@@ -47,8 +47,8 @@ decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     let rest = B.drop siz bs
     return (pkt, rest)
   where
-    handler (E.SomeException e) = do
-        stdoutLogger $ bhow e
+    logAction msg = do
+        stdoutLogger ("decodePacket: " <> msg)
         return (PacketIB BrokenPacket,"")
     decode rbuf _proFlags True = do
         header <- Short . makeCID <$> extractShortByteString rbuf myCIDLength

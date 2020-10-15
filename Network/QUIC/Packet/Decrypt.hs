@@ -9,11 +9,10 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
 import Foreign.Ptr
 import Network.ByteOrder
-import qualified Control.Exception as E
 
 import Network.QUIC.Connection
+import Network.QUIC.Exception
 import Network.QUIC.Imports
-import Network.QUIC.Logger
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Number
@@ -23,7 +22,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
-decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
+decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
     cipher <- getCipher conn lvl
     coder <- getCoder conn lvl
     let proFlags = Flags (cryptPacket `B.index` 0)
@@ -52,8 +51,8 @@ decryptCrypt conn Crypt{..} lvl = E.handle handler $ do
           frames <- decodeFrames payload
           return $ Just $ Plain rawFlags pn frames
   where
-    handler (E.SomeException e) = do
-        connDebugLog conn ("decryptCrypt: " <> bhow e)
+    logAction msg = do
+        connDebugLog conn ("decryptCrypt: " <> msg)
         return Nothing
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber

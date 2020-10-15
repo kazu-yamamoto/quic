@@ -47,6 +47,7 @@ library
                        Network.QUIC.Packet.Version
                        Network.QUIC.Parameters
                        Network.QUIC.Qlog
+                       Network.QUIC.QLogger
                        Network.QUIC.Receiver
                        Network.QUIC.Recovery
                        Network.QUIC.Recovery.Constants

@@ -22,6 +22,7 @@ import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
+import Network.QUIC.QLogger
 import Network.QUIC.Receiver
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
@@ -107,7 +108,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     return (conn,send,recv,myAuthCIDs)
 
 handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()
-handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = E.handle handler $ do
+handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = handleLogE logAction $ do
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
@@ -119,9 +120,7 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = E.ha
     addThreadIdResource conn tid3
     handshakeClient conf conn myAuthCIDs `E.onException` freeResources conn
   where
-    handler (E.SomeException e) = do
-        connDebugLog conn $ "handshakeClientConnection: " <> bhow e
-        E.throwIO e
+    logAction msg = connDebugLog conn $ "handshakeClientConnection: " <> msg
 
 ----------------------------------------------------------------
 
@@ -202,7 +201,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     return (conn, send, recv, accMyAuthCIDs)
 
 handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()
-handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do
+handshakeServerConnection conf conn send recv myAuthCIDs = handleLogE logAction $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender $ connLDCC conn
@@ -224,9 +223,7 @@ handshakeServerConnection conf conn send recv myAuthCIDs = E.handle handler $ do
     let frames = [NewToken token,ncid,HandshakeDone]
     putOutput conn $ OutControl RTT1Level frames
   where
-    handler (E.SomeException e) = do
-        connDebugLog conn $ "handshakeServerConnection: " <> bhow e
-        E.throwIO e
+    logAction msg = connDebugLog conn $ "handshakeServerConnection: " <> msg
 
 -- | Stopping the main thread of the server.
 stopQUICServer :: Connection -> IO ()
