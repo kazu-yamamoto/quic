@@ -17,10 +17,10 @@ module Network.QUIC.Stream (
   -- * Misc
   , getTxStreamOffset
   , isTxStreamClosed
-  , setTxStreamFin
+  , setTxStreamClosed
   , getRxStreamOffset
   , isRxStreamClosed
-  , setRxStreamFin
+  , setRxStreamClosed
   , addTxStreamData
   , setTxMaxStreamData
   , addRxStreamData

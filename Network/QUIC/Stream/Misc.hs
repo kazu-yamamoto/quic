@@ -3,10 +3,10 @@
 module Network.QUIC.Stream.Misc (
     getTxStreamOffset
   , isTxStreamClosed
-  , setTxStreamFin
+  , setTxStreamClosed
   , getRxStreamOffset
   , isRxStreamClosed
-  , setRxStreamFin
+  , setRxStreamClosed
   --
   , addTxStreamData
   , setTxMaxStreamData
@@ -42,8 +42,8 @@ isTxStreamClosed Stream{..} = do
     StreamState _ fin <- readIORef streamStateTx
     return fin
 
-setTxStreamFin :: Stream -> IO ()
-setTxStreamFin Stream{..} = atomicModifyIORef'' streamStateTx set
+setTxStreamClosed :: Stream -> IO ()
+setTxStreamClosed Stream{..} = atomicModifyIORef'' streamStateTx set
   where
     set (StreamState off _) = StreamState off True
 
@@ -59,8 +59,8 @@ isRxStreamClosed Stream{..} = do
     StreamState _ fin <- readIORef streamStateRx
     return fin
 
-setRxStreamFin :: Stream -> IO ()
-setRxStreamFin Stream{..} = atomicModifyIORef'' streamStateRx set
+setRxStreamClosed :: Stream -> IO ()
+setRxStreamClosed Stream{..} = atomicModifyIORef'' streamStateRx set
   where
     set (StreamState off _) = StreamState off True
 
