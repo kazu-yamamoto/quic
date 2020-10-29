@@ -415,21 +415,21 @@ sendStreamSmall conn send s0 frame0 total0 = do
                   return $ build [frame]
 
 sendStreamLarge :: Connection -> SendMany -> Stream -> [ByteString] -> Bool -> IO ()
-sendStreamLarge conn send s dats0 fin0 = loop fin0 dats0
+sendStreamLarge conn send s dats0 fin0 = loop dats0
   where
     sid = streamId s
-    loop _ [] = return ()
-    loop fin dats = do
+    loop [] = return ()
+    loop dats = do
         let (dats1,dats2) = splitChunks dats
             len = totalLen dats1
         off <- getTxStreamOffset s len
-        let fin1 = fin && null dats2
-            frame = StreamF sid off dats1 fin1
+        let fin = fin0 && null dats2
+            frame = StreamF sid off dats1 fin
         ready <- isConnection1RTTReady conn
         let lvl | ready     = RTT1Level
                 | otherwise = RTT0Level
         construct conn lvl [frame] >>= sendPacket conn send
-        loop fin dats2
+        loop dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]
 splitChunks :: [ByteString] -> ([ByteString],[ByteString])
