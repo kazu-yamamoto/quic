@@ -363,19 +363,19 @@ packFin s False = do
 
 sendStreamFragment :: Connection -> SendMany -> TxStreamData -> IO ()
 sendStreamFragment conn send (TxStreamData s dats len fin0) = do
-    let sid = streamId s
     fin <- packFin s fin0
     if len < limitation then do
-        off <- getTxStreamOffset s len
-        let frame = StreamF sid off dats fin
-        sendStreamSmall conn send s frame len
+        sendStreamSmall conn send s dats fin len
       else
         sendStreamLarge conn send s dats fin
     when fin $ setTxStreamFin s
 
-sendStreamSmall :: Connection -> SendMany -> Stream -> Frame -> Int -> IO ()
-sendStreamSmall conn send s0 frame0 total0 = do
-    frames <- loop s0 frame0 total0 id
+sendStreamSmall :: Connection -> SendMany -> Stream -> [StreamData] -> Bool -> Int -> IO ()
+sendStreamSmall conn send s0 dats0 fin0 len0 = do
+    off0 <- getTxStreamOffset s0 len0
+    let sid0 = streamId s0
+        frame0 = StreamF sid0 off0 dats0 fin0
+    frames <- loop s0 frame0 len0 id
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
