@@ -368,7 +368,6 @@ sendStreamFragment conn send (TxStreamData s dats len fin0) = do
         sendStreamSmall conn send s dats fin len
       else
         sendStreamLarge conn send s dats fin
-    when fin $ setTxStreamFin s
 
 sendStreamSmall :: Connection -> SendMany -> Stream -> [StreamData] -> Bool -> Int -> IO ()
 sendStreamSmall conn send s0 dats0 fin0 len0 = do
@@ -399,7 +398,6 @@ sendStreamSmall conn send s0 dats0 fin0 len0 = do
                   _ <- takeSendStreamQ s0 -- cf tryPeek
                   addTxData conn len1
                   fin1' <- packFin s fin1 -- must be after takeSendStreamQ
-                  when fin1' $ setTxStreamFin s1
                   off1 <- getTxStreamOffset s1 len1
                   let sid  = streamId s
                       sid1 = streamId s1

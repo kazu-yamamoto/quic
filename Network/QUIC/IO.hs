@@ -58,6 +58,7 @@ shutdownStream s = do
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
+    setTxStreamFin s
     putSendStreamQ s $ TxStreamData s [] 0 True
 
 -- | Sending a FIN if necessary and closing a stream.
@@ -66,7 +67,9 @@ closeStream conn s = do
     closed <- isClosed s
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
-    unless sclosed $ putSendStreamQ s $ TxStreamData s [] 0 True
+    unless sclosed $ do
+        setTxStreamFin s
+        putSendStreamQ s $ TxStreamData s [] 0 True
     delStream conn s
     let sid = streamId s
     when ((isClient conn && isServerInitiatedBidirectional sid)
