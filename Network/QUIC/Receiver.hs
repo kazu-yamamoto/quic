@@ -131,8 +131,8 @@ processFrame conn lvl Ping =
     putOutput conn $ OutControl lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) =
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
-processFrame _ _ ResetStream{} = return ()
-processFrame _ _ StopSending{} = return ()
+processFrame _ _ frame@ResetStream{} = print frame
+processFrame _ _ frame@StopSending{} = print frame
 processFrame conn lvl (CryptoF off cdat) = do
     let len = BS.length cdat
         rx = RxStreamData cdat off len False
@@ -207,7 +207,7 @@ processFrame conn _ (StreamDataBlocked sid _) = do
           fire (Microseconds 50000) $ do
               newMax' <- getRxMaxStreamData strm
               putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax']
-processFrame _ _ StreamsBlocked{} = return ()
+processFrame _ _ frame@StreamsBlocked{} = print frame
 processFrame conn _ (NewConnectionID cidInfo rpt) = do
     addPeerCID conn cidInfo
     when (rpt >= 1) $ do
