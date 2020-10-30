@@ -6,7 +6,7 @@ This package implements QUIC based on Haskell lightweight threads.
 - Example client and server are found in the [`util/`](https://github.com/kazu-yamamoto/quic/tree/master/util) directory.
 - Implementation plan and status are found in [#2](https://github.com/kazu-yamamoto/quic/issues/2).
 
-This package should cover:
+This package covers:
 
 - [draft-ietf-quic-transport](https://tools.ietf.org/html/draft-ietf-quic-transport)
 - [draft-ietf-quic-tls](https://tools.ietf.org/html/draft-ietf-quic-tls)
@@ -19,8 +19,11 @@ The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/htt
 
 Blog articles:
 
-- [Implementation status of QUIC in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/02/18/145038)
+- [The Current Plan for Haskell QUIC](https://kazu-yamamoto.hatenablog.jp/entry/2020/10/23/141648).
+- [Improving QUIC APIs of the TLS library in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/16/150801)
+- [Developing QUIC Loss Detection and Congestion Control in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/15/121613)
 - [Implementing HTTP/3 in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/06/09/155236)
+- [Implementation status of QUIC in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/02/18/145038)
 
 ### Note
 
