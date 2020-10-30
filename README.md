@@ -19,11 +19,11 @@ The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/htt
 
 Blog articles:
 
-- [The Current Plan for Haskell QUIC](https://kazu-yamamoto.hatenablog.jp/entry/2020/10/23/141648).
-- [Improving QUIC APIs of the TLS library in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/16/150801)
-- [Developing QUIC Loss Detection and Congestion Control in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/15/121613)
-- [Implementing HTTP/3 in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/06/09/155236)
-- [Implementation status of QUIC in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/02/18/145038)
+- [The Current Plan for Haskell QUIC](https://kazu-yamamoto.hatenablog.jp/entry/2020/10/23/141648) (2020/10/23)
+- [Improving QUIC APIs of the TLS library in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/16/150801) (2020/09/16)
+- [Developing QUIC Loss Detection and Congestion Control in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/15/121613) (2020/09/15)
+- [Implementing HTTP/3 in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/06/09/155236) (2020/06/09)
+- [Implementation status of QUIC in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/02/18/145038) (2019/09/20)
 
 ### Note
 
