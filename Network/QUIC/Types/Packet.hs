@@ -104,8 +104,9 @@ setCryptDelayed crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 1 }
 data StatelessReset = StatelessReset deriving (Eq, Show)
 
 data ReceivedPacket = ReceivedPacket {
-    rpCryptPacket  :: CryptPacket
-  , rpTimeRecevied :: TimeMicrosecond
+    rpCryptPacket    :: CryptPacket
+  , rpTimeRecevied   :: TimeMicrosecond
+  , rpUdpPayloadSize :: Int
   } deriving (Eq, Show)
 
 ----------------------------------------------------------------
