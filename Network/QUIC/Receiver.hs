@@ -103,16 +103,24 @@ processReceivedPacket conn rpkt = do
           when (lvl == RTT1Level) $ setPeerPacketNumber conn pn
           unless (isCryptLogged crypt) $
               qlogReceived conn (PlainPacket hdr plain) tim
-          mapM_ (processFrame conn lvl) frames
-          when (any ackEliciting frames) $ do
-              case lvl of
-                RTT0Level -> return ()
-                RTT1Level -> delayedAck conn
-                _         -> do
-                    sup <- getSpeedingUp (connLDCC conn)
-                    when sup $ do
-                        qlogDebug conn $ Debug "ping for speedup"
-                        putOutput conn $ OutControl lvl [Ping]
+          ver <- getVersion conn
+          let ackEli   = any ackEliciting   frames
+              pathVali = any pathValidating frames
+              shouldDrop = ver >= Draft32
+                        && rpReceivedBytes rpkt < defaultQUICPacketSize
+                        && (pathVali
+                            || (lvl == InitialLevel && ackEli))
+          unless shouldDrop $ do
+              mapM_ (processFrame conn lvl) frames
+              when ackEli $ do
+                  case lvl of
+                    RTT0Level -> return ()
+                    RTT1Level -> delayedAck conn
+                    _         -> do
+                        sup <- getSpeedingUp (connLDCC conn)
+                        when sup $ do
+                            qlogDebug conn $ Debug "ping for speedup"
+                            putOutput conn $ OutControl lvl [Ping]
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do

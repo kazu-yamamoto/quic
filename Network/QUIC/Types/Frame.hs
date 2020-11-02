@@ -74,6 +74,11 @@ ackEliciting ConnectionCloseQUIC{} = False
 ackEliciting ConnectionCloseApp{}  = False
 ackEliciting _                     = True
 
+pathValidating :: Frame -> Bool
+pathValidating PathChallenge{} = True
+pathValidating PathResponse{}  = True
+pathValidating _               = False
+
 inFlight :: Frame -> Bool
 inFlight Ack{}                 = False
 inFlight ConnectionCloseQUIC{} = False
