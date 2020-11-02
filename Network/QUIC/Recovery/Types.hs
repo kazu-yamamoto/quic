@@ -4,6 +4,8 @@
 
 module Network.QUIC.Recovery.Types (
     SentPacket(..)
+  , mkSentPacket
+  , fixSentPacket
   , LostPacket(..)
   , SentPackets(..)
   , emptySentPackets
@@ -61,6 +63,33 @@ instance Ord SentPacket where
     x <= y = spPacketNumber x <= spPacketNumber y
 
 newtype LostPacket = LostPacket SentPacket
+
+mkSentPacket :: PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> Bool -> SentPacket
+mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
+    spPlainPacket       = ppkt
+  , spTimeSent          = timeMicrosecond0
+  , spSentBytes         = 0
+  , spEncryptionLevel   = lvl
+  , spPacketNumber      = mypn
+  , spPeerPacketNumbers = ppns
+  , spAckEliciting      = ackeli
+  }
+
+fixSentPacket :: SentPacket -> [ByteString] -> Bool -> SentPacket
+fixSentPacket spkt bss addPad = spkt {
+    spPlainPacket = if addPad then addPadding $ spPlainPacket spkt
+                              else spPlainPacket spkt
+  , spSentBytes   = sentBytes
+  }
+  where
+    sentBytes = totalLen bss
+
+addPadding :: PlainPacket -> PlainPacket
+addPadding (PlainPacket hdr plain) = PlainPacket hdr plain'
+  where
+    plain' = plain {
+        plainFrames = plainFrames plain ++ [Padding 0]
+      }
 
 ----------------------------------------------------------------
 

@@ -68,35 +68,6 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
 
 ----------------------------------------------------------------
 
-mkSentPacket :: PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> Bool -> SentPacket
-mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
-    spPlainPacket       = ppkt
-  , spTimeSent          = timeMicrosecond0
-  , spSentBytes         = 0
-  , spEncryptionLevel   = lvl
-  , spPacketNumber      = mypn
-  , spPeerPacketNumbers = ppns
-  , spAckEliciting      = ackeli
-  }
-
-fixSentPacket :: SentPacket -> [ByteString] -> Bool -> SentPacket
-fixSentPacket spkt bss addPad = spkt {
-    spPlainPacket = if addPad then addPadding $ spPlainPacket spkt
-                              else spPlainPacket spkt
-  , spSentBytes   = sentBytes
-  }
-  where
-    sentBytes = totalLen bss
-
-addPadding :: PlainPacket -> PlainPacket
-addPadding (PlainPacket hdr plain) = PlainPacket hdr plain'
-  where
-    plain' = plain {
-        plainFrames = plainFrames plain ++ [Padding 0]
-      }
-
-----------------------------------------------------------------
-
 sendPingPacket :: Connection -> SendMany -> EncryptionLevel -> IO ()
 sendPingPacket conn send lvl = do
     maxSiz <- getMaxPacketSize conn
@@ -345,10 +316,6 @@ threshold  =  832
 
 limitation :: Int
 limitation = 1040
-
-{-# INLINE totalLen #-}
-totalLen :: [ByteString] -> Int
-totalLen = sum . map B.length
 
 packFin :: Stream -> Bool -> IO Bool
 packFin _ True  = return True

@@ -30,7 +30,16 @@ module Network.QUIC.Recovery (
   , beforeAntiAmp
   , ldccTimer
   -- Types
-  , SentPacket(..)
+  , SentPacket
+  , spPlainPacket
+  , spTimeSent
+  , spSentBytes
+  , spEncryptionLevel
+  , spPacketNumber
+  , spPeerPacketNumbers
+  , spAckEliciting
+  , mkSentPacket
+  , fixSentPacket
   , LDCC
   , newLDCC
   , qlogSent
