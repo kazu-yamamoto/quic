@@ -110,6 +110,14 @@ data ReceivedPacket = ReceivedPacket {
   , rpEncryptionLevel :: EncryptionLevel
   } deriving (Eq, Show)
 
+mkReceivedPacket :: CryptPacket -> TimeMicrosecond -> Int -> EncryptionLevel -> ReceivedPacket
+mkReceivedPacket cpkt tim bytes lvl = ReceivedPacket {
+    rpCryptPacket     = cpkt
+  , rpTimeRecevied    = tim
+  , rpReceivedBytes   = bytes
+  , rpEncryptionLevel = lvl
+  }
+
 ----------------------------------------------------------------
 
 data LongHeaderPacketType = InitialPacketType
