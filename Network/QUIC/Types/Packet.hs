@@ -106,7 +106,7 @@ data StatelessReset = StatelessReset deriving (Eq, Show)
 data ReceivedPacket = ReceivedPacket {
     rpCryptPacket     :: CryptPacket
   , rpTimeRecevied    :: TimeMicrosecond
-  , rpUdpPayloadSize  :: Int
+  , rpReceivedBytes   :: Int
   , rpEncryptionLevel :: EncryptionLevel
   } deriving (Eq, Show)
 

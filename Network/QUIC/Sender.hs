@@ -70,13 +70,13 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
 
 mkSentPacket :: PacketNumber -> EncryptionLevel -> PlainPacket -> PeerPacketNumbers -> Bool -> SentPacket
 mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
-    spPacketNumber      = mypn
-  , spEncryptionLevel   = lvl
-  , spPlainPacket       = ppkt
-  , spPeerPacketNumbers = ppns
-  , spAckEliciting      = ackeli
+    spPlainPacket       = ppkt
   , spTimeSent          = timeMicrosecond0
   , spSentBytes         = 0
+  , spEncryptionLevel   = lvl
+  , spPacketNumber      = mypn
+  , spPeerPacketNumbers = ppns
+  , spAckEliciting      = ackeli
   }
 
 fixSentPacket :: SentPacket -> [ByteString] -> Bool -> SentPacket

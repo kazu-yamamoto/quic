@@ -48,13 +48,13 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 data SentPacket = SentPacket {
-    spPacketNumber      :: PacketNumber
-  , spEncryptionLevel   :: EncryptionLevel
-  , spPlainPacket       :: PlainPacket
-  , spPeerPacketNumbers :: PeerPacketNumbers
-  , spAckEliciting      :: Bool
+    spPlainPacket       :: PlainPacket
   , spTimeSent          :: TimeMicrosecond
   , spSentBytes         :: Int
+  , spEncryptionLevel   :: EncryptionLevel
+  , spPacketNumber      :: PacketNumber
+  , spPeerPacketNumbers :: PeerPacketNumbers
+  , spAckEliciting      :: Bool
   } deriving (Eq, Show)
 
 instance Ord SentPacket where
