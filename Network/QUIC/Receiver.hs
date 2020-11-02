@@ -39,29 +39,27 @@ receiver conn recv = handleLog logAction $ do
           Just x  -> return x
     loopHandshake = do
         rpkt <- recvTimeout
-        processCryptPacketHandshake conn rpkt
+        processReceivedPacketHandshake conn rpkt
         established <- isConnectionEstablished conn
         unless established loopHandshake
     loopEstablished = forever $ do
         rpkt <- recvTimeout
-        let CryptPacket hdr crypt = rpCryptPacket rpkt
-            tim = rpTimeRecevied rpkt
+        let CryptPacket hdr _ = rpCryptPacket rpkt
             cid = headerMyCID hdr
         included <- myCIDsInclude conn cid
         if included then do
             used <- isMyCID conn cid
             unless used $ setMyCID conn cid
-            processCryptPacket conn hdr crypt tim
+            processReceivedPacket conn rpkt
           else do
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("receiver: " <> msg)
 
-processCryptPacketHandshake :: Connection -> ReceivedPacket -> IO ()
-processCryptPacketHandshake conn rpkt = do
-    let CryptPacket hdr crypt = rpCryptPacket rpkt
-        tim = rpTimeRecevied rpkt
-        lvl = packetEncryptionLevel hdr
+processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
+processReceivedPacketHandshake conn rpkt = do
+    let CryptPacket hdr _ = rpCryptPacket rpkt
+        lvl = rpEncryptionLevel rpkt
     mx <- timeout (Microseconds 10000) $ waitEncryptionLevel conn lvl
     case mx of
       Nothing -> do
@@ -78,7 +76,7 @@ processCryptPacketHandshake conn rpkt = do
                       resetPeerCID conn newPeerCID
                   setPeerAuthCIDs conn $ \auth ->
                       auth { initSrcCID = Just newPeerCID }
-              processCryptPacket conn hdr crypt tim
+              processReceivedPacket conn rpkt
         | otherwise -> do
               mycid <- getMyCID conn
               when (lvl == HandshakeLevel
@@ -90,11 +88,13 @@ processCryptPacketHandshake conn rpkt = do
                       dropSecrets conn InitialLevel
                       clearCryptoStream conn InitialLevel
                       onPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
-              processCryptPacket conn hdr crypt tim
+              processReceivedPacket conn rpkt
 
-processCryptPacket :: Connection -> Header -> Crypt -> TimeMicrosecond -> IO ()
-processCryptPacket conn hdr crypt tim = do
-    let lvl = packetEncryptionLevel hdr
+processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
+processReceivedPacket conn rpkt = do
+    let CryptPacket hdr crypt = rpCryptPacket rpkt
+        lvl = rpEncryptionLevel rpkt
+        tim = rpTimeRecevied rpkt
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@(Plain _ pn frames) -> do

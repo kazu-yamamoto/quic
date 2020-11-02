@@ -54,7 +54,7 @@ readerClient tid myVers s q conn = handleLog logAction $ forever $ do
         case mver of
           Nothing  -> E.throwTo tid VersionNegotiationFailed
           Just ver -> E.throwTo tid $ NextVersion ver
-    putQ t z (PacketIC pkt) = writeRecvQ q $ ReceivedPacket pkt t z
+    putQ t z (PacketIC pkt lvl) = writeRecvQ q $ ReceivedPacket pkt t z lvl
     putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
         ok <- checkCIDs conn dCID ex

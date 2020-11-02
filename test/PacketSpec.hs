@@ -36,12 +36,12 @@ spec = do
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
             serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref
             initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
-            (PacketIC (CryptPacket header crypt), _) <- decodePacket clientInitialPacketBinary
-            Just plain <- decryptCrypt serverConn crypt InitialLevel
+            (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
+            Just plain <- decryptCrypt serverConn crypt lvl
             let ppkt = PlainPacket header plain
             clientInitialPacketBinary' <- B.concat <$> encodePlainPacket clientConn ppkt Nothing
-            (PacketIC (CryptPacket header' crypt'), _) <- decodePacket clientInitialPacketBinary'
-            Just plain' <- decryptCrypt serverConn crypt' InitialLevel
+            (PacketIC (CryptPacket header' crypt') lvl', _) <- decodePacket clientInitialPacketBinary'
+            Just plain' <- decryptCrypt serverConn crypt' lvl'
             header' `shouldBe` header
             plainFrames plain' `shouldBe` plainFrames plain
 

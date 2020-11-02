@@ -38,7 +38,7 @@ data Version = Negotiation
 
 data PacketI = PacketIV VersionNegotiationPacket
              | PacketIR RetryPacket
-             | PacketIC CryptPacket
+             | PacketIC CryptPacket EncryptionLevel
              | PacketIB BrokenPacket
              deriving (Eq, Show)
 
@@ -104,9 +104,10 @@ setCryptDelayed crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 1 }
 data StatelessReset = StatelessReset deriving (Eq, Show)
 
 data ReceivedPacket = ReceivedPacket {
-    rpCryptPacket    :: CryptPacket
-  , rpTimeRecevied   :: TimeMicrosecond
-  , rpUdpPayloadSize :: Int
+    rpCryptPacket     :: CryptPacket
+  , rpTimeRecevied    :: TimeMicrosecond
+  , rpUdpPayloadSize  :: Int
+  , rpEncryptionLevel :: EncryptionLevel
   } deriving (Eq, Show)
 
 ----------------------------------------------------------------

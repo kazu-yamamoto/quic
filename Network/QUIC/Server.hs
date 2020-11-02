@@ -195,7 +195,7 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
 -- cannot be connected.
 dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..}
-         (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _))
+         (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _) lvl)
          mysa peersa send bs0RTT udpPayloadSize tim
   | udpPayloadSize < defaultQUICPacketSize = do
         stdoutLogger $ "dispatch: too small " <> bhow udpPayloadSize <> ", " <> bhow peersa
@@ -228,11 +228,11 @@ dispatch Dispatch{..} ServerConfig{..}
     pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
         mq <- lookupRecvQDict srcTable key
         case mq of
-          Just q -> writeRecvQ q $ ReceivedPacket cpkt tim udpPayloadSize
+          Just q -> writeRecvQ q $ ReceivedPacket cpkt tim udpPayloadSize lvl
           Nothing -> do
               q <- newRecvQ
               insertRecvQDict srcTable key q
-              writeRecvQ q $ ReceivedPacket cpkt tim udpPayloadSize
+              writeRecvQ q $ ReceivedPacket cpkt tim udpPayloadSize lvl
               let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
                   ent = Accept {
@@ -251,8 +251,8 @@ dispatch Dispatch{..} ServerConfig{..}
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
               when (bs0RTT /= "") $ do
-                  (PacketIC cpktRTT0, _) <- decodePacket bs0RTT
-                  writeRecvQ q $ ReceivedPacket cpktRTT0 tim udpPayloadSize
+                  (PacketIC cpktRTT0 lvl', _) <- decodePacket bs0RTT
+                  writeRecvQ q $ ReceivedPacket cpktRTT0 tim udpPayloadSize lvl'
     -- Initial: DCID=S1, SCID=C1 ->
     --                                     <- Initial: DCID=C1, SCID=S2
     --                               ...
@@ -307,12 +307,12 @@ dispatch Dispatch{..} ServerConfig{..}
         newtoken <- encryptToken tokenMgr retryToken
         bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
         send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _)) _ peersa _ _ udpPayloadSize tim = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ peersa _ _ udpPayloadSize tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
-      Just q  -> writeRecvQ q $ ReceivedPacket cpkt tim udpPayloadSize
+      Just q  -> writeRecvQ q $ ReceivedPacket cpkt tim udpPayloadSize lvl
       Nothing -> stdoutLogger $ "dispatch: orphan 0RTT: " <> bhow peersa
-dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa _ _ udpPayloadSize tim  = do
+dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) _ peersa _ _ udpPayloadSize tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
@@ -325,7 +325,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt)) _ peersa
             Just plain -> do
                 qlogReceived conn (PlainPacket hdr plain) tim
                 let cpkt' = CryptPacket hdr $ setCryptLogged crypt
-                writeMigrationQ conn $ ReceivedPacket cpkt' tim udpPayloadSize
+                writeMigrationQ conn $ ReceivedPacket cpkt' tim udpPayloadSize lvl
                 migrating <- isPathValidating conn
                 unless migrating $ do
                     setMigrationStarted conn
@@ -346,7 +346,7 @@ readerServer s q conn = handleLog logAction $ forever $ do
     now <- getTimeMicrosecond
     addRxBytes conn $ BS.length bs
     pkts <- decodeCryptPackets bs
-    mapM (\p -> writeRecvQ q (ReceivedPacket p now udpPayloadSize)) pkts
+    mapM (\(p,l) -> writeRecvQ q (ReceivedPacket p now udpPayloadSize l)) pkts
   where
     logAction msg = connDebugLog conn ("readerServer: " <> msg)
 
