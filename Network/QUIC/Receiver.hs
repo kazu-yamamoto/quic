@@ -110,7 +110,10 @@ processReceivedPacket conn rpkt = do
                         && rpReceivedBytes rpkt < defaultQUICPacketSize
                         && (pathVali
                             || (lvl == InitialLevel && ackEli))
-          unless shouldDrop $ do
+          if shouldDrop then do
+              putStrLn $ "Drop packet whose size is " ++ show (rpReceivedBytes rpkt)
+              qlogDropped conn hdr
+            else do
               mapM_ (processFrame conn lvl) frames
               when ackEli $ do
                   case lvl of
