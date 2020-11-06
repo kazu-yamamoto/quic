@@ -163,23 +163,23 @@ construct conn lvl frames = do
                         | otherwise                  = toAck ppns : frames
             mypn <- nextPacketNumber conn
             let plain = Plain (Flags 0) mypn frames'
-                ppkt = toPlainPakcet lvl plain
+                ppkt = toPlainPacket lvl plain
             return [mkSentPacket mypn lvl ppkt ppns True]
       where
-        toPlainPakcet InitialLevel   plain =
+        toPlainPacket InitialLevel   plain =
             PlainPacket (Initial   ver peercid mycid token) plain
-        toPlainPakcet RTT0Level      plain =
+        toPlainPacket RTT0Level      plain =
             PlainPacket (RTT0      ver peercid mycid)       plain
-        toPlainPakcet HandshakeLevel plain =
+        toPlainPacket HandshakeLevel plain =
             PlainPacket (Handshake ver peercid mycid)       plain
-        toPlainPakcet RTT1Level      plain =
+        toPlainPacket RTT1Level      plain =
             PlainPacket (Short         peercid)             plain
         toAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
         makeAck ppns = do
             mypn <- nextPacketNumber conn
             let frames' = [toAck ppns]
                 plain = Plain (Flags 0) mypn frames'
-                ppkt = toPlainPakcet lvl plain
+                ppkt = toPlainPacket lvl plain
             return [mkSentPacket mypn lvl ppkt ppns False]
 
 ----------------------------------------------------------------
