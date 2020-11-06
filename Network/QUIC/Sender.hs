@@ -166,14 +166,11 @@ construct conn lvl frames = do
                 ppkt = toPlainPacket lvl plain
             return [mkSentPacket mypn lvl ppkt ppns True]
       where
-        toPlainPacket InitialLevel   plain =
-            PlainPacket (Initial   ver peercid mycid token) plain
-        toPlainPacket RTT0Level      plain =
-            PlainPacket (RTT0      ver peercid mycid)       plain
-        toPlainPacket HandshakeLevel plain =
-            PlainPacket (Handshake ver peercid mycid)       plain
-        toPlainPacket RTT1Level      plain =
-            PlainPacket (Short         peercid)             plain
+        mkHeader InitialLevel   = Initial   ver peercid mycid token
+        mkHeader RTT0Level      = RTT0      ver peercid mycid
+        mkHeader HandshakeLevel = Handshake ver peercid mycid
+        mkHeader RTT1Level      = Short         peercid
+        toPlainPacket l plain = PlainPacket (mkHeader l) plain
         toAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
         makeAck ppns = do
             mypn <- nextPacketNumber conn
