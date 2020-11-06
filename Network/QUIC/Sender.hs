@@ -132,13 +132,8 @@ construct conn lvl frames = do
             if nullPeerPacketNumbers ppns then
                 return []
               else do
-                mypn <- nextPacketNumber conn
-                let header
-                      | lvl' == InitialLevel = Initial   ver peercid mycid token
-                      | otherwise            = Handshake ver peercid mycid
-                    ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
-                    plain    = Plain (Flags 0) mypn [ackFrame]
-                    ppkt     = PlainPacket header plain
+                let ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
+                (ppkt, mypn) <- mkPlainPacket conn lvl' ver peercid mycid token [ackFrame]
                 return [mkSentPacket mypn lvl' ppkt ppns False]
     constructTargetPacket ver mycid peercid token
       | null frames = do -- ACK only packet
@@ -151,33 +146,44 @@ construct conn lvl frames = do
                     prevppns <- getPreviousRTT1PPNs ldcc
                     if ppns /= prevppns then do
                         setPreviousRTT1PPNs ldcc ppns
-                        makeAck ppns
+                        (ppkt, mypn) <- mkAckPlainPacket conn lvl ver peercid mycid token ppns
+                        return [mkSentPacket mypn lvl ppkt ppns False]
                      else
                        return []
-                  else
-                    makeAck ppns
+                  else do
+                    (ppkt, mypn) <- mkAckPlainPacket conn lvl ver peercid mycid token ppns
+                    return [mkSentPacket mypn lvl ppkt ppns False]
       | otherwise = do
             resetDealyedAck conn
             ppns <- getPeerPacketNumbers ldcc lvl
             let frames' | nullPeerPacketNumbers ppns = frames
-                        | otherwise                  = toAck ppns : frames
-            mypn <- nextPacketNumber conn
-            let plain = Plain (Flags 0) mypn frames'
-                ppkt = toPlainPacket lvl plain
+                        | otherwise                  = mkAck ppns : frames
+            (ppkt, mypn) <- mkPlainPacket conn lvl ver peercid mycid token frames'
             return [mkSentPacket mypn lvl ppkt ppns True]
-      where
-        mkHeader InitialLevel   = Initial   ver peercid mycid token
-        mkHeader RTT0Level      = RTT0      ver peercid mycid
-        mkHeader HandshakeLevel = Handshake ver peercid mycid
-        mkHeader RTT1Level      = Short         peercid
-        toPlainPacket l plain = PlainPacket (mkHeader l) plain
-        toAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
-        makeAck ppns = do
-            mypn <- nextPacketNumber conn
-            let frames' = [toAck ppns]
-                plain = Plain (Flags 0) mypn frames'
-                ppkt = toPlainPacket lvl plain
-            return [mkSentPacket mypn lvl ppkt ppns False]
+
+mkAck :: PeerPacketNumbers -> Frame
+mkAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
+
+mkAckPlainPacket :: Connection -> EncryptionLevel -> Version -> CID -> CID -> ByteString -> PeerPacketNumbers -> IO (PlainPacket, PacketNumber)
+mkAckPlainPacket conn lvl ver peercid mycid token ppns =
+    mkPlainPacket conn lvl ver peercid mycid token frames
+ where
+   frames = mkAck ppns : []
+
+mkPlainPacket :: Connection -> EncryptionLevel -> Version -> CID -> CID -> ByteString -> [Frame] -> IO (PlainPacket, PacketNumber)
+mkPlainPacket conn lvl ver peercid mycid token frames = do
+    mypn <- nextPacketNumber conn
+    let plain = Plain (Flags 0) mypn frames
+        header = mkHeader lvl ver peercid mycid token
+        ppkt = PlainPacket header plain
+    return (ppkt, mypn)
+
+mkHeader :: EncryptionLevel -> Version -> CID -> CID -> Token -> Header
+mkHeader lvl ver peercid mycid token = case lvl of
+    InitialLevel   -> Initial   ver peercid mycid token
+    RTT0Level      -> RTT0      ver peercid mycid
+    HandshakeLevel -> Handshake ver peercid mycid
+    RTT1Level      -> Short         peercid
 
 ----------------------------------------------------------------
 
