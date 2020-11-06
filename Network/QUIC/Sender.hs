@@ -107,20 +107,16 @@ construct conn lvl frames = do
     if discarded then
         return []
       else do
-        ver <- getVersion conn
-        token <- getToken conn
-        mycid <- getMyCID conn
-        peercid <- getPeerCID conn
         established <- isConnectionEstablished conn
         if established || (isServer conn && lvl == HandshakeLevel) then do
-            constructTargetPacket ver mycid peercid token
+            constructTargetPacket
           else do
-            ppkt0 <- constructLowerAckPacket ver mycid peercid token
-            ppkt1 <- constructTargetPacket ver mycid peercid token
+            ppkt0 <- constructLowerAckPacket
+            ppkt1 <- constructTargetPacket
             return (ppkt0 ++ ppkt1)
   where
     ldcc = connLDCC conn
-    constructLowerAckPacket ver mycid peercid token = do
+    constructLowerAckPacket = do
         let lvl' = case lvl of
               HandshakeLevel -> InitialLevel
               RTT1Level      -> HandshakeLevel
@@ -133,9 +129,9 @@ construct conn lvl frames = do
                 return []
               else do
                 let ackFrame = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
-                (ppkt, mypn) <- mkPlainPacket conn lvl' ver peercid mycid token [ackFrame]
+                (ppkt, mypn) <- mkPlainPacket conn lvl' [ackFrame]
                 return [mkSentPacket mypn lvl' ppkt ppns False]
-    constructTargetPacket ver mycid peercid token
+    constructTargetPacket
       | null frames = do -- ACK only packet
             resetDealyedAck conn
             ppns <- getPeerPacketNumbers ldcc lvl
@@ -146,44 +142,49 @@ construct conn lvl frames = do
                     prevppns <- getPreviousRTT1PPNs ldcc
                     if ppns /= prevppns then do
                         setPreviousRTT1PPNs ldcc ppns
-                        (ppkt, mypn) <- mkAckPlainPacket conn lvl ver peercid mycid token ppns
+                        (ppkt, mypn) <- mkAckPlainPacket conn lvl ppns
                         return [mkSentPacket mypn lvl ppkt ppns False]
                      else
                        return []
                   else do
-                    (ppkt, mypn) <- mkAckPlainPacket conn lvl ver peercid mycid token ppns
+                    (ppkt, mypn) <- mkAckPlainPacket conn lvl ppns
                     return [mkSentPacket mypn lvl ppkt ppns False]
       | otherwise = do
             resetDealyedAck conn
             ppns <- getPeerPacketNumbers ldcc lvl
             let frames' | nullPeerPacketNumbers ppns = frames
                         | otherwise                  = mkAck ppns : frames
-            (ppkt, mypn) <- mkPlainPacket conn lvl ver peercid mycid token frames'
+            (ppkt, mypn) <- mkPlainPacket conn lvl frames'
             return [mkSentPacket mypn lvl ppkt ppns True]
 
 mkAck :: PeerPacketNumbers -> Frame
 mkAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
 
-mkAckPlainPacket :: Connection -> EncryptionLevel -> Version -> CID -> CID -> ByteString -> PeerPacketNumbers -> IO (PlainPacket, PacketNumber)
-mkAckPlainPacket conn lvl ver peercid mycid token ppns =
-    mkPlainPacket conn lvl ver peercid mycid token frames
+mkAckPlainPacket :: Connection -> EncryptionLevel -> PeerPacketNumbers -> IO (PlainPacket, PacketNumber)
+mkAckPlainPacket conn lvl ppns =
+    mkPlainPacket conn lvl frames
  where
    frames = mkAck ppns : []
 
-mkPlainPacket :: Connection -> EncryptionLevel -> Version -> CID -> CID -> ByteString -> [Frame] -> IO (PlainPacket, PacketNumber)
-mkPlainPacket conn lvl ver peercid mycid token frames = do
+mkPlainPacket :: Connection -> EncryptionLevel -> [Frame] -> IO (PlainPacket, PacketNumber)
+mkPlainPacket conn lvl frames = do
+    header <- mkHeader conn lvl
     mypn <- nextPacketNumber conn
     let plain = Plain (Flags 0) mypn frames
-        header = mkHeader lvl ver peercid mycid token
         ppkt = PlainPacket header plain
     return (ppkt, mypn)
 
-mkHeader :: EncryptionLevel -> Version -> CID -> CID -> Token -> Header
-mkHeader lvl ver peercid mycid token = case lvl of
-    InitialLevel   -> Initial   ver peercid mycid token
-    RTT0Level      -> RTT0      ver peercid mycid
-    HandshakeLevel -> Handshake ver peercid mycid
-    RTT1Level      -> Short         peercid
+mkHeader :: Connection -> EncryptionLevel -> IO Header
+mkHeader conn lvl = do
+    ver <- getVersion conn
+    mycid <- getMyCID conn
+    peercid <- getPeerCID conn
+    token <- if lvl == InitialLevel then getToken conn else return ""
+    return $ case lvl of
+      InitialLevel   -> Initial   ver peercid mycid token
+      RTT0Level      -> RTT0      ver peercid mycid
+      HandshakeLevel -> Handshake ver peercid mycid
+      RTT1Level      -> Short         peercid
 
 ----------------------------------------------------------------
 
