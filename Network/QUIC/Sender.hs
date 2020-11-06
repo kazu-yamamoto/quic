@@ -128,7 +128,7 @@ construct conn lvl frames = do
             if nullPeerPacketNumbers ppns then
                 return []
               else
-                mkAckPlainPacket conn lvl' ppns
+                mkPlainPacket conn lvl' [] ppns
     constructTargetPacket
       | null frames = do -- ACK only packet
             resetDealyedAck conn
@@ -140,34 +140,29 @@ construct conn lvl frames = do
                     prevppns <- getPreviousRTT1PPNs ldcc
                     if ppns /= prevppns then do
                         setPreviousRTT1PPNs ldcc ppns
-                        mkAckPlainPacket conn lvl ppns
+                        mkPlainPacket conn lvl [] ppns
                      else
                        return []
                   else
-                    mkAckPlainPacket conn lvl ppns
+                    mkPlainPacket conn lvl [] ppns
       | otherwise = do
             resetDealyedAck conn
             ppns <- getPeerPacketNumbers ldcc lvl
-            let frames' | nullPeerPacketNumbers ppns = frames
-                        | otherwise                  = mkAck ppns : frames
-            mkPlainPacket conn lvl frames' ppns True
+            mkPlainPacket conn lvl frames ppns
 
-mkAck :: PeerPacketNumbers -> Frame
-mkAck ppns = Ack (toAckInfo $ fromPeerPacketNumbers ppns) 0
-
-mkAckPlainPacket :: Connection -> EncryptionLevel -> PeerPacketNumbers -> IO [SentPacket]
-mkAckPlainPacket conn lvl ppns =
-    mkPlainPacket conn lvl frames ppns False
- where
-   frames = mkAck ppns : []
-
-mkPlainPacket :: Connection -> EncryptionLevel -> [Frame] -> PeerPacketNumbers -> Bool -> IO [SentPacket]
-mkPlainPacket conn lvl frames ppns ackEli = do
+mkPlainPacket :: Connection -> EncryptionLevel -> [Frame] -> PeerPacketNumbers -> IO [SentPacket]
+mkPlainPacket conn lvl frames0 ppns = do
+    let ackEli | null frames0 = False
+               | otherwise    = True
+        frames | nullPeerPacketNumbers ppns = frames0
+               | otherwise                  = mkAck ppns : frames0
     header <- mkHeader conn lvl
     mypn <- nextPacketNumber conn
     let plain = Plain (Flags 0) mypn frames
         ppkt = PlainPacket header plain
     return [mkSentPacket mypn lvl ppkt ppns ackEli]
+  where
+    mkAck ps = Ack (toAckInfo $ fromPeerPacketNumbers ps) 0
 
 mkHeader :: Connection -> EncryptionLevel -> IO Header
 mkHeader conn lvl = do
