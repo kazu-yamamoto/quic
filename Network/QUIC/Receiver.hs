@@ -98,7 +98,8 @@ processReceivedPacket conn rpkt = do
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
-          when (isIllegalReservedBits plainMarks) $
+          when (isIllegalReservedBits plainMarks) $ do
+              sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "Non 0 RR bits"
               exitConnection conn $ TransportErrorOccurs ProtocolViolation "Non 0 RR bits"
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl plainPacketNumber
