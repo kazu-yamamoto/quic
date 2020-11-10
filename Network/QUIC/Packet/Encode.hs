@@ -63,7 +63,7 @@ encodePlainPacket conn ppkt mlen = do
     encodePlainPacket' conn wbuf ppkt mlen
 
 encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO [ByteString]
-encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames)) mlen = do
+encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames _)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf InitialPacketType ver dCID sCID flags pn
@@ -73,21 +73,21 @@ encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain f
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen InitialLevel
 
-encodePlainPacket' conn wbuf (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames)) mlen = do
+encodePlainPacket' conn wbuf (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames _)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf RTT0PacketType ver dCID sCID flags pn
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT0Level
 
-encodePlainPacket' conn wbuf (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames)) mlen = do
+encodePlainPacket' conn wbuf (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames _)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf HandshakePacketType ver dCID sCID flags pn
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen HandshakeLevel
 
-encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames)) mlen = do
+encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames _)) mlen = do
     -- flag
     let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen

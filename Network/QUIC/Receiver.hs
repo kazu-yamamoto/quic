@@ -97,7 +97,9 @@ processReceivedPacket conn rpkt = do
         tim = rpTimeRecevied rpkt
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
-      Just plain@(Plain _ pn frames) -> do
+      Just plain@(Plain _ pn frames marks) -> do
+          when (isIllegalReservedBits marks) $
+              exitConnection conn $ TransportErrorOccurs ProtocolViolation "Non 0 RR bits"
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl pn
           when (lvl == RTT1Level) $ setPeerPacketNumber conn pn

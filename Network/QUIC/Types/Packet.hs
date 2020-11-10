@@ -81,7 +81,17 @@ data Plain  = Plain  {
     plainFlags        :: Flags Raw
   , plainPacketNumber :: PacketNumber
   , plainFrames       :: [Frame]
+  , plainMarks        :: Int
   } deriving (Eq, Show)
+
+defaultPlainMarks :: Int
+defaultPlainMarks = 0
+
+illegalReservedBits :: Int
+illegalReservedBits = 1
+
+isIllegalReservedBits :: Int -> Bool
+isIllegalReservedBits marks = marks `testBit` 0
 
 data Crypt = Crypt {
     cryptPktNumOffset :: Int

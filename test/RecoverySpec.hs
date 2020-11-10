@@ -53,5 +53,5 @@ sp33 = sp 33 True  $ UnixTime 80 0
 sp :: PacketNumber -> Bool -> TimeMicrosecond -> SentPacket
 sp mypn ackeli tm = spkt { spTimeSent = tm }
   where
-    ppkt = PlainPacket (Short $ toCID "") (Plain (Flags 0) 0 [])
+    ppkt = PlainPacket (Short $ toCID "") (Plain (Flags 0) 0 [] 0)
     spkt = mkSentPacket mypn InitialLevel ppkt emptyPeerPacketNumbers ackeli

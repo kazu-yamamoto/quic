@@ -45,11 +45,15 @@ decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
         poke8 flags p 0
         void $ copy (p `plusPtr` cryptPktNumOffset) $ B.take epnLen bytePN
     let mpayload = decrypt coder ciphertext header pn
+        rrMask | lvl == RTT1Level = 0x18
+               | otherwise        = 0x0c
+        marks | flags .&. rrMask == 0 = defaultPlainMarks
+              | otherwise             = illegalReservedBits
     case mpayload of
       Nothing      -> return Nothing
       Just payload -> do
           frames <- decodeFrames payload
-          return $ Just $ Plain rawFlags pn frames
+          return $ Just $ Plain rawFlags pn frames marks
   where
     logAction msg = do
         connDebugLog conn ("decryptCrypt: " <> msg)
