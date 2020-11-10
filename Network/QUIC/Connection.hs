@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Network.QUIC.Connection (
     Connection
   , clientConnection
@@ -59,7 +61,6 @@ module Network.QUIC.Connection (
   , delayedAck
   , resetDealyedAck
   , setMaxPacketSize
-  , exitConnection
   , addResource
   , freeResources
   , addThreadIdResource
@@ -147,7 +148,12 @@ module Network.QUIC.Connection (
   , Input(..)
   , Crypto(..)
   , Output(..)
+  -- In this module
+  , exitConnection
+  , sendConnectionClose
   ) where
+
+import qualified Control.Exception as E
 
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Migration
@@ -159,3 +165,14 @@ import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
+import Network.QUIC.Types
+
+exitConnection :: Connection -> QUICError -> IO ()
+exitConnection Connection{..} ue = E.throwTo connThreadId ue
+
+sendConnectionClose :: Connection -> Frame -> IO ()
+sendConnectionClose conn frame = do
+    lvl <- getEncryptionLevel conn
+    putOutput conn $ OutControl lvl [frame]
+    setCloseSent conn

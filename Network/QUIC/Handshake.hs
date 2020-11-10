@@ -233,12 +233,11 @@ getErrorCause e =
 
 notifyPeer :: Connection -> TLS.TLSError -> IO ()
 notifyPeer conn err = do
-    let ad = errorToAlertDescription err
-        frames = [ConnectionCloseQUIC (CryptoError ad) 0 ""]
-    level <- getEncryptionLevel conn
-    putOutput conn $ OutControl level frames
-    setCloseSent conn
+    sendConnectionClose conn frame
     exitConnection conn $ HandshakeFailed ad
+  where
+    ad = errorToAlertDescription err
+    frame = ConnectionCloseQUIC (CryptoError ad) 0 ""
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do
