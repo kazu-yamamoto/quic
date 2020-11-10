@@ -3,7 +3,12 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Network.QUIC.Run where
+module Network.QUIC.Run (
+    runQUICClient
+  , runQUICServer
+  , stopQUICServer
+  , clientCertificateChain
+  ) where
 
 import Control.Concurrent
 import qualified Control.Exception as E
