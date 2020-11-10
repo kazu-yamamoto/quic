@@ -16,12 +16,14 @@ import Network.QUIC.Types
 data Hooks = Hooks {
     onCloseSent     :: IO ()
   , onCloseReceived :: IO ()
+  , onPlainCreated  :: Plain -> Plain
   }
 
 defaultHooks :: Hooks
 defaultHooks = Hooks {
     onCloseSent     = return ()
   , onCloseReceived = return ()
+  , onPlainCreated  = id
   }
 
 ----------------------------------------------------------------

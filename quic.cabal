@@ -122,6 +122,7 @@ test-suite spec
   ghc-options:          -Wall -threaded
   main-is:              Spec.hs
   other-modules:        Config
+                        ErrorSpec
                         FrameSpec
                         HandshakeSpec
                         IOSpec

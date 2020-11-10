@@ -142,6 +142,7 @@ module Network.QUIC.Connection (
   -- Types
   , connThreadId
   , connHooks
+  , Hooks(..)
   , connLDCC
   , headerBuffer
   , payloadBuffer
@@ -155,6 +156,7 @@ module Network.QUIC.Connection (
 
 import qualified Control.Exception as E
 
+import Network.QUIC.Config
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Migration
 import Network.QUIC.Connection.Misc
