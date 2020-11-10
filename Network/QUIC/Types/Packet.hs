@@ -86,20 +86,20 @@ data Plain  = Plain  {
 data Crypt = Crypt {
     cryptPktNumOffset :: Int
   , cryptPacket       :: ByteString
-  , cryptFlags        :: Int
+  , cryptMarks        :: Int
   } deriving (Eq, Show)
 
 isCryptLogged :: Crypt -> Bool
-isCryptLogged  crypt = cryptFlags crypt `testBit` 0
+isCryptLogged  crypt = cryptMarks crypt `testBit` 0
 
 isCryptDelayed :: Crypt -> Bool
-isCryptDelayed crypt = cryptFlags crypt `testBit` 1
+isCryptDelayed crypt = cryptMarks crypt `testBit` 1
 
 setCryptLogged :: Crypt -> Crypt
-setCryptLogged  crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 0 }
+setCryptLogged  crypt = crypt { cryptMarks = cryptMarks crypt `setBit` 0 }
 
 setCryptDelayed :: Crypt -> Crypt
-setCryptDelayed crypt = crypt { cryptFlags = cryptFlags crypt `setBit` 1 }
+setCryptDelayed crypt = crypt { cryptMarks = cryptMarks crypt `setBit` 1 }
 
 data StatelessReset = StatelessReset deriving (Eq, Show)
 
