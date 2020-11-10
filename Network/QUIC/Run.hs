@@ -210,6 +210,9 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     --
     setRegister conn accRegister accUnregister
     accRegister myCID conn
+    addResource conn $ do
+        myCIDs <- getMyCIDs conn
+        mapM_ accUnregister myCIDs
     --
     void $ forkIO $ readerServer s0 accRecvQ conn -- dies when s0 is closed.
     return $ ConnRes conn send recv accMyAuthCIDs
@@ -251,10 +254,6 @@ close conn = do
     let frame = ConnectionCloseQUIC NoError 0 ""
     sendConnectionClose conn frame
     void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
-    when (isServer conn) $ do
-        unregister <- getUnregister conn
-        myCIDs <- getMyCIDs conn
-        mapM_ unregister myCIDs
     killHandshaker conn
     -- close the socket after threads reading/writing the socket die.
     freeResources conn
