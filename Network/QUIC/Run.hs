@@ -52,7 +52,13 @@ runQUICClient conf client = do
     when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
     E.bracket (forkIO timeouter)
               killThread
-              (\_ -> E.bracket (connect conf) close client)
+              (\_ -> E.bracket (connect conf) freeResources clientAndClose)
+  where
+    clientAndClose conn = do
+        ret <- client conn
+        sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+        void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
+        return ret
 
 -- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
 connect :: ClientConfig -> IO Connection
@@ -131,6 +137,7 @@ handshakeClientConnection conf@ClientConfig{..} (ConnRes conn send recv myAuthCI
     addThreadIdResource conn tid2
     addThreadIdResource conn tid3
     handshakeClient conf conn myAuthCIDs
+    addResource conn $ killHandshaker conn
     return conn
   where
     logAction msg = connDebugLog conn $ "handshakeClientConnection: " <> msg
@@ -152,8 +159,12 @@ runQUICServer conf server = handleLog debugLog $ do
                body = handshakeServerConnection conf
         -- Typically, ConnectionIsClosed breaks acceptStream.
         -- And the exception should be ignored.
-        void $ forkIO (E.bracket create close server `E.catch` ignore)
+        void $ forkIO (E.bracket create freeResources serverAndClose `E.catch` ignore)
   where
+    serverAndClose conn = do
+        server conn
+        sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+        void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
     debugLog msg = stdoutLogger ("runQUICServer: " <> msg)
     setup = do
         dispatch <- newDispatch
@@ -239,6 +250,7 @@ handshakeServerConnection conf (ConnRes conn send recv myAuthCIDs) = handleLogE 
     let ncid = NewConnectionID cidInfo 0
     let frames = [NewToken token,ncid,HandshakeDone]
     putOutput conn $ OutControl RTT1Level frames
+    addResource conn $ killHandshaker conn
     return conn
   where
     logAction msg = connDebugLog conn $ "handshakeServerConnection: " <> msg
@@ -246,17 +258,6 @@ handshakeServerConnection conf (ConnRes conn send recv myAuthCIDs) = handleLogE 
 -- | Stopping the main thread of the server.
 stopQUICServer :: Connection -> IO ()
 stopQUICServer conn = getMainThreadId conn >>= killThread
-
-----------------------------------------------------------------
-
-close :: Connection -> IO ()
-close conn = do
-    let frame = ConnectionCloseQUIC NoError 0 ""
-    sendConnectionClose conn frame
-    void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
-    killHandshaker conn
-    -- close the socket after threads reading/writing the socket die.
-    freeResources conn
 
 ----------------------------------------------------------------
 
