@@ -39,6 +39,13 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+data ConnRes = ConnRes Connection SendMany Receive AuthCIDs
+
+connResConnection :: ConnRes -> Connection
+connResConnection (ConnRes conn _ _ _) = conn
+
+----------------------------------------------------------------
+
 -- | Running a QUIC client.
 runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
 runQUICClient conf client = do
@@ -64,17 +71,15 @@ connect conf = do
                 Left  se1' -> E.throwIO se1'
                 Right _    -> E.throwIO VersionNegotiationFailed
   where
-    connect' ver = do
-        (conn,send,recv,myAuthCIDs) <- createClientConnection conf ver
-        handshakeClientConnection conf conn send recv myAuthCIDs `E.onException` freeResources conn
-        return conn
+    connect' ver = E.bracketOnError (createClientConnection conf ver)
+                                    (freeResources . connResConnection)
+                                    (handshakeClientConnection conf)
     check se
       | Just (NextVersion ver)   <- E.fromException se = Right ver
       | Just (e :: QUICError)    <- E.fromException se = Left e
       | otherwise = Left $ BadThingHappen se
 
-createClientConnection :: ClientConfig -> Version
-                       -> IO (Connection, SendMany, Receive, AuthCIDs)
+createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
     (s0,sa0) <- udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
@@ -110,10 +115,10 @@ createClientConnection conf@ClientConfig{..} ver = do
     mytid <- myThreadId
     --
     void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
-    return (conn,send,recv,myAuthCIDs)
+    return $ ConnRes conn send recv myAuthCIDs
 
-handshakeClientConnection :: ClientConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()
-handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = handleLogE logAction $ do
+handshakeClientConnection :: ClientConfig -> ConnRes -> IO Connection
+handshakeClientConnection conf@ClientConfig{..} (ConnRes conn send recv myAuthCIDs) = handleLogE logAction $ do
     setToken conn $ resumptionToken ccResumption
     tid0 <- forkIO $ sender   conn send
     tid1 <- forkIO $ receiver conn recv
@@ -123,7 +128,8 @@ handshakeClientConnection conf@ClientConfig{..} conn send recv myAuthCIDs = hand
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
     addThreadIdResource conn tid3
-    handshakeClient conf conn myAuthCIDs `E.onException` freeResources conn
+    handshakeClient conf conn myAuthCIDs
+    return conn
   where
     logAction msg = connDebugLog conn $ "handshakeClientConnection: " <> msg
 
@@ -137,10 +143,9 @@ runQUICServer conf server = handleLog debugLog $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
-        let create = do
-                (conn,send,recv,myAuthCIDs) <- createServerConnection conf dispatch acc mainThreadId
-                handshakeServerConnection conf conn send recv myAuthCIDs `E.onException` freeResources conn
-                return conn
+        let create = E.bracketOnError (createServerConnection conf dispatch acc mainThreadId)
+                                      (freeResources . connResConnection)
+                                      (handshakeServerConnection conf)
         -- Typically, ConnectionIsClosed breaks acceptStream.
         -- And the exception should be ignored.
         void $ forkIO (E.bracket create close server `E.catch` ignore)
@@ -158,7 +163,7 @@ runQUICServer conf server = handleLog debugLog $ do
         mapM_ killThread tids
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
-                       -> IO (Connection, SendMany, Receive, AuthCIDs)
+                       -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = do
     s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
     sref <- newIORef (s0, accRecvQ)
@@ -203,10 +208,10 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     accRegister myCID conn
     --
     void $ forkIO $ readerServer s0 accRecvQ conn -- dies when s0 is closed.
-    return (conn, send, recv, accMyAuthCIDs)
+    return $ ConnRes conn send recv accMyAuthCIDs
 
-handshakeServerConnection :: ServerConfig -> Connection -> SendMany -> Receive -> AuthCIDs -> IO ()
-handshakeServerConnection conf conn send recv myAuthCIDs = handleLogE logAction $ do
+handshakeServerConnection :: ServerConfig -> ConnRes -> IO Connection
+handshakeServerConnection conf (ConnRes conn send recv myAuthCIDs) = handleLogE logAction $ do
     tid0 <- forkIO $ sender conn send
     tid1 <- forkIO $ receiver conn recv
     tid2 <- forkIO $ resender $ connLDCC conn
@@ -215,7 +220,7 @@ handshakeServerConnection conf conn send recv myAuthCIDs = handleLogE logAction 
     addThreadIdResource conn tid1
     addThreadIdResource conn tid2
     addThreadIdResource conn tid3
-    handshakeServer conf conn myAuthCIDs `E.onException` freeResources conn
+    handshakeServer conf conn myAuthCIDs
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn
@@ -227,6 +232,7 @@ handshakeServerConnection conf conn send recv myAuthCIDs = handleLogE logAction 
     let ncid = NewConnectionID cidInfo 0
     let frames = [NewToken token,ncid,HandshakeDone]
     putOutput conn $ OutControl RTT1Level frames
+    return conn
   where
     logAction msg = connDebugLog conn $ "handshakeServerConnection: " <> msg
 
