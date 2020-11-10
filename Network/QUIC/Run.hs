@@ -71,9 +71,11 @@ connect conf = do
                 Left  se1' -> E.throwIO se1'
                 Right _    -> E.throwIO VersionNegotiationFailed
   where
-    connect' ver = E.bracketOnError (createClientConnection conf ver)
-                                    (freeResources . connResConnection)
-                                    (handshakeClientConnection conf)
+    connect' ver = E.bracketOnError open clse body
+      where
+        open = createClientConnection conf ver
+        clse = freeResources . connResConnection
+        body = handshakeClientConnection conf
     check se
       | Just (NextVersion ver) <- E.fromException se = Right ver
       | Just (e :: QUICError)  <- E.fromException se = Left e
@@ -143,9 +145,11 @@ runQUICServer conf server = handleLog debugLog $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
-        let create = E.bracketOnError (createServerConnection conf dispatch acc mainThreadId)
-                                      (freeResources . connResConnection)
-                                      (handshakeServerConnection conf)
+        let create = E.bracketOnError open clse body
+             where
+               open = createServerConnection conf dispatch acc mainThreadId
+               clse = freeResources . connResConnection
+               body = handshakeServerConnection conf
         -- Typically, ConnectionIsClosed breaks acceptStream.
         -- And the exception should be ignored.
         void $ forkIO (E.bracket create close server `E.catch` ignore)
