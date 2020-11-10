@@ -97,17 +97,17 @@ processReceivedPacket conn rpkt = do
         tim = rpTimeRecevied rpkt
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
-      Just plain@(Plain _ pn frames marks) -> do
-          when (isIllegalReservedBits marks) $
+      Just plain@Plain{..} -> do
+          when (isIllegalReservedBits plainMarks) $
               exitConnection conn $ TransportErrorOccurs ProtocolViolation "Non 0 RR bits"
           -- For Ping, record PPN first, then send an ACK.
-          onPacketReceived (connLDCC conn) lvl pn
-          when (lvl == RTT1Level) $ setPeerPacketNumber conn pn
+          onPacketReceived (connLDCC conn) lvl plainPacketNumber
+          when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
           unless (isCryptLogged crypt) $
               qlogReceived conn (PlainPacket hdr plain) tim
           ver <- getVersion conn
-          let ackEli   = any ackEliciting   frames
-              pathVali = any pathValidating frames
+          let ackEli   = any ackEliciting   plainFrames
+              pathVali = any pathValidating plainFrames
               shouldDrop = ver >= Draft32
                         && rpReceivedBytes rpkt < defaultQUICPacketSize
                         && (pathVali
@@ -116,7 +116,7 @@ processReceivedPacket conn rpkt = do
               putStrLn $ "Drop packet whose size is " ++ show (rpReceivedBytes rpkt)
               qlogDropped conn hdr
             else do
-              mapM_ (processFrame conn lvl) frames
+              mapM_ (processFrame conn lvl) plainFrames
               when ackEli $ do
                   case lvl of
                     RTT0Level -> return ()
