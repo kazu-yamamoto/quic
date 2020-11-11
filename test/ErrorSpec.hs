@@ -4,38 +4,66 @@ module ErrorSpec where
 
 import Control.Concurrent
 import Data.ByteString ()
+import System.Timeout
 import Test.Hspec
-
 import Network.QUIC
 import Network.QUIC.Internal
 
 import Config
 
-spec :: Spec
-spec = do
-    sc <- runIO $ makeTestServerConfig
-    var <- runIO newEmptyMVar
+{-
+import System.Environment
+import qualified Test.Hspec.Core.Runner as H
+
+main :: IO ()
+main = do
+    [host,port] <- getArgs
+    let cc = defaultClientConfig {
+            ccServerName = host
+          , ccPortName   = port
+          }
+    withArgs [] (H.runSpec (spec' cc) H.defaultConfig) >>= H.evaluateSummary
+-}
+
+setup :: IO (IO ())
+setup = do
+    sc <- makeTestServerConfig
+    var <- newEmptyMVar
     -- To kill this server, one connection must be established
-    _ <- runIO $ forkIO $ runQUICServer sc $ \conn -> do
+    _ <- forkIO $ runQUICServer sc $ \conn -> do
         waitEstablished conn
         _ <- takeMVar var
         stopQUICServer conn
-    describe "error handling" $ do
-        it "throws protocol violation" $ do
-            let cc0 = addHook testClientConfig $ setOnPlainCreated $ rrBits InitialLevel
-            runQUICClient cc0 waitEstablished `shouldThrow` check ProtocolViolation
-            let cc1 = addHook testClientConfig $ setOnPlainCreated $ rrBits HandshakeLevel
-            runQUICClient cc1 waitEstablished `shouldThrow` check ProtocolViolation
-            let cc2 = addHook testClientConfig $ setOnPlainCreated $ rrBits RTT1Level
-            runQUICClient cc2 waitEstablished `shouldThrow` check ProtocolViolation
-        it "throws transport parameter error" $ do
-            let cc0 = addHook testClientConfig $ setOnTransportParametersCreated dropInitialSourceConnectionId
-            runQUICClient cc0 waitEstablished `shouldThrow` check TransportParameterError
-            -- Stop the server
-            let ccF = testClientConfig
-            runQUICClient ccF $ \conn -> do
-                waitEstablished conn
-                putMVar var ()
+    threadDelay 50000 -- give time to the server to get ready
+    return $ putMVar var ()
+
+teardown :: IO () -> IO ()
+teardown action = do
+    -- Stop the server
+    let ccF = testClientConfig
+    runQUICClient ccF $ \conn -> do
+        waitEstablished conn
+        action
+
+spec :: Spec
+spec = beforeAll setup $ afterAll teardown $ spec' testClientConfig
+
+runC :: ClientConfig -> (Connection -> IO a) -> IO (Maybe a)
+runC cc body = timeout 500000 $ runQUICClient cc body
+
+spec' :: ClientConfig -> SpecWith a
+spec' cc = do
+    describe "A QUIC server" $ do
+        it "throws protocol violation if reserved bits are non-zero" $ \_ -> do
+            let cc0 = addHook cc $ setOnPlainCreated $ rrBits InitialLevel
+            runC cc0 waitEstablished `shouldThrow` check ProtocolViolation
+            let cc1 = addHook cc $ setOnPlainCreated $ rrBits HandshakeLevel
+            runC cc1 waitEstablished `shouldThrow` check ProtocolViolation
+            let cc2 = addHook cc $ setOnPlainCreated $ rrBits RTT1Level
+            runC cc2 waitEstablished `shouldThrow` check ProtocolViolation
+        it "throws transport parameter error if initial source connection is missing" $ \_ -> do
+            let cc0 = addHook cc $ setOnTransportParametersCreated dropInitialSourceConnectionId
+            runC cc0 waitEstablished `shouldThrow` check TransportParameterError
 
 addHook :: ClientConfig -> (Hooks -> Hooks) -> ClientConfig
 addHook cc modify = cc'
