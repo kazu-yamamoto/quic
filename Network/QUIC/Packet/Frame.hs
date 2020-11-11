@@ -14,7 +14,6 @@ import Foreign.Storable (peek, alignment)
 import Network.Socket.Internal (zeroMemory)
 
 import Network.QUIC.Imports
-import Network.QUIC.Logger
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -48,6 +47,15 @@ encodeFrame wbuf (Ack (AckInfo largest range1 ranges) (Milliseconds delay)) = do
     putRanges (gap,rng) = do
         encodeInt' wbuf $ fromIntegral gap
         encodeInt' wbuf $ fromIntegral rng
+encodeFrame wbuf (ResetStream sid (ApplicationError err) finalLen) = do
+    write8 wbuf 0x05
+    encodeInt' wbuf $ fromIntegral sid
+    encodeInt' wbuf $ fromIntegral err
+    encodeInt' wbuf $ fromIntegral finalLen
+encodeFrame wbuf (StopSending sid (ApplicationError err)) = do
+    write8 wbuf 0x05
+    encodeInt' wbuf $ fromIntegral sid
+    encodeInt' wbuf $ fromIntegral err
 encodeFrame wbuf (CryptoF off cdata) = do
     write8 wbuf 0x06
     encodeInt' wbuf $ fromIntegral off
@@ -123,7 +131,8 @@ encodeFrame wbuf (ConnectionCloseApp (ApplicationError err) reason) = do
     copyShortByteString wbuf reason
 encodeFrame wbuf HandshakeDone =
     write8 wbuf 0x1e
-encodeFrame _ _ = stdoutLogger "encodeFrame: not supported yet" -- fixme
+encodeFrame wbuf (UnknownFrame typ) =
+    write8 wbuf $ fromIntegral typ
 
 ----------------------------------------------------------------
 
@@ -238,7 +247,11 @@ decodeAckFrame rbuf = do
         getRanges n' (build . ((gap, rng) :))
 
 decodeResetStreamFrame :: ReadBuffer -> IO Frame
-decodeResetStreamFrame _ = return ResetStream -- fixme
+decodeResetStreamFrame rbuf = do
+    sID <- fromIntegral <$> decodeInt' rbuf
+    err <- ApplicationError . fromIntegral <$> decodeInt' rbuf
+    finalLen <- fromIntegral <$> decodeInt' rbuf
+    return $ ResetStream sID err finalLen
 
 decodeStopSending :: ReadBuffer -> IO Frame
 decodeStopSending rbuf = do

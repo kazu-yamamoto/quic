@@ -18,7 +18,7 @@ data Direction = Unidirectional | Bidirectional deriving (Eq, Show)
 data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
-           | ResetStream -- fixme
+           | ResetStream StreamId ApplicationError Int
            | StopSending StreamId ApplicationError
            | CryptoF Offset CryptoData
            | NewToken Token
