@@ -136,6 +136,8 @@ encodeFrame wbuf (UnknownFrame typ) =
 
 ----------------------------------------------------------------
 
+-- Transport 12.4: "The payload of a packet that contains frames MUST
+-- contain at least one frame"
 decodeFrames :: ByteString -> IO [Frame]
 decodeFrames bs = withReadBuffer bs $ loop id
   where
@@ -143,7 +145,9 @@ decodeFrames bs = withReadBuffer bs $ loop id
         ok <- (>= 1) <$> remainingSize rbuf
         if ok then do
             frame <- decodeFrame rbuf
-            loop (frames . (frame:)) rbuf
+            case frame of
+              UnknownFrame _ -> return []
+              _              -> loop (frames . (frame:)) rbuf
           else
             return $ frames []
 

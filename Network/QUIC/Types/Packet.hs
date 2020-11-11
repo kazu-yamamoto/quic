@@ -87,11 +87,17 @@ data Plain = Plain {
 defaultPlainMarks :: Int
 defaultPlainMarks = 0
 
-illegalReservedBits :: Int
-illegalReservedBits = 1
+setIllegalReservedBits :: Int -> Int
+setIllegalReservedBits = (`setBit` 0)
+
+setFrameBroken :: Int -> Int
+setFrameBroken = (`setBit` 1)
 
 isIllegalReservedBits :: Int -> Bool
-isIllegalReservedBits marks = marks `testBit` 0
+isIllegalReservedBits = (`testBit` 0)
+
+isFrameBroken :: Int -> Bool
+isFrameBroken = (`testBit` 1)
 
 data Crypt = Crypt {
     cryptPktNumOffset :: Int

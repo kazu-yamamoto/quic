@@ -101,6 +101,9 @@ processReceivedPacket conn rpkt = do
           when (isIllegalReservedBits plainMarks) $ do
               sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "Non 0 RR bits"
               exitConnection conn $ TransportErrorOccurs ProtocolViolation "Non 0 RR bits"
+          when (isFrameBroken plainMarks) $ do
+              sendConnectionClose conn $ ConnectionCloseQUIC FrameEncodingError 0 ""
+              exitConnection conn $ TransportErrorOccurs FrameEncodingError ""
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl plainPacketNumber
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber

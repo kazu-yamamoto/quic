@@ -48,12 +48,14 @@ decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
         rrMask | lvl == RTT1Level = 0x18
                | otherwise        = 0x0c
         marks | flags .&. rrMask == 0 = defaultPlainMarks
-              | otherwise             = illegalReservedBits
+              | otherwise             = setIllegalReservedBits defaultPlainMarks
     case mpayload of
       Nothing      -> return Nothing
       Just payload -> do
           frames <- decodeFrames payload
-          return $ Just $ Plain rawFlags pn frames marks
+          let marks' | null frames = setFrameBroken marks
+                     | otherwise   = marks
+          return $ Just $ Plain rawFlags pn frames marks'
   where
     logAction msg = do
         connDebugLog conn ("decryptCrypt: " <> msg)
