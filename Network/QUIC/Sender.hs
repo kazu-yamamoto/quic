@@ -158,7 +158,8 @@ mkPlainPacket conn lvl frames0 ppns = do
                | otherwise                  = mkAck ppns : frames0
     header <- mkHeader conn lvl
     mypn <- nextPacketNumber conn
-    let plain = onPlainCreated (connHooks conn) $ Plain (Flags 0) mypn frames 0
+    let convert = onPlainCreated $ connHooks conn
+        plain = convert lvl $ Plain (Flags 0) mypn frames 0
         ppkt = PlainPacket header plain
     return [mkSentPacket mypn lvl ppkt ppns ackEli]
   where

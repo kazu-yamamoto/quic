@@ -16,14 +16,14 @@ import Network.QUIC.Types
 data Hooks = Hooks {
     onCloseSent     :: IO ()
   , onCloseReceived :: IO ()
-  , onPlainCreated  :: Plain -> Plain
+  , onPlainCreated  :: EncryptionLevel -> Plain -> Plain
   }
 
 defaultHooks :: Hooks
 defaultHooks = Hooks {
     onCloseSent     = return ()
   , onCloseReceived = return ()
-  , onPlainCreated  = id
+  , onPlainCreated  = \_l p -> p
   }
 
 ----------------------------------------------------------------

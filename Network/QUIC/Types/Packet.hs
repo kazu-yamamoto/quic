@@ -77,7 +77,7 @@ headerPeerCID  Short{}              = CID ""
 data PlainPacket = PlainPacket Header Plain deriving (Eq, Show)
 data CryptPacket = CryptPacket Header Crypt deriving (Eq, Show)
 
-data Plain  = Plain  {
+data Plain = Plain {
     plainFlags        :: Flags Raw
   , plainPacketNumber :: PacketNumber
   , plainFrames       :: [Frame]

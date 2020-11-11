@@ -22,17 +22,31 @@ spec = do
         stopQUICServer conn
     describe "error handling" $ do
         it "through protocol violation" $ do
-            let cc0 = testClientConfig
-                cc = cc0 { ccConfig = (ccConfig cc0) { confHooks = defaultHooks { onPlainCreated = rrBits }}}
-            runQUICClient cc waitEstablished `shouldThrow` check ProtocolViolation
+            let cc0 = addHook testClientConfig $ rrBits InitialLevel
+            runQUICClient cc0 waitEstablished `shouldThrow` check ProtocolViolation
+            let cc1 = addHook testClientConfig $ rrBits HandshakeLevel
+            runQUICClient cc1 waitEstablished `shouldThrow` check ProtocolViolation
+            let cc2 = addHook testClientConfig $ rrBits RTT1Level
+            runQUICClient cc2 waitEstablished `shouldThrow` check ProtocolViolation
             -- Stop the server
-            let cc' = testClientConfig
-            runQUICClient cc' $ \conn -> do
+            let ccF = testClientConfig
+            runQUICClient ccF $ \conn -> do
                 waitEstablished conn
                 putMVar var ()
 
-rrBits :: Plain -> Plain
-rrBits plain = plain { plainFlags = Flags 0x08 }
+addHook :: ClientConfig -> (EncryptionLevel -> Plain -> Plain) -> ClientConfig
+addHook cc modify = cc'
+  where
+    conf = ccConfig cc
+    hooks = confHooks conf
+    hooks' = hooks { onPlainCreated = modify }
+    conf' = conf { confHooks = hooks' }
+    cc' = cc { ccConfig = conf' }
+
+rrBits :: EncryptionLevel -> EncryptionLevel -> Plain -> Plain
+rrBits lvl0 lvl plain
+  | lvl0 == lvl = plain { plainFlags = Flags 0x08 }
+  | otherwise   = plain
 
 check :: TransportError -> QUICError -> Bool
 check te (TransportErrorOccurs te' _) = te == te'
