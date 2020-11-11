@@ -192,13 +192,17 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
   | extid == extensionID_QuicTransportParameters = do
         let mparams = decodeParameters bs
         case mparams of
-          Nothing    -> err
+          Nothing     -> err
           Just params -> do
               checkAuthCIDs params
               setParams params
               qlogParamsSet conn (params,"remote")
   where
-    err = E.throwIO TransportParameterError
+    err = do
+        sendConnectionClose conn $ ConnectionCloseQUIC TransportParameterError 0 ""
+        exitConnection conn $ TransportErrorOccurs TransportParameterError ""
+        -- converted into Error_Misc and ignored in "tell"
+        E.throwIO TransportParameterError
     checkAuthCIDs params = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do

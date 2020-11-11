@@ -40,7 +40,8 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
       , clientWantSessionResume = resumptionSession ccResumption
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
-    qparams = setCIDsToParameters myAuthCIDs $ confParameters ccConfig
+    convert = onTransportParametersCreated $ confHooks $ ccConfig
+    qparams = convert $ setCIDsToParameters myAuthCIDs $ confParameters ccConfig
     eQparams = encodeParameters qparams
     cshared = def {
         sharedValidationCache = if ccValidate then
