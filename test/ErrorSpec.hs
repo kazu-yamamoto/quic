@@ -21,7 +21,7 @@ spec = do
         _ <- takeMVar var
         stopQUICServer conn
     describe "error handling" $ do
-        it "through protocol violation" $ do
+        it "throws protocol violation" $ do
             let cc0 = addHook testClientConfig $ rrBits InitialLevel
             runQUICClient cc0 waitEstablished `shouldThrow` check ProtocolViolation
             let cc1 = addHook testClientConfig $ rrBits HandshakeLevel
