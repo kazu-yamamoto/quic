@@ -47,7 +47,10 @@ setOnPlainCreated f hooks = hooks { onPlainCreated = f }
 
 rrBits :: EncryptionLevel -> EncryptionLevel -> Plain -> Plain
 rrBits lvl0 lvl plain
-  | lvl0 == lvl = plain { plainFlags = Flags 0x08 }
+  | lvl0 == lvl = if plainPacketNumber plain /= 0 then
+                    plain { plainFlags = Flags 0x08 }
+                  else
+                    plain
   | otherwise   = plain
 
 setOnTransportParametersCreated :: (Parameters -> Parameters) -> Hooks -> Hooks
