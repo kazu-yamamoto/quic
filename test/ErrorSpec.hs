@@ -11,20 +11,6 @@ import Network.QUIC.Internal
 
 import Config
 
-{-
-import System.Environment
-import qualified Test.Hspec.Core.Runner as H
-
-main :: IO ()
-main = do
-    [host,port] <- getArgs
-    let cc = defaultClientConfig {
-            ccServerName = host
-          , ccPortName   = port
-          }
-    withArgs [] (H.runSpec (spec' cc) H.defaultConfig) >>= H.evaluateSummary
--}
-
 setup :: IO (IO ())
 setup = do
     sc <- makeTestServerConfig
@@ -49,7 +35,7 @@ spec :: Spec
 spec = beforeAll setup $ afterAll teardown $ spec' testClientConfig
 
 runC :: ClientConfig -> (Connection -> IO a) -> IO (Maybe a)
-runC cc body = timeout 500000 $ runQUICClient cc body
+runC cc body = timeout 2000000 $ runQUICClient cc body
 
 spec' :: ClientConfig -> SpecWith a
 spec' cc = do
