@@ -4,7 +4,7 @@ import System.Environment
 import qualified Test.Hspec.Core.Runner as H
 
 import Network.QUIC
-import ErrorSpec
+import Transport
 
 main :: IO ()
 main = do
@@ -13,4 +13,4 @@ main = do
             ccServerName = host
           , ccPortName   = port
           }
-    withArgs [] (H.runSpec (spec' cc) H.defaultConfig) >>= H.evaluateSummary
+    withArgs [] (H.runSpec (transportSpec cc) H.defaultConfig) >>= H.evaluateSummary
