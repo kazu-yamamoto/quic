@@ -195,6 +195,7 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
           Nothing     -> err
           Just params -> do
               checkAuthCIDs params
+              checkInvalid params
               setParams params
               qlogParamsSet conn (params,"remote")
   where
@@ -215,6 +216,8 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
     check v0 v1
       | v0 == v1  = return ()
       | otherwise = err
+    checkInvalid params = do
+        when (maxUdpPayloadSize params < 1200) err
     setParams params = do
         setPeerParameters conn params
         when (isClient conn) $ do

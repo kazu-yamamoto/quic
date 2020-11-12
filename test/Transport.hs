@@ -14,8 +14,11 @@ runC cc body = timeout 2000000 $ runQUICClient cc body
 transportSpec :: ClientConfig -> SpecWith a
 transportSpec cc = do
     describe "QUIC servers" $ do
-        it "MUST send TRANSPORT_PARAMETER_ERROR if nitial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
+        it "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
             let cc0 = addHook cc $ setOnTransportParametersCreated dropInitialSourceConnectionId
+            runC cc0 waitEstablished `shouldThrow` check TransportParameterError
+        it "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size is invalid [Transport 7.4 and 18.2]" $ \_ -> do
+            let cc0 = addHook cc $ setOnTransportParametersCreated setMaxUdpPayloadSize
             runC cc0 waitEstablished `shouldThrow` check TransportParameterError
         it "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]" $ \_ -> do
             let cc0 = addHook cc $ setOnPlainCreated $ unknownFrame RTT1Level
@@ -52,6 +55,9 @@ setOnTransportParametersCreated f hooks = hooks { onTransportParametersCreated =
 
 dropInitialSourceConnectionId :: Parameters -> Parameters
 dropInitialSourceConnectionId params = params { initialSourceConnectionId = Nothing }
+
+setMaxUdpPayloadSize :: Parameters -> Parameters
+setMaxUdpPayloadSize params = params { maxUdpPayloadSize = 1090 }
 
 unknownFrame :: EncryptionLevel -> EncryptionLevel -> Plain -> Plain
 unknownFrame lvl0 lvl plain
