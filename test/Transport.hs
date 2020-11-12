@@ -12,26 +12,26 @@ runC :: ClientConfig -> (Connection -> IO a) -> IO (Maybe a)
 runC cc body = timeout 2000000 $ runQUICClient cc body
 
 transportSpec :: ClientConfig -> SpecWith a
-transportSpec cc = do
+transportSpec cc0 = do
     describe "QUIC servers" $ do
         it "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
-            let cc0 = addHook cc $ setOnTransportParametersCreated dropInitialSourceConnectionId
-            runC cc0 waitEstablished `shouldThrow` check TransportParameterError
+            let cc = addHook cc0 $ setOnTransportParametersCreated dropInitialSourceConnectionId
+            runC cc waitEstablished `shouldThrow` check TransportParameterError
         it "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size is invalid [Transport 7.4 and 18.2]" $ \_ -> do
-            let cc0 = addHook cc $ setOnTransportParametersCreated setMaxUdpPayloadSize
-            runC cc0 waitEstablished `shouldThrow` check TransportParameterError
+            let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
+            runC cc waitEstablished `shouldThrow` check TransportParameterError
         it "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]" $ \_ -> do
-            let cc0 = addHook cc $ setOnPlainCreated $ unknownFrame RTT1Level
-            runC cc0 waitEstablished `shouldThrow` check FrameEncodingError
+            let cc = addHook cc0 $ setOnPlainCreated $ unknownFrame RTT1Level
+            runC cc waitEstablished `shouldThrow` check FrameEncodingError
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Initial are non-zero [Transport 17.2]" $ \_ -> do
-            let cc0 = addHook cc $ setOnPlainCreated $ rrBits InitialLevel
-            runC cc0 waitEstablished `shouldThrow` check ProtocolViolation
+            let cc = addHook cc0 $ setOnPlainCreated $ rrBits InitialLevel
+            runC cc waitEstablished `shouldThrow` check ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Handshake are non-zero [Transport 17.2]" $ \_ -> do
-            let cc1 = addHook cc $ setOnPlainCreated $ rrBits HandshakeLevel
-            runC cc1 waitEstablished `shouldThrow` check ProtocolViolation
+            let cc = addHook cc0 $ setOnPlainCreated $ rrBits HandshakeLevel
+            runC cc waitEstablished `shouldThrow` check ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
-            let cc2 = addHook cc $ setOnPlainCreated $ rrBits RTT1Level
-            runC cc2 waitEstablished `shouldThrow` check ProtocolViolation
+            let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
+            runC cc waitEstablished `shouldThrow` check ProtocolViolation
 
 addHook :: ClientConfig -> (Hooks -> Hooks) -> ClientConfig
 addHook cc modify = cc'
