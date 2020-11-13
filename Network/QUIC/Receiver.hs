@@ -253,16 +253,20 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
 processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
-processFrame conn _ HandshakeDone = do
-    onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
-    fire (Microseconds 100000) $ do
-        dropSecrets conn RTT0Level
-        dropSecrets conn HandshakeLevel
-        clearCryptoStream conn HandshakeLevel
-        clearCryptoStream conn RTT1Level
-    setConnectionEstablished conn
-    -- to receive NewSessionTicket
-    fire (Microseconds 1000000) $ killHandshaker conn
+processFrame conn _ HandshakeDone
+  | isServer conn = do
+        sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "HANDSHAKE_DONE"
+        exitConnection conn $ TransportErrorOccurs ProtocolViolation "HANDSHAKE_DONE"
+  | otherwise = do
+        onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
+        fire (Microseconds 100000) $ do
+            dropSecrets conn RTT0Level
+            dropSecrets conn HandshakeLevel
+            clearCryptoStream conn HandshakeLevel
+            clearCryptoStream conn RTT1Level
+        setConnectionEstablished conn
+        -- to receive NewSessionTicket
+        fire (Microseconds 1000000) $ killHandshaker conn
 processFrame conn _ (UnknownFrame _n)       = do
     connDebugLog conn $ "processFrame: " <> bhow _n
 processFrame _ _ _ = return () -- error
