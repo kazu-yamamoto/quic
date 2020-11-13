@@ -167,7 +167,11 @@ processFrame conn lvl (CryptoF off cdat) = do
               void $ putRxCrypto conn lvl rx
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
-processFrame conn _ (NewToken token) =
+processFrame conn _ (NewToken token)
+  | isServer conn = do
+        sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "NEW_TOKEN"
+        exitConnection conn $ TransportErrorOccurs ProtocolViolation "NEW_TOKEN"
+  | otherwise = do
     setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
