@@ -51,6 +51,9 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
+        it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated handshakeDone
+            runC cc waitEstablished `shouldThrow` check ProtocolViolation
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
             runC cc waitEstablished `shouldThrow` check (CryptoError NoApplicationProtocol)
@@ -113,6 +116,11 @@ unknownFrame :: EncryptionLevel -> EncryptionLevel -> Plain -> Plain
 unknownFrame lvl0 lvl plain
   | lvl0 == lvl = plain { plainFrames = UnknownFrame 0x20 : plainFrames plain }
   | otherwise   = plain
+
+handshakeDone :: EncryptionLevel -> Plain -> Plain
+handshakeDone lvl plain
+  | lvl == RTT1Level = plain { plainFrames = HandshakeDone : plainFrames plain }
+  | otherwise = plain
 
 ----------------------------------------------------------------
 
