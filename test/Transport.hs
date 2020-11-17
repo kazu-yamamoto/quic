@@ -51,6 +51,9 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
+        it "MUST send PROTOCOL_VIOLATION if NEW_TOKEN is received [Transport 19.7]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated newToken
+            runC cc waitEstablished `shouldThrow` check ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
@@ -120,6 +123,11 @@ unknownFrame lvl0 lvl plain
 handshakeDone :: EncryptionLevel -> Plain -> Plain
 handshakeDone lvl plain
   | lvl == RTT1Level = plain { plainFrames = HandshakeDone : plainFrames plain }
+  | otherwise = plain
+
+newToken :: EncryptionLevel -> Plain -> Plain
+newToken lvl plain
+  | lvl == RTT1Level = plain { plainFrames = NewToken "DUMMY" : plainFrames plain }
   | otherwise = plain
 
 ----------------------------------------------------------------
