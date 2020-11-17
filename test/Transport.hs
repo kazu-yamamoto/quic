@@ -13,6 +13,8 @@ import Network.TLS.QUIC (ExtensionRaw)
 import Network.QUIC
 import Network.QUIC.Internal
 
+----------------------------------------------------------------
+
 runC :: ClientConfig -> (Connection -> IO a) -> IO (Maybe a)
 runC cc body = timeout 2000000 $ runQUICClient cc body
 
@@ -44,6 +46,8 @@ transportSpec cc0 = do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
             runC cc waitEstablished `shouldThrow` check (CryptoError MissingExtension)
 
+----------------------------------------------------------------
+
 addHook :: ClientConfig -> (Hooks -> Hooks) -> ClientConfig
 addHook cc modify = cc'
   where
@@ -56,6 +60,14 @@ addHook cc modify = cc'
 setOnPlainCreated :: (EncryptionLevel -> Plain -> Plain) -> Hooks -> Hooks
 setOnPlainCreated f hooks = hooks { onPlainCreated = f }
 
+setOnTransportParametersCreated :: (Parameters -> Parameters) -> Hooks -> Hooks
+setOnTransportParametersCreated f hooks = hooks { onTransportParametersCreated = f }
+
+setOnTLSExtensionCreated :: ([ExtensionRaw] -> [ExtensionRaw]) -> Hooks -> Hooks
+setOnTLSExtensionCreated f params = params { onTLSExtensionCreated = f }
+
+----------------------------------------------------------------
+
 rrBits :: EncryptionLevel -> EncryptionLevel -> Plain -> Plain
 rrBits lvl0 lvl plain
   | lvl0 == lvl = if plainPacketNumber plain /= 0 then
@@ -63,9 +75,6 @@ rrBits lvl0 lvl plain
                   else
                     plain
   | otherwise   = plain
-
-setOnTransportParametersCreated :: (Parameters -> Parameters) -> Hooks -> Hooks
-setOnTransportParametersCreated f hooks = hooks { onTransportParametersCreated = f }
 
 dropInitialSourceConnectionId :: Parameters -> Parameters
 dropInitialSourceConnectionId params = params { initialSourceConnectionId = Nothing }
@@ -78,9 +87,8 @@ unknownFrame lvl0 lvl plain
   | lvl0 == lvl = plain { plainFrames = UnknownFrame 0x20 : plainFrames plain }
   | otherwise   = plain
 
+----------------------------------------------------------------
+
 check :: TransportError -> QUICError -> Bool
 check te (TransportErrorOccurs te' _) = te == te'
 check _  _                            = False
-
-setOnTLSExtensionCreated :: ([ExtensionRaw] -> [ExtensionRaw]) -> Hooks -> Hooks
-setOnTLSExtensionCreated f params = params { onTLSExtensionCreated = f }
