@@ -40,7 +40,7 @@ transportSpec cc0 = do
             let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
             runC cc waitEstablished `shouldThrow` check TransportParameterError
         it "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]" $ \_ -> do
-            let cc = addHook cc0 $ setOnPlainCreated $ unknownFrame RTT1Level
+            let cc = addHook cc0 $ setOnPlainCreated unknownFrame
             runC cc waitEstablished `shouldThrow` check FrameEncodingError
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Initial are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits InitialLevel
@@ -115,10 +115,10 @@ setStatelessResetToken params = params { statelessResetToken = Just $ StatelessR
 setMaxUdpPayloadSize :: Parameters -> Parameters
 setMaxUdpPayloadSize params = params { maxUdpPayloadSize = 1090 }
 
-unknownFrame :: EncryptionLevel -> EncryptionLevel -> Plain -> Plain
-unknownFrame lvl0 lvl plain
-  | lvl0 == lvl = plain { plainFrames = UnknownFrame 0x20 : plainFrames plain }
-  | otherwise   = plain
+unknownFrame :: EncryptionLevel -> Plain -> Plain
+unknownFrame lvl plain
+  | lvl == RTT1Level = plain { plainFrames = UnknownFrame 0x20 : plainFrames plain }
+  | otherwise        = plain
 
 handshakeDone :: EncryptionLevel -> Plain -> Plain
 handshakeDone lvl plain
