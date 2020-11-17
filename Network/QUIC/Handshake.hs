@@ -218,12 +218,16 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
       | otherwise = err
     checkInvalid params = do
         when (maxUdpPayloadSize params < 1200) err
+        when (isServer conn) $ do
+            when (isJust $ originalDestinationConnectionId params) err
+            when (isJust $ preferredAddress params) err
+            when (isJust $ retrySourceConnectionId params) err
+            when (isJust $ statelessResetToken params) err
     setParams params = do
         setPeerParameters conn params
-        when (isClient conn) $ do
-            case statelessResetToken params of
-              Nothing  -> return ()
-              Just srt -> setPeerStatelessResetToken conn srt
+        case statelessResetToken params of
+          Nothing  -> return ()
+          Just srt -> setPeerStatelessResetToken conn srt
         setTxMaxData conn $ initialMaxData params
         setMinIdleTimeout conn $ milliToMicro $ maxIdleTimeout params
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params

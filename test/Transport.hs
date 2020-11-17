@@ -24,6 +24,18 @@ transportSpec cc0 = do
         it "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated dropInitialSourceConnectionId
             runC cc waitEstablished `shouldThrow` check TransportParameterError
+        it "MUST send TRANSPORT_PARAMETER_ERROR if original_destination_connection_id is received [Transport 18.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTransportParametersCreated setOriginalDestinationConnectionId
+            runC cc waitEstablished `shouldThrow` check TransportParameterError
+        it "MUST send TRANSPORT_PARAMETER_ERROR if preferred_address, is received [Transport 18.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTransportParametersCreated setPreferredAddress
+            runC cc waitEstablished `shouldThrow` check TransportParameterError
+        it "MUST send TRANSPORT_PARAMETER_ERROR if retry_source_connection_id is received [Transport 18.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTransportParametersCreated setRetrySourceConnectionId
+            runC cc waitEstablished `shouldThrow` check TransportParameterError
+        it "MUST send TRANSPORT_PARAMETER_ERROR if stateless_reset_token is received [Transport 18.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTransportParametersCreated setStatelessResetToken
+            runC cc waitEstablished `shouldThrow` check TransportParameterError
         it "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size is invalid [Transport 7.4 and 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
             runC cc waitEstablished `shouldThrow` check TransportParameterError
@@ -78,6 +90,21 @@ rrBits lvl0 lvl plain
 
 dropInitialSourceConnectionId :: Parameters -> Parameters
 dropInitialSourceConnectionId params = params { initialSourceConnectionId = Nothing }
+
+dummyCID :: Maybe CID
+dummyCID = Just $ toCID "DUMMY"
+
+setOriginalDestinationConnectionId :: Parameters -> Parameters
+setOriginalDestinationConnectionId params = params { originalDestinationConnectionId = dummyCID }
+
+setPreferredAddress :: Parameters -> Parameters
+setPreferredAddress params = params { preferredAddress = Just "DUMMY" }
+
+setRetrySourceConnectionId :: Parameters -> Parameters
+setRetrySourceConnectionId params = params { retrySourceConnectionId = dummyCID }
+
+setStatelessResetToken :: Parameters -> Parameters
+setStatelessResetToken params = params { statelessResetToken = Just $ StatelessResetToken "DUMMY" }
 
 setMaxUdpPayloadSize :: Parameters -> Parameters
 setMaxUdpPayloadSize params = params { maxUdpPayloadSize = 1090 }
