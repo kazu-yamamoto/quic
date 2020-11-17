@@ -8,6 +8,7 @@ import Data.ByteString ()
 import System.Timeout
 import Test.Hspec
 import Network.TLS (AlertDescription(..))
+import Network.TLS.QUIC (ExtensionRaw)
 
 import Network.QUIC
 import Network.QUIC.Internal
@@ -39,6 +40,9 @@ transportSpec cc0 = do
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
             runC cc waitEstablished `shouldThrow` check (CryptoError NoApplicationProtocol)
+        it "MUST the send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
+            runC cc waitEstablished `shouldThrow` check (CryptoError MissingExtension)
 
 addHook :: ClientConfig -> (Hooks -> Hooks) -> ClientConfig
 addHook cc modify = cc'
@@ -77,3 +81,6 @@ unknownFrame lvl0 lvl plain
 check :: TransportError -> QUICError -> Bool
 check te (TransportErrorOccurs te' _) = te == te'
 check _  _                            = False
+
+setOnTLSExtensionCreated :: ([ExtensionRaw] -> [ExtensionRaw]) -> Hooks -> Hooks
+setOnTLSExtensionCreated f params = params { onTLSExtensionCreated = f }
