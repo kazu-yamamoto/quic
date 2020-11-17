@@ -18,6 +18,7 @@ data Hooks = Hooks {
   , onCloseReceived :: IO ()
   , onPlainCreated  :: EncryptionLevel -> Plain -> Plain
   , onTransportParametersCreated :: Parameters -> Parameters
+  , onTLSExtensionCreated :: [ExtensionRaw] -> [ExtensionRaw]
   }
 
 defaultHooks :: Hooks
@@ -26,6 +27,7 @@ defaultHooks = Hooks {
   , onCloseReceived = return ()
   , onPlainCreated  = \_l p -> p
   , onTransportParametersCreated = id
+  , onTLSExtensionCreated = id
   }
 
 ----------------------------------------------------------------

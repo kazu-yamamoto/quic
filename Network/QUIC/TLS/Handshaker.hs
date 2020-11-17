@@ -40,15 +40,16 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
       , clientWantSessionResume = resumptionSession ccResumption
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
-    convert = onTransportParametersCreated $ confHooks $ ccConfig
-    qparams = convert $ setCIDsToParameters myAuthCIDs $ confParameters ccConfig
+    convTP = onTransportParametersCreated $ confHooks $ ccConfig
+    convExt = onTLSExtensionCreated $ confHooks $ ccConfig
+    qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters ccConfig
     eQparams = encodeParameters qparams
     cshared = def {
         sharedValidationCache = if ccValidate then
                                   def
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
-      , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+      , sharedHelloExtensions = convExt [ExtensionRaw extensionID_QuicTransportParameters eQparams]
       , sharedSessionManager = sessionManager establish
       }
     hook = def {
@@ -77,11 +78,13 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
       , serverDebug     = debug
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
-    qparams = setCIDsToParameters myAuthCIDs $ confParameters scConfig
+    convTP = onTransportParametersCreated $ confHooks $ scConfig
+    convExt = onTLSExtensionCreated $ confHooks $ scConfig
+    qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters scConfig
     eQparams = encodeParameters qparams
     sshared = def {
             sharedCredentials     = confCredentials scConfig
-          , sharedHelloExtensions = [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+          , sharedHelloExtensions = convExt [ExtensionRaw extensionID_QuicTransportParameters eQparams]
           , sharedSessionManager  = scSessionManager
           }
     hook = def {
