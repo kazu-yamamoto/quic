@@ -36,7 +36,7 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
-        it "MUST send no_application_protocol TLS alert if no application protocols are supported" $ \_ -> do
+        it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
             runC cc waitEstablished `shouldThrow` check (CryptoError NoApplicationProtocol)
 
