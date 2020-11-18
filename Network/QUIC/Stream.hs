@@ -1,6 +1,7 @@
 module Network.QUIC.Stream (
   -- * Types
-    Stream(..)
+    Stream
+  , streamId
   , newStream
   , TxStreamData(..)
   , SendStreamQ
