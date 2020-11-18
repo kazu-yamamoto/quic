@@ -224,7 +224,12 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         plen = maximumUdpPayloadSize
     hbuf <- mallocBytes hlen
     pbuf <- mallocBytes plen
-    let freeBufs = free hbuf >> free pbuf
+    freeRef <- newIORef False
+    let freeBufs = do
+            freed <- atomicModifyIORef' freeRef $ \x -> (True,x)
+            unless freed $ do
+                free hbuf
+                free pbuf
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
