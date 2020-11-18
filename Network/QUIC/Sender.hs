@@ -312,20 +312,20 @@ threshold  =  832
 limitation :: Int
 limitation = 1040
 
-packFin :: Stream -> Bool -> IO Bool
-packFin _ True  = return True
-packFin s False = do
-    mx <- tryPeekSendStreamQ s
+packFin :: Connection -> Stream -> Bool -> IO Bool
+packFin _    _ True  = return True
+packFin conn s False = do
+    mx <- tryPeekSendStreamQ conn
     case mx of
       Just (TxStreamData s1 [] 0 True)
           | streamId s == streamId s1 -> do
-                _ <- takeSendStreamQ s
+                _ <- takeSendStreamQ conn
                 return True
       _ -> return False
 
 sendStreamFragment :: Connection -> SendMany -> TxStreamData -> IO ()
 sendStreamFragment conn send (TxStreamData s dats len fin0) = do
-    fin <- packFin s fin0
+    fin <- packFin conn s fin0
     if len < limitation then do
         sendStreamSmall conn send s dats fin len
       else
@@ -343,11 +343,11 @@ sendStreamSmall conn send s0 dats0 fin0 len0 = do
     construct conn lvl frames >>= sendPacket conn send
   where
     tryPeek = do
-        mx <- tryPeekSendStreamQ s0
+        mx <- tryPeekSendStreamQ conn
         case mx of
           Nothing -> do
               yield
-              tryPeekSendStreamQ s0
+              tryPeekSendStreamQ conn
           Just _ -> return mx
     loop :: Stream -> Frame -> Int -> ([Frame] -> [Frame]) -> IO [Frame]
     loop s frame total build = do
@@ -357,9 +357,9 @@ sendStreamSmall conn send s0 dats0 fin0 len0 = do
           Just (TxStreamData s1 dats1 len1 fin1) -> do
               let total1 = len1 + total
               if total1 < limitation then do
-                  _ <- takeSendStreamQ s0 -- cf tryPeek
+                  _ <- takeSendStreamQ conn -- cf tryPeek
                   addTxData conn len1
-                  fin1' <- packFin s fin1 -- must be after takeSendStreamQ
+                  fin1' <- packFin conn s fin1 -- must be after takeSendStreamQ
                   off1 <- getTxStreamOffset s1 len1
                   let sid  = streamId s
                       sid1 = streamId s1

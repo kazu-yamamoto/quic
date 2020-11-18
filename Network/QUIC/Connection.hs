@@ -76,10 +76,12 @@ module Network.QUIC.Connection (
   , setCloseSent
   , setCloseReceived
   , isCloseSent
+  , isClosed
   , wait0RTTReady
   , wait1RTTReady
   , waitEstablished
   , waitClosed
+  , readConnectionFlowTx
   , addTxData
   , getTxData
   , setTxMaxData
@@ -118,8 +120,12 @@ module Network.QUIC.Connection (
   , takeOutputSTM
   , tryPeekOutput
   , putOutput
+  , takeSendStreamQ
   , takeSendStreamQSTM
+  , tryPeekSendStreamQ
+  , putSendStreamQ
   , takeSendBlockQSTM
+  , putSendBlockedQ
   , readMigrationQ
   , writeMigrationQ
   -- * Role

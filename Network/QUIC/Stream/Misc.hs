@@ -8,6 +8,7 @@ module Network.QUIC.Stream.Misc (
   , isRxStreamClosed
   , setRxStreamClosed
   --
+  , readStreamFlowTx
   , addTxStreamData
   , setTxMaxStreamData
   , addRxStreamData
@@ -15,14 +16,8 @@ module Network.QUIC.Stream.Misc (
   , addRxMaxStreamData
   , getRxMaxStreamData
   , getRxStreamWindow
-  -- Shared
-  , isClosed
-  , is1RTTReady
   --
-  , waitWindowIsOpen
-  , flowWindow
   , Blocked(..)
-  , isBlocked
   ) where
 
 import Control.Concurrent.STM
@@ -66,6 +61,11 @@ setRxStreamClosed Stream{..} = atomicModifyIORef'' streamStateRx set
 
 ----------------------------------------------------------------
 
+readStreamFlowTx :: Stream -> STM Flow
+readStreamFlowTx Stream{..} = readTVar streamFlowTx
+
+----------------------------------------------------------------
+
 addTxStreamData :: Stream -> Int -> IO ()
 addTxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx add
   where
@@ -101,44 +101,3 @@ getRxMaxStreamData Stream{..} = flowMaxData <$> readIORef streamFlowRx
 
 getRxStreamWindow :: Stream -> IO Int
 getRxStreamWindow Stream{..} = flowWindow <$> readIORef streamFlowRx
-
-----------------------------------------------------------------
-
-isClosed :: Stream -> IO Bool
-isClosed Stream{..} = do
-    tx <- readIORef $ sharedCloseSent streamShared
-    rx <- readIORef $ sharedCloseReceived streamShared
-    return (tx || rx)
-
-----------------------------------------------------------------
-
-is1RTTReady :: Stream -> IO Bool
-is1RTTReady Stream{..} = readIORef $ shared1RTTReady streamShared
-
-----------------------------------------------------------------
-
-flowWindow :: Flow -> Int
-flowWindow Flow{..} = flowMaxData - flowData
-
-isBlocked :: Stream -> Int -> IO (Maybe Blocked)
-isBlocked strm@Stream{..} n = do
-  atomically $ do
-    strmFlow <- readTVar streamFlowTx
-    let strmWindow = flowWindow strmFlow
-    connFlow <- readTVar (sharedConnFlowTx streamShared)
-    let connWindow = flowWindow connFlow
-    let blocked
-         | n > strmWindow = if n > connWindow
-                            then Just $ BothBlocked strm (flowMaxData strmFlow) (flowMaxData connFlow)
-                            else Just $ StrmBlocked strm (flowMaxData strmFlow)
-         | otherwise      = if n > connWindow
-                            then Just $ ConnBlocked (flowMaxData connFlow)
-                            else Nothing
-    return blocked
-
-waitWindowIsOpen :: Stream -> Int -> IO ()
-waitWindowIsOpen Stream{..} n = do
-  atomically $ do
-    strmWindow <- flowWindow <$> readTVar streamFlowTx
-    connWindow <- flowWindow <$> readTVar (sharedConnFlowTx streamShared)
-    check (n <= strmWindow && n <= connWindow)

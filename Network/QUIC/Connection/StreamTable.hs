@@ -37,7 +37,7 @@ findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
 
 addStream :: Connection -> StreamId -> IO Stream
 addStream conn@Connection{..} sid = do
-    strm <- newStream sid shared
+    strm <- newStream conn sid
     peerParams <- getPeerParameters conn
     let txMaxStreamData | isClient conn = clientInitial sid peerParams
                         | otherwise     = serverInitial sid peerParams
@@ -74,9 +74,9 @@ serverInitial sid params
 ----------------------------------------------------------------
 
 setupCryptoStreams :: Connection -> IO ()
-setupCryptoStreams Connection{..} = do
+setupCryptoStreams conn@Connection{..} = do
     stbl0 <- readIORef streamTable
-    stbl <- insertCryptoStreams stbl0 shared
+    stbl <- insertCryptoStreams conn stbl0
     writeIORef streamTable stbl
 
 clearCryptoStream :: Connection -> EncryptionLevel -> IO ()

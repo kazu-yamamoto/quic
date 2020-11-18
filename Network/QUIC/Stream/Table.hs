@@ -14,6 +14,7 @@ module Network.QUIC.Stream.Table (
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as Map
 
+import {-# Source #-} Network.QUIC.Connection.Types
 import Network.QUIC.Stream.Types
 import Network.QUIC.Types
 
@@ -50,11 +51,11 @@ toCryptoStreamId RTT1Level      = rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 
-insertCryptoStreams :: StreamTable -> Shared -> IO StreamTable
-insertCryptoStreams stbl shrd = do
-    strm1 <- newStream initialCryptoStreamId   shrd
-    strm2 <- newStream handshakeCryptoStreamId shrd
-    strm3 <- newStream rtt1CryptoStreamId      shrd
+insertCryptoStreams :: Connection -> StreamTable -> IO StreamTable
+insertCryptoStreams conn stbl = do
+    strm1 <- newStream conn initialCryptoStreamId
+    strm2 <- newStream conn handshakeCryptoStreamId
+    strm3 <- newStream conn rtt1CryptoStreamId
     return $ insertStream initialCryptoStreamId   strm1
            $ insertStream handshakeCryptoStreamId strm2
            $ insertStream rtt1CryptoStreamId      strm3 stbl

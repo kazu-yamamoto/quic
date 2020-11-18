@@ -11,10 +11,12 @@ module Network.QUIC.Connection.State (
   , setCloseSent
   , isCloseReceived
   , setCloseReceived
+  , isClosed
   , wait0RTTReady
   , wait1RTTReady
   , waitEstablished
   , waitClosed
+  , readConnectionFlowTx
   , addTxData
   , getTxData
   , setTxMaxData
@@ -88,6 +90,12 @@ isCloseReceived :: Connection -> IO Bool
 isCloseReceived Connection{..} =
     atomically (closeReceived <$> readTVar closeState)
 
+isClosed :: Connection -> IO Bool
+isClosed Connection{..} = do
+    tx <- readIORef $ sharedCloseSent shared
+    rx <- readIORef $ sharedCloseReceived shared
+    return (tx || rx)
+
 wait0RTTReady :: Connection -> IO ()
 wait0RTTReady Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
@@ -107,6 +115,11 @@ waitClosed :: Connection -> IO ()
 waitClosed Connection{..} = atomically $ do
     cs <- readTVar closeState
     check (cs == CloseState True True)
+
+----------------------------------------------------------------
+
+readConnectionFlowTx :: Connection -> STM Flow
+readConnectionFlowTx Connection{..} = readTVar flowTx
 
 ----------------------------------------------------------------
 

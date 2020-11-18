@@ -2,6 +2,7 @@
 
 module Network.QUIC.IO where
 
+import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as B
 
@@ -34,42 +35,42 @@ sendStream s dat = sendStreamMany s [dat]
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany s dats = do
-    closed <- isClosed s
+    closed <- isClosed $ streamConnection s
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     let len = sum $ map B.length dats
     -- fixme: size check for 0RTT
-    ready <- is1RTTReady s
+    ready <- isConnection1RTTReady $ streamConnection s
     when ready $ do
         mblocked <- isBlocked s len
         case mblocked of
           Nothing -> return ()
           Just blocked -> do
-              putSendBlockedQ s blocked
+              putSendBlockedQ (streamConnection s) blocked
               waitWindowIsOpen s len
     addTxStreamData s len
-    putSendStreamQ s $ TxStreamData s dats len False
+    putSendStreamQ (streamConnection s) $ TxStreamData s dats len False
 
 -- | Sending a FIN in the stream.
 shutdownStream :: Stream -> IO ()
 shutdownStream s = do
-    closed <- isClosed s
+    closed <- isClosed $ streamConnection s
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     setTxStreamClosed s
-    putSendStreamQ s $ TxStreamData s [] 0 True
+    putSendStreamQ (streamConnection s) $ TxStreamData s [] 0 True
 
 -- | Sending a FIN if necessary and closing a stream.
 closeStream :: Connection -> Stream -> IO ()
 closeStream conn s = do
-    closed <- isClosed s
+    closed <- isClosed $ streamConnection s
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     unless sclosed $ do
         setTxStreamClosed s
-        putSendStreamQ s $ TxStreamData s [] 0 True
+        putSendStreamQ (streamConnection s) $ TxStreamData s [] 0 True
     delStream conn s
     let sid = streamId s
     when ((isClient conn && isServerInitiatedBidirectional sid)
@@ -89,6 +90,29 @@ acceptStream conn = do
 --   an empty bytestring is returned.
 recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = do
-    closed <- isClosed s
+    closed <- isClosed $ streamConnection s
     when closed $ E.throwIO ConnectionIsClosed
     takeRecvStreamQwithSize s n
+
+isBlocked :: Stream -> Int -> IO (Maybe Blocked)
+isBlocked s n = do
+  atomically $ do
+    strmFlow <- readStreamFlowTx s
+    let strmWindow = flowWindow strmFlow
+    connFlow <- readConnectionFlowTx $ streamConnection s
+    let connWindow = flowWindow connFlow
+    let blocked
+         | n > strmWindow = if n > connWindow
+                            then Just $ BothBlocked s (flowMaxData strmFlow) (flowMaxData connFlow)
+                            else Just $ StrmBlocked s (flowMaxData strmFlow)
+         | otherwise      = if n > connWindow
+                            then Just $ ConnBlocked (flowMaxData connFlow)
+                            else Nothing
+    return blocked
+
+waitWindowIsOpen :: Stream -> Int -> IO ()
+waitWindowIsOpen s n = do
+  atomically $ do
+    strmWindow <- flowWindow <$> readStreamFlowTx s
+    connWindow <- flowWindow <$> readConnectionFlowTx (streamConnection s)
+    check (n <= strmWindow && n <= connWindow)

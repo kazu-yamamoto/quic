@@ -27,11 +27,29 @@ tryPeekOutput conn = atomically $ tryPeekTQueue (outputQ conn)
 putOutput :: Connection -> Output -> IO ()
 putOutput conn out = atomically $ writeTQueue (outputQ conn) out
 
+----------------------------------------------------------------
+
+takeSendStreamQ :: Connection -> IO TxStreamData
+takeSendStreamQ conn = atomically $ readTBQueue $ sharedSendStreamQ $ shared conn
+
 takeSendStreamQSTM :: Connection -> STM TxStreamData
 takeSendStreamQSTM conn = readTBQueue $ sharedSendStreamQ $ shared conn
 
+tryPeekSendStreamQ :: Connection -> IO (Maybe TxStreamData)
+tryPeekSendStreamQ conn = atomically $ tryPeekTBQueue $ sharedSendStreamQ $ shared conn
+
+putSendStreamQ :: Connection -> TxStreamData -> IO ()
+putSendStreamQ conn out = atomically $ writeTBQueue (sharedSendStreamQ $ shared conn) out
+
+----------------------------------------------------------------
+
 takeSendBlockQSTM :: Connection -> STM Blocked
 takeSendBlockQSTM conn = readTQueue $ sharedSendBlockedQ $ shared conn
+
+putSendBlockedQ :: Connection -> Blocked -> IO ()
+putSendBlockedQ conn blk = atomically $ writeTQueue (sharedSendBlockedQ $ shared conn) blk
+
+----------------------------------------------------------------
 
 readMigrationQ :: Connection -> IO ReceivedPacket
 readMigrationQ conn = atomically $ readTQueue $ migrationQ conn

@@ -2,12 +2,9 @@ module Network.QUIC.Stream (
   -- * Types
     Stream
   , streamId
+  , streamConnection
   , newStream
   , TxStreamData(..)
-  , SendStreamQ
-  , SendBlockedQ
-  , Shared(..)
-  , newShared
   , Flow(..)
   , defaultFlow
   , StreamState(..)
@@ -22,6 +19,7 @@ module Network.QUIC.Stream (
   , getRxStreamOffset
   , isRxStreamClosed
   , setRxStreamClosed
+  , readStreamFlowTx
   , addTxStreamData
   , setTxMaxStreamData
   , addRxStreamData
@@ -29,16 +27,7 @@ module Network.QUIC.Stream (
   , addRxMaxStreamData
   , getRxMaxStreamData
   , getRxStreamWindow
-  , isClosed
-  , is1RTTReady
-  , waitWindowIsOpen
   , flowWindow
-  , isBlocked
-  -- * Queue
-  , takeSendStreamQ
-  , tryPeekSendStreamQ
-  , putSendStreamQ
-  , putSendBlockedQ
   -- * Reass
   , takeRecvStreamQwithSize
   , putRxStreamData
@@ -55,7 +44,6 @@ module Network.QUIC.Stream (
   ) where
 
 import Network.QUIC.Stream.Misc
-import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Reass
 import Network.QUIC.Stream.Table
 import Network.QUIC.Stream.Types

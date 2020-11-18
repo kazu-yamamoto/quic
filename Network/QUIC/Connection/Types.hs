@@ -219,7 +219,6 @@ newConnection :: Role
               -> IORef (Socket,RecvQ)
               -> IO Connection
 newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
-    tvarFlowTx <- newTVarIO defaultFlow
     let hlen = maximumQUICHeaderSize
         plen = maximumUdpPayloadSize
     hbuf <- mallocBytes hlen
@@ -252,7 +251,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTQueueIO
         <*> return outQ
         <*> newTQueueIO
-        <*> newShared tvarFlowTx
+        <*> newShared
         <*> newIORef 0
         <*> newIORef (return ())
         -- State
@@ -262,7 +261,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newTVarIO (newConcurrency rl Bidirectional  0)
         <*> newTVarIO (newConcurrency rl Unidirectional 0)
         <*> newIORef  peerConcurrency
-        <*> return tvarFlowTx
+        <*> newTVarIO defaultFlow
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newTVarIO NonMigration
         <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
@@ -329,3 +328,23 @@ type InputQ  = TQueue Input
 type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
 type MigrationQ = TQueue ReceivedPacket
+
+----------------------------------------------------------------
+
+type SendStreamQ = TBQueue TxStreamData
+type SendBlockedQ = TQueue Blocked
+
+data Shared = Shared {
+    sharedCloseSent     :: IORef Bool
+  , sharedCloseReceived :: IORef Bool
+  , shared1RTTReady     :: IORef Bool
+  , sharedSendStreamQ   :: SendStreamQ
+  , sharedSendBlockedQ  :: SendBlockedQ
+  }
+
+newShared :: IO Shared
+newShared = Shared <$> newIORef False
+                   <*> newIORef False
+                   <*> newIORef False
+                   <*> newTBQueueIO 10
+                   <*> newTQueueIO
