@@ -3,32 +3,38 @@
 module ErrorSpec where
 
 import Control.Concurrent
+import Control.Monad (forever, void)
 import Data.ByteString ()
-import Test.Hspec
 import Network.QUIC
+import System.Timeout (timeout)
+import Test.Hspec
 
 import Config
 import Transport
 
-setup :: IO (IO ())
+setup :: IO ()
 setup = do
     sc <- makeTestServerConfig
-    var <- newEmptyMVar
-    -- To kill this server, one connection must be established
-    _ <- forkIO $ runQUICServer sc $ \conn -> do
-        waitEstablished conn
-        _ <- takeMVar var
-        stopQUICServer conn
-    threadDelay 50000 -- give time to the server to get ready
-    return $ putMVar var ()
+    void $ forkIO $ runQUICServer sc loop
+    threadDelay 500000 -- give enough time to the server
+  where
+    loop conn = forever $ do
+        strm <- acceptStream conn
+        void $ forkIO $ do
+            mbs <- timeout 1000000 $ recvStream strm 1024
+            case mbs of
+              Just "EXIT" -> stopQUICServer conn
+              _           -> return ()
+            closeStream conn strm
 
-teardown :: IO () -> IO ()
-teardown action = do
-    -- Stop the server
-    let ccF = testClientConfig
-    runQUICClient ccF $ \conn -> do
-        waitEstablished conn
-        action
+teardown :: () -> IO ()
+teardown _ = do
+    let cc = testClientConfig
+    runQUICClient cc $ \conn -> do
+        strm <- stream conn
+        sendStream strm "EXIT"
+        closeStream conn strm
+        threadDelay 1000000
 
 spec :: Spec
 spec = beforeAll setup $ afterAll teardown $ transportSpec testClientConfig
