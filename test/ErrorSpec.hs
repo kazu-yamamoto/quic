@@ -25,7 +25,7 @@ setup = do
             case mbs of
               Just "EXIT" -> stopQUICServer conn
               _           -> return ()
-            closeStream conn strm
+            closeStream strm
 
 teardown :: () -> IO ()
 teardown _ = do
@@ -33,7 +33,7 @@ teardown _ = do
     runQUICClient cc $ \conn -> do
         strm <- stream conn
         sendStream strm "EXIT"
-        closeStream conn strm
+        closeStream strm
         threadDelay 1000000
 
 spec :: Spec

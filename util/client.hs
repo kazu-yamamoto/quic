@@ -307,7 +307,7 @@ clientHQ Aux{..} conn = do
         bs <- recvStream s 1024
         if bs == "" then do
             auxDebug "Connection finished"
-            closeStream conn s
+            closeStream s
             getConnectionStats conn >>= print
           else do
             auxShow bs
@@ -335,7 +335,7 @@ clientH3 Aux{..} conn = do
         auxDebug $ "SID: " ++ show (streamId s0)
         if bs == "" then do
             auxDebug "Connection finished"
-            closeStream conn s0
+            closeStream s0
             getConnectionStats conn >>= print
           else do
             auxShow bs

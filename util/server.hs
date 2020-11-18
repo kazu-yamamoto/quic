@@ -141,7 +141,7 @@ serverHQ conn = connDebugLog conn "Connection terminated" `onE` do
     let sid = streamId s
     when (isClientInitiatedBidirectional sid) $ do
         sendStream s html
-        closeStream conn s
+        closeStream s
 
 consume :: Connection -> Stream -> IO ()
 consume conn s = loop
@@ -177,5 +177,5 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
             let sid = streamId s
             when (isClientInitiatedBidirectional sid) $ do
                 sendStreamMany s hdrbdy
-                closeStream conn s
+                closeStream s
         loop hdrbdy
