@@ -23,7 +23,9 @@ setup = do
         void $ forkIO $ do
             mbs <- timeout 1000000 $ recvStream strm 1024
             case mbs of
-              Just "EXIT" -> stopQUICServer conn
+              Just "EXIT" -> do
+                  sendStream strm "OK"
+                  stopQUICServer conn
               _           -> return ()
             closeStream strm
 
@@ -33,8 +35,8 @@ teardown _ = do
     runQUICClient cc $ \conn -> do
         strm <- stream conn
         sendStream strm "EXIT"
+        _ <- recvStream strm 1024
         closeStream strm
-        threadDelay 1000000
 
 spec :: Spec
 spec = beforeAll setup $ afterAll teardown $ transportSpec testClientConfig
