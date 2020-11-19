@@ -45,9 +45,6 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION on no frames [Transport 12.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated noFrames
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
-        it "MUST send PROTOCOL_VIOLATION if reserved bits in Initial are non-zero [Transport 17.2]" $ \_ -> do
-            let cc = addHook cc0 $ setOnPlainCreated $ rrBits InitialLevel
-            runC cc waitEstablished `shouldThrow` check ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Handshake are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits HandshakeLevel
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
