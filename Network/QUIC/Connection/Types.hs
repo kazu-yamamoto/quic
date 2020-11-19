@@ -90,7 +90,7 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
-    encrypt :: CipherText -> ByteString -> PacketNumber -> [CipherText]
+    encrypt :: PlainText  -> ByteString -> PacketNumber -> [CipherText]
   , decrypt :: CipherText -> ByteString -> PacketNumber -> Maybe PlainText
   , protect   :: Sample -> Mask
   , unprotect :: Sample -> Mask
