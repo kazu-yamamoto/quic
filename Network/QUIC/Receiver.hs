@@ -98,10 +98,10 @@ processReceivedPacket conn rpkt = do
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
-          when (isIllegalReservedBits plainMarks) $ do
-              sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "Non 0 RR bits"
-              exitConnection conn $ TransportErrorOccurs ProtocolViolation "Non 0 RR bits"
-          when (isFrameBroken plainMarks) $ do
+          when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $ do
+              sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "Non 0 RR bits or no frames"
+              exitConnection conn $ TransportErrorOccurs ProtocolViolation "Non 0 RR bits or no frames"
+          when (isUnknownFrame plainMarks) $ do
               sendConnectionClose conn $ ConnectionCloseQUIC FrameEncodingError 0 ""
               exitConnection conn $ TransportErrorOccurs FrameEncodingError ""
           -- For Ping, record PPN first, then send an ACK.

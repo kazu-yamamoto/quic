@@ -57,10 +57,12 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 ----------------------------------------------------------------
 
 encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO [ByteString]
-encodePlainPacket conn ppkt mlen = do
+encodePlainPacket conn ppkt@(PlainPacket _ plain) mlen = do
     let (buf,buflen) = headerBuffer conn
+        mlen' | isNoPaddings (plainMarks plain) = Nothing
+              | otherwise                       = mlen
     wbuf <- newWriteBuffer buf buflen
-    encodePlainPacket' conn wbuf ppkt mlen
+    encodePlainPacket' conn wbuf ppkt mlen'
 
 encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO [ByteString]
 encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames _)) mlen = do
@@ -87,9 +89,10 @@ encodePlainPacket' conn wbuf (PlainPacket (Handshake ver dCID sCID) (Plain flags
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen HandshakeLevel
 
-encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames _)) mlen = do
+encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames marks)) mlen = do
     -- flag
-    let (epn, epnLen) = encodePacketNumber 0 {- dummy -} pn
+    let (epn, epnLen) | is4bytesPN marks = (fromIntegral pn, 4)
+                      | otherwise        = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen
     quicBit <- greaseQuicBit <$> getPeerParameters conn
     Flags flags' <- encodeShortHeaderFlags flags pp quicBit
@@ -177,7 +180,6 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
 
 ----------------------------------------------------------------
 
--- fixme
 protectHeader :: Buffer -> Buffer -> Int -> Cipher -> (Sample -> Mask) -> [CipherText] -> IO ()
 protectHeader headerBeg pnBeg epnLen cipher makeMask [ctxt0,tag0] = do
     flags <- Flags <$> peek8 headerBeg 0
@@ -188,17 +190,14 @@ protectHeader headerBeg pnBeg epnLen cipher makeMask [ctxt0,tag0] = do
     when (epnLen >= 3) $ shuffle 2
     when (epnLen == 4) $ shuffle 3
   where
-    ctxt
-      | epnLen == 1 = B.drop 3 ctxt0
-      | epnLen == 2 = B.drop 2 ctxt0
-      | epnLen == 3 = B.drop 1 ctxt0
-      | otherwise   = ctxt0
+    ctxt1 = ctxt0 `B.append` tag0
+    ctxt2
+      | epnLen == 1 = B.drop 3 ctxt1
+      | epnLen == 2 = B.drop 2 ctxt1
+      | epnLen == 3 = B.drop 1 ctxt1
+      | otherwise   =          ctxt1
     slen = sampleLength cipher
-    clen = B.length ctxt
-    -- We assume that clen (the size of ciphertext) is larger than
-    -- or equal to sample length (16 bytes) in many cases.
-    sample | clen >= slen = Sample $ B.take slen ctxt
-           | otherwise    = Sample (ctxt `B.append` B.take (slen - clen) tag0)
+    sample = Sample $ B.take slen ctxt2
     Mask mask = makeMask sample
     shuffle n = do
         p0 <- peek8 pnBeg n

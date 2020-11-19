@@ -52,10 +52,15 @@ decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
     case mpayload of
       Nothing      -> return Nothing
       Just payload -> do
-          frames <- decodeFrames payload
-          let marks' | null frames = setFrameBroken marks
-                     | otherwise   = marks
-          return $ Just $ Plain rawFlags pn frames marks'
+          mframes <- decodeFrames payload
+          case mframes of
+            Nothing -> do
+                let marks' = setUnknownFrame marks
+                return $ Just $ Plain rawFlags pn [] marks'
+            Just frames -> do
+                let marks' | null frames = setNoFrames marks
+                           | otherwise   = marks
+                return $ Just $ Plain rawFlags pn frames marks'
   where
     logAction msg = do
         connDebugLog conn ("decryptCrypt: " <> msg)

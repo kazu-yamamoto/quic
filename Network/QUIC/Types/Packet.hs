@@ -90,14 +90,32 @@ defaultPlainMarks = 0
 setIllegalReservedBits :: Int -> Int
 setIllegalReservedBits = (`setBit` 0)
 
-setFrameBroken :: Int -> Int
-setFrameBroken = (`setBit` 1)
+setUnknownFrame :: Int -> Int
+setUnknownFrame = (`setBit` 1)
+
+setNoFrames :: Int -> Int
+setNoFrames = (`setBit` 2)
+
+setNoPaddings :: Int -> Int
+setNoPaddings = (`setBit` 8)
+
+set4bytesPN :: Int -> Int
+set4bytesPN = (`setBit` 9)
 
 isIllegalReservedBits :: Int -> Bool
 isIllegalReservedBits = (`testBit` 0)
 
-isFrameBroken :: Int -> Bool
-isFrameBroken = (`testBit` 1)
+isUnknownFrame :: Int -> Bool
+isUnknownFrame = (`testBit` 1)
+
+isNoFrames :: Int -> Bool
+isNoFrames = (`testBit` 2)
+
+isNoPaddings :: Int -> Bool
+isNoPaddings = (`testBit` 8)
+
+is4bytesPN :: Int -> Bool
+is4bytesPN = (`testBit` 9)
 
 data Crypt = Crypt {
     cryptPktNumOffset :: Int
