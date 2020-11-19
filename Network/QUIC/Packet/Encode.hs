@@ -190,14 +190,12 @@ protectHeader headerBeg pnBeg epnLen cipher makeMask [ctxt0,tag0] = do
     when (epnLen >= 3) $ shuffle 2
     when (epnLen == 4) $ shuffle 3
   where
-    ctxt1 = ctxt0 `B.append` tag0
-    ctxt2
-      | epnLen == 1 = B.drop 3 ctxt1
-      | epnLen == 2 = B.drop 2 ctxt1
-      | epnLen == 3 = B.drop 1 ctxt1
-      | otherwise   =          ctxt1
     slen = sampleLength cipher
+    ctxt1 | B.length ctxt0 >= slen + 4 = ctxt0 -- fast path
+          | otherwise                  = ctxt0 `B.append` tag0
+    ctxt2 = B.drop (4 - epnLen) ctxt1
     sample = Sample $ B.take slen ctxt2
+    -- throw an exception if length sample < slen
     Mask mask = makeMask sample
     shuffle n = do
         p0 <- peek8 pnBeg n
