@@ -6,37 +6,22 @@ import Control.Concurrent
 import Control.Monad (forever, void)
 import Data.ByteString ()
 import Network.QUIC
-import System.Timeout (timeout)
 import Test.Hspec
 
 import Config
 import Transport
 
-setup :: IO ()
+setup :: IO ThreadId
 setup = do
     sc <- makeTestServerConfig
-    void $ forkIO $ runQUICServer sc loop
+    tid <- forkIO $ runQUICServer sc loop
     threadDelay 500000 -- give enough time to the server
+    return tid
   where
-    loop conn = forever $ do
-        strm <- acceptStream conn
-        void $ forkIO $ do
-            mbs <- timeout 1000000 $ recvStream strm 1024
-            case mbs of
-              Just "EXIT" -> do
-                  sendStream strm "OK"
-                  stopQUICServer conn
-              _           -> return ()
-            closeStream strm
+    loop conn = forever $ void $ acceptStream conn
 
-teardown :: () -> IO ()
-teardown _ = do
-    let cc = testClientConfig
-    runQUICClient cc $ \conn -> do
-        strm <- stream conn
-        sendStream strm "EXIT"
-        _ <- recvStream strm 1024
-        closeStream strm
+teardown :: ThreadId -> IO ()
+teardown tid = killThread tid
 
 spec :: Spec
 spec = beforeAll setup $ afterAll teardown $ transportSpec testClientConfig
