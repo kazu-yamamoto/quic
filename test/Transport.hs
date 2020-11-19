@@ -54,6 +54,11 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if NEW_TOKEN is received [Transport 19.7]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated newToken
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
+
+        it "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.9]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated maxStreamData
+            runC cc waitEstablished `shouldThrow` check StreamStateError
+
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
             runC cc waitEstablished `shouldThrow` check ProtocolViolation
@@ -133,6 +138,11 @@ handshakeDone lvl plain
 newToken :: EncryptionLevel -> Plain -> Plain
 newToken lvl plain
   | lvl == RTT1Level = plain { plainFrames = NewToken "DUMMY" : plainFrames plain }
+  | otherwise = plain
+
+maxStreamData :: EncryptionLevel -> Plain -> Plain
+maxStreamData lvl plain
+  | lvl == RTT1Level = plain { plainFrames = MaxStreamData 102 1000000 : plainFrames plain }
   | otherwise = plain
 
 ----------------------------------------------------------------

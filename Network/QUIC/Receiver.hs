@@ -207,7 +207,9 @@ processFrame conn _ (MaxData n) =
 processFrame conn _ (MaxStreamData sid n) = do
     mstrm <- findStream conn sid
     case mstrm of
-      Nothing   -> return ()
+      Nothing   -> do
+          sendConnectionClose conn $ ConnectionCloseQUIC StreamStateError 0 "No such stream"
+          exitConnection conn $ TransportErrorOccurs StreamStateError "No such stream"
       Just strm -> setTxMaxStreamData strm n
 processFrame conn _ (MaxStreams dir n)
   | dir == Bidirectional = setMyMaxStreams conn n
