@@ -23,51 +23,51 @@ transportSpec cc0 = do
     describe "QUIC servers" $ do
         it "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated dropInitialSourceConnectionId
-            runC cc waitEstablished `shouldThrow` check TransportParameterError
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
         it "MUST send TRANSPORT_PARAMETER_ERROR if original_destination_connection_id is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setOriginalDestinationConnectionId
-            runC cc waitEstablished `shouldThrow` check TransportParameterError
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
         it "MUST send TRANSPORT_PARAMETER_ERROR if preferred_address, is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setPreferredAddress
-            runC cc waitEstablished `shouldThrow` check TransportParameterError
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
         it "MUST send TRANSPORT_PARAMETER_ERROR if retry_source_connection_id is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setRetrySourceConnectionId
-            runC cc waitEstablished `shouldThrow` check TransportParameterError
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
         it "MUST send TRANSPORT_PARAMETER_ERROR if stateless_reset_token is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setStatelessResetToken
-            runC cc waitEstablished `shouldThrow` check TransportParameterError
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
         it "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size is invalid [Transport 7.4 and 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
-            runC cc waitEstablished `shouldThrow` check TransportParameterError
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
         it "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated unknownFrame
-            runC cc waitEstablished `shouldThrow` check FrameEncodingError
+            runC cc waitEstablished `shouldThrow` transportError FrameEncodingError
         it "MUST send PROTOCOL_VIOLATION on no frames [Transport 12.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated noFrames
-            runC cc waitEstablished `shouldThrow` check ProtocolViolation
+            runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Handshake are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits HandshakeLevel
-            runC cc waitEstablished `shouldThrow` check ProtocolViolation
+            runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
-            runC cc waitEstablished `shouldThrow` check ProtocolViolation
+            runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if NEW_TOKEN is received [Transport 19.7]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated newToken
-            runC cc waitEstablished `shouldThrow` check ProtocolViolation
+            runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
 
         it "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.9]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated maxStreamData
-            runC cc waitEstablished `shouldThrow` check StreamStateError
+            runC cc waitEstablished `shouldThrow` transportError StreamStateError
 
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
-            runC cc waitEstablished `shouldThrow` check ProtocolViolation
+            runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
-            runC cc waitEstablished `shouldThrow` check (CryptoError NoApplicationProtocol)
+            runC cc waitEstablished `shouldThrow` transportError (CryptoError NoApplicationProtocol)
         it "MUST the send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
-            runC cc waitEstablished `shouldThrow` check (CryptoError MissingExtension)
+            runC cc waitEstablished `shouldThrow` transportError (CryptoError MissingExtension)
 
 ----------------------------------------------------------------
 
@@ -147,6 +147,6 @@ maxStreamData lvl plain
 
 ----------------------------------------------------------------
 
-check :: TransportError -> QUICError -> Bool
-check te (TransportErrorOccurs te' _) = te == te'
-check _  _                            = False
+transportError :: TransportError -> QUICError -> Bool
+transportError te (TransportErrorOccurs te' _) = te == te'
+transportError _  _                            = False
