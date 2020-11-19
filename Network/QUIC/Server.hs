@@ -304,9 +304,12 @@ dispatch Dispatch{..} ServerConfig{..}
     sendRetry = do
         newdCID <- newCID
         retryToken <- generateRetryToken ver newdCID sCID dCID
-        newtoken <- encryptToken tokenMgr retryToken
-        bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
-        send bss
+        mnewtoken <- timeout (Microseconds 100000) $ encryptToken tokenMgr retryToken
+        case mnewtoken of
+          Nothing       -> stdoutLogger "RETRY TOKEN STACKED"
+          Just newtoken -> do
+              bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
+              send bss
 dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ peersa _ _ bytes tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
