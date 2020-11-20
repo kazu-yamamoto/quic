@@ -148,8 +148,14 @@ processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "ACK" 0x02 -- fixme
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
-processFrame _ _ frame@ResetStream{} = print frame
-processFrame _ _ frame@StopSending{} = print frame
+processFrame conn lvl frame@ResetStream{} = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "RESET_STREAM" 0x04
+    print frame
+processFrame conn lvl frame@StopSending{} = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "STOP_SENDING" 0x05
+    print frame
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "CRYPTO" 0x06
@@ -170,7 +176,7 @@ processFrame conn lvl (CryptoF off cdat) = do
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn lvl (NewToken token) = do
-    when (isServer conn || lvl == RTT0Level) $
+    when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" 0x07
     setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
@@ -202,23 +208,35 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
         fire (Microseconds 50000) $ do
             newMax' <- getRxMaxData conn
             putOutput conn $ OutControl RTT1Level [MaxData newMax']
-processFrame conn _ (MaxData n) =
+processFrame conn lvl (MaxData n) = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "MAX_DATA" 0x010
     setTxMaxData conn n
-processFrame conn _ (MaxStreamData sid n) = do
+processFrame conn lvl (MaxStreamData sid n) = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "MAX_STREAM_DATA" 0x011
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> sendCCandExitConnection conn StreamStateError "No such stream" 0x11
       Just strm -> setTxMaxStreamData strm n
-processFrame conn _ (MaxStreams dir n)
-  | dir == Bidirectional = setMyMaxStreams conn n
-  | otherwise            = setMyUniMaxStreams conn n
-processFrame conn _ DataBlocked{} = do
+processFrame conn lvl (MaxStreams dir n) = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "MAX_STREAMS" 0
+    if dir == Bidirectional then
+        setMyMaxStreams conn n
+      else
+        setMyUniMaxStreams conn n
+processFrame conn lvl DataBlocked{} = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "DATA_BLOCKED" 0x14
     newMax <- getRxMaxData conn
     putOutput conn $ OutControl RTT1Level [MaxData newMax]
     fire (Microseconds 50000) $ do
         newMax' <- getRxMaxData conn
         putOutput conn $ OutControl RTT1Level [MaxData newMax']
-processFrame conn _ (StreamDataBlocked sid _) = do
+processFrame conn lvl (StreamDataBlocked sid _) = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "STREAM_DATA_BLOCKED" 0x15
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> return ()
@@ -228,16 +246,19 @@ processFrame conn _ (StreamDataBlocked sid _) = do
           fire (Microseconds 50000) $ do
               newMax' <- getRxMaxStreamData strm
               putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax']
-processFrame _ _ frame@StreamsBlocked{} = print frame
-processFrame conn _ (NewConnectionID cidInfo rpt) = do
+processFrame conn lvl frame@StreamsBlocked{} = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "STREAMS_BLOCKED" 0
+    print frame
+processFrame conn lvl (NewConnectionID cidInfo rpt) = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        sendCCandExitConnection conn ProtocolViolation "NEW_CONNECTION_ID" 0x18
     addPeerCID conn cidInfo
     when (rpt >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         let frames = map RetireConnectionID seqNums
         putOutput conn $ OutControl RTT1Level frames
-processFrame conn lvl (RetireConnectionID sn) = do
-    when (lvl == RTT0Level) $
-        sendCCandExitConnection conn ProtocolViolation "RETIRE_CONNECTION_ID" 0x19
+processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     when (isServer conn) $ case mcidInfo of
       Nothing -> return ()
@@ -261,7 +282,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn lvl HandshakeDone = do
-    when (isServer conn || lvl == RTT0Level) $
+    when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e
     onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
     fire (Microseconds 100000) $ do
