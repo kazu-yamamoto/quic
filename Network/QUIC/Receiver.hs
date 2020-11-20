@@ -266,9 +266,7 @@ processFrame conn _ HandshakeDone
         setConnectionEstablished conn
         -- to receive NewSessionTicket
         fire (Microseconds 1000000) $ killHandshaker conn
-processFrame conn _ (UnknownFrame _n)       = do
-    connDebugLog conn $ "processFrame: " <> bhow _n
-processFrame _ _ _ = return () -- error
+processFrame conn _ _ = sendCCandExitConnection conn ProtocolViolation "" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.
