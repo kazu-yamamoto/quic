@@ -98,12 +98,10 @@ processReceivedPacket conn rpkt = do
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
-          when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $ do
-              sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "Non 0 RR bits or no frames"
-              exitConnection conn $ TransportErrorOccurs ProtocolViolation "Non 0 RR bits or no frames"
-          when (isUnknownFrame plainMarks) $ do
-              sendConnectionClose conn $ ConnectionCloseQUIC FrameEncodingError 0 ""
-              exitConnection conn $ TransportErrorOccurs FrameEncodingError ""
+          when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
+              sendCCandExitConnection conn ProtocolViolation "Non 0 RR bits or no frames" Nothing
+          when (isUnknownFrame plainMarks) $
+              sendCCandExitConnection conn FrameEncodingError "Unknown frame" Nothing
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl plainPacketNumber
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
@@ -168,11 +166,10 @@ processFrame conn lvl (CryptoF off cdat) = do
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token)
-  | isServer conn = do
-        sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "NEW_TOKEN"
-        exitConnection conn $ TransportErrorOccurs ProtocolViolation "NEW_TOKEN"
+  | isServer conn =
+        sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" (Just 0x07)
   | otherwise = do
-    setNewToken conn token
+        setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
@@ -207,9 +204,7 @@ processFrame conn _ (MaxData n) =
 processFrame conn _ (MaxStreamData sid n) = do
     mstrm <- findStream conn sid
     case mstrm of
-      Nothing   -> do
-          sendConnectionClose conn $ ConnectionCloseQUIC StreamStateError 0 "No such stream"
-          exitConnection conn $ TransportErrorOccurs StreamStateError "No such stream"
+      Nothing   -> sendCCandExitConnection conn StreamStateError "No such stream" (Just 0x11)
       Just strm -> setTxMaxStreamData strm n
 processFrame conn _ (MaxStreams dir n)
   | dir == Bidirectional = setMyMaxStreams conn n
@@ -260,9 +255,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone
-  | isServer conn = do
-        sendConnectionClose conn $ ConnectionCloseQUIC ProtocolViolation 0 "HANDSHAKE_DONE"
-        exitConnection conn $ TransportErrorOccurs ProtocolViolation "HANDSHAKE_DONE"
+  | isServer conn = sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" (Just 0x1e)
   | otherwise = do
         onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
         fire (Microseconds 100000) $ do

@@ -158,6 +158,7 @@ module Network.QUIC.Connection (
   -- In this module
   , exitConnection
   , sendConnectionClose
+  , sendCCandExitConnection
   ) where
 
 import qualified Control.Exception as E
@@ -174,6 +175,7 @@ import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
+import Network.QUIC.Imports
 import Network.QUIC.Types
 
 exitConnection :: Connection -> QUICError -> IO ()
@@ -184,3 +186,12 @@ sendConnectionClose conn frame = do
     lvl <- getEncryptionLevel conn
     putOutput conn $ OutControl lvl [frame]
     setCloseSent conn
+
+sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> Maybe FrameType -> IO ()
+sendCCandExitConnection conn err desc mftyp = do
+    sendConnectionClose conn frame
+    exitConnection conn quicerr
+  where
+    ftyp = fromMaybe 0 mftyp
+    frame = ConnectionCloseQUIC err ftyp desc
+    quicerr = TransportErrorOccurs err desc
