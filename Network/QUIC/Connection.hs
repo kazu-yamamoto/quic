@@ -187,11 +187,10 @@ sendConnectionClose conn frame = do
     putOutput conn $ OutControl lvl [frame]
     setCloseSent conn
 
-sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> Maybe FrameType -> IO ()
-sendCCandExitConnection conn err desc mftyp = do
+sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO ()
+sendCCandExitConnection conn err desc ftyp = do
     sendConnectionClose conn frame
     exitConnection conn quicerr
   where
-    ftyp = fromMaybe 0 mftyp
     frame = ConnectionCloseQUIC err ftyp desc
     quicerr = TransportErrorOccurs err desc

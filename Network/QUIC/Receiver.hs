@@ -99,9 +99,9 @@ processReceivedPacket conn rpkt = do
     case mplain of
       Just plain@Plain{..} -> do
           when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
-              sendCCandExitConnection conn ProtocolViolation "Non 0 RR bits or no frames" Nothing
+              sendCCandExitConnection conn ProtocolViolation "Non 0 RR bits or no frames" 0
           when (isUnknownFrame plainMarks) $
-              sendCCandExitConnection conn FrameEncodingError "Unknown frame" Nothing
+              sendCCandExitConnection conn FrameEncodingError "Unknown frame" 0
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl plainPacketNumber
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
@@ -167,7 +167,7 @@ processFrame conn lvl (CryptoF off cdat) = do
               connDebugLog conn "processFrame: Short:Crypto for server"
 processFrame conn _ (NewToken token)
   | isServer conn =
-        sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" (Just 0x07)
+        sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" 0x07
   | otherwise = do
         setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
@@ -204,7 +204,7 @@ processFrame conn _ (MaxData n) =
 processFrame conn _ (MaxStreamData sid n) = do
     mstrm <- findStream conn sid
     case mstrm of
-      Nothing   -> sendCCandExitConnection conn StreamStateError "No such stream" (Just 0x11)
+      Nothing   -> sendCCandExitConnection conn StreamStateError "No such stream" 0x11
       Just strm -> setTxMaxStreamData strm n
 processFrame conn _ (MaxStreams dir n)
   | dir == Bidirectional = setMyMaxStreams conn n
@@ -255,7 +255,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn _ HandshakeDone
-  | isServer conn = sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" (Just 0x1e)
+  | isServer conn = sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e
   | otherwise = do
         onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
         fire (Microseconds 100000) $ do
