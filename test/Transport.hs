@@ -54,6 +54,9 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Handshake are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits HandshakeLevel
             runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
+        it "MUST send PROTOCOL_VIOLATION if PATH_CHALLENGE in Handshake is received [Transport 17.2.4]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated handshakePathChallenge
+            runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
             runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
@@ -139,6 +142,11 @@ setMaxAckDelay params = params { maxAckDelay = 2^(15 :: Int) }
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
   | lvl == RTT1Level = plain { plainFrames = UnknownFrame 0x20 : plainFrames plain }
+  | otherwise        = plain
+
+handshakePathChallenge :: EncryptionLevel -> Plain -> Plain
+handshakePathChallenge lvl plain
+  | lvl == HandshakeLevel = plain { plainFrames = PathChallenge (PathData "01234567") : plainFrames plain }
   | otherwise        = plain
 
 noFrames :: EncryptionLevel -> Plain -> Plain
