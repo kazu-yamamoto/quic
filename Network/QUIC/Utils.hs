@@ -34,3 +34,6 @@ getRandomOneByte = randomIO
 {-# INLINE totalLen #-}
 totalLen :: [ByteString] -> Int
 totalLen = foldl' (+) 0 . map B.length
+
+sum' :: (Functor f, Foldable f) => f Int -> Int
+sum' = foldl' (+) 0

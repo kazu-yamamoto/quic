@@ -74,7 +74,7 @@ encodeFrame wbuf (StreamF sid off dats fin) = do
     write8 wbuf flag2
     encodeInt' wbuf $ fromIntegral sid
     when (off /= 0) $ encodeInt' wbuf $ fromIntegral off
-    encodeInt' wbuf $ fromIntegral $ sum $ map B.length dats
+    encodeInt' wbuf $ fromIntegral $ totalLen dats
     mapM_ (copyByteString wbuf) dats
 encodeFrame wbuf (MaxData n) = do
     write8 wbuf 0x10

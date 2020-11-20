@@ -4,7 +4,6 @@ module Network.QUIC.IO where
 
 import Control.Concurrent.STM
 import qualified Control.Exception as E
-import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -39,7 +38,7 @@ sendStreamMany s dats = do
     when closed $ E.throwIO ConnectionIsClosed
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
-    let len = sum $ map B.length dats
+    let len = totalLen dats
     -- fixme: size check for 0RTT
     ready <- isConnection1RTTReady $ streamConnection s
     when ready $ do

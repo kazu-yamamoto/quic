@@ -78,8 +78,8 @@ onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of
 
 decreaseCC :: (Functor m, Foldable m) => LDCC -> m SentPacket -> IO ()
 decreaseCC ldcc@LDCC{..} packets = do
-    let sentBytes = sum (spSentBytes <$> packets)
-        num = sum (countAckEli <$> packets)
+    let sentBytes = sum' (spSentBytes <$> packets)
+        num = sum' (countAckEli <$> packets)
     metricsUpdated ldcc $
         atomically $ modifyTVar' recoveryCC $ \cc ->
           cc {
