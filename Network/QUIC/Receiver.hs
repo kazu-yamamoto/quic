@@ -144,11 +144,15 @@ processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping =
     putOutput conn $ OutControl lvl []
-processFrame conn lvl (Ack ackInfo ackDelay) =
+processFrame conn lvl (Ack ackInfo ackDelay) = do
+    when (lvl == RTT0Level) $ do
+        sendCCandExitConnection conn ProtocolViolation "ACK" 0x02 -- fixme
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
 processFrame _ _ frame@ResetStream{} = print frame
 processFrame _ _ frame@StopSending{} = print frame
 processFrame conn lvl (CryptoF off cdat) = do
+    when (lvl == RTT0Level) $ do
+        sendCCandExitConnection conn ProtocolViolation "CRYPTO" 0x06
     let len = BS.length cdat
         rx = RxStreamData cdat off len False
     case lvl of
@@ -165,11 +169,10 @@ processFrame conn lvl (CryptoF off cdat) = do
               void $ putRxCrypto conn lvl rx
         | otherwise -> do
               connDebugLog conn "processFrame: Short:Crypto for server"
-processFrame conn _ (NewToken token)
-  | isServer conn =
+processFrame conn lvl (NewToken token) = do
+    when (isServer conn || lvl == RTT0Level) $
         sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" 0x07
-  | otherwise = do
-        setNewToken conn token
+    setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
@@ -232,7 +235,9 @@ processFrame conn _ (NewConnectionID cidInfo rpt) = do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         let frames = map RetireConnectionID seqNums
         putOutput conn $ OutControl RTT1Level frames
-processFrame conn _ (RetireConnectionID sn) = do
+processFrame conn lvl (RetireConnectionID sn) = do
+    when (lvl == RTT0Level) $
+        sendCCandExitConnection conn ProtocolViolation "RETIRE_CONNECTION_ID" 0x19
     mcidInfo <- retireMyCID conn sn
     when (isServer conn) $ case mcidInfo of
       Nothing -> return ()
@@ -242,6 +247,7 @@ processFrame conn _ (RetireConnectionID sn) = do
 processFrame conn RTT1Level (PathChallenge dat) =
     putOutput conn $ OutControl RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
+    -- RTT0Level falls intentionally
     checkResponse conn dat
 processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
     setCloseReceived conn
@@ -254,18 +260,18 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
 processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     exitConnection conn $ ApplicationErrorOccurs err reason
-processFrame conn _ HandshakeDone
-  | isServer conn = sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e
-  | otherwise = do
-        onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
-        fire (Microseconds 100000) $ do
-            dropSecrets conn RTT0Level
-            dropSecrets conn HandshakeLevel
-            clearCryptoStream conn HandshakeLevel
-            clearCryptoStream conn RTT1Level
-        setConnectionEstablished conn
-        -- to receive NewSessionTicket
-        fire (Microseconds 1000000) $ killHandshaker conn
+processFrame conn lvl HandshakeDone = do
+    when (isServer conn || lvl == RTT0Level) $
+        sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e
+    onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
+    fire (Microseconds 100000) $ do
+        dropSecrets conn RTT0Level
+        dropSecrets conn HandshakeLevel
+        clearCryptoStream conn HandshakeLevel
+        clearCryptoStream conn RTT1Level
+    setConnectionEstablished conn
+    -- to receive NewSessionTicket
+    fire (Microseconds 1000000) $ killHandshaker conn
 processFrame conn _ _ = sendCCandExitConnection conn ProtocolViolation "" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.
