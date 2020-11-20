@@ -36,8 +36,14 @@ transportSpec cc0 = do
         it "MUST send TRANSPORT_PARAMETER_ERROR if stateless_reset_token is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setStatelessResetToken
             runC cc waitEstablished `shouldThrow` transportError TransportParameterError
-        it "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size is invalid [Transport 7.4 and 18.2]" $ \_ -> do
+        it "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size < 1200 [Transport 7.4 and 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
+        it "MUST send TRANSPORT_PARAMETER_ERROR if ack_delay_exponen > 20 [Transport 7.4 and 18.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTransportParametersCreated setAckDelayExponent
+            runC cc waitEstablished `shouldThrow` transportError TransportParameterError
+        it "MUST send TRANSPORT_PARAMETER_ERROR if max_ack_delay >= 2^14 [Transport 7.4 and 18.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTransportParametersCreated setMaxAckDelay
             runC cc waitEstablished `shouldThrow` transportError TransportParameterError
         it "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated unknownFrame
@@ -117,8 +123,18 @@ setRetrySourceConnectionId params = params { retrySourceConnectionId = dummyCID 
 setStatelessResetToken :: Parameters -> Parameters
 setStatelessResetToken params = params { statelessResetToken = Just $ StatelessResetToken "DUMMY" }
 
+----------------------------------------------------------------
+
 setMaxUdpPayloadSize :: Parameters -> Parameters
 setMaxUdpPayloadSize params = params { maxUdpPayloadSize = 1090 }
+
+setAckDelayExponent :: Parameters -> Parameters
+setAckDelayExponent params = params { ackDelayExponent = 30 }
+
+setMaxAckDelay :: Parameters -> Parameters
+setMaxAckDelay params = params { maxAckDelay = 2^(15 :: Int) }
+
+----------------------------------------------------------------
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain

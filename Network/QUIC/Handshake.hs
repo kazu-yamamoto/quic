@@ -218,6 +218,8 @@ setPeerParams conn _ctx [ExtensionRaw extid bs]
       | otherwise = err
     checkInvalid params = do
         when (maxUdpPayloadSize params < 1200) err
+        when (ackDelayExponent params > 20) err
+        when (maxAckDelay params >= 2^(14 :: Int)) err
         when (isServer conn) $ do
             when (isJust $ originalDestinationConnectionId params) err
             when (isJust $ preferredAddress params) err
