@@ -225,8 +225,10 @@ sendOutput :: Connection -> SendMany -> Output -> IO ()
 sendOutput conn send (OutControl lvl frames) = do
     construct conn lvl frames >>= sendPacket conn send
     when (lvl == HandshakeLevel) $ discardInitialPacketNumberSpace conn
-sendOutput conn send (OutHandshake x) = do
-    sendCryptoFragments conn send x
+sendOutput conn send (OutHandshake lcs0) = do
+    let convert = onTLSHandshakeCreated $ connHooks conn
+        lcs = convert lcs0
+    sendCryptoFragments conn send lcs
 sendOutput conn send (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0
     let lvl = levelFromHeader hdr0

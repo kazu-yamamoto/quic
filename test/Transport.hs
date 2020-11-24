@@ -5,6 +5,7 @@ module Transport (
   ) where
 
 import Data.ByteString ()
+import qualified Data.ByteString as BS
 import System.Timeout
 import Test.Hspec
 import Network.TLS (AlertDescription(..))
@@ -71,6 +72,9 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
             runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
+        it "MUST send unexpected_message TLS alert if KeyUpdate is received [TLS 6]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate
+            runC cc waitEstablished `shouldThrow` transportError (CryptoError UnexpectedMessage)
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
             runC cc waitEstablished `shouldThrow` transportError (CryptoError NoApplicationProtocol)
@@ -97,6 +101,9 @@ setOnTransportParametersCreated f hooks = hooks { onTransportParametersCreated =
 
 setOnTLSExtensionCreated :: ([ExtensionRaw] -> [ExtensionRaw]) -> Hooks -> Hooks
 setOnTLSExtensionCreated f params = params { onTLSExtensionCreated = f }
+
+setOnTLSHandshakeCreated :: ([(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]) -> Hooks -> Hooks
+setOnTLSHandshakeCreated f hooks = hooks { onTLSHandshakeCreated = f }
 
 ----------------------------------------------------------------
 
@@ -168,6 +175,12 @@ maxStreamData :: EncryptionLevel -> Plain -> Plain
 maxStreamData lvl plain
   | lvl == RTT1Level = plain { plainFrames = MaxStreamData 102 1000000 : plainFrames plain }
   | otherwise = plain
+
+----------------------------------------------------------------
+
+cryptoKeyUpdate :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
+cryptoKeyUpdate [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append fin "\x18\x00\x00\x01\x01")]
+cryptoKeyUpdate lcs = lcs
 
 ----------------------------------------------------------------
 

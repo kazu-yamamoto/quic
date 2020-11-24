@@ -19,6 +19,7 @@ data Hooks = Hooks {
   , onPlainCreated  :: EncryptionLevel -> Plain -> Plain
   , onTransportParametersCreated :: Parameters -> Parameters
   , onTLSExtensionCreated :: [ExtensionRaw] -> [ExtensionRaw]
+  , onTLSHandshakeCreated :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
   }
 
 defaultHooks :: Hooks
@@ -28,6 +29,7 @@ defaultHooks = Hooks {
   , onPlainCreated  = \_l p -> p
   , onTransportParametersCreated = id
   , onTLSExtensionCreated = id
+  , onTLSHandshakeCreated = id
   }
 
 ----------------------------------------------------------------
