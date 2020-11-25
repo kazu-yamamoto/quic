@@ -81,6 +81,9 @@ transportSpec cc0 = do
         it "MUST the send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
             runC cc waitEstablished `shouldThrow` transportError (CryptoError MissingExtension)
+        it "MUST send unexpected_message TLS alert if EndOfEarlyData is received [TLS 8.3]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoEndOfEarlyData
+            runC cc waitEstablished `shouldThrow` transportError (CryptoError UnexpectedMessage)
 
 ----------------------------------------------------------------
 
@@ -181,6 +184,10 @@ maxStreamData lvl plain
 cryptoKeyUpdate :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
 cryptoKeyUpdate [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append fin "\x18\x00\x00\x01\x01")]
 cryptoKeyUpdate lcs = lcs
+
+cryptoEndOfEarlyData :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
+cryptoEndOfEarlyData [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append "\x05\x00\x00\x00" fin)]
+cryptoEndOfEarlyData lcs = lcs
 
 ----------------------------------------------------------------
 
