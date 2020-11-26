@@ -47,11 +47,11 @@ onPacketSent ldcc@LDCC{..} sentPacket = do
 onPacketSentCC :: LDCC -> SentPacket -> IO ()
 onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
     atomically $ modifyTVar' recoveryCC $ \cc -> cc {
-        bytesInFlight = bytesInFlight cc + bytesSent
+        bytesInFlight = bytesInFlight cc + sentBytes
       , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
       }
   where
-    bytesSent = spSentBytes sentPacket
+    sentBytes = spSentBytes sentPacket
 
 ----------------------------------------------------------------
 
