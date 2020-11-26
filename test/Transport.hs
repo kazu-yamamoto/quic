@@ -4,12 +4,13 @@ module Transport (
     transportSpec
   ) where
 
+import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
-import System.Timeout
-import Test.Hspec
 import Network.TLS (AlertDescription(..))
 import Network.TLS.QUIC (ExtensionRaw)
+import System.Timeout
+import Test.Hspec
 
 import Network.QUIC
 import Network.QUIC.Internal
@@ -84,6 +85,18 @@ transportSpec cc0 = do
         it "MUST send unexpected_message TLS alert if EndOfEarlyData is received [TLS 8.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoEndOfEarlyData
             runC cc waitEstablished `shouldThrow` transportError (CryptoError UnexpectedMessage)
+        it "MUST send PROTOCOL_VIOLATION if CRYPTO in 0-RTT is received [TLS 8.3]" $ \_ -> do
+            mres <- runC cc0 $ \conn -> do
+                waitEstablished conn
+                getResumptionInfo conn
+            case mres of
+              Nothing -> return ()
+              Just res -> when (is0RTTPossible res) $ do
+                let cc1 = addHook cc0 $ setOnTLSHandshakeCreated crypto0RTT
+                    cc = cc1 { ccResumption = res
+                             , ccUse0RTT = True
+                             }
+                runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
 
 ----------------------------------------------------------------
 
@@ -188,6 +201,10 @@ cryptoKeyUpdate lcs = lcs
 cryptoEndOfEarlyData :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
 cryptoEndOfEarlyData [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append "\x05\x00\x00\x00" fin)]
 cryptoEndOfEarlyData lcs = lcs
+
+crypto0RTT :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
+crypto0RTT [(InitialLevel,ch)] = [(InitialLevel,ch),(RTT0Level,"\x08\x00\x00\x02\x00\x00")]
+crypto0RTT lcs = lcs
 
 ----------------------------------------------------------------
 

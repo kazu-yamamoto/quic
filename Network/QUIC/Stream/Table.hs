@@ -45,7 +45,8 @@ rtt1CryptoStreamId      = -3
 
 toCryptoStreamId :: EncryptionLevel -> StreamId
 toCryptoStreamId InitialLevel   = initialCryptoStreamId
-toCryptoStreamId RTT0Level      = error "toCryptoStreamId"
+-- This is to generate an error packet of CRYPTO in 0-RTT
+toCryptoStreamId RTT0Level      = rtt1CryptoStreamId
 toCryptoStreamId HandshakeLevel = handshakeCryptoStreamId
 toCryptoStreamId RTT1Level      = rtt1CryptoStreamId
 
@@ -62,7 +63,7 @@ insertCryptoStreams conn stbl = do
 
 deleteCryptoStream :: EncryptionLevel -> StreamTable -> StreamTable
 deleteCryptoStream InitialLevel   = deleteStream initialCryptoStreamId
-deleteCryptoStream RTT0Level      = error "deleteCryptoStream"
+deleteCryptoStream RTT0Level      = deleteStream rtt1CryptoStreamId
 deleteCryptoStream HandshakeLevel = deleteStream handshakeCryptoStreamId
 deleteCryptoStream RTT1Level      = deleteStream rtt1CryptoStreamId
 

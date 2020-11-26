@@ -275,6 +275,7 @@ thresholdC :: Int
 thresholdC = 200
 
 sendCryptoFragments :: Connection -> SendMany -> [(EncryptionLevel, CryptoData)] -> IO ()
+sendCryptoFragments _ _ [] = return ()
 sendCryptoFragments conn send lcs = do
     loop limitationC id lcs
     when (any (\(l,_) -> l == HandshakeLevel) lcs) $
