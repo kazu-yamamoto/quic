@@ -304,7 +304,7 @@ sendCryptoFragments conn send lcs = do
         spkts1 <- construct conn lvl [frame1]
         let len1 = len0 - B.length bs
             build1 = build0 . (spkts1 ++)
-        loop len1  build1 xs
+        loop len1 build1 xs
 
 ----------------------------------------------------------------
 
