@@ -215,6 +215,9 @@ processFrame conn lvl (MaxData n) = do
 processFrame conn lvl (MaxStreamData sid n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "MAX_STREAM_DATA" 0x011
+    when ((isClient conn && isServerInitiatedUnidirectional sid)
+        ||(isServer conn && isClientInitiatedUnidirectional sid)) $
+        sendCCandExitConnection conn StreamStateError "Receiving-only stream" 0x11
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> sendCCandExitConnection conn StreamStateError "No such stream" 0x11
