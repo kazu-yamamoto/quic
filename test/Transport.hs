@@ -65,7 +65,7 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if NEW_TOKEN is received [Transport 19.7]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated newToken
             runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
-        it "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.9]" $ \_ -> do
+        it "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.10]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated maxStreamData
             runC cc waitEstablished `shouldThrow` transportError StreamStateError
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
