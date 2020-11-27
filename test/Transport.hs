@@ -86,7 +86,7 @@ transportSpec cc0 = do
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
             runC cc waitEstablished `shouldThrow` transportError (CryptoError NoApplicationProtocol)
-        it "MUST the send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
+        it "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
             runC cc waitEstablished `shouldThrow` transportError (CryptoError MissingExtension)
         it "MUST send unexpected_message TLS alert if EndOfEarlyData is received [TLS 8.3]" $ \_ -> do
