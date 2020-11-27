@@ -225,6 +225,8 @@ processFrame conn lvl (MaxStreamData sid n) = do
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "MAX_STREAMS" 0
+    when (n > 2^(60 :: Int)) $
+        sendCCandExitConnection conn FrameEncodingError "MAX_STREAMS" 0
     if dir == Bidirectional then
         setMyMaxStreams conn n
       else
