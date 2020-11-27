@@ -74,6 +74,9 @@ transportSpec cc0 = do
         it "MUST send FRAME_ENCODING_ERROR if invalid MAX_STREAMS is received [Transport 19.11]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated maxStreams
             runC cc waitEstablished `shouldThrow` transportError FrameEncodingError
+        it "MUST send STREAM_LIMIT_ERROR or FRAME_ENCODING_ERROR if invalid STREAMS_BLOCKED is received [Transport 19.14]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated streamsBlocked
+            runC cc waitEstablished `shouldThrow` transportErrors [FrameEncodingError,StreamLimitError]
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
             runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
@@ -206,6 +209,11 @@ maxStreams lvl plain
   | lvl == RTT1Level = plain { plainFrames = MaxStreams Bidirectional (2^(60 :: Int) + 1) : plainFrames plain }
   | otherwise = plain
 
+streamsBlocked :: EncryptionLevel -> Plain -> Plain
+streamsBlocked lvl plain
+  | lvl == RTT1Level = plain { plainFrames = StreamsBlocked Bidirectional (2^(60 :: Int) + 1) : plainFrames plain }
+  | otherwise = plain
+
 ----------------------------------------------------------------
 
 cryptoKeyUpdate :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
@@ -225,3 +233,7 @@ crypto0RTT lcs = lcs
 transportError :: TransportError -> QUICError -> Bool
 transportError te (TransportErrorOccurs te' _) = te == te'
 transportError _  _                            = False
+
+transportErrors :: [TransportError] -> QUICError -> Bool
+transportErrors tes (TransportErrorOccurs te _) = te `elem` tes
+transportErrors _   _                           = False

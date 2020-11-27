@@ -251,9 +251,11 @@ processFrame conn lvl (StreamDataBlocked sid _) = do
           fire (Microseconds 50000) $ do
               newMax' <- getRxMaxStreamData strm
               putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax']
-processFrame conn lvl frame@StreamsBlocked{} = do
+processFrame conn lvl frame@(StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STREAMS_BLOCKED" 0
+    when (n > 2^(60 :: Int)) $
+        sendCCandExitConnection conn FrameEncodingError "MAX_STREAMS" 0
     print frame
 processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
