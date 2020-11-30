@@ -173,8 +173,8 @@ processFrame conn lvl (CryptoF off cdat) = do
       RTT1Level
         | isClient conn ->
               void $ putRxCrypto conn lvl rx
-        | otherwise -> do
-              connDebugLog conn "processFrame: Short:Crypto for server"
+        | otherwise ->
+              sendCCandExitConnection conn ProtocolViolation "CRYPTO in 1-RTT" 0x06
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" 0x07

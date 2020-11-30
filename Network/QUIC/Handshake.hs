@@ -130,6 +130,7 @@ handshakeClient conf conn myAuthCIDs = do
         setConnection1RTTReady conn
         cidInfo <- getNewMyCID conn
         let ncid = NewConnectionID cidInfo 0
+        putOutput conn $ OutHandshake [] -- for h3spec testing
         putOutput conn $ OutControl RTT1Level [ncid]
     done _ctx = do
         info <- getConnectionInfo conn

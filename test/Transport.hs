@@ -4,6 +4,7 @@ module Transport (
     transportSpec
   ) where
 
+import Control.Concurrent
 import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
@@ -80,9 +81,12 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
             runC cc waitEstablished `shouldThrow` transportError ProtocolViolation
-        it "MUST send unexpected_message TLS alert if KeyUpdate is received [TLS 6]" $ \_ -> do
+        it "MUST send unexpected_message TLS alert if KeyUpdate in Handshake is received [TLS 6]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate
             runC cc waitEstablished `shouldThrow` transportError (CryptoError UnexpectedMessage)
+        it "MUST send unexpected_message TLS alert if KeyUpdate in 1-RTT is received [TLS 6]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate2
+            runC cc (\conn -> waitEstablished conn >> threadDelay 1000000) `shouldThrow` transportErrors [CryptoError UnexpectedMessage, ProtocolViolation]
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
             runC cc waitEstablished `shouldThrow` transportError (CryptoError NoApplicationProtocol)
@@ -219,6 +223,11 @@ streamsBlocked lvl plain
 cryptoKeyUpdate :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
 cryptoKeyUpdate [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append fin "\x18\x00\x00\x01\x01")]
 cryptoKeyUpdate lcs = lcs
+
+cryptoKeyUpdate2 :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
+-- [] is intentionally created in RTT1Level for h3spec
+cryptoKeyUpdate2 [] = [(RTT1Level,"\x18\x00\x00\x01\x01")]
+cryptoKeyUpdate2 lcs = lcs
 
 cryptoEndOfEarlyData :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
 cryptoEndOfEarlyData [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append "\x05\x00\x00\x00" fin)]
