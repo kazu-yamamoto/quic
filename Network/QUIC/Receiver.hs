@@ -7,6 +7,7 @@ module Network.QUIC.Receiver (
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
+import Network.TLS (AlertDescription(..))
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -174,7 +175,7 @@ processFrame conn lvl (CryptoF off cdat) = do
         | isClient conn ->
               void $ putRxCrypto conn lvl rx
         | otherwise ->
-              sendCCandExitConnection conn ProtocolViolation "CRYPTO in 1-RTT" 0x06
+              sendCCandExitConnection conn (CryptoError UnexpectedMessage) "CRYPTO in 1-RTT" 0x06
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" 0x07
