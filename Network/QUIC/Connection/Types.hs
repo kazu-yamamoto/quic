@@ -144,8 +144,8 @@ data Connection = Connection {
   , connQLog          :: QLogger
   , connHooks         :: Hooks
   -- WriteBuffer
-  , headerBuffer      :: (Buffer,BufferSize)
-  , payloadBuffer     :: (Buffer,BufferSize)
+  , headerBuffer      :: (Buffer,BufferSize) -- occupied by a sender
+  , payloadBuffer     :: (Buffer,BufferSize) -- occupied by a sender
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
