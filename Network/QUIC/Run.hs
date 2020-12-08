@@ -159,7 +159,7 @@ runQUICServer conf server = handleLog debugLog $ do
                body = handshakeServerConnection conf
         -- Typically, ConnectionIsClosed breaks acceptStream.
         -- And the exception should be ignored.
-        void $ forkIO (E.bracket create freeResources serverAndClose `E.catch` ignore)
+        void $ forkIO (handleLog debugLog $ E.bracket create freeResources serverAndClose)
   where
     serverAndClose conn = do
         server conn
