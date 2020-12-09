@@ -11,13 +11,15 @@ import qualified GHC.IO.Exception as E
 import qualified System.IO.Error as E
 
 import Network.QUIC.Logger
+import Network.QUIC.Types
 
 handleLog :: DebugLogger -> IO () -> IO ()
 handleLog logAction action = E.handle handler action
   where
     handler :: E.SomeException -> IO ()
     handler se
-      | Just E.ThreadKilled <- E.fromException se = return ()
+      | Just E.ThreadKilled     <- E.fromException se = return ()
+      | Just ConnectionIsClosed <- E.fromException se = return ()
       | otherwise = do
             case E.fromException se of
               Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()

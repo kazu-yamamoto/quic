@@ -261,9 +261,6 @@ stopQUICServer conn = getMainThreadId conn >>= killThread
 
 ----------------------------------------------------------------
 
-ignore :: E.SomeException -> IO ()
-ignore _ = return ()
-
 clientCertificateChain :: Connection -> IO (Maybe CertificateChain)
 clientCertificateChain conn
   | isClient conn = return Nothing
