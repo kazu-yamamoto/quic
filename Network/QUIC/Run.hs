@@ -54,11 +54,11 @@ runQUICClient conf client = do
               killThread
               (\_ -> E.bracket (connect conf) freeResources clientAndClose)
   where
-    clientAndClose conn = client conn `E.finally` do
-        sent <- isCloseSent conn
-        unless sent $ do
-            sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
-            void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
+    clientAndClose conn = do
+        ret <- client conn
+        sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+        void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
+        return ret
 
 -- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
 connect :: ClientConfig -> IO Connection
