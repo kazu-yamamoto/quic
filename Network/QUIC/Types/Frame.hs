@@ -56,6 +56,12 @@ isClientInitiatedUnidirectional sid = (0b11 .&. sid) == 2
 isServerInitiatedUnidirectional :: StreamId -> Bool
 isServerInitiatedUnidirectional sid = (0b11 .&. sid) == 3
 
+isClientInitiated :: StreamId -> Bool
+isClientInitiated sid = (0b1 .&. sid) == 0
+
+isServerInitiated :: StreamId -> Bool
+isServerInitiated sid = (0b1 .&. sid) == 1
+
 type Delay = Milliseconds
 
 type Fin = Bool
