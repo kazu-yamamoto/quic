@@ -286,11 +286,17 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
     if err == NoError then do
         onCloseReceived $ connHooks conn
         sent <- isCloseSent conn
-        unless sent $ exitConnection conn ConnectionIsClosed
+        unless sent $ do
+            sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+            exitConnection conn ConnectionIsClosed
       else do
+        sent <- isCloseSent conn
+        unless sent $ sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
         exitConnection conn $ TransportErrorOccurs err reason
 processFrame conn _ (ConnectionCloseApp err reason) = do
     setCloseReceived conn
+    sent <- isCloseSent conn
+    unless sent $ sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
     exitConnection conn $ ApplicationErrorOccurs err reason
 processFrame conn lvl HandshakeDone = do
     when (isServer conn || lvl /= RTT1Level) $
