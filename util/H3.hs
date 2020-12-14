@@ -63,6 +63,7 @@ html :: ByteString
 html = "<html><head><title>Welcome to QUIC in Haskell</title></head><body><p>Welcome to QUIC in Haskell. Currently draft-24 and draft-25 are supported. This server asks clients to retry if no token/retry_token is provided. HTTP 0.9, HTTP/3 and QPACK implementations are a toy and hard-coded. No path validation at this moment.</p></body></html>"
 
 makeProtos :: Version -> (ByteString, ByteString)
+makeProtos Version1 = ("h3","hq")
 makeProtos ver = (h3X,hqX)
   where
     verbs = C8.pack $ show $ fromVersion ver
