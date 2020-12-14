@@ -113,7 +113,7 @@ frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" <> sw sn <> "\""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
 frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" <> toLogStr (transportError err) <> "\",\"raw_error_code\":" <> sw (fromTransportError err) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\""
-frameExtra (ConnectionCloseApp _err reason) =  ",\"error_space\":\"transport\",\"error_code\":\"" <> "\",\"raw_error_code\":" <> sw (0 :: Int) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
+frameExtra (ConnectionCloseApp _err reason) =  ",\"error_space\":\"application\",\"error_code\":\"" <> "\",\"raw_error_code\":" <> sw (0 :: Int) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
 frameExtra HandshakeDone{} = ""
 frameExtra (UnknownFrame _Int) = ""
 
@@ -131,7 +131,11 @@ transportError ConnectionIdLimitError  = "connection_id_limit_error"
 transportError ProtocolViolation       = "protocol_violation"
 transportError InvalidToken            = "invalid_migration"
 transportError CryptoBufferExceeded    = "crypto_buffer_exceeded"
-transportError _                       = ""
+transportError KeyUpdateError          = "key_update_error"
+transportError AeadLimitReached        = "aead_limit_reached"
+transportError NoViablePath            = "no_viablpath"
+transportError (CryptoError _)         = "crypto_error"
+transportError (UnknownError n)        = sw n
 
 {-# INLINE ack #-}
 ack :: [PacketNumber] -> LogStr
