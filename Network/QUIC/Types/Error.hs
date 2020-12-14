@@ -27,6 +27,7 @@ data TransportError = NoError
                     | CryptoBufferExceeded
                     | KeyUpdateError
                     | AeadLimitReached
+                    | NoViablePath
                     | CryptoError TLS.AlertDescription
                     | UnknownError Int
                     deriving (Eq,Show,Typeable)
@@ -49,6 +50,7 @@ fromTransportError InvalidToken            = 0xb
 fromTransportError CryptoBufferExceeded    = 0xd
 fromTransportError KeyUpdateError          = 0xe
 fromTransportError AeadLimitReached        = 0xf
+fromTransportError NoViablePath            = 0x10
 fromTransportError (CryptoError desc)      =
     0x100 + fromIntegral (fromAlertDescription desc)
 fromTransportError (UnknownError n)        = n
@@ -69,6 +71,7 @@ toTransportError 0xb = InvalidToken
 toTransportError 0xd = CryptoBufferExceeded
 toTransportError 0xe = KeyUpdateError
 toTransportError 0xf = AeadLimitReached
+toTransportError 0x10 = NoViablePath
 toTransportError n
   | 0x100 <= n && n <= 0x1ff = case mdesc of
       Nothing   -> UnknownError n
