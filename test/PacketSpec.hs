@@ -28,7 +28,7 @@ spec = do
                 clientAuthCIDs = defaultAuthCIDs { initSrcCID = Just clientCID }
                 -- dummy
             let clientConf = testClientConfig
-                ver = head $ confVersions $ ccConfig clientConf
+                ver = Draft29
             s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
             q <- newRecvQ
             sref <- newIORef (s,q)

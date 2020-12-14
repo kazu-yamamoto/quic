@@ -44,12 +44,14 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
     convExt = onTLSExtensionCreated $ confHooks $ ccConfig
     qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters ccConfig
     eQparams = encodeParameters qparams
+    tpId | ver == Version1 = extensionID_QuicTransportParameters
+         | otherwise       = 0xffa5
     cshared = def {
         sharedValidationCache = if ccValidate then
                                   def
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
-      , sharedHelloExtensions = convExt [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+      , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]
       , sharedSessionManager = sessionManager establish
       }
     hook = def {
@@ -82,9 +84,11 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
     convExt = onTLSExtensionCreated $ confHooks $ scConfig
     qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters scConfig
     eQparams = encodeParameters qparams
+    tpId | ver == Version1 = extensionID_QuicTransportParameters
+         | otherwise       = 0xffa5
     sshared = def {
             sharedCredentials     = confCredentials scConfig
-          , sharedHelloExtensions = convExt [ExtensionRaw extensionID_QuicTransportParameters eQparams]
+          , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]
           , sharedSessionManager  = scSessionManager
           }
     hook = def {

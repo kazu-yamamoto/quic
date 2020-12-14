@@ -11,6 +11,7 @@ import Network.QUIC.Types
 
 encodeVersion :: Version -> Word32
 encodeVersion Negotiation        = 0
+encodeVersion Version1           = 1
 encodeVersion Draft18            = 0xff000012
 encodeVersion Draft19            = 0xff000013
 encodeVersion Draft20            = 0xff000014
@@ -34,6 +35,7 @@ encodeVersion (UnknownVersion w) = w
 
 decodeVersion :: Word32 -> Version
 decodeVersion 0          = Negotiation
+decodeVersion 1          = Version1
 decodeVersion 0xff000012 = Draft18
 decodeVersion 0xff000013 = Draft19
 decodeVersion 0xff000014 = Draft20

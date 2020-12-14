@@ -189,8 +189,10 @@ handshakeServer conf conn myAuthCIDs = do
         connDebugLog conn $ bhow info
 
 setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
-setPeerParams conn _ctx [ExtensionRaw extid bs]
-  | extid == extensionID_QuicTransportParameters = do
+setPeerParams conn _ctx [ExtensionRaw extid bs] = do
+    ver <- getVersion conn
+    when ((ver == Version1 && extid == extensionID_QuicTransportParameters) ||
+          extid == 0xffa5) $ do
         let mparams = decodeParameters bs
         case mparams of
           Nothing     -> err
