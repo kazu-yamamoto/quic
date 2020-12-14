@@ -79,7 +79,11 @@ connect conf = do
     connect' ver = E.bracketOnError open clse body
       where
         open = createClientConnection conf ver
-        clse = freeResources . connResConnection
+        clse connRes = do
+            let conn = connResConnection connRes
+            sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+            threadDelay 100000
+            freeResources conn
         body = handshakeClientConnection conf
     check se
       | Just (NextVersion ver) <- E.fromException se = Right ver
