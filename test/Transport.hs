@@ -19,7 +19,12 @@ import Network.QUIC.Internal
 ----------------------------------------------------------------
 
 runC :: ClientConfig -> (Connection -> IO a) -> IO (Maybe a)
-runC cc body = timeout 2000000 $ runQUICClient cc body
+runC cc body = timeout 2000000 $ runQUICClient cc body'
+  where
+    body' conn = do
+        ret <- body conn
+        threadDelay 100000
+        return ret
 
 transportSpec :: ClientConfig -> SpecWith a
 transportSpec cc0 = do
