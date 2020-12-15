@@ -347,7 +347,7 @@ readerServer s q conn = handleLog logAction $ forever $ do
     bs <- NSB.recv s maximumUdpPayloadSize
     let bytes = BS.length bs
     now <- getTimeMicrosecond
-    addRxBytes conn $ BS.length bs
+    addRxBytes conn bytes
     pkts <- decodeCryptPackets bs
     mapM (\(p,l) -> writeRecvQ q (mkReceivedPacket p now bytes l)) pkts
   where
