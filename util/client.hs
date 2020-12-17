@@ -107,7 +107,7 @@ options = [
     (NoArg (\o -> o { optMigration = Just ChangeClientCID }))
     "use a new client CID"
   , Option ['B'] ["nat-rebinding"]
-    (NoArg (\o -> o { optMigration = Just NATRebiding }))
+    (NoArg (\o -> o { optMigration = Just NATRebinding }))
     "use a new local port"
   , Option ['A'] ["address-mobility"]
     (NoArg (\o -> o { optMigration = Just MigrateTo }))
@@ -262,7 +262,7 @@ runClient conf opts@Options{..} aux@Aux{..} = do
                    else do
                      putStrLn $ "Result: (N) change client CID ... NG " ++ show (mig,changed)
                      exitFailure
-             Just NATRebiding -> do
+             Just NATRebinding -> do
                  putStrLn "Result: (B) NAT rebinding ... OK"
                  exitSuccess
              Just MigrateTo -> do

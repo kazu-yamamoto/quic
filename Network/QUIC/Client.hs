@@ -87,7 +87,7 @@ recvClient = readRecvQ
 
 data Migration = ChangeServerCID
                | ChangeClientCID
-               | NATRebiding
+               | NATRebinding
                | MigrateTo -- SockAddr
                deriving (Eq, Show)
 
@@ -114,7 +114,7 @@ migrationClient conn ChangeClientCID = do
     let frames = [NewConnectionID cidInfo x]
     putOutput conn $ OutControl RTT1Level frames
     return True
-migrationClient conn NATRebiding = do
+migrationClient conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
 migrationClient conn MigrateTo = do
