@@ -110,13 +110,11 @@ processReceivedPacket conn rpkt = do
               qlogReceived conn (PlainPacket hdr plain) tim
           ver <- getVersion conn
           let ackEli   = any ackEliciting   plainFrames
-              pathVali = any pathValidating plainFrames
               shouldDrop = ver >= Draft32
                         && rpReceivedBytes rpkt < defaultQUICPacketSize
-                        && (pathVali
-                            || (lvl == InitialLevel && ackEli))
+                        && (lvl == InitialLevel && ackEli)
           if shouldDrop then do
-              putStrLn $ "Drop packet whose size is " ++ show (rpReceivedBytes rpkt)
+              stdoutLogger ("Drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr
             else do
               mapM_ (processFrame conn lvl) plainFrames
