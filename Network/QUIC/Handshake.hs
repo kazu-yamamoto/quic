@@ -189,10 +189,18 @@ handshakeServer conf conn myAuthCIDs = do
         connDebugLog conn $ bhow info
 
 setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
-setPeerParams conn _ctx [ExtensionRaw extid bs] = do
+setPeerParams conn _ctx ps0 = do
     ver <- getVersion conn
-    when ((ver == Version1 && extid == extensionID_QuicTransportParameters) ||
-          extid == 0xffa5) $ do
+    let mps | ver == Version1 = getTP extensionID_QuicTransportParameters ps0
+            | otherwise       = getTP 0xffa5 ps0
+    setPP mps
+  where
+    getTP _ [] = Nothing
+    getTP n (ExtensionRaw extid bs : ps)
+      | extid == n = Just bs
+      | otherwise  = getTP n ps
+    setPP Nothing = return ()
+    setPP (Just bs) = do
         let mparams = decodeParameters bs
         case mparams of
           Nothing     -> err
@@ -201,7 +209,6 @@ setPeerParams conn _ctx [ExtensionRaw extid bs] = do
               checkInvalid params
               setParams params
               qlogParamsSet conn (params,"remote")
-  where
     err = do
         sendConnectionClose conn $ ConnectionCloseQUIC TransportParameterError 0 ""
         exitConnection conn $ TransportErrorOccurs TransportParameterError ""
@@ -238,7 +245,6 @@ setPeerParams conn _ctx [ExtensionRaw extid bs] = do
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
         setMyMaxStreams conn $ initialMaxStreamsBidi params
         setMyUniMaxStreams conn $ initialMaxStreamsUni params
-setPeerParams _ _ _ = return ()
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.HandshakeFailed e) = e
