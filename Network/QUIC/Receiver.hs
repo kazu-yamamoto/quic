@@ -279,23 +279,30 @@ processFrame conn RTT1Level (PathChallenge dat) =
 processFrame conn RTT1Level (PathResponse dat) =
     -- RTT0Level falls intentionally
     checkResponse conn dat
-processFrame conn _ (ConnectionCloseQUIC err _ftyp reason) = do
-    setCloseReceived conn
-    if err == NoError then do
+processFrame conn _ (ConnectionCloseQUIC err _ftyp reason)
+  | err == NoError = do
+        setCloseReceived conn
         onCloseReceived $ connHooks conn
         sent <- isCloseSent conn
         unless sent $ do
             sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+            -- if sent, client/server already exits.
             exitConnection conn ConnectionIsClosed
-      else do
+  | otherwise = do
         sent <- isCloseSent conn
         unless sent $ sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
-        exitConnection conn $ TransportErrorOccurs err reason
+        received <- isCloseReceived conn
+        unless received $ do
+            setCloseReceived conn
+            exitConnection conn $ TransportErrorOccurs err reason
 processFrame conn _ (ConnectionCloseApp err reason) = do
-    setCloseReceived conn
     sent <- isCloseSent conn
     unless sent $ sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
-    exitConnection conn $ ApplicationErrorOccurs err reason
+    received <- isCloseReceived conn
+    unless received $ do
+        setCloseReceived conn
+        let qerr = ApplicationErrorOccurs err reason
+        exitConnection conn qerr
 processFrame conn lvl HandshakeDone = do
     when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e

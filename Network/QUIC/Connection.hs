@@ -76,6 +76,7 @@ module Network.QUIC.Connection (
   , setCloseSent
   , setCloseReceived
   , isCloseSent
+  , isCloseReceived
   , isClosed
   , wait0RTTReady
   , wait1RTTReady
