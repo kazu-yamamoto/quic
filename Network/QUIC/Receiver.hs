@@ -182,31 +182,37 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
         rx = RxStreamData dat off len fin
-    putRxStreamData strm rx
-    addRxData conn $ BS.length dat             -- fixme: including 0RTT?
+    ok <- putRxStreamData strm rx
+    if ok then
+        addRxData conn $ BS.length dat             -- fixme: including 0RTT?
+      else
+        sendCCandExitConnection conn FlowControlError "" 0
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
         rx = RxStreamData dat off len fin
-    putRxStreamData strm rx
-    addRxStreamData strm $ BS.length dat
-    window <- getRxStreamWindow strm
-    let initialWindow = initialRxMaxStreamData conn sid
-    when (window <= (initialWindow .>>. 1)) $ do
-        newMax <- addRxMaxStreamData strm initialWindow
-        putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
-        fire (Microseconds 50000) $ do
-            newMax' <- getRxMaxStreamData strm
-            putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax']
-    addRxData conn $ BS.length dat
-    cwindow <- getRxDataWindow conn
-    let cinitialWindow = initialMaxData $ getMyParameters conn
-    when (cwindow <= (cinitialWindow .>>. 1)) $ do
-        newMax <- addRxMaxData conn cinitialWindow
-        putOutput conn $ OutControl RTT1Level [MaxData newMax]
-        fire (Microseconds 50000) $ do
-            newMax' <- getRxMaxData conn
-            putOutput conn $ OutControl RTT1Level [MaxData newMax']
+    ok <- putRxStreamData strm rx
+    if ok then do
+        addRxStreamData strm $ BS.length dat
+        window <- getRxStreamWindow strm
+        let initialWindow = initialRxMaxStreamData conn sid
+        when (window <= (initialWindow .>>. 1)) $ do
+            newMax <- addRxMaxStreamData strm initialWindow
+            putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
+            fire (Microseconds 50000) $ do
+                newMax' <- getRxMaxStreamData strm
+                putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax']
+        addRxData conn $ BS.length dat
+        cwindow <- getRxDataWindow conn
+        let cinitialWindow = initialMaxData $ getMyParameters conn
+        when (cwindow <= (cinitialWindow .>>. 1)) $ do
+            newMax <- addRxMaxData conn cinitialWindow
+            putOutput conn $ OutControl RTT1Level [MaxData newMax]
+            fire (Microseconds 50000) $ do
+                newMax' <- getRxMaxData conn
+                putOutput conn $ OutControl RTT1Level [MaxData newMax']
+      else
+        sendCCandExitConnection conn FlowControlError "" 0
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "MAX_DATA" 0x010

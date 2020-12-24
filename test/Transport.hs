@@ -29,6 +29,9 @@ runC cc body = timeout 2000000 $ runQUICClient cc body'
 transportSpec :: ClientConfig -> SpecWith a
 transportSpec cc0 = do
     describe "QUIC servers" $ do
+        it "MUST send FLOW_CONTROL_ERROR if a STREAM frame with a large offset is received [Transport 4.1]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated largeOffset
+            runC cc waitEstablished `shouldThrow` transportErrorsIn [FlowControlError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated dropInitialSourceConnectionId
             runC cc waitEstablished `shouldThrow` transportErrorsIn [TransportParameterError]
@@ -177,6 +180,13 @@ setMaxAckDelay :: Parameters -> Parameters
 setMaxAckDelay params = params { maxAckDelay = 2^(15 :: Int) }
 
 ----------------------------------------------------------------
+
+largeOffset :: EncryptionLevel -> Plain -> Plain
+largeOffset lvl plain
+  | lvl == RTT1Level = plain { plainFrames = fake : plainFrames plain }
+  | otherwise        = plain
+  where
+    fake = StreamF 0 1000000 ["GET /\r\n"] True
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain

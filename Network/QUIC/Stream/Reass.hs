@@ -11,6 +11,7 @@ import qualified Data.ByteString as BS
 
 import Network.QUIC.Imports
 import Network.QUIC.Logger
+import Network.QUIC.Stream.Misc
 import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Types
 import Network.QUIC.Types
@@ -82,10 +83,15 @@ takeRecvStreamQwithSize strm siz0 = do
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
-putRxStreamData :: Stream -> RxStreamData -> IO ()
-putRxStreamData s rx = do
-    (dats,fin1,_) <- tryReassemble s rx
-    loop fin1 dats
+putRxStreamData :: Stream -> RxStreamData -> IO Bool
+putRxStreamData s rx@(RxStreamData dat off _ _) = do
+    lim <- getRxMaxStreamData s
+    if BS.length dat + off > lim then
+        return False
+      else do
+        (dats,fin1,_) <- tryReassemble s rx
+        loop fin1 dats
+        return True
   where
     loop False []    = return ()
     loop True  []    = putRecvStreamQ s ""
