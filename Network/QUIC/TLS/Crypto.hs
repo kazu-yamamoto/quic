@@ -336,8 +336,17 @@ sampleLength cipher
 bsXOR :: ByteString -> ByteString -> ByteString
 bsXOR = Byte.xor
 
+-- XORing IV and a packet numbr with left padded.
+--             src0
+-- IV          +IIIIIIIIIIIIIIIIII--------+
+--                 diff          src1
+-- PN          +000000000000000000+-------+
+--             dst
+-- Nonce       +IIIIIIIIIIIIIIIIII--------+
 bsXORpad :: ByteString -> ByteString -> ByteString
-bsXORpad (PS fp0 off0 len0) (PS fp1 off1 len1) = B.unsafeCreate len0 $ \dst ->
+bsXORpad (PS fp0 off0 len0) (PS fp1 off1 len1)
+  | len0 < len1 = error "bsXORpad"
+  | otherwise = B.unsafeCreate len0 $ \dst ->
   withForeignPtr fp0 $ \p0 ->
     withForeignPtr fp1 $ \p1 -> do
         let src0 = p0 `plusPtr` off0
@@ -353,6 +362,15 @@ bsXORpad (PS fp0 off0 len0) (PS fp1 off1 len1) = B.unsafeCreate len0 $ \dst ->
         w2 <- peek src1
         poke dst (w1 `xor` w2)
         loop (dst `plusPtr` 1) (src0 `plusPtr` 1) (src1 `plusPtr` 1) (len - 1)
+
+{-
+bsXORpad' :: ByteString -> ByteString -> ByteString
+bsXORpad' iv pn = B.pack $ zipWith xor ivl pnl
+  where
+    ivl = B.unpack iv
+    diff = B.length iv - B.length pn
+    pnl = replicate diff 0 ++ B.unpack pn
+-}
 
 ----------------------------------------------------------------
 
