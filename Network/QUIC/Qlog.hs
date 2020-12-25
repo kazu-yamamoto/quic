@@ -134,7 +134,9 @@ transportError CryptoBufferExceeded    = "crypto_buffer_exceeded"
 transportError KeyUpdateError          = "key_update_error"
 transportError AeadLimitReached        = "aead_limit_reached"
 transportError NoViablePath            = "no_viablpath"
-transportError (CryptoError _)         = "crypto_error"
+-- this is not conformant to the spec
+-- the spec defines to convert an TLS alert as hex digits.
+transportError (CryptoError desc)      = "crypto_error_" <> sw (show desc)
 transportError (UnknownError n)        = sw n
 
 {-# INLINE ack #-}
