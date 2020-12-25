@@ -113,7 +113,7 @@ frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" <> sw sn <> "\""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
 frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" <> toLogStr (transportError err) <> "\",\"raw_error_code\":" <> sw (fromTransportError err) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\""
-frameExtra (ConnectionCloseApp _err reason) =  ",\"error_space\":\"application\",\"error_code\":\"" <> "\",\"raw_error_code\":" <> sw (0 :: Int) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
+frameExtra (ConnectionCloseApp err reason) =  ",\"error_space\":\"application\",\"error_code\":\"" <> "\",\"raw_error_code\":" <> sw err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
 frameExtra HandshakeDone{} = ""
 frameExtra (UnknownFrame _Int) = ""
 
