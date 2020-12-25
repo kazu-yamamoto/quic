@@ -91,19 +91,19 @@ transportSpec cc0 = do
             runC cc waitEstablished `shouldThrow` transportError
         it "MUST send unexpected_message TLS alert if KeyUpdate in Handshake is received [TLS 6]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate
-            runC cc waitEstablished `shouldThrow` transportErrorsIn [CryptoError TLS.UnexpectedMessage]
+            runC cc waitEstablished `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send unexpected_message TLS alert if KeyUpdate in 1-RTT is received [TLS 6]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate2
-            runC cc (\conn -> waitEstablished conn >> threadDelay 1000000) `shouldThrow` transportErrorsIn [CryptoError TLS.UnexpectedMessage]
+            runC cc (\conn -> waitEstablished conn >> threadDelay 1000000) `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
-            runC cc waitEstablished `shouldThrow` transportErrorsIn [CryptoError TLS.NoApplicationProtocol]
+            runC cc waitEstablished `shouldThrow` cryptoErrorsIn [TLS.NoApplicationProtocol]
         it "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
-            runC cc waitEstablished `shouldThrow` transportErrorsIn [CryptoError TLS.MissingExtension]
+            runC cc waitEstablished `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
         it "MUST send unexpected_message TLS alert if EndOfEarlyData is received [TLS 8.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoEndOfEarlyData
-            runC cc waitEstablished `shouldThrow` transportErrorsIn [CryptoError TLS.UnexpectedMessage]
+            runC cc waitEstablished `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send PROTOCOL_VIOLATION if CRYPTO in 0-RTT is received [TLS 8.3]" $ \_ -> do
             mres <- runC cc0 $ \conn -> do
                 waitEstablished conn
@@ -266,3 +266,17 @@ transportError _ = False
 transportErrorsIn :: [TransportError] -> QUICError -> Bool
 transportErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` tes) || transportError qe
 transportErrorsIn _   _                           = False
+
+cryptoError :: QUICError -> Bool
+cryptoError (TransportErrorOccurs te _) = te `elem` [CryptoError TLS.InternalError, CryptoError TLS.HandshakeFailure]
+cryptoError _ = False
+
+-- Crypto Sec 4.8: QUIC permits the use of a generic code in place of
+-- a specific error code; see Section 11 of [QUIC-TRANSPORT]. For TLS
+-- alerts, this includes replacing any alert with a generic alert,
+-- such as handshake_failure (0x128 in QUIC). Endpoints MAY use a
+-- generic error code to avoid possibly exposing confidential
+-- information.
+cryptoErrorsIn :: [TLS.AlertDescription] -> QUICError -> Bool
+cryptoErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` map CryptoError tes) || cryptoError qe
+cryptoErrorsIn _   _                           = False
