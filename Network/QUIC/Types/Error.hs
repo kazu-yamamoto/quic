@@ -3,7 +3,6 @@
 
 module Network.QUIC.Types.Error where
 
-import Control.Exception as E
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
@@ -12,7 +11,6 @@ import Network.QUIC.Imports
 type ErrorCode = Int
 
 newtype TransportError = TransportError Int deriving (Eq, Show)
-instance Exception TransportError
 
 pattern NoError                 :: TransportError
 pattern NoError                  = TransportError  0x0
