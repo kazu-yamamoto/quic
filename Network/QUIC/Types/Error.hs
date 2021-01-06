@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE PatternSynonyms #-}
+
 module Network.QUIC.Types.Error where
 
 import Control.Exception as E
@@ -7,8 +9,6 @@ import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
 import Network.QUIC.Imports
-
-newtype ApplicationError = ApplicationError Int deriving (Eq, Show)
 
 type ErrorCode = Int
 
@@ -81,3 +81,62 @@ toTransportError n
     mdesc = toAlertDescription $ fromIntegral (n - 0x100)
 
 type ReasonPhrase = Bytes
+
+newtype ApplicationError = ApplicationError Int deriving (Eq, Show)
+
+pattern H3NoError               :: ApplicationError
+pattern H3NoError                = ApplicationError 0x100
+
+pattern H3GeneralProtocolError  :: ApplicationError
+pattern H3GeneralProtocolError   = ApplicationError 0x101
+
+pattern H3InternalError         :: ApplicationError
+pattern H3InternalError          = ApplicationError 0x102
+
+pattern H3StreamCreationError   :: ApplicationError
+pattern H3StreamCreationError    = ApplicationError 0x103
+
+pattern H3ClosedCriticalStream  :: ApplicationError
+pattern H3ClosedCriticalStream   = ApplicationError 0x104
+
+pattern H3FrameUnexpected       :: ApplicationError
+pattern H3FrameUnexpected        = ApplicationError 0x105
+
+pattern H3FrameError            :: ApplicationError
+pattern H3FrameError             = ApplicationError 0x106
+
+pattern H3ExcessiveLoad         :: ApplicationError
+pattern H3ExcessiveLoad          = ApplicationError 0x107
+
+pattern H3IdError               :: ApplicationError
+pattern H3IdError                = ApplicationError 0x108
+
+pattern H3SettingsError         :: ApplicationError
+pattern H3SettingsError          = ApplicationError 0x109
+
+pattern H3MissingSettings       :: ApplicationError
+pattern H3MissingSettings        = ApplicationError 0x10A
+
+pattern H3RequestRejected       :: ApplicationError
+pattern H3RequestRejected        = ApplicationError 0x10B
+
+pattern H3RequestCancelled      :: ApplicationError
+pattern H3RequestCancelled       = ApplicationError 0x10C
+
+pattern H3RequestIncomplete     :: ApplicationError
+pattern H3RequestIncomplete      = ApplicationError 0x10D
+
+pattern H3ConnectError          :: ApplicationError
+pattern H3ConnectError           = ApplicationError 0x10F
+
+pattern H3VersionFallback       :: ApplicationError
+pattern H3VersionFallback        = ApplicationError 0x110
+
+pattern QpackDecompressionFailed :: ApplicationError
+pattern QpackDecompressionFailed = ApplicationError 0x200
+
+pattern QpackEncoderStreamError :: ApplicationError
+pattern QpackEncoderStreamError  = ApplicationError 0x201
+
+pattern QpackDecoderStreamError :: ApplicationError
+pattern QpackDecoderStreamError  = ApplicationError 0x202
