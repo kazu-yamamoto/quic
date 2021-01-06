@@ -156,7 +156,7 @@ processFrame conn lvl (StopSending sid _err) = do
         sendCCandExitConnection conn ProtocolViolation "STOP_SENDING" 0x05
     when ((isClient conn && isServerInitiatedUnidirectional sid)
         ||(isServer conn && isClientInitiatedUnidirectional sid)) $
-        sendCCandExitConnection conn StreamStateError "Receiving-only stream" 0x11
+        sendCCandExitConnection conn StreamStateError "Receive-only stream" 0x11
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
@@ -231,7 +231,7 @@ processFrame conn lvl (MaxStreamData sid n) = do
         sendCCandExitConnection conn ProtocolViolation "MAX_STREAM_DATA" 0x011
     when ((isClient conn && isServerInitiatedUnidirectional sid)
         ||(isServer conn && isClientInitiatedUnidirectional sid)) $
-        sendCCandExitConnection conn StreamStateError "Receiving-only stream" 0x11
+        sendCCandExitConnection conn StreamStateError "Receive-only stream" 0x11
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
