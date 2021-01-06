@@ -215,7 +215,7 @@ newToken lvl plain
 
 maxStreamData :: EncryptionLevel -> Plain -> Plain
 maxStreamData lvl plain
-  | lvl == RTT1Level = plain { plainFrames = MaxStreamData 102 1000000 : plainFrames plain }
+  | lvl == RTT1Level = plain { plainFrames = MaxStreamData 101 1000000 : plainFrames plain }
   | otherwise = plain
 
 maxStreamData2 :: EncryptionLevel -> Plain -> Plain
