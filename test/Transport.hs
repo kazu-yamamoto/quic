@@ -71,6 +71,9 @@ transportSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
             runC cc waitEstablished `shouldThrow` transportError
+        it "MUST send STREAM_STATE_ERROR if STOP_SENDING is received for a non-existing stream [Transport 19.5]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated stopSending
+            runC cc waitEstablished `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send PROTOCOL_VIOLATION if NEW_TOKEN is received [Transport 19.7]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated newToken
             runC cc waitEstablished `shouldThrow` transportError
@@ -211,6 +214,11 @@ handshakeDone lvl plain
 newToken :: EncryptionLevel -> Plain -> Plain
 newToken lvl plain
   | lvl == RTT1Level = plain { plainFrames = NewToken "DUMMY" : plainFrames plain }
+  | otherwise = plain
+
+stopSending :: EncryptionLevel -> Plain -> Plain
+stopSending lvl plain
+  | lvl == RTT1Level = plain { plainFrames = StopSending 101 H3NoError : plainFrames plain }
   | otherwise = plain
 
 maxStreamData :: EncryptionLevel -> Plain -> Plain

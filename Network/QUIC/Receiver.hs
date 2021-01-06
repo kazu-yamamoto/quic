@@ -151,10 +151,19 @@ processFrame conn lvl frame@ResetStream{} = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "RESET_STREAM" 0x04
     print frame
-processFrame conn lvl frame@StopSending{} = do
+processFrame conn lvl (StopSending sid _err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STOP_SENDING" 0x05
-    print frame
+    when ((isClient conn && isServerInitiatedUnidirectional sid)
+        ||(isServer conn && isClientInitiatedUnidirectional sid)) $
+        sendCCandExitConnection conn StreamStateError "Receiving-only stream" 0x11
+    mstrm <- findStream conn sid
+    case mstrm of
+      Nothing   -> do
+          when ((isClient conn && isClientInitiated sid)
+              ||(isServer conn && isServerInitiated sid)) $
+              sendCCandExitConnection conn StreamStateError "No such stream" 0x11
+      Just _strm -> putStrLn "StopSending" -- fixme
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "CRYPTO" 0x06
