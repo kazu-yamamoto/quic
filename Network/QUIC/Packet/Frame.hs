@@ -48,7 +48,7 @@ encodeFrame wbuf (Ack (AckInfo largest range1 ranges) (Milliseconds delay)) = do
         encodeInt' wbuf $ fromIntegral gap
         encodeInt' wbuf $ fromIntegral rng
 encodeFrame wbuf (ResetStream sid (ApplicationError err) finalLen) = do
-    write8 wbuf 0x05
+    write8 wbuf 0x04
     encodeInt' wbuf $ fromIntegral sid
     encodeInt' wbuf $ fromIntegral err
     encodeInt' wbuf $ fromIntegral finalLen
