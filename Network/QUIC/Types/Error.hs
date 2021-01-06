@@ -6,10 +6,6 @@ module Network.QUIC.Types.Error where
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
-import Network.QUIC.Imports
-
-type ErrorCode = Int
-
 newtype TransportError = TransportError Int deriving (Eq, Show)
 
 pattern NoError                 :: TransportError
@@ -64,8 +60,6 @@ cryptoError :: TLS.AlertDescription -> TransportError
 cryptoError ad = TransportError ec
   where
     ec = 0x100 + fromIntegral (fromAlertDescription ad)
-
-type ReasonPhrase = Bytes
 
 newtype ApplicationError = ApplicationError Int deriving (Eq, Show)
 

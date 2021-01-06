@@ -15,6 +15,8 @@ type FrameType = Int
 
 data Direction = Unidirectional | Bidirectional deriving (Eq, Show)
 
+type ReasonPhrase = Bytes
+
 data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
