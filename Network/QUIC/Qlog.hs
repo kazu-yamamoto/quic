@@ -112,7 +112,7 @@ frameExtra (NewConnectionID (CIDInfo sn cid _) _) = ",\"sequence_number\":\"" <>
 frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" <> sw sn <> "\""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
-frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" <> toLogStr (transportError err) <> "\",\"raw_error_code\":" <> sw (fromTransportError err) <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\""
+frameExtra (ConnectionCloseQUIC err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" <> transportError err <> "\",\"raw_error_code\":" <> transportError' err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\""
 frameExtra (ConnectionCloseApp err reason) =  ",\"error_space\":\"application\",\"error_code\":\"" <> "\",\"raw_error_code\":" <> sw err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
 frameExtra HandshakeDone{} = ""
 frameExtra (UnknownFrame _Int) = ""
@@ -134,10 +134,10 @@ transportError CryptoBufferExceeded    = "crypto_buffer_exceeded"
 transportError KeyUpdateError          = "key_update_error"
 transportError AeadLimitReached        = "aead_limit_reached"
 transportError NoViablePath            = "no_viablpath"
--- this is not conformant to the spec
--- the spec defines to convert an TLS alert as hex digits.
-transportError (CryptoError desc)      = "crypto_error_" <> sw (show desc)
-transportError (UnknownError n)        = sw n
+transportError (TransportError n)      = sw n
+
+transportError' :: TransportError -> LogStr
+transportError' (TransportError n)     = sw n
 
 {-# INLINE ack #-}
 ack :: [PacketNumber] -> LogStr

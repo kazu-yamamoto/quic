@@ -185,7 +185,7 @@ processFrame conn lvl (CryptoF off cdat) = do
         | isClient conn ->
               void $ putRxCrypto conn lvl rx
         | otherwise ->
-              sendCCandExitConnection conn (CryptoError UnexpectedMessage) "CRYPTO in 1-RTT" 0x06
+              sendCCandExitConnection conn (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT" 0x06
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" 0x07

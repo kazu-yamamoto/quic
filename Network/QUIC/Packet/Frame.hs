@@ -118,9 +118,9 @@ encodeFrame wbuf (PathChallenge (PathData pdata)) = do
 encodeFrame wbuf (PathResponse (PathData pdata)) = do
     write8 wbuf 0x1b
     copyByteString wbuf $ Short.fromShort pdata
-encodeFrame wbuf (ConnectionCloseQUIC err ftyp reason) = do
+encodeFrame wbuf (ConnectionCloseQUIC (TransportError err) ftyp reason) = do
     write8 wbuf 0x1c
-    encodeInt' wbuf $ fromIntegral $ fromTransportError err
+    encodeInt' wbuf $ fromIntegral err
     encodeInt' wbuf $ fromIntegral ftyp
     encodeInt' wbuf $ fromIntegral $ Short.length reason
     copyShortByteString wbuf reason
@@ -313,7 +313,7 @@ decodeStreamsBlocked rbuf dir = StreamsBlocked dir . fromIntegral <$> decodeInt'
 
 decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameQUIC rbuf = do
-    err    <- toTransportError . fromIntegral <$> decodeInt' rbuf
+    err    <- TransportError . fromIntegral <$> decodeInt' rbuf
     ftyp   <- fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractShortByteString rbuf len

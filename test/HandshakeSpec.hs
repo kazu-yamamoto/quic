@@ -73,7 +73,7 @@ spec = do
                             }
                       }
                 handshakeFailure e
-                    | TransportErrorOccurs (CryptoError TLS.HandshakeFailure) _ <- e = True
+                    | TransportErrorOccurs te@(TransportError _) _ <- e = te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
             testHandshake3 cc1 cc2 sc handshakeFailure
         it "can handshake with large EE from a client" $ do

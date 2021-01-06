@@ -61,6 +61,7 @@ module Network.QUIC (
   , QUICError(..)
   , TransportError(..)
   , ApplicationError(..)
+  , cryptoError
   -- * Synchronization
   , wait1RTTReady
   , waitEstablished

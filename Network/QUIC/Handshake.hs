@@ -259,7 +259,7 @@ notifyPeer conn err = do
     exitConnection conn $ HandshakeFailed ad
   where
     ad = errorToAlertDescription err
-    frame = ConnectionCloseQUIC (CryptoError ad) 0 ""
+    frame = ConnectionCloseQUIC (cryptoError ad) 0 ""
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do
