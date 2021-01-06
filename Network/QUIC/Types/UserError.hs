@@ -5,6 +5,7 @@ import qualified Network.TLS as TLS
 
 import Network.QUIC.Imports
 import Network.QUIC.Types.Error
+import Network.QUIC.Types.Frame
 import Network.QUIC.Types.Packet
 
 data QUICError = VersionIsUnknown Word32

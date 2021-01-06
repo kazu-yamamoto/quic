@@ -283,9 +283,9 @@ transportErrorsIn :: [TransportError] -> QUICError -> Bool
 transportErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` tes) || transportError qe
 transportErrorsIn _   _                           = False
 
-cryptoError :: QUICError -> Bool
-cryptoError (TransportErrorOccurs te _) = te `elem` [CryptoError TLS.InternalError, CryptoError TLS.HandshakeFailure]
-cryptoError _ = False
+cryptoErrorX :: QUICError -> Bool
+cryptoErrorX (TransportErrorOccurs te _) = te `elem` [cryptoError TLS.InternalError, cryptoError TLS.HandshakeFailure]
+cryptoErrorX _ = False
 
 -- Crypto Sec 4.8: QUIC permits the use of a generic code in place of
 -- a specific error code; see Section 11 of [QUIC-TRANSPORT]. For TLS
@@ -294,5 +294,5 @@ cryptoError _ = False
 -- generic error code to avoid possibly exposing confidential
 -- information.
 cryptoErrorsIn :: [TLS.AlertDescription] -> QUICError -> Bool
-cryptoErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` map CryptoError tes) || cryptoError qe
+cryptoErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` map cryptoError tes) || cryptoErrorX qe
 cryptoErrorsIn _   _                           = False

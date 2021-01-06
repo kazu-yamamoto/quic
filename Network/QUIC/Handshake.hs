@@ -213,7 +213,7 @@ setPeerParams conn _ctx ps0 = do
         sendConnectionClose conn $ ConnectionCloseQUIC TransportParameterError 0 ""
         exitConnection conn $ TransportErrorOccurs TransportParameterError ""
         -- converted into Error_Misc and ignored in "tell"
-        E.throwIO TransportParameterError
+        E.throwIO $ TransportErrorOccurs TransportParameterError ""
     checkAuthCIDs params = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do
@@ -259,7 +259,7 @@ notifyPeer conn err = do
     exitConnection conn $ HandshakeFailed ad
   where
     ad = errorToAlertDescription err
-    frame = ConnectionCloseQUIC (CryptoError ad) 0 ""
+    frame = ConnectionCloseQUIC (cryptoError ad) 0 ""
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do
