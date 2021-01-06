@@ -147,22 +147,25 @@ processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "ACK" 0x02 -- fixme
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
-processFrame conn lvl frame@ResetStream{} = do
+processFrame conn lvl (ResetStream sid _err _finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "RESET_STREAM" 0x04
-    print frame
+    when ((isClient conn && isClientInitiatedUnidirectional sid)
+        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+        sendCCandExitConnection conn StreamStateError "Send-only stream" 0x04
+    putStrLn "ResetStream" -- fixme
 processFrame conn lvl (StopSending sid _err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STOP_SENDING" 0x05
     when ((isClient conn && isServerInitiatedUnidirectional sid)
         ||(isServer conn && isClientInitiatedUnidirectional sid)) $
-        sendCCandExitConnection conn StreamStateError "Receive-only stream" 0x11
+        sendCCandExitConnection conn StreamStateError "Receive-only stream" 0x05
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
           when ((isClient conn && isClientInitiated sid)
               ||(isServer conn && isServerInitiated sid)) $
-              sendCCandExitConnection conn StreamStateError "No such stream" 0x11
+              sendCCandExitConnection conn StreamStateError "No such stream" 0x05
       Just _strm -> putStrLn "StopSending" -- fixme
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $ do
