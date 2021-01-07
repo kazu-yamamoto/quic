@@ -42,22 +42,22 @@ instance Qlog Debug where
     qlog (Debug msg) = "{\"message\":" <> sw msg <> "}"
 
 instance Qlog RetryPacket where
-    qlog RetryPacket{} = "{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}"
+    qlog RetryPacket{} = "{\"header\":{\"packet_type\":\"retry\",\"packet_number\":\"\"}}"
 
 instance Qlog VersionNegotiationPacket where
-    qlog VersionNegotiationPacket{} = "{\"packet_type\":\"version_negotiation\",\"header\":{\"packet_number\":\"\"}}"
+    qlog VersionNegotiationPacket{} = "{\"header\":{\"packet_type\":\"version_negotiation\",\"packet_number\":\"\"}}"
 
 instance Qlog Header where
-    qlog hdr = "{\"packet_type\":\"" <> packetType hdr <> "\"}"
+    qlog hdr = "{\"header\":{\"packet_type\":\"" <> packetType hdr <> "\"}}"
 
 instance Qlog CryptPacket where
     qlog (CryptPacket hdr _) = qlog hdr
 
 instance Qlog PlainPacket where
-    qlog (PlainPacket hdr Plain{..}) = "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> ",\"header\":{\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"}}"
+    qlog (PlainPacket hdr Plain{..}) = "{\"header\":{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"},\"frames\":[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]}"
 
 instance Qlog StatelessReset where
-    qlog StatelessReset = "{\"packet_type\":\"stateless_reset\",\"header\":{\"packet_number\":\"\"}}"
+    qlog StatelessReset = "{\"header\":{\"packet_type\":\"stateless_reset\",\"packet_number\":\"\"}}"
 
 packetType :: Header -> LogStr
 packetType Initial{}   = "initial"
