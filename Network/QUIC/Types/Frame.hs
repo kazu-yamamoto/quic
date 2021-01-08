@@ -16,6 +16,7 @@ type FrameType = Int
 data Direction = Unidirectional | Bidirectional deriving (Eq, Show)
 
 type ReasonPhrase = Bytes
+type SeqNum = Int
 
 data Frame = Padding Int
            | Ping
@@ -31,8 +32,8 @@ data Frame = Padding Int
            | DataBlocked Int
            | StreamDataBlocked StreamId Int
            | StreamsBlocked Direction Int
-           | NewConnectionID CIDInfo Int
-           | RetireConnectionID Int
+           | NewConnectionID CIDInfo SeqNum -- retire prior to
+           | RetireConnectionID SeqNum
            | PathChallenge PathData
            | PathResponse PathData
            | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
