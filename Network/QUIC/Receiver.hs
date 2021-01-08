@@ -281,6 +281,9 @@ processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "NEW_CONNECTION_ID" 0x18
     addPeerCID conn cidInfo
+    let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
+    when (cidlen < 1 || 20 < cidlen || rpt > cidInfoSeq cidInfo) $
+        sendCCandExitConnection conn FrameEncodingError "NEW_CONNECTION_ID" 0x18
     when (rpt >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         let frames = map RetireConnectionID seqNums
