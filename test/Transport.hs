@@ -92,17 +92,12 @@ transportSpec cc0 = do
         it "MUST send STREAM_LIMIT_ERROR or FRAME_ENCODING_ERROR if invalid STREAMS_BLOCKED is received [Transport 19.14]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated streamsBlocked
             runC cc waitEstablished `shouldThrow` transportErrorsIn [FrameEncodingError,StreamLimitError]
-
-
         it "MUST send FRAME_ENCODING_ERROR if NEW_CONNECTION_ID with invalid Retire_Prior_To is received [Transport 19.15]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ newConnectionID ncidLargeRPT
             runC cc waitEstablished `shouldThrow` transportErrorsIn [FrameEncodingError]
-
         it "MUST send FRAME_ENCODING_ERROR if NEW_CONNECTION_ID with 0-byte CID is received [Transport 19.15]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ newConnectionID ncidZeroCID
             runC cc waitEstablished `shouldThrow` transportErrorsIn [FrameEncodingError]
-
-
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
             runC cc waitEstablished `shouldThrow` transportError
