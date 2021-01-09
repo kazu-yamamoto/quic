@@ -52,19 +52,15 @@ decryptToken = CT.decryptToken
 
 ----------------------------------------------------------------
 
+cryptoTokenSize :: Int
+cryptoTokenSize = 76 -- 4 + 8 + 1 + (1 + 20) * 3
+
 -- length includes its field
 instance Storable CryptoToken where
-    sizeOf (CryptoToken _ _ Nothing) = 1 + 4 + 8 + 1
-    sizeOf (CryptoToken _ _ (Just (l,r,o))) =
-        let (_, llen) = unpackCID l
-            (_, rlen) = unpackCID r
-            (_, olen) = unpackCID o
-        in 1 + 4 + 8 + 1 + 3 + fromIntegral (llen + rlen + olen)
-    alignment _ = 4
+    sizeOf    ~_ = cryptoTokenSize
+    alignment ~_ = 4
     peek ptr = do
-        len0 <- peek (castPtr ptr :: Ptr Word8)
-        let len = fromIntegral len0 - 1
-        rbuf <- newReadBuffer (castPtr (ptr `plusPtr` 1)) len
+        rbuf <- newReadBuffer (castPtr ptr) cryptoTokenSize
         ver  <- decodeVersion <$> read32 rbuf
         s <- CTime . fromIntegral <$> read64 rbuf
         let tim = UnixTime s 0
@@ -72,17 +68,19 @@ instance Storable CryptoToken where
         case typ of
           0 -> return $ CryptoToken ver tim Nothing
           _ -> do
-              llen <- fromIntegral <$> read8 rbuf
-              lCID <- makeCID <$> extractShortByteString rbuf llen
-              rlen <- fromIntegral <$> read8 rbuf
-              rCID <- makeCID <$> extractShortByteString rbuf rlen
-              olen <- fromIntegral <$> read8 rbuf
-              oCID <- makeCID <$> extractShortByteString rbuf olen
-              return $ CryptoToken ver tim $ Just (lCID, rCID, oCID)
-    poke ptr rt@(CryptoToken ver tim mcids) = do
-        let len = sizeOf rt
-        wbuf <- newWriteBuffer (castPtr ptr) len
-        write8 wbuf $ fromIntegral len
+              l <- pick rbuf
+              r <- pick rbuf
+              o <- pick rbuf
+              return $ CryptoToken ver tim $ Just (l,r,o)
+      where
+        pick rbuf = do
+            xlen0 <- fromIntegral <$> read8 rbuf
+            let xlen = min xlen0 20
+            x <- makeCID <$> extractShortByteString rbuf xlen
+            ff rbuf (20 - xlen)
+            return x
+    poke ptr (CryptoToken ver tim mcids) = do
+        wbuf <- newWriteBuffer (castPtr ptr) cryptoTokenSize
         write32 wbuf $ encodeVersion ver
         let CTime s = utSeconds tim
         write64 wbuf $ fromIntegral s
@@ -90,12 +88,12 @@ instance Storable CryptoToken where
           Nothing      -> write8 wbuf 0
           Just (l,r,o) -> do
               write8 wbuf 1
-              let (lcid, llen) = unpackCID l
-              write8 wbuf llen
-              copyShortByteString wbuf lcid
-              let (rcid, rlen) = unpackCID r
-              write8 wbuf rlen
-              copyShortByteString wbuf rcid
-              let (ocid, olen) = unpackCID o
-              write8 wbuf olen
-              copyShortByteString wbuf ocid
+              bury wbuf l
+              bury wbuf r
+              bury wbuf o
+      where
+        bury wbuf x = do
+            let (xcid, xlen) = unpackCID x
+            write8 wbuf xlen
+            copyShortByteString wbuf xcid
+            ff wbuf (20 - fromIntegral xlen)
