@@ -63,7 +63,7 @@ module Network.QUIC (
   , QUICException(..)
   , TransportError(.., NoError, InternalError, ConnectionRefused, FlowControlError, StreamLimitError, StreamStateError, FinalSizeError, FrameEncodingError, TransportParameterError, ConnectionIdLimitError, ProtocolViolation, InvalidToken, ApplicationError, CryptoBufferExceeded, KeyUpdateError, AeadLimitReached, NoViablePath)
   , cryptoError
-  , ApplicationProtocolError(.., H3NoError, H3GeneralProtocolError, H3InternalError, H3ClosedCriticalStream, H3FrameUnexpected, H3FrameError, H3ExcessiveLoad, H3IdError, H3SettingsError, H3MissingSettings, H3RequestRejected, H3RequestCancelled, H3RequestIncomplete, H3ConnectError, H3VersionFallback, QpackDecompressionFailed, QpackEncoderStreamError, QpackDecoderStreamError)
+  , ApplicationProtocolError(..)
   -- * Synchronization
   , wait1RTTReady
   , waitEstablished

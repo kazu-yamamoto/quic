@@ -227,12 +227,12 @@ newToken lvl plain
 
 resetStream :: EncryptionLevel -> Plain -> Plain
 resetStream lvl plain
-  | lvl == RTT1Level = plain { plainFrames = ResetStream 3 H3NoError 0 : plainFrames plain }
+  | lvl == RTT1Level = plain { plainFrames = ResetStream 3 (ApplicationProtocolError 0) 0 : plainFrames plain }
   | otherwise = plain
 
 stopSending :: EncryptionLevel -> Plain -> Plain
 stopSending lvl plain
-  | lvl == RTT1Level = plain { plainFrames = StopSending 101 H3NoError : plainFrames plain }
+  | lvl == RTT1Level = plain { plainFrames = StopSending 101 (ApplicationProtocolError 0) : plainFrames plain }
   | otherwise = plain
 
 maxStreamData :: EncryptionLevel -> Plain -> Plain
