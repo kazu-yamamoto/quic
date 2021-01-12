@@ -323,7 +323,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
     received <- isCloseReceived conn
     unless received $ do
         setCloseReceived conn
-        let quicexc = ApplicationErrorIsReceived err reason
+        let quicexc = ApplicationProtocolErrorIsReceived err reason
         exitConnection conn quicexc
 processFrame conn lvl HandshakeDone = do
     when (isServer conn || lvl /= RTT1Level) $

@@ -13,8 +13,8 @@ data QUICException =
     VersionIsUnknown Word32
   | TransportErrorIsSent     TransportError ReasonPhrase
   | TransportErrorIsReceived TransportError ReasonPhrase
-  | ApplicationErrorIsSent     ApplicationProtocolError ReasonPhrase
-  | ApplicationErrorIsReceived ApplicationProtocolError ReasonPhrase
+  | ApplicationProtocolErrorIsSent     ApplicationProtocolError ReasonPhrase
+  | ApplicationProtocolErrorIsReceived ApplicationProtocolError ReasonPhrase
   | ConnectionIsClosed
   | ConnectionIsTimeout
   | ConnectionIsReset

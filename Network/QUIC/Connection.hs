@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection (
@@ -160,6 +161,7 @@ module Network.QUIC.Connection (
   , sendConnectionClose
   , sendCCandExitConnection
   , isConnectionOpen
+  , abortConnection
   ) where
 
 import qualified Control.Exception as E
@@ -199,3 +201,12 @@ sendCCandExitConnection conn err desc ftyp = do
 -- | Checking if a connection is open.
 isConnectionOpen :: Connection -> IO Bool
 isConnectionOpen = isConnOpen
+
+-- | Closing a connection with an error code.
+abortConnection :: Connection -> ApplicationProtocolError -> IO ()
+abortConnection conn err = do
+    sendConnectionClose conn frame
+    exitConnection conn quicexc
+  where
+    frame = ConnectionCloseApp err ""
+    quicexc = ApplicationProtocolErrorIsSent err ""

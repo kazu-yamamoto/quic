@@ -120,7 +120,3 @@ waitWindowIsOpen s n = do
 -- | Closing a stream with an error code.
 resetStream :: Stream -> ApplicationProtocolError -> IO ()
 resetStream = undefined
-
--- | Closing a connection with an error code.
-abortConnection :: Connection -> ApplicationProtocolError -> IO ()
-abortConnection = undefined
