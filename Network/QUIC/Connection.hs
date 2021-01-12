@@ -195,7 +195,7 @@ sendCCandExitConnection conn err desc ftyp = do
     sendConnectionClose conn frame
     exitConnection conn quicexc
   where
-    frame = ConnectionCloseQUIC err ftyp desc
+    frame = ConnectionClose err ftyp desc
     quicexc = TransportErrorIsSent err desc
 
 -- | Checking if a connection is open.

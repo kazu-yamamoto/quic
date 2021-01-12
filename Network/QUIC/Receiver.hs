@@ -300,18 +300,18 @@ processFrame conn RTT1Level (PathChallenge dat) =
 processFrame conn RTT1Level (PathResponse dat) =
     -- RTT0Level falls intentionally
     checkResponse conn dat
-processFrame conn _ (ConnectionCloseQUIC err _ftyp reason)
+processFrame conn _ (ConnectionClose err _ftyp reason)
   | err == NoError = do
         setCloseReceived conn
         onCloseReceived $ connHooks conn
         sent <- isCloseSent conn
         unless sent $ do
-            sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+            sendConnectionClose conn $ ConnectionClose NoError 0 ""
             -- if sent, client/server already exits.
             exitConnection conn ConnectionIsClosed
   | otherwise = do
         sent <- isCloseSent conn
-        unless sent $ sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+        unless sent $ sendConnectionClose conn $ ConnectionClose NoError 0 ""
         received <- isCloseReceived conn
         unless received $ do
             setCloseReceived conn
@@ -319,7 +319,7 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp reason)
             exitConnection conn quicexc
 processFrame conn _ (ConnectionCloseApp err reason) = do
     sent <- isCloseSent conn
-    unless sent $ sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
+    unless sent $ sendConnectionClose conn $ ConnectionClose NoError 0 ""
     received <- isCloseReceived conn
     unless received $ do
         setCloseReceived conn

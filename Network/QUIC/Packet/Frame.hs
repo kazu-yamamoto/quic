@@ -118,7 +118,7 @@ encodeFrame wbuf (PathChallenge (PathData pdata)) = do
 encodeFrame wbuf (PathResponse (PathData pdata)) = do
     write8 wbuf 0x1b
     copyByteString wbuf $ Short.fromShort pdata
-encodeFrame wbuf (ConnectionCloseQUIC (TransportError err) ftyp reason) = do
+encodeFrame wbuf (ConnectionClose (TransportError err) ftyp reason) = do
     write8 wbuf 0x1c
     encodeInt' wbuf $ fromIntegral err
     encodeInt' wbuf $ fromIntegral ftyp
@@ -153,19 +153,19 @@ decodeFrame :: ReadBuffer -> IO Frame
 decodeFrame rbuf = do
     ftyp <- fromIntegral <$> decodeInt' rbuf
     case ftyp :: FrameType of
-      0x00 -> decodePaddingFrames rbuf
+      0x00 -> decodePadding rbuf
       0x01 -> return Ping
-      0x02 -> decodeAckFrame rbuf
+      0x02 -> decodeAck rbuf
    -- 0x03 -> Ack with ECN Counts
-      0x04 -> decodeResetStreamFrame rbuf
+      0x04 -> decodeResetStream rbuf
       0x05 -> decodeStopSending rbuf
-      0x06 -> decodeCryptoFrame rbuf
+      0x06 -> decodeCrypto rbuf
       0x07 -> decodeNewToken rbuf
       x | 0x08 <= x && x <= 0x0f -> do
               let off = testBit x 2
                   len = testBit x 1
                   fin = testBit x 0
-              decodeStreamFrame rbuf off len fin
+              decodeStream rbuf off len fin
       0x10 -> decodeMaxData rbuf
       0x11 -> decodeMaxStreamData rbuf
       0x12 -> decodeMaxStreams rbuf Bidirectional
@@ -178,13 +178,13 @@ decodeFrame rbuf = do
       0x19 -> decodeRetireConnectionID rbuf
       0x1a -> decodePathChallenge rbuf
       0x1b -> decodePathResponse rbuf
-      0x1c -> decodeConnectionCloseFrameQUIC rbuf
-      0x1d -> decodeConnectionCloseFrameApp rbuf
+      0x1c -> decodeConnectionClose rbuf
+      0x1d -> decodeConnectionCloseApp rbuf
       0x1e -> return HandshakeDone
       x    -> return $ UnknownFrame x
 
-decodePaddingFrames :: ReadBuffer -> IO Frame
-decodePaddingFrames rbuf = do
+decodePadding :: ReadBuffer -> IO Frame
+decodePadding rbuf = do
     n <- withCurrentOffSet rbuf $ \beg -> do
         rest <- remainingSize rbuf
         let end = beg `plusPtr` rest
@@ -225,15 +225,15 @@ countZero beg0 end0
                 return (n, beg)
       | otherwise = return (n, beg)
 
-decodeCryptoFrame :: ReadBuffer -> IO Frame
-decodeCryptoFrame rbuf = do
+decodeCrypto :: ReadBuffer -> IO Frame
+decodeCrypto rbuf = do
     off <- fromIntegral <$> decodeInt' rbuf
     len <- fromIntegral <$> decodeInt' rbuf
     cdata <- extractByteString rbuf len
     return $ CryptoF off cdata
 
-decodeAckFrame :: ReadBuffer -> IO Frame
-decodeAckFrame rbuf = do
+decodeAck :: ReadBuffer -> IO Frame
+decodeAck rbuf = do
     largest <- decodeInt' rbuf
     delay   <- fromIntegral <$> decodeInt' rbuf
     count   <- fromIntegral <$> decodeInt' rbuf
@@ -248,8 +248,8 @@ decodeAckFrame rbuf = do
         let n' = n - 1 :: Int
         getRanges n' (build . ((gap, rng) :))
 
-decodeResetStreamFrame :: ReadBuffer -> IO Frame
-decodeResetStreamFrame rbuf = do
+decodeResetStream :: ReadBuffer -> IO Frame
+decodeResetStream rbuf = do
     sID <- fromIntegral <$> decodeInt' rbuf
     err <- ApplicationProtocolError . fromIntegral <$> decodeInt' rbuf
     finalLen <- fromIntegral <$> decodeInt' rbuf
@@ -266,8 +266,8 @@ decodeNewToken rbuf = do
     len <- fromIntegral <$> decodeInt' rbuf
     NewToken <$> extractByteString rbuf len
 
-decodeStreamFrame :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
-decodeStreamFrame rbuf hasOff hasLen fin = do
+decodeStream :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
+decodeStream rbuf hasOff hasLen fin = do
     sID <- fromIntegral <$> decodeInt' rbuf
     off <- if hasOff then
              fromIntegral <$> decodeInt' rbuf
@@ -311,16 +311,16 @@ decodeStreamsBlocked rbuf dir = StreamsBlocked dir . fromIntegral <$> decodeInt'
 
 ----------------------------------------------------------------
 
-decodeConnectionCloseFrameQUIC  :: ReadBuffer -> IO Frame
-decodeConnectionCloseFrameQUIC rbuf = do
+decodeConnectionClose :: ReadBuffer -> IO Frame
+decodeConnectionClose rbuf = do
     err    <- TransportError . fromIntegral <$> decodeInt' rbuf
     ftyp   <- fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractShortByteString rbuf len
-    return $ ConnectionCloseQUIC err ftyp reason
+    return $ ConnectionClose err ftyp reason
 
-decodeConnectionCloseFrameApp  :: ReadBuffer -> IO Frame
-decodeConnectionCloseFrameApp rbuf = do
+decodeConnectionCloseApp  :: ReadBuffer -> IO Frame
+decodeConnectionCloseApp rbuf = do
     err    <- ApplicationProtocolError . fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractShortByteString rbuf len

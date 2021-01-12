@@ -36,7 +36,7 @@ data Frame = Padding Int
            | RetireConnectionID SeqNum
            | PathChallenge PathData
            | PathResponse PathData
-           | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
+           | ConnectionClose     TransportError FrameType ReasonPhrase
            | ConnectionCloseApp  ApplicationProtocolError ReasonPhrase
            | HandshakeDone
            | UnknownFrame Int
@@ -81,11 +81,11 @@ emptyToken :: Token
 emptyToken = ""
 
 ackEliciting :: Frame -> Bool
-ackEliciting Padding{}             = False
-ackEliciting Ack{}                 = False
-ackEliciting ConnectionCloseQUIC{} = False
-ackEliciting ConnectionCloseApp{}  = False
-ackEliciting _                     = True
+ackEliciting Padding{}            = False
+ackEliciting Ack{}                = False
+ackEliciting ConnectionClose{}    = False
+ackEliciting ConnectionCloseApp{} = False
+ackEliciting _                    = True
 
 pathValidating :: Frame -> Bool
 pathValidating PathChallenge{} = True
@@ -93,7 +93,7 @@ pathValidating PathResponse{}  = True
 pathValidating _               = False
 
 inFlight :: Frame -> Bool
-inFlight Ack{}                 = False
-inFlight ConnectionCloseQUIC{} = False
-inFlight ConnectionCloseApp{}  = False
-inFlight _                     = True
+inFlight Ack{}                = False
+inFlight ConnectionClose{}    = False
+inFlight ConnectionCloseApp{} = False
+inFlight _                    = True

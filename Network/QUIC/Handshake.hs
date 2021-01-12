@@ -210,7 +210,7 @@ setPeerParams conn _ctx ps0 = do
               setParams params
               qlogParamsSet conn (params,"remote")
     err = do
-        sendConnectionClose conn $ ConnectionCloseQUIC TransportParameterError 0 ""
+        sendConnectionClose conn $ ConnectionClose TransportParameterError 0 ""
         let qerr = TransportErrorIsSent TransportParameterError ""
         exitConnection conn qerr
         -- converted into Error_Misc and ignored in "tell"
@@ -260,7 +260,7 @@ notifyPeer conn err = do
     exitConnection conn $ HandshakeFailed ad
   where
     ad = errorToAlertDescription err
-    frame = ConnectionCloseQUIC (cryptoError ad) 0 ""
+    frame = ConnectionClose (cryptoError ad) 0 ""
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do
