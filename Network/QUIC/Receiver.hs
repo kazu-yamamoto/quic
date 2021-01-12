@@ -315,14 +315,15 @@ processFrame conn _ (ConnectionCloseQUIC err _ftyp reason)
         received <- isCloseReceived conn
         unless received $ do
             setCloseReceived conn
-            exitConnection conn $ TransportErrorOccurs err reason
+            let qerr = TransportErrorIsReceived err reason
+            exitConnection conn qerr
 processFrame conn _ (ConnectionCloseApp err reason) = do
     sent <- isCloseSent conn
     unless sent $ sendConnectionClose conn $ ConnectionCloseQUIC NoError 0 ""
     received <- isCloseReceived conn
     unless received $ do
         setCloseReceived conn
-        let qerr = ApplicationErrorOccurs err reason
+        let qerr = ApplicationErrorIsReceived err reason
         exitConnection conn qerr
 processFrame conn lvl HandshakeDone = do
     when (isServer conn || lvl /= RTT1Level) $

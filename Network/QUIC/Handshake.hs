@@ -211,9 +211,10 @@ setPeerParams conn _ctx ps0 = do
               qlogParamsSet conn (params,"remote")
     err = do
         sendConnectionClose conn $ ConnectionCloseQUIC TransportParameterError 0 ""
-        exitConnection conn $ TransportErrorOccurs TransportParameterError ""
+        let qerr = TransportErrorIsSent TransportParameterError ""
+        exitConnection conn qerr
         -- converted into Error_Misc and ignored in "tell"
-        E.throwIO $ TransportErrorOccurs TransportParameterError ""
+        E.throwIO qerr
     checkAuthCIDs params = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do

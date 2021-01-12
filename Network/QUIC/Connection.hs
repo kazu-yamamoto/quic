@@ -194,4 +194,4 @@ sendCCandExitConnection conn err desc ftyp = do
     exitConnection conn quicerr
   where
     frame = ConnectionCloseQUIC err ftyp desc
-    quicerr = TransportErrorOccurs err desc
+    quicerr = TransportErrorIsSent err desc

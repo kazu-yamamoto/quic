@@ -292,7 +292,7 @@ crypto0RTT lcs = lcs
 ----------------------------------------------------------------
 
 transportError :: QUICError -> Bool
-transportError (TransportErrorOccurs te _) = te `elem` [ProtocolViolation, InternalError]
+transportError (TransportErrorIsReceived te _) = te `elem` [ProtocolViolation, InternalError]
 transportError _ = False
 
 -- Transport Sec 11:
@@ -301,11 +301,11 @@ transportError _ = False
 -- PROTOCOL_VIOLATION or INTERNAL_ERROR) can always be used in place
 -- of specific error codes.
 transportErrorsIn :: [TransportError] -> QUICError -> Bool
-transportErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` tes) || transportError qe
+transportErrorsIn tes qe@(TransportErrorIsReceived te _) = (te `elem` tes) || transportError qe
 transportErrorsIn _   _                           = False
 
 cryptoErrorX :: QUICError -> Bool
-cryptoErrorX (TransportErrorOccurs te _) = te `elem` [cryptoError TLS.InternalError, cryptoError TLS.HandshakeFailure]
+cryptoErrorX (TransportErrorIsReceived te _) = te `elem` [cryptoError TLS.InternalError, cryptoError TLS.HandshakeFailure]
 cryptoErrorX _ = False
 
 -- Crypto Sec 4.8: QUIC permits the use of a generic code in place of
@@ -315,5 +315,5 @@ cryptoErrorX _ = False
 -- generic error code to avoid possibly exposing confidential
 -- information.
 cryptoErrorsIn :: [TLS.AlertDescription] -> QUICError -> Bool
-cryptoErrorsIn tes qe@(TransportErrorOccurs te _) = (te `elem` map cryptoError tes) || cryptoErrorX qe
+cryptoErrorsIn tes qe@(TransportErrorIsReceived te _) = (te `elem` map cryptoError tes) || cryptoErrorX qe
 cryptoErrorsIn _   _                           = False
