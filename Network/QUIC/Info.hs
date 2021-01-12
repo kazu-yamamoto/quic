@@ -64,11 +64,13 @@ instance Show ConnectionInfo where
 
 ----------------------------------------------------------------
 
+-- | Statistics of a connection.
 data ConnectionStats = ConnectionStats {
     txBytes :: Int
   , rxBytes :: Int
   } deriving (Eq, Show)
 
+-- | Getting statistics of a connection.
 getConnectionStats :: Connection -> IO ConnectionStats
 getConnectionStats conn = do
     tx <- getTxBytes conn

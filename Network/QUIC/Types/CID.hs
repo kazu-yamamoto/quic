@@ -21,7 +21,7 @@ import Network.QUIC.Imports
 myCIDLength :: Int
 myCIDLength = 8
 
--- A type for conneciton ID.
+-- | A type for conneciton ID.
 newtype CID = CID Bytes deriving (Eq, Ord)
 
 instance Show CID where

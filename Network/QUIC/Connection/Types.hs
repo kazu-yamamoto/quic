@@ -140,7 +140,7 @@ newConcurrency rl dir n = Concurrency typ typ n
 data Connection = Connection {
     connState         :: ConnState
   -- Actions
-  , connDebugLog      :: DebugLogger
+  , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
   -- WriteBuffer

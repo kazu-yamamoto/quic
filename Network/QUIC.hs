@@ -25,7 +25,7 @@ module Network.QUIC (
   -- * Server
   , acceptStream
   -- * Client
-  , migration
+  , migrate
   , Migration(..)
   -- * Configrations
   , ClientConfig(..)
@@ -67,6 +67,7 @@ module Network.QUIC (
   , cryptoError
   , ApplicationProtocolError(..)
   -- * Synchronization
+  , wait0RTTReady
   , wait1RTTReady
   , waitEstablished
   ) where

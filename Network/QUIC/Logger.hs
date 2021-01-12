@@ -17,6 +17,7 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
+-- | A type for debug logger.
 type DebugLogger = Builder -> IO ()
 
 bhow :: Show a => a -> Builder

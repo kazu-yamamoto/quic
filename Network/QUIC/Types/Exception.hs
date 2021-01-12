@@ -8,6 +8,7 @@ import Network.QUIC.Types.Error
 import Network.QUIC.Types.Frame
 import Network.QUIC.Types.Packet
 
+-- | User level exceptions for QUIC.
 data QUICException =
     VersionIsUnknown Word32
   | TransportErrorIsSent     TransportError ReasonPhrase

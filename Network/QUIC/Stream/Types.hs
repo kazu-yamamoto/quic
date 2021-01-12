@@ -22,6 +22,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+-- | An abstract data type for streams.
 data Stream = Stream {
     streamId         :: StreamId -- ^ Getting stream identifier.
   , streamConnection :: Connection

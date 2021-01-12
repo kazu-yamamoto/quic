@@ -6,6 +6,7 @@ module Network.QUIC.Types.Error where
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
+-- | Transport errors of QUIC.
 newtype TransportError = TransportError Int deriving (Eq, Show)
 
 pattern NoError                 :: TransportError
@@ -59,9 +60,11 @@ pattern AeadLimitReached         = TransportError  0xf
 pattern NoViablePath            :: TransportError
 pattern NoViablePath             = TransportError 0x10
 
+-- | Converting a TLS alert to a corresponding transport error.
 cryptoError :: TLS.AlertDescription -> TransportError
 cryptoError ad = TransportError ec
   where
     ec = 0x100 + fromIntegral (fromAlertDescription ad)
 
+-- | Application protocol errors of QUIC.
 newtype ApplicationProtocolError = ApplicationProtocolError Int deriving (Eq, Show)

@@ -13,6 +13,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+-- | Hooks.
 data Hooks = Hooks {
     onCloseSent     :: IO ()
   , onCloseReceived :: IO ()
@@ -22,6 +23,7 @@ data Hooks = Hooks {
   , onTLSHandshakeCreated :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
   }
 
+-- | Default hooks.
 defaultHooks :: Hooks
 defaultHooks = Hooks {
     onCloseSent     = return ()

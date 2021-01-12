@@ -5,7 +5,7 @@ module Network.QUIC.Client (
     readerClient
   , recvClient
   , Migration(..)
-  , migration
+  , migrate
   ) where
 
 import Control.Concurrent
@@ -85,6 +85,7 @@ recvClient = readRecvQ
 
 ----------------------------------------------------------------
 
+-- | How to migrate a connection.
 data Migration = ChangeServerCID
                | ChangeClientCID
                | NATRebinding
@@ -92,8 +93,8 @@ data Migration = ChangeServerCID
                deriving (Eq, Show)
 
 -- | Migrating.
-migration :: Connection -> Migration -> IO Bool
-migration conn typ
+migrate :: Connection -> Migration -> IO Bool
+migrate conn typ
   | isClient conn = do
         waitEstablished conn
         migrationClient conn typ

@@ -95,16 +95,20 @@ isClosed Connection{..} = do
     rx <- readIORef $ sharedCloseReceived shared
     return (tx || rx)
 
+-- | Waiting until 0-RTT data can be sent.
 wait0RTTReady :: Connection -> IO ()
 wait0RTTReady Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
     check (cs >= ReadyFor0RTT)
 
+-- | Waiting until 1-RTT data can be sent.
 wait1RTTReady :: Connection -> IO ()
 wait1RTTReady Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
     check (cs >= ReadyFor1RTT)
 
+-- | For clients, waiting until HANDSHAKE_DONE is received.
+--   For servers, waiting until a TLS stack reports that the handshake is complete.
 waitEstablished :: Connection -> IO ()
 waitEstablished Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState

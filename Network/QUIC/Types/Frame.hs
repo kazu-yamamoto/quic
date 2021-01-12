@@ -47,15 +47,19 @@ data Frame = Padding Int
 --   On 32-bit machines, the total number of stream identifiers is limited.
 type StreamId = Int
 
+-- | Checking if a stream is client-initiated bidirectional.
 isClientInitiatedBidirectional :: StreamId -> Bool
 isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0
 
+-- | Checking if a stream is server-initiated bidirectional.
 isServerInitiatedBidirectional :: StreamId -> Bool
 isServerInitiatedBidirectional  sid = (0b11 .&. sid) == 1
 
+-- | Checking if a stream is client-initiated unidirectional.
 isClientInitiatedUnidirectional :: StreamId -> Bool
 isClientInitiatedUnidirectional sid = (0b11 .&. sid) == 2
 
+-- | Checking if a stream is server-initiated unidirectional.
 isServerInitiatedUnidirectional :: StreamId -> Bool
 isServerInitiatedUnidirectional sid = (0b11 .&. sid) == 3
 

@@ -264,6 +264,7 @@ stopQUICServer conn = getMainThreadId conn >>= killThread
 
 ----------------------------------------------------------------
 
+-- | Getting a certificate chain.
 clientCertificateChain :: Connection -> IO (Maybe CertificateChain)
 clientCertificateChain conn
   | isClient conn = return Nothing
