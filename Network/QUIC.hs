@@ -59,11 +59,11 @@ module Network.QUIC (
   -- * Statistics
   , ConnectionStats(..)
   , getConnectionStats
-  -- * Errors
-  , QUICError(..)
+  -- * Exceptions and Errors
+  , QUICException(..)
   , TransportError(.., NoError, InternalError, ConnectionRefused, FlowControlError, StreamLimitError, StreamStateError, FinalSizeError, FrameEncodingError, TransportParameterError, ConnectionIdLimitError, ProtocolViolation, InvalidToken, ApplicationError, CryptoBufferExceeded, KeyUpdateError, AeadLimitReached, NoViablePath)
-  , ApplicationProtocolError(.., H3NoError, H3GeneralProtocolError, H3InternalError, H3ClosedCriticalStream, H3FrameUnexpected, H3FrameError, H3ExcessiveLoad, H3IdError, H3SettingsError, H3MissingSettings, H3RequestRejected, H3RequestCancelled, H3RequestIncomplete, H3ConnectError, H3VersionFallback, QpackDecompressionFailed, QpackEncoderStreamError, QpackDecoderStreamError)
   , cryptoError
+  , ApplicationProtocolError(.., H3NoError, H3GeneralProtocolError, H3InternalError, H3ClosedCriticalStream, H3FrameUnexpected, H3FrameError, H3ExcessiveLoad, H3IdError, H3SettingsError, H3MissingSettings, H3RequestRejected, H3RequestCancelled, H3RequestIncomplete, H3ConnectError, H3VersionFallback, QpackDecompressionFailed, QpackEncoderStreamError, QpackDecoderStreamError)
   -- * Synchronization
   , wait1RTTReady
   , waitEstablished

@@ -147,7 +147,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
             waitEstablished conn
             void $ acceptStream conn
 
-testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICError -> Bool) -> IO ()
+testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc selector = void $ do
     mvar <- newEmptyMVar
     concurrently (clients mvar) (server mvar)

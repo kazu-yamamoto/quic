@@ -86,9 +86,9 @@ connect conf = do
             freeResources conn
         body = handshakeClientConnection conf
     check se
-      | Just (NextVersion ver) <- E.fromException se = Right ver
-      | Just (e :: QUICError)  <- E.fromException se = Left e
-      | otherwise                                    = Left $ BadThingHappen se
+      | Just (NextVersion ver)    <- E.fromException se = Right ver
+      | Just (e :: QUICException) <- E.fromException se = Left e
+      | otherwise                                       = Left $ BadThingHappen se
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do

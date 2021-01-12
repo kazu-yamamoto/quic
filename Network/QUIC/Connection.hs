@@ -179,7 +179,7 @@ import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
-exitConnection :: Connection -> QUICError -> IO ()
+exitConnection :: Connection -> QUICException -> IO ()
 exitConnection Connection{..} ue = E.throwTo connThreadId ue
 
 sendConnectionClose :: Connection -> Frame -> IO ()
@@ -191,7 +191,7 @@ sendConnectionClose conn frame = do
 sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO ()
 sendCCandExitConnection conn err desc ftyp = do
     sendConnectionClose conn frame
-    exitConnection conn quicerr
+    exitConnection conn quicexc
   where
     frame = ConnectionCloseQUIC err ftyp desc
-    quicerr = TransportErrorIsSent err desc
+    quicexc = TransportErrorIsSent err desc
