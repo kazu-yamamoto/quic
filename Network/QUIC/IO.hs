@@ -51,7 +51,7 @@ sendStreamMany s dats = do
     addTxStreamData s len
     putSendStreamQ (streamConnection s) $ TxStreamData s dats len False
 
--- | Sending a FIN in the stream.
+-- | Sending FIN in the stream.
 shutdownStream :: Stream -> IO ()
 shutdownStream s = do
     closed <- isClosed $ streamConnection s
@@ -61,7 +61,7 @@ shutdownStream s = do
     setTxStreamClosed s
     putSendStreamQ (streamConnection s) $ TxStreamData s [] 0 True
 
--- | Sending a FIN if necessary and closing a stream.
+-- | Closing a stream. FIN is sent if necessary.
 closeStream :: Stream -> IO ()
 closeStream s = do
     closed <- isClosed $ streamConnection s
@@ -116,3 +116,11 @@ waitWindowIsOpen s n = do
     strmWindow <- flowWindow <$> readStreamFlowTx s
     connWindow <- flowWindow <$> readConnectionFlowTx (streamConnection s)
     check (n <= strmWindow && n <= connWindow)
+
+-- | Closing a stream with an error code.
+resetStream :: Stream -> ApplicationProtocolError -> IO ()
+resetStream = undefined
+
+-- | Closing a connection with an error code.
+abortConnection :: Connection -> ApplicationProtocolError -> IO ()
+abortConnection = undefined

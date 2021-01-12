@@ -1,8 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.State (
-    isConnectionOpen
-  , setConnection0RTTReady
+    setConnection0RTTReady
   , isConnection1RTTReady
   , setConnection1RTTReady
   , isConnectionEstablished

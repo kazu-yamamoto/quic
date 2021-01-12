@@ -8,6 +8,7 @@ module Network.QUIC (
   , stopQUICServer
   , Connection
   , isConnectionOpen
+  , abortConnection
   -- * Stream
   , Stream
   , stream
@@ -15,11 +16,12 @@ module Network.QUIC (
   , streamId
   , StreamId
   , closeStream
+  , shutdownStream
+  , resetStream
   -- * IO
   , recvStream
   , sendStream
   , sendStreamMany
-  , shutdownStream
   -- * Server
   , acceptStream
   -- * Client

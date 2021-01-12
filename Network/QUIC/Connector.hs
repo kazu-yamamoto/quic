@@ -54,8 +54,8 @@ isConnectionEstablished conn = do
       Established -> True
       _           -> False
 
-isConnectionOpen :: Connector a => a -> IO Bool
-isConnectionOpen conn = do
+isConnOpen :: Connector a => a -> IO Bool
+isConnOpen conn = do
     st <- getConnectionState conn
     return $ case st of
       Closing -> False

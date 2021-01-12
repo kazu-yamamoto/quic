@@ -67,7 +67,6 @@ module Network.QUIC.Connection (
   , readMinIdleTimeout
   , setMinIdleTimeout
   -- * State
-  , isConnectionOpen
   , isConnectionEstablished
   , isConnection1RTTReady
   , setConnection0RTTReady
@@ -160,6 +159,7 @@ module Network.QUIC.Connection (
   , exitConnection
   , sendConnectionClose
   , sendCCandExitConnection
+  , isConnectionOpen
   ) where
 
 import qualified Control.Exception as E
@@ -195,3 +195,7 @@ sendCCandExitConnection conn err desc ftyp = do
   where
     frame = ConnectionCloseQUIC err ftyp desc
     quicexc = TransportErrorIsSent err desc
+
+-- | Checking if a connection is open.
+isConnectionOpen :: Connection -> IO Bool
+isConnectionOpen = isConnOpen

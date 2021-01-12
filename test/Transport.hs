@@ -72,7 +72,7 @@ transportSpec cc0 = do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
             runC cc waitEstablished `shouldThrow` transportError
         it "MUST send STREAM_STATE_ERROR if RESET_STREAM is received for a send-only stream [Transport 19.4]" $ \_ -> do
-            let cc = addHook cc0 $ setOnPlainCreated resetStream
+            let cc = addHook cc0 $ setOnPlainCreated resetStrm
             runC cc waitEstablished `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send STREAM_STATE_ERROR if STOP_SENDING is received for a non-existing stream [Transport 19.5]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated stopSending
@@ -225,8 +225,8 @@ newToken lvl plain
   | lvl == RTT1Level = plain { plainFrames = NewToken "DUMMY" : plainFrames plain }
   | otherwise = plain
 
-resetStream :: EncryptionLevel -> Plain -> Plain
-resetStream lvl plain
+resetStrm :: EncryptionLevel -> Plain -> Plain
+resetStrm lvl plain
   | lvl == RTT1Level = plain { plainFrames = ResetStream 3 (ApplicationProtocolError 0) 0 : plainFrames plain }
   | otherwise = plain
 
