@@ -21,8 +21,8 @@ type SeqNum = Int
 data Frame = Padding Int
            | Ping
            | Ack AckInfo Delay
-           | ResetStream StreamId ApplicationError Int
-           | StopSending StreamId ApplicationError
+           | ResetStream StreamId ApplicationProtocolError Int
+           | StopSending StreamId ApplicationProtocolError
            | CryptoF Offset CryptoData
            | NewToken Token
            | StreamF StreamId Offset [StreamData] Fin
@@ -37,7 +37,7 @@ data Frame = Padding Int
            | PathChallenge PathData
            | PathResponse PathData
            | ConnectionCloseQUIC TransportError FrameType ReasonPhrase
-           | ConnectionCloseApp ApplicationError ReasonPhrase
+           | ConnectionCloseApp  ApplicationProtocolError ReasonPhrase
            | HandshakeDone
            | UnknownFrame Int
            deriving (Eq,Show)

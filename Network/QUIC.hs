@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 -- | This main module provides APIs for QUIC.
 module Network.QUIC (
   -- * Running a QUIC client and server
@@ -59,8 +61,8 @@ module Network.QUIC (
   , getConnectionStats
   -- * Errors
   , QUICError(..)
-  , TransportError(..)
-  , ApplicationError(..)
+  , TransportError(.., NoError, InternalError, ConnectionRefused, FlowControlError, StreamLimitError, StreamStateError, FinalSizeError, FrameEncodingError, TransportParameterError, ConnectionIdLimitError, ProtocolViolation, InvalidToken, ApplicationError, CryptoBufferExceeded, KeyUpdateError, AeadLimitReached, NoViablePath)
+  , ApplicationProtocolError(.., H3NoError, H3GeneralProtocolError, H3InternalError, H3ClosedCriticalStream, H3FrameUnexpected, H3FrameError, H3ExcessiveLoad, H3IdError, H3SettingsError, H3MissingSettings, H3RequestRejected, H3RequestCancelled, H3RequestIncomplete, H3ConnectError, H3VersionFallback, QpackDecompressionFailed, QpackEncoderStreamError, QpackDecoderStreamError)
   , cryptoError
   -- * Synchronization
   , wait1RTTReady

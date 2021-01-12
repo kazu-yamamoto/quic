@@ -44,6 +44,9 @@ pattern ProtocolViolation        = TransportError  0xa
 pattern InvalidToken            :: TransportError
 pattern InvalidToken             = TransportError  0xb
 
+pattern ApplicationError        :: TransportError
+pattern ApplicationError         = TransportError  0xc
+
 pattern CryptoBufferExceeded    :: TransportError
 pattern CryptoBufferExceeded     = TransportError  0xd
 
@@ -61,61 +64,61 @@ cryptoError ad = TransportError ec
   where
     ec = 0x100 + fromIntegral (fromAlertDescription ad)
 
-newtype ApplicationError = ApplicationError Int deriving (Eq, Show)
+newtype ApplicationProtocolError = ApplicationProtocolError Int deriving (Eq, Show)
 
-pattern H3NoError                :: ApplicationError
-pattern H3NoError                 = ApplicationError 0x100
+pattern H3NoError                :: ApplicationProtocolError
+pattern H3NoError                 = ApplicationProtocolError 0x100
 
-pattern H3GeneralProtocolError   :: ApplicationError
-pattern H3GeneralProtocolError    = ApplicationError 0x101
+pattern H3GeneralProtocolError   :: ApplicationProtocolError
+pattern H3GeneralProtocolError    = ApplicationProtocolError 0x101
 
-pattern H3InternalError          :: ApplicationError
-pattern H3InternalError           = ApplicationError 0x102
+pattern H3InternalError          :: ApplicationProtocolError
+pattern H3InternalError           = ApplicationProtocolError 0x102
 
-pattern H3StreamCreationError    :: ApplicationError
-pattern H3StreamCreationError     = ApplicationError 0x103
+pattern H3StreamCreationError    :: ApplicationProtocolError
+pattern H3StreamCreationError     = ApplicationProtocolError 0x103
 
-pattern H3ClosedCriticalStream   :: ApplicationError
-pattern H3ClosedCriticalStream    = ApplicationError 0x104
+pattern H3ClosedCriticalStream   :: ApplicationProtocolError
+pattern H3ClosedCriticalStream    = ApplicationProtocolError 0x104
 
-pattern H3FrameUnexpected        :: ApplicationError
-pattern H3FrameUnexpected         = ApplicationError 0x105
+pattern H3FrameUnexpected        :: ApplicationProtocolError
+pattern H3FrameUnexpected         = ApplicationProtocolError 0x105
 
-pattern H3FrameError             :: ApplicationError
-pattern H3FrameError              = ApplicationError 0x106
+pattern H3FrameError             :: ApplicationProtocolError
+pattern H3FrameError              = ApplicationProtocolError 0x106
 
-pattern H3ExcessiveLoad          :: ApplicationError
-pattern H3ExcessiveLoad           = ApplicationError 0x107
+pattern H3ExcessiveLoad          :: ApplicationProtocolError
+pattern H3ExcessiveLoad           = ApplicationProtocolError 0x107
 
-pattern H3IdError                :: ApplicationError
-pattern H3IdError                 = ApplicationError 0x108
+pattern H3IdError                :: ApplicationProtocolError
+pattern H3IdError                 = ApplicationProtocolError 0x108
 
-pattern H3SettingsError          :: ApplicationError
-pattern H3SettingsError           = ApplicationError 0x109
+pattern H3SettingsError          :: ApplicationProtocolError
+pattern H3SettingsError           = ApplicationProtocolError 0x109
 
-pattern H3MissingSettings        :: ApplicationError
-pattern H3MissingSettings         = ApplicationError 0x10A
+pattern H3MissingSettings        :: ApplicationProtocolError
+pattern H3MissingSettings         = ApplicationProtocolError 0x10A
 
-pattern H3RequestRejected        :: ApplicationError
-pattern H3RequestRejected         = ApplicationError 0x10B
+pattern H3RequestRejected        :: ApplicationProtocolError
+pattern H3RequestRejected         = ApplicationProtocolError 0x10B
 
-pattern H3RequestCancelled       :: ApplicationError
-pattern H3RequestCancelled        = ApplicationError 0x10C
+pattern H3RequestCancelled       :: ApplicationProtocolError
+pattern H3RequestCancelled        = ApplicationProtocolError 0x10C
 
-pattern H3RequestIncomplete      :: ApplicationError
-pattern H3RequestIncomplete       = ApplicationError 0x10D
+pattern H3RequestIncomplete      :: ApplicationProtocolError
+pattern H3RequestIncomplete       = ApplicationProtocolError 0x10D
 
-pattern H3ConnectError           :: ApplicationError
-pattern H3ConnectError            = ApplicationError 0x10F
+pattern H3ConnectError           :: ApplicationProtocolError
+pattern H3ConnectError            = ApplicationProtocolError 0x10F
 
-pattern H3VersionFallback        :: ApplicationError
-pattern H3VersionFallback         = ApplicationError 0x110
+pattern H3VersionFallback        :: ApplicationProtocolError
+pattern H3VersionFallback         = ApplicationProtocolError 0x110
 
-pattern QpackDecompressionFailed :: ApplicationError
-pattern QpackDecompressionFailed  = ApplicationError 0x200
+pattern QpackDecompressionFailed :: ApplicationProtocolError
+pattern QpackDecompressionFailed  = ApplicationProtocolError 0x200
 
-pattern QpackEncoderStreamError  :: ApplicationError
-pattern QpackEncoderStreamError   = ApplicationError 0x201
+pattern QpackEncoderStreamError  :: ApplicationProtocolError
+pattern QpackEncoderStreamError   = ApplicationProtocolError 0x201
 
-pattern QpackDecoderStreamError  :: ApplicationError
-pattern QpackDecoderStreamError   = ApplicationError 0x202
+pattern QpackDecoderStreamError  :: ApplicationProtocolError
+pattern QpackDecoderStreamError   = ApplicationProtocolError 0x202

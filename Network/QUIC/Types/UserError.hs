@@ -11,8 +11,8 @@ import Network.QUIC.Types.Packet
 data QUICError = VersionIsUnknown Word32
                | TransportErrorIsSent     TransportError ReasonPhrase
                | TransportErrorIsReceived TransportError ReasonPhrase
-               | ApplicationErrorIsSent     ApplicationError ReasonPhrase
-               | ApplicationErrorIsReceived ApplicationError ReasonPhrase
+               | ApplicationErrorIsSent     ApplicationProtocolError ReasonPhrase
+               | ApplicationErrorIsReceived ApplicationProtocolError ReasonPhrase
                | ConnectionIsClosed
                | ConnectionIsTimeout
                | ConnectionIsReset

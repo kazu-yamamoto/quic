@@ -47,12 +47,12 @@ encodeFrame wbuf (Ack (AckInfo largest range1 ranges) (Milliseconds delay)) = do
     putRanges (gap,rng) = do
         encodeInt' wbuf $ fromIntegral gap
         encodeInt' wbuf $ fromIntegral rng
-encodeFrame wbuf (ResetStream sid (ApplicationError err) finalLen) = do
+encodeFrame wbuf (ResetStream sid (ApplicationProtocolError err) finalLen) = do
     write8 wbuf 0x04
     encodeInt' wbuf $ fromIntegral sid
     encodeInt' wbuf $ fromIntegral err
     encodeInt' wbuf $ fromIntegral finalLen
-encodeFrame wbuf (StopSending sid (ApplicationError err)) = do
+encodeFrame wbuf (StopSending sid (ApplicationProtocolError err)) = do
     write8 wbuf 0x05
     encodeInt' wbuf $ fromIntegral sid
     encodeInt' wbuf $ fromIntegral err
@@ -124,7 +124,7 @@ encodeFrame wbuf (ConnectionCloseQUIC (TransportError err) ftyp reason) = do
     encodeInt' wbuf $ fromIntegral ftyp
     encodeInt' wbuf $ fromIntegral $ Short.length reason
     copyShortByteString wbuf reason
-encodeFrame wbuf (ConnectionCloseApp (ApplicationError err) reason) = do
+encodeFrame wbuf (ConnectionCloseApp (ApplicationProtocolError err) reason) = do
     write8 wbuf 0x1d
     encodeInt' wbuf $ fromIntegral err
     encodeInt' wbuf $ fromIntegral $ Short.length reason
@@ -251,14 +251,14 @@ decodeAckFrame rbuf = do
 decodeResetStreamFrame :: ReadBuffer -> IO Frame
 decodeResetStreamFrame rbuf = do
     sID <- fromIntegral <$> decodeInt' rbuf
-    err <- ApplicationError . fromIntegral <$> decodeInt' rbuf
+    err <- ApplicationProtocolError . fromIntegral <$> decodeInt' rbuf
     finalLen <- fromIntegral <$> decodeInt' rbuf
     return $ ResetStream sID err finalLen
 
 decodeStopSending :: ReadBuffer -> IO Frame
 decodeStopSending rbuf = do
     sID <- fromIntegral <$> decodeInt' rbuf
-    err <- ApplicationError . fromIntegral <$> decodeInt' rbuf
+    err <- ApplicationProtocolError . fromIntegral <$> decodeInt' rbuf
     return $ StopSending sID err
 
 decodeNewToken :: ReadBuffer -> IO Frame
@@ -321,7 +321,7 @@ decodeConnectionCloseFrameQUIC rbuf = do
 
 decodeConnectionCloseFrameApp  :: ReadBuffer -> IO Frame
 decodeConnectionCloseFrameApp rbuf = do
-    err    <- ApplicationError . fromIntegral <$> decodeInt' rbuf
+    err    <- ApplicationProtocolError . fromIntegral <$> decodeInt' rbuf
     len    <- fromIntegral <$> decodeInt' rbuf
     reason <- extractShortByteString rbuf len
     return $ ConnectionCloseApp err reason
