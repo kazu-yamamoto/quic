@@ -9,7 +9,7 @@ import Network.QUIC
 import Test.Hspec
 
 import Config
-import Transport
+import TransportError
 
 setup :: IO ThreadId
 setup = do
@@ -24,4 +24,4 @@ teardown :: ThreadId -> IO ()
 teardown tid = killThread tid
 
 spec :: Spec
-spec = beforeAll setup $ afterAll teardown $ transportSpec testClientConfig
+spec = beforeAll setup $ afterAll teardown $ transportErrorSpec testClientConfig

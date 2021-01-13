@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Transport (
-    transportSpec
+module TransportError (
+    transportErrorSpec
   ) where
 
 import Control.Concurrent
@@ -26,8 +26,8 @@ runC cc body = timeout 2000000 $ runQUICClient cc body'
         threadDelay 100000
         return ret
 
-transportSpec :: ClientConfig -> SpecWith a
-transportSpec cc0 = do
+transportErrorSpec :: ClientConfig -> SpecWith a
+transportErrorSpec cc0 = do
     describe "QUIC servers" $ do
         it "MUST send FLOW_CONTROL_ERROR if a STREAM frame with a large offset is received [Transport 4.1]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated largeOffset

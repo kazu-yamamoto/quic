@@ -141,7 +141,7 @@ test-suite spec
                         PacketSpec
                         RecoverySpec
                         TLSSpec
-                        Transport
+                        TransportError
                         TypesSpec
   build-depends:        base >= 4 && < 5
                       , QuickCheck
