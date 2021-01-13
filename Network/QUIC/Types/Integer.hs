@@ -1,7 +1,17 @@
 {-# LANGUAGE BinaryLiterals #-}
 
-module Network.QUIC.Types.Integer where
+module Network.QUIC.Types.Integer (
+    encodeInt
+  , encodeInt8
+  , encodeInt'
+  , encodeInt'2
+  , decodeInt
+  , decodeInt'
+  ) where
 
+import Data.ByteString.Internal (unsafeCreate)
+import Foreign.Ptr
+import Foreign.Storable
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Network.QUIC.Imports
@@ -22,23 +32,42 @@ import Network.QUIC.Imports
 -- >>> enc16 $ encodeInt 37
 -- "25"
 encodeInt :: Int64  -> ByteString
-encodeInt i = unsafeDupablePerformIO $  withWriteBuffer 8 $ \wbuf ->
-  encodeInt' wbuf i
+encodeInt i = unsafeCreate n $ \p -> do
+    let p' = p `plusPtr` (n - 1)
+    go tag n i p'
+  where
+    (tag,n) = tagLen i
 {-# NOINLINE encodeInt #-}
 
 encodeInt8 :: Int64  -> ByteString
-encodeInt8 i = unsafeDupablePerformIO $ withWriteBuffer 8 $ \wbuf -> do
-    let ws = decomp 0b11000000 8 [] i
-    mapM_ (write8 wbuf) ws
+encodeInt8 i = unsafeCreate n $ \p -> do
+    let p' = p `plusPtr` (n - 1)
+    go tag n i p'
+  where
+    n = 8
+    tag = 0b11000000
 {-# NOINLINE encodeInt8 #-}
+
+go :: Word8 -> Int -> Int64 -> Ptr Word8 -> IO ()
+go _   0 _ _ = return ()
+go tag 1 x p = poke p (tag .|. fromIntegral x)
+go tag n x p = do
+    poke p (fromIntegral x)
+    let n' = n - 1
+        x' = x .>>. 8
+        p' = p `plusPtr` (-1)
+    go tag n' x' p'
+
+tagLen :: Int64 -> (Word8, Int)
+tagLen i | i <=         63 = (0b00000000, 1)
+         | i <=      16383 = (0b01000000, 2)
+         | i <= 1073741823 = (0b10000000, 4)
+         | otherwise       = (0b11000000, 8)
 
 encodeInt' :: WriteBuffer -> Int64 -> IO ()
 encodeInt' wbuf i = mapM_ (write8 wbuf) ws
   where
-    (tag,n) | i <=         63 = (0b00000000, 1)
-            | i <=      16383 = (0b01000000, 2)
-            | i <= 1073741823 = (0b10000000, 4)
-            | otherwise       = (0b11000000, 8)
+    (tag,n) = tagLen i
     ws = decomp tag n [] i
 
 encodeInt'2 :: WriteBuffer -> Int64 -> IO ()
