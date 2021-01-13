@@ -22,60 +22,39 @@ import Network.QUIC.Imports
 -- >>> enc16 $ encodeInt 37
 -- "25"
 encodeInt :: Int64  -> ByteString
-encodeInt i = unsafeDupablePerformIO $
-    withWriteBuffer 8 $ \wbuf -> encodeInt' wbuf i
+encodeInt i = unsafeDupablePerformIO $  withWriteBuffer 8 $ \wbuf ->
+  encodeInt' wbuf i
 {-# NOINLINE encodeInt #-}
-
-encodeInt' :: WriteBuffer -> Int64 -> IO ()
-encodeInt' wbuf i
-  | i <=         63 = do
-        let [w0] = decomp 1 [] i
-        write8 wbuf w0
-  | i <=      16383 = do
-        let [w0,w1] = decomp 2 [] i
-        write8 wbuf (w0 .|. 0b01000000)
-        write8 wbuf w1
-  | i <= 1073741823 = do
-        let [w0,w1,w2,w3] = decomp 4 [] i
-        write8 wbuf (w0 .|. 0b10000000)
-        write8 wbuf w1
-        write8 wbuf w2
-        write8 wbuf w3
-  | otherwise       = do
-        let [w0,w1,w2,w3,w4,w5,w6,w7] = decomp 8 [] i
-        write8 wbuf (w0 .|. 0b11000000)
-        write8 wbuf w1
-        write8 wbuf w2
-        write8 wbuf w3
-        write8 wbuf w4
-        write8 wbuf w5
-        write8 wbuf w6
-        write8 wbuf w7
-
-encodeInt'2 :: WriteBuffer -> Int64 -> IO ()
-encodeInt'2 wbuf i = do
-    let [w0,w1] = decomp 2 [] i
-    write8 wbuf (w0 .|. 0b01000000)
-    write8 wbuf w1
-
-decomp :: Int -> [Word8] -> Int64 -> [Word8]
-decomp 0 ws _ = ws
-decomp n ws x = decomp (n-1) (w:ws) x'
-  where
-    x' = x .>>. 8
-    w  = fromIntegral x
 
 encodeInt8 :: Int64  -> ByteString
 encodeInt8 i = unsafeDupablePerformIO $ withWriteBuffer 8 $ \wbuf -> do
-    let [w0,w1,w2,w3,w4,w5,w6,w7] = decomp 8 [] i
-    write8 wbuf (w0 .|. 0b11000000)
-    write8 wbuf w1
-    write8 wbuf w2
-    write8 wbuf w3
-    write8 wbuf w4
-    write8 wbuf w5
-    write8 wbuf w6
-    write8 wbuf w7
+    let ws = decomp 0b11000000 8 [] i
+    mapM_ (write8 wbuf) ws
+{-# NOINLINE encodeInt8 #-}
+
+encodeInt' :: WriteBuffer -> Int64 -> IO ()
+encodeInt' wbuf i = mapM_ (write8 wbuf) ws
+  where
+    (tag,n) | i <=         63 = (0b00000000, 1)
+            | i <=      16383 = (0b01000000, 2)
+            | i <= 1073741823 = (0b10000000, 4)
+            | otherwise       = (0b11000000, 8)
+    ws = decomp tag n [] i
+
+encodeInt'2 :: WriteBuffer -> Int64 -> IO ()
+encodeInt'2 wbuf i = do
+    let ws = decomp 0b01000000 2 [] i
+    mapM_ (write8 wbuf) ws
+
+decomp :: Word8 -> Int -> [Word8] -> Int64 -> [Word8]
+decomp _   0 ws _ = ws
+decomp tag 1 ws x = w:ws
+  where
+    w  = fromIntegral x .|. tag
+decomp tag n ws x = decomp tag (n-1) (w:ws) x'
+  where
+    x' = x .>>. 8
+    w  = fromIntegral x
 
 ----------------------------------------------------------------
 
