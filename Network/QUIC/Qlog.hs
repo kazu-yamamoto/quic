@@ -113,7 +113,7 @@ frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" <> sw sn <> "\""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
 frameExtra (ConnectionClose err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" <> transportError err <> "\",\"raw_error_code\":" <> transportError' err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\""
-frameExtra (ConnectionCloseApp err reason) =  ",\"error_space\":\"application\",\"error_code\":\"" <> "\",\"raw_error_code\":" <> sw err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
+frameExtra (ConnectionCloseApp err reason) =  ",\"error_space\":\"application\",\"error_code\":" <> applicationProtoclError err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
 frameExtra HandshakeDone{} = ""
 frameExtra (UnknownFrame _Int) = ""
 
@@ -138,6 +138,9 @@ transportError (TransportError n)      = sw n
 
 transportError' :: TransportError -> LogStr
 transportError' (TransportError n)     = sw n
+
+applicationProtoclError :: ApplicationProtocolError -> LogStr
+applicationProtoclError (ApplicationProtocolError n) = sw n
 
 {-# INLINE ack #-}
 ack :: [PacketNumber] -> LogStr
