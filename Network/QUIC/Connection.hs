@@ -164,6 +164,7 @@ module Network.QUIC.Connection (
   , abortConnection
   ) where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 
 import Network.QUIC.Config
@@ -206,6 +207,7 @@ isConnectionOpen = isConnOpen
 abortConnection :: Connection -> ApplicationProtocolError -> IO ()
 abortConnection conn err = do
     sendConnectionClose conn frame
+    threadDelay 100000
     exitConnection conn quicexc
   where
     frame = ConnectionCloseApp err ""
