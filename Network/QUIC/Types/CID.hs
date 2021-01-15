@@ -13,7 +13,6 @@ module Network.QUIC.Types.CID (
   , CIDInfo(..)
   ) where
 
-import Crypto.Random (getRandomBytes)
 import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Imports
@@ -28,7 +27,7 @@ instance Show CID where
     show (CID cid) = shortToString (enc16s cid)
 
 newCID :: IO CID
-newCID = toCID <$> getRandomBytes myCIDLength
+newCID = CID <$> getRandomBytes myCIDLength
 
 toCID :: ByteString -> CID
 toCID = CID . Short.toShort
@@ -49,13 +48,13 @@ unpackCID (CID sbs) = (sbs, len)
 newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq,Ord,Show)
 
 newStatelessResetToken :: IO StatelessResetToken
-newStatelessResetToken = StatelessResetToken . Short.toShort <$> getRandomBytes 16
+newStatelessResetToken = StatelessResetToken <$> getRandomBytes 16
 
 -- 8 bytes
 newtype PathData = PathData Bytes deriving (Eq,Show)
 
 newPathData :: IO PathData
-newPathData = PathData . Short.toShort <$> getRandomBytes 8
+newPathData = PathData <$> getRandomBytes 8
 
 data CIDInfo = CIDInfo {
     cidInfoSeq :: Int

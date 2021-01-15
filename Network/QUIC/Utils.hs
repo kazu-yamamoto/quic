@@ -2,6 +2,7 @@
 
 module Network.QUIC.Utils where
 
+import Control.Monad (replicateM)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import Data.ByteString.Base16
@@ -9,9 +10,9 @@ import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
 import Data.Char (chr)
 import Data.Either (fromRight)
+import Data.List (foldl')
 import Data.Word
 import System.Random (randomIO)
-import Data.List (foldl')
 
 dec16 :: ByteString -> ByteString
 dec16 = fromRight "" . decode
@@ -30,6 +31,9 @@ shortToString = map (chr . fromIntegral) . Short.unpack
 
 getRandomOneByte :: IO Word8
 getRandomOneByte = randomIO
+
+getRandomBytes :: Int -> IO ShortByteString
+getRandomBytes n = Short.pack <$> replicateM n getRandomOneByte
 
 {-# INLINE totalLen #-}
 totalLen :: [ByteString] -> Int
