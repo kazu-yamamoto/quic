@@ -55,12 +55,12 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
                 onPacketSent ldcc sentPacket
     buildPackets _ [] _ _ = error "sendPacket: buildPackets"
     buildPackets siz [spkt] build0 build1 = do
-        bss <- encodePlainPacket conn (spPlainPacket spkt) $ Just siz
-        let sentPacket = fixSentPacket spkt bss True
+        (bss,padlen) <- encodePlainPacket conn (spPlainPacket spkt) $ Just siz
+        let sentPacket = fixSentPacket spkt bss padlen
         return (build0 [sentPacket], build1 bss)
     buildPackets siz (spkt:ss) build0 build1 = do
-        bss <- encodePlainPacket conn (spPlainPacket spkt) Nothing
-        let sentPacket = fixSentPacket spkt bss False
+        (bss,padlen) <- encodePlainPacket conn (spPlainPacket spkt) Nothing
+        let sentPacket = fixSentPacket spkt bss padlen
         let build0' = build0 . (sentPacket :)
             build1' = build1 . (bss ++)
             siz' = siz - spSentBytes sentPacket
@@ -87,11 +87,11 @@ sendPingPacket conn send lvl = do
       else do
         let spkt = last xs
             ping = spPlainPacket spkt
-        bss <- encodePlainPacket conn ping (Just maxSiz)
+        (bss,padlen) <- encodePlainPacket conn ping (Just maxSiz)
         now <- getTimeMicrosecond
         send bss
         addTxBytes conn $ totalLen bss
-        let sentPacket0 = fixSentPacket spkt bss True
+        let sentPacket0 = fixSentPacket spkt bss padlen
             sentPacket = sentPacket0 { spTimeSent = now }
         qlogSent conn sentPacket now
         onPacketSent ldcc sentPacket

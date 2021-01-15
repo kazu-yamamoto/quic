@@ -94,7 +94,7 @@ frameType UnknownFrame{}        = "unknown"
 
 {-# INLINE frameExtra #-}
 frameExtra :: Frame -> LogStr
-frameExtra (Padding _) = ""
+frameExtra (Padding n) = ",\"payload_length\":" <> sw n
 frameExtra  Ping = ""
 frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" <> ack (fromAckInfo ai)
 frameExtra ResetStream{} = ""

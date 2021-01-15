@@ -75,20 +75,20 @@ mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
   , spAckEliciting      = ackeli
   }
 
-fixSentPacket :: SentPacket -> [ByteString] -> Bool -> SentPacket
-fixSentPacket spkt bss addPad = spkt {
-    spPlainPacket = if addPad then addPadding $ spPlainPacket spkt
-                              else spPlainPacket spkt
+fixSentPacket :: SentPacket -> [ByteString] -> Int -> SentPacket
+fixSentPacket spkt bss padLen = spkt {
+    spPlainPacket = if padLen /= 0 then addPadding padLen $ spPlainPacket spkt
+                                   else spPlainPacket spkt
   , spSentBytes   = sentBytes
   }
   where
     sentBytes = totalLen bss
 
-addPadding :: PlainPacket -> PlainPacket
-addPadding (PlainPacket hdr plain) = PlainPacket hdr plain'
+addPadding :: Int -> PlainPacket -> PlainPacket
+addPadding n (PlainPacket hdr plain) = PlainPacket hdr plain'
   where
     plain' = plain {
-        plainFrames = plainFrames plain ++ [Padding 0]
+        plainFrames = plainFrames plain ++ [Padding n]
       }
 
 ----------------------------------------------------------------

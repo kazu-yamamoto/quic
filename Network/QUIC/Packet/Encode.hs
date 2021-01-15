@@ -24,7 +24,7 @@ import Network.QUIC.Types
 encodePacket :: Connection -> PacketO -> IO [ByteString]
 encodePacket _    (PacketOV pkt) = (:[]) <$> encodeVersionNegotiationPacket pkt
 encodePacket _    (PacketOR pkt) = (:[]) <$> encodeRetryPacket pkt
-encodePacket conn (PacketOP pkt) = encodePlainPacket conn pkt Nothing
+encodePacket conn (PacketOP pkt) = fst   <$> encodePlainPacket conn pkt Nothing
 
 ----------------------------------------------------------------
 
@@ -56,7 +56,7 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 
 ----------------------------------------------------------------
 
-encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO [ByteString]
+encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO ([ByteString],Int)
 encodePlainPacket conn ppkt@(PlainPacket _ plain) mlen = do
     let (buf,buflen) = headerBuffer conn
         mlen' | isNoPaddings (plainMarks plain) = Nothing
@@ -64,7 +64,7 @@ encodePlainPacket conn ppkt@(PlainPacket _ plain) mlen = do
     wbuf <- newWriteBuffer buf buflen
     encodePlainPacket' conn wbuf ppkt mlen'
 
-encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO [ByteString]
+encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO ([ByteString],Int)
 encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames _)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
@@ -135,21 +135,24 @@ encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
 
 ----------------------------------------------------------------
 
-protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO [ByteString]
+protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO ([ByteString],Int)
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     cipher <- getCipher conn lvl
     let (buf,buflen) = payloadBuffer conn
     (plaintext0,siz) <- encodeFramesWithPadding buf buflen frames
     here <- currentOffset wbuf
     let taglen = tagLength cipher
-        plaintext = case mlen of
-                      Nothing -> B.take siz plaintext0
+        (plaintext,padLen) = case mlen of
+                      Nothing -> let ptxt = B.take siz plaintext0
+                                 in (ptxt, 0)
                       Just expectedSize ->
                           let headerSize = (here `minusPtr` headerBeg)
                                          + (if lvl /= RTT1Level then 2 else 0)
                                          + epnLen
                               plainSize = expectedSize - headerSize - taglen
-                          in B.take plainSize plaintext0
+                              ptxt = B.take plainSize plaintext0
+                              pdlen = plainSize - siz
+                          in (ptxt,pdlen)
     when (lvl /= RTT1Level) $ do
         let len = epnLen + B.length plaintext + taglen
         -- length: assuming 2byte length
@@ -170,13 +173,13 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     coder <- getCoder conn lvl
     let ciphertext = encrypt coder plaintext header pn
     if null ciphertext then
-        return []
+        return ([],0)
       else do
         -- protecting header
         let makeMask = protect coder
         protectHeader headerBeg pnBeg epnLen cipher makeMask ciphertext
         hdr <- toByteString wbuf
-        return (hdr:ciphertext)
+        return (hdr:ciphertext, padLen)
 
 ----------------------------------------------------------------
 
