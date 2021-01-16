@@ -5,6 +5,7 @@ module TransportError (
   ) where
 
 import Control.Concurrent
+import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
@@ -121,7 +122,9 @@ transportErrorSpec cc0 = do
                 waitEstablished conn
                 getResumptionInfo conn
             case mres of
-              Nothing -> return ()
+              Nothing -> do
+                  putStrLn $ "0-RTT is not possible. Skipping this test. Use \"h3spec -s 0-RTT\" next time."
+                  E.throwIO $ TransportErrorIsReceived InternalError ""
               Just res -> when (is0RTTPossible res) $ do
                 let cc1 = addHook cc0 $ setOnTLSHandshakeCreated crypto0RTT
                     cc = cc1 { ccResumption = res
