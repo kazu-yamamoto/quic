@@ -210,7 +210,7 @@ setPeerParams conn _ctx ps0 = do
               setParams params
               qlogParamsSet conn (params,"remote")
     err = do
-        sendConnectionClose conn $ ConnectionClose TransportParameterError 0 ""
+        sendFrame conn $ ConnectionClose TransportParameterError 0 ""
         let qerr = TransportErrorIsSent TransportParameterError ""
         exitConnection conn qerr
         -- converted into Error_Misc and ignored in "tell"
@@ -256,7 +256,7 @@ getErrorCause e =
 
 notifyPeer :: Connection -> TLS.TLSError -> IO ()
 notifyPeer conn err = do
-    sendConnectionClose conn frame
+    sendFrame conn frame
     exitConnection conn $ HandshakeFailed ad
   where
     ad = errorToAlertDescription err

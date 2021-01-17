@@ -158,7 +158,7 @@ module Network.QUIC.Connection (
   , Output(..)
   -- In this module
   , exitConnection
-  , sendConnectionClose
+  , sendFrame
   , sendCCandExitConnection
   , isConnectionOpen
   , abortConnection
@@ -188,15 +188,15 @@ import Network.QUIC.Types
 exitConnection :: Connection -> QUICException -> IO ()
 exitConnection Connection{..} ue = E.throwTo connThreadId ue
 
-sendConnectionClose :: Connection -> Frame -> IO ()
-sendConnectionClose conn frame = do
+sendFrame :: Connection -> Frame -> IO ()
+sendFrame conn frame = do
     lvl <- getEncryptionLevel conn
     putOutput conn $ OutControl lvl [frame]
     setCloseSent conn
 
 sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO ()
 sendCCandExitConnection conn err desc ftyp = do
-    sendConnectionClose conn frame
+    sendFrame conn frame
     exitConnection conn quicexc
   where
     frame = ConnectionClose err ftyp desc
@@ -212,7 +212,7 @@ isConnectionOpen = isConnOpen
 --   of this connection.
 abortConnection :: Connection -> ApplicationProtocolError -> IO ()
 abortConnection conn err = do
-    sendConnectionClose conn frame
+    sendFrame conn frame
     threadDelay 100000
     exitConnection conn quicexc
   where

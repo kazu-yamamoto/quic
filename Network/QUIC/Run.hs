@@ -56,7 +56,7 @@ runQUICClient conf client = do
   where
     clientAndClose conn = client conn `E.finally` do
         sent <- isCloseSent conn
-        unless sent $ sendConnectionClose conn $ ConnectionClose NoError 0 ""
+        unless sent $ sendFrame conn $ ConnectionClose NoError 0 ""
         threadDelay 100000
 
 -- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
@@ -81,7 +81,7 @@ connect conf = do
         open = createClientConnection conf ver
         clse connRes = do
             let conn = connResConnection connRes
-            sendConnectionClose conn $ ConnectionClose NoError 0 ""
+            sendFrame conn $ ConnectionClose NoError 0 ""
             threadDelay 100000
             freeResources conn
         body = handshakeClientConnection conf
@@ -166,7 +166,7 @@ runQUICServer conf server = handleLog debugLog $ do
   where
     serverAndClose conn = do
         server conn
-        sendConnectionClose conn $ ConnectionClose NoError 0 ""
+        sendFrame conn $ ConnectionClose NoError 0 ""
         void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
     debugLog msg = stdoutLogger ("runQUICServer: " <> msg)
     setup = do

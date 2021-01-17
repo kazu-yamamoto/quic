@@ -306,12 +306,12 @@ processFrame conn _ (ConnectionClose err _ftyp reason)
         onCloseReceived $ connHooks conn
         sent <- isCloseSent conn
         unless sent $ do
-            sendConnectionClose conn $ ConnectionClose NoError 0 ""
+            sendFrame conn $ ConnectionClose NoError 0 ""
             -- if sent, client/server already exits.
             exitConnection conn ConnectionIsClosed
   | otherwise = do
         sent <- isCloseSent conn
-        unless sent $ sendConnectionClose conn $ ConnectionClose NoError 0 ""
+        unless sent $ sendFrame conn $ ConnectionClose NoError 0 ""
         received <- isCloseReceived conn
         unless received $ do
             setCloseReceived conn
@@ -319,7 +319,7 @@ processFrame conn _ (ConnectionClose err _ftyp reason)
             exitConnection conn quicexc
 processFrame conn _ (ConnectionCloseApp err reason) = do
     sent <- isCloseSent conn
-    unless sent $ sendConnectionClose conn $ ConnectionClose NoError 0 ""
+    unless sent $ sendFrame conn $ ConnectionClose NoError 0 ""
     received <- isCloseReceived conn
     unless received $ do
         setCloseReceived conn

@@ -104,4 +104,8 @@ waitWindowIsOpen s n = do
 
 -- | Closing a stream with an error code.
 resetStream :: Stream -> ApplicationProtocolError -> IO ()
-resetStream = undefined
+resetStream s aerr = do
+    sendFrame (streamConnection s) frame
+    -- fixme: some operations are necessary here.
+  where
+    frame = ResetStream (streamId s) aerr 0
