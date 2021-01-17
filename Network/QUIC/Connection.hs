@@ -182,6 +182,9 @@ import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
+-- | Closing a connection.
+--   'QUICException' is thrown to the main thread
+--   of this connection.
 exitConnection :: Connection -> QUICException -> IO ()
 exitConnection Connection{..} ue = E.throwTo connThreadId ue
 
@@ -204,6 +207,9 @@ isConnectionOpen :: Connection -> IO Bool
 isConnectionOpen = isConnOpen
 
 -- | Closing a connection with an error code.
+--   A specified error code is sent to the peer and
+--   'ApplicationProtocolErrorIsSent' is thrown to the main thread
+--   of this connection.
 abortConnection :: Connection -> ApplicationProtocolError -> IO ()
 abortConnection conn err = do
     sendConnectionClose conn frame
