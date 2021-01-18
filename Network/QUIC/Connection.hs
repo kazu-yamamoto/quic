@@ -158,6 +158,7 @@ module Network.QUIC.Connection (
   , Output(..)
   -- In this module
   , exitConnection
+  , exitConnectionByStream
   , sendFrame
   , sendCCandExitConnection
   , isConnectionOpen
@@ -180,6 +181,7 @@ import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
+import Network.QUIC.Stream
 import Network.QUIC.Types
 
 -- | Closing a connection.
@@ -187,6 +189,12 @@ import Network.QUIC.Types
 --   of this connection.
 exitConnection :: Connection -> QUICException -> IO ()
 exitConnection Connection{..} ue = E.throwTo connThreadId ue
+
+
+exitConnectionByStream :: Stream -> QUICException -> IO ()
+exitConnectionByStream strm ue = E.throwTo tid ue
+  where
+    tid = connThreadId $ streamConnection strm
 
 sendFrame :: Connection -> Frame -> IO ()
 sendFrame conn frame = do

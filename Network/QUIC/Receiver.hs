@@ -147,12 +147,16 @@ processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "ACK" 0x02 -- fixme
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
-processFrame conn lvl (ResetStream sid _err _finlen) = do
+processFrame conn lvl (ResetStream sid aerr _finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "RESET_STREAM" 0x04
     when ((isClient conn && isClientInitiatedUnidirectional sid)
         ||(isServer conn && isServerInitiatedUnidirectional sid)) $
         sendCCandExitConnection conn StreamStateError "Send-only stream" 0x04
+    mstrm <- findStream conn sid
+    case mstrm of
+      Nothing   -> return ()
+      Just strm -> onResetStreamReceived (connHooks conn) strm aerr
     putStrLn "ResetStream" -- fixme
 processFrame conn lvl (StopSending sid _err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $

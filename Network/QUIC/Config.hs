@@ -9,6 +9,7 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
+import Network.QUIC.Stream
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -21,6 +22,7 @@ data Hooks = Hooks {
   , onTransportParametersCreated :: Parameters -> Parameters
   , onTLSExtensionCreated :: [ExtensionRaw] -> [ExtensionRaw]
   , onTLSHandshakeCreated :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
+  , onResetStreamReceived :: Stream -> ApplicationProtocolError -> IO ()
   }
 
 -- | Default hooks.
@@ -32,6 +34,7 @@ defaultHooks = Hooks {
   , onTransportParametersCreated = id
   , onTLSExtensionCreated = id
   , onTLSHandshakeCreated = id
+  , onResetStreamReceived = \_ _ -> return ()
   }
 
 ----------------------------------------------------------------
