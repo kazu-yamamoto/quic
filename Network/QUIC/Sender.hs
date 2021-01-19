@@ -263,11 +263,6 @@ adjustForRetransmit conn (x:xs) = do
     rs <- adjustForRetransmit conn xs
     return (x : rs)
 
-sendTxStreamData :: Connection -> SendMany -> TxStreamData -> IO ()
-sendTxStreamData conn send tx@(TxStreamData _ _ len _) = do
-    addTxData conn len
-    sendStreamFragment conn send tx
-
 limitationC :: Int
 limitationC = 1024
 
@@ -326,8 +321,8 @@ packFin conn s False = do
                 return True
       _ -> return False
 
-sendStreamFragment :: Connection -> SendMany -> TxStreamData -> IO ()
-sendStreamFragment conn send (TxStreamData s dats len fin0) = do
+sendTxStreamData :: Connection -> SendMany -> TxStreamData -> IO ()
+sendTxStreamData conn send (TxStreamData s dats len fin0) = do
     fin <- packFin conn s fin0
     if len < limitation then do
         sendStreamSmall conn send s dats fin len
@@ -361,7 +356,6 @@ sendStreamSmall conn send s0 dats0 fin0 len0 = do
               let total1 = len1 + total
               if total1 < limitation then do
                   _ <- takeSendStreamQ conn -- cf tryPeek
-                  addTxData conn len1
                   fin1' <- packFin conn s fin1 -- must be after takeSendStreamQ
                   off1 <- getTxStreamOffset s1 len1
                   let sid  = streamId s

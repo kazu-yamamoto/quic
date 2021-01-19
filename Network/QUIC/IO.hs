@@ -43,6 +43,7 @@ sendStreamMany s dats = do
               putSendBlockedQ (streamConnection s) blocked
               waitWindowIsOpen s len
     addTxStreamData s len
+    addTxData (streamConnection s) len
     putSendStreamQ (streamConnection s) $ TxStreamData s dats len False
 
 -- | Sending FIN in the stream.

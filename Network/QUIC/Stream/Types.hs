@@ -26,6 +26,8 @@ import Network.QUIC.Types
 data Stream = Stream {
     streamId         :: StreamId -- ^ Getting stream identifier.
   , streamConnection :: Connection
+  -- "counter" is equivalent to "offset".
+  -- It is duplicated but used for API level flow control.
   , streamFlowTx     :: TVar  Flow           -- counter, maxDax
   , streamFlowRx     :: IORef Flow           -- counter, maxDax
   , streamStateTx    :: IORef StreamState    -- offset, fin
