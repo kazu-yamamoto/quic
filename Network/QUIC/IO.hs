@@ -80,8 +80,7 @@ recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = takeRecvStreamQwithSize s n
 
 isBlocked :: Stream -> Int -> IO (Maybe Blocked)
-isBlocked s n = do
-  atomically $ do
+isBlocked s n = atomically $ do
     strmFlow <- readStreamFlowTx s
     let strmWindow = flowWindow strmFlow
     connFlow <- readConnectionFlowTx $ streamConnection s
@@ -96,8 +95,7 @@ isBlocked s n = do
     return blocked
 
 waitWindowIsOpen :: Stream -> Int -> IO ()
-waitWindowIsOpen s n = do
-  atomically $ do
+waitWindowIsOpen s n = atomically $ do
     strmWindow <- flowWindow <$> readStreamFlowTx s
     connWindow <- flowWindow <$> readConnectionFlowTx (streamConnection s)
     check (n <= strmWindow && n <= connWindow)
