@@ -66,8 +66,8 @@ readStreamFlowTx Stream{..} = readTVar streamFlowTx
 
 ----------------------------------------------------------------
 
-addTxStreamData :: Stream -> Int -> IO ()
-addTxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx add
+addTxStreamData :: Stream -> Int -> STM ()
+addTxStreamData Stream{..} n = modifyTVar' streamFlowTx add
   where
     add flow = flow { flowData = flowData flow + n }
 

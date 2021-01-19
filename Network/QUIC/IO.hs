@@ -4,6 +4,7 @@ module Network.QUIC.IO where
 
 import Control.Concurrent.STM
 import qualified Control.Exception as E
+import qualified Data.ByteString as BS
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -27,24 +28,85 @@ unidirectionalStream conn = do
 sendStream :: Stream -> ByteString -> IO ()
 sendStream s dat = sendStreamMany s [dat]
 
+----------------------------------------------------------------
+
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
+sendStreamMany _   [] = return ()
 sendStreamMany s dats = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     let len = totalLen dats
+        conn = streamConnection s
     -- fixme: size check for 0RTT
-    ready <- isConnection1RTTReady $ streamConnection s
-    when ready $ do
-        mblocked <- isBlocked s len
-        case mblocked of
-          Nothing -> return ()
-          Just blocked -> do
-              putSendBlockedQ (streamConnection s) blocked
+    ready <- isConnection1RTTReady conn
+    if not ready then do
+        -- 0-RTT
+        atomically $ do
+            addTxStreamData s len
+            addTxData conn len
+        putSendStreamQ conn $ TxStreamData s dats len False
+      else do
+        -- 1-RTT
+        eblocked <- isBlocked s len
+        case eblocked of
+          Right n
+            | len == n  ->
+                  putSendStreamQ conn $ TxStreamData s dats len False
+            | otherwise -> do
+                  let (dats1,dats2) = split n dats
+                  putSendStreamQ conn $ TxStreamData s dats1 n False
+                  sendStreamMany s dats2
+          Left blocked  -> do
+              putSendBlockedQ conn blocked
               waitWindowIsOpen s len
+              putSendStreamQ conn $ TxStreamData s dats len False
+
+split :: Int -> [BS.ByteString] -> ([BS.ByteString],[BS.ByteString])
+split n0 dats0 = loop n0 dats0 id
+  where
+    loop 0 bss      build = (build [], bss)
+    loop _ []       build = (build [], [])
+    loop n (bs:bss) build = case len `compare` n of
+        GT -> let (bs1,bs2) = BS.splitAt n bs
+              in (build [bs1], bs2:bss)
+        EQ -> (build [bs], bss)
+        LT -> loop (n - len) bss (build . (bs :))
+      where
+        len = BS.length bs
+
+isBlocked :: Stream -> Int -> IO (Either Blocked Int)
+isBlocked s len = atomically $ do
+    let conn = streamConnection s
+    strmFlow <- readStreamFlowTx s
+    connFlow <- readConnectionFlowTx conn
+    let strmWindow = flowWindow strmFlow
+        connWindow = flowWindow connFlow
+        minFlow = min strmWindow connWindow
+        n = min len minFlow
+    if n > 0 then do
+        addTxStreamData s n
+        addTxData conn n
+        return $ Right n
+      else do
+        let cs = len > strmWindow
+            cw = len > connWindow
+            blocked
+              | cs && cw  = BothBlocked s (flowMaxData strmFlow) (flowMaxData connFlow)
+              | cs        = StrmBlocked s (flowMaxData strmFlow)
+              | otherwise = ConnBlocked (flowMaxData connFlow)
+        return $ Left blocked
+
+waitWindowIsOpen :: Stream -> Int -> IO ()
+waitWindowIsOpen s len = atomically $ do
+    let conn = streamConnection s
+    strmWindow <- flowWindow <$> readStreamFlowTx s
+    connWindow <- flowWindow <$> readConnectionFlowTx conn
+    check (len <= strmWindow && len <= connWindow)
     addTxStreamData s len
-    addTxData (streamConnection s) len
-    putSendStreamQ (streamConnection s) $ TxStreamData s dats len False
+    addTxData conn len
+
+----------------------------------------------------------------
 
 -- | Sending FIN in the stream.
 shutdownStream :: Stream -> IO ()
@@ -79,27 +141,6 @@ acceptStream conn = do
 --   an empty bytestring is returned.
 recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = takeRecvStreamQwithSize s n
-
-isBlocked :: Stream -> Int -> IO (Maybe Blocked)
-isBlocked s n = atomically $ do
-    strmFlow <- readStreamFlowTx s
-    let strmWindow = flowWindow strmFlow
-    connFlow <- readConnectionFlowTx $ streamConnection s
-    let connWindow = flowWindow connFlow
-    let blocked
-         | n > strmWindow = if n > connWindow
-                            then Just $ BothBlocked s (flowMaxData strmFlow) (flowMaxData connFlow)
-                            else Just $ StrmBlocked s (flowMaxData strmFlow)
-         | otherwise      = if n > connWindow
-                            then Just $ ConnBlocked (flowMaxData connFlow)
-                            else Nothing
-    return blocked
-
-waitWindowIsOpen :: Stream -> Int -> IO ()
-waitWindowIsOpen s n = atomically $ do
-    strmWindow <- flowWindow <$> readStreamFlowTx s
-    connWindow <- flowWindow <$> readConnectionFlowTx (streamConnection s)
-    check (n <= strmWindow && n <= connWindow)
 
 -- | Closing a stream with an error code.
 resetStream :: Stream -> ApplicationProtocolError -> IO ()

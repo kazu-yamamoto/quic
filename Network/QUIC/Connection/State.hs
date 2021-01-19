@@ -126,8 +126,8 @@ readConnectionFlowTx Connection{..} = readTVar flowTx
 
 ----------------------------------------------------------------
 
-addTxData :: Connection -> Int -> IO ()
-addTxData Connection{..} n = atomically $ modifyTVar' flowTx add
+addTxData :: Connection -> Int -> STM ()
+addTxData Connection{..} n = modifyTVar' flowTx add
   where
     add flow = flow { flowData = flowData flow + n }
 
