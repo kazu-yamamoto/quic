@@ -129,7 +129,7 @@ transportErrorSpec cc0 = do
                                  }
                     runC cc waitEstablished `shouldThrow` transportError
               _ -> do
-                    putStrLn $ "0-RTT is not possible. Skipping this test. Use \"h3spec -s 0-RTT\" next time."
+                    putStrLn $ "Warning: 0-RTT is not possible. Skipping this test. Use \"h3spec -s 0-RTT\" next time."
                     when (ccDebugLog cc0) $ print mres
 
 ----------------------------------------------------------------
