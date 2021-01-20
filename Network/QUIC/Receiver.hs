@@ -169,7 +169,7 @@ processFrame conn lvl (StopSending sid _err) = do
       Nothing   -> do
           when ((isClient conn && isClientInitiated sid)
               ||(isServer conn && isServerInitiated sid)) $
-              sendCCandExitConnection conn StreamStateError "No such stream" 0x05
+              sendCCandExitConnection conn StreamStateError "No such stream for STOP_SENDING" 0x05
       Just _strm -> putStrLn "StopSending" -- fixme
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $ do
@@ -244,7 +244,7 @@ processFrame conn lvl (MaxStreamData sid n) = do
       Nothing   -> do
           when ((isClient conn && isClientInitiated sid)
               ||(isServer conn && isServerInitiated sid)) $
-              sendCCandExitConnection conn StreamStateError "No such stream" 0x11
+              sendCCandExitConnection conn StreamStateError "No such stream for MAX_STREAM_DATA" 0x11
       Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
