@@ -157,7 +157,7 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
     case mstrm of
       Nothing   -> return ()
       Just strm -> onResetStreamReceived (connHooks conn) strm aerr
-    putStrLn "ResetStream" -- fixme
+    connDebugLog conn "ResetStream" -- fixme
 processFrame conn lvl (StopSending sid _err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STOP_SENDING" 0x05
@@ -170,7 +170,7 @@ processFrame conn lvl (StopSending sid _err) = do
           when ((isClient conn && isClientInitiated sid)
               ||(isServer conn && isServerInitiated sid)) $
               sendCCandExitConnection conn StreamStateError "No such stream for STOP_SENDING" 0x05
-      Just _strm -> putStrLn "StopSending" -- fixme
+      Just _strm -> connDebugLog conn "StopSending" -- fixme
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "CRYPTO" 0x06
