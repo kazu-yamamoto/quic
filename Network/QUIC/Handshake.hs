@@ -68,7 +68,7 @@ recvTLS conn hsr level =
                 n <- recvCompleted hsr
                 -- Sending ACKs for three times rule
                 when ((n `mod` 3) == 1) $
-                    sendCryptoData conn $ OutControl HandshakeLevel []
+                    sendCryptoData conn $ OutControl HandshakeLevel [] False
             return (Right bs)
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
@@ -129,9 +129,8 @@ handshakeClient conf conn myAuthCIDs = do
         rxLevelChanged hsr
         setConnection1RTTReady conn
         cidInfo <- getNewMyCID conn
-        let ncid = NewConnectionID cidInfo 0
         putOutput conn $ OutHandshake [] -- for h3spec testing
-        putOutput conn $ OutControl RTT1Level [ncid]
+        sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
     done _ctx = do
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
@@ -183,7 +182,7 @@ handshakeServer conf conn myAuthCIDs = do
             clearCryptoStream conn RTT1Level
         setConnection1RTTReady conn
         setConnectionEstablished conn
---        putOutput conn $ OutControl RTT1Level [HandshakeDone]
+--        sendFrames conn RTT1Level [HandshakeDone]
         --
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
@@ -210,7 +209,7 @@ setPeerParams conn _ctx ps0 = do
               setParams params
               qlogParamsSet conn (params,"remote")
     err = do
-        sendFrame conn $ ConnectionClose TransportParameterError 0 ""
+        sendCCFrame conn $ ConnectionClose TransportParameterError 0 ""
         let qerr = TransportErrorIsSent TransportParameterError ""
         exitConnection conn qerr
         -- converted into Error_Misc and ignored in "tell"
@@ -256,7 +255,7 @@ getErrorCause e =
 
 notifyPeer :: Connection -> TLS.TLSError -> IO ()
 notifyPeer conn err = do
-    sendFrame conn frame
+    sendCCFrame conn frame
     exitConnection conn $ HandshakeFailed ad
   where
     ad = errorToAlertDescription err

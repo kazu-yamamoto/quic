@@ -56,7 +56,7 @@ runQUICClient conf client = do
   where
     clientAndClose conn = client conn `E.finally` do
         sent <- isCloseSent conn
-        unless sent $ sendFrame conn $ ConnectionClose NoError 0 ""
+        unless sent $ sendCCFrame conn $ ConnectionClose NoError 0 ""
         threadDelay 100000
 
 -- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
@@ -81,7 +81,7 @@ connect conf = do
         open = createClientConnection conf ver
         clse connRes = do
             let conn = connResConnection connRes
-            sendFrame conn $ ConnectionClose NoError 0 ""
+            sendCCFrame conn $ ConnectionClose NoError 0 ""
             threadDelay 100000
             freeResources conn
         body = handshakeClientConnection conf
@@ -166,7 +166,7 @@ runQUICServer conf server = handleLog debugLog $ do
   where
     serverAndClose conn = do
         server conn
-        sendFrame conn $ ConnectionClose NoError 0 ""
+        sendCCFrame conn $ ConnectionClose NoError 0 ""
         void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
     debugLog msg = stdoutLogger ("runQUICServer: " <> msg)
     setup = do
@@ -251,8 +251,7 @@ handshakeServerConnection conf (ConnRes conn send recv myAuthCIDs) = handleLogE 
     mgr <- getTokenManager conn
     token <- encryptToken mgr cryptoToken
     let ncid = NewConnectionID cidInfo 0
-    let frames = [NewToken token,ncid,HandshakeDone]
-    putOutput conn $ OutControl RTT1Level frames
+    sendFrames conn RTT1Level [NewToken token,ncid,HandshakeDone]
     addResource conn $ killHandshaker conn
     return conn
   where

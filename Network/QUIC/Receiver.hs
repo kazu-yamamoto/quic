@@ -126,7 +126,7 @@ processReceivedPacket conn rpkt = do
                         sup <- getSpeedingUp (connLDCC conn)
                         when sup $ do
                             qlogDebug conn $ Debug "ping for speedup"
-                            putOutput conn $ OutControl lvl [Ping]
+                            sendFrames conn lvl [Ping]
       Nothing -> do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
@@ -142,7 +142,7 @@ processReceivedPacket conn rpkt = do
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping =
-    putOutput conn $ OutControl lvl []
+    sendFrames conn lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "ACK" 0x02 -- fixme
@@ -214,19 +214,19 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
         let initialWindow = initialRxMaxStreamData conn sid
         when (window <= (initialWindow .>>. 1)) $ do
             newMax <- addRxMaxStreamData strm initialWindow
-            putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
+            sendFrames conn RTT1Level [MaxStreamData sid newMax]
             fire (Microseconds 50000) $ do
                 newMax' <- getRxMaxStreamData strm
-                putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax']
+                sendFrames conn RTT1Level [MaxStreamData sid newMax']
         addRxData conn $ BS.length dat
         cwindow <- getRxDataWindow conn
         let cinitialWindow = initialMaxData $ getMyParameters conn
         when (cwindow <= (cinitialWindow .>>. 1)) $ do
             newMax <- addRxMaxData conn cinitialWindow
-            putOutput conn $ OutControl RTT1Level [MaxData newMax]
+            sendFrames conn RTT1Level [MaxData newMax]
             fire (Microseconds 50000) $ do
                 newMax' <- getRxMaxData conn
-                putOutput conn $ OutControl RTT1Level [MaxData newMax']
+                sendFrames conn RTT1Level [MaxData newMax']
       else
         sendCCandExitConnection conn FlowControlError "" 0
 processFrame conn lvl (MaxData n) = do
@@ -259,10 +259,10 @@ processFrame conn lvl DataBlocked{} = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "DATA_BLOCKED" 0x14
     newMax <- getRxMaxData conn
-    putOutput conn $ OutControl RTT1Level [MaxData newMax]
+    sendFrames conn RTT1Level [MaxData newMax]
     fire (Microseconds 50000) $ do
         newMax' <- getRxMaxData conn
-        putOutput conn $ OutControl RTT1Level [MaxData newMax']
+        sendFrames conn RTT1Level [MaxData newMax']
 processFrame conn lvl (StreamDataBlocked sid _) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STREAM_DATA_BLOCKED" 0x15
@@ -271,10 +271,10 @@ processFrame conn lvl (StreamDataBlocked sid _) = do
       Nothing   -> return ()
       Just strm -> do
           newMax <- getRxMaxStreamData strm
-          putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax]
+          sendFrames conn RTT1Level [MaxStreamData sid newMax]
           fire (Microseconds 50000) $ do
               newMax' <- getRxMaxStreamData strm
-              putOutput conn $ OutControl RTT1Level [MaxStreamData sid newMax']
+              sendFrames conn RTT1Level [MaxStreamData sid newMax']
 processFrame conn lvl frame@(StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STREAMS_BLOCKED" 0
@@ -290,8 +290,7 @@ processFrame conn lvl (NewConnectionID cidInfo rpt) = do
         sendCCandExitConnection conn FrameEncodingError "NEW_CONNECTION_ID" 0x18
     when (rpt >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
-        let frames = map RetireConnectionID seqNums
-        putOutput conn $ OutControl RTT1Level frames
+        sendFrames conn RTT1Level $ map RetireConnectionID seqNums
 processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     when (isServer conn) $ case mcidInfo of
@@ -300,7 +299,7 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
           unregister <- getUnregister conn
           unregister cid
 processFrame conn RTT1Level (PathChallenge dat) =
-    putOutput conn $ OutControl RTT1Level [PathResponse dat]
+    sendFrames conn RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
     -- RTT0Level falls intentionally
     checkResponse conn dat
@@ -310,12 +309,12 @@ processFrame conn _ (ConnectionClose err _ftyp reason)
         onCloseReceived $ connHooks conn
         sent <- isCloseSent conn
         unless sent $ do
-            sendFrame conn $ ConnectionClose NoError 0 ""
+            sendCCFrame conn $ ConnectionClose NoError 0 ""
             -- if sent, client/server already exits.
             exitConnection conn ConnectionIsClosed
   | otherwise = do
         sent <- isCloseSent conn
-        unless sent $ sendFrame conn $ ConnectionClose NoError 0 ""
+        unless sent $ sendCCFrame conn $ ConnectionClose NoError 0 ""
         received <- isCloseReceived conn
         unless received $ do
             setCloseReceived conn
@@ -323,7 +322,7 @@ processFrame conn _ (ConnectionClose err _ftyp reason)
             exitConnection conn quicexc
 processFrame conn _ (ConnectionCloseApp err reason) = do
     sent <- isCloseSent conn
-    unless sent $ sendFrame conn $ ConnectionClose NoError 0 ""
+    unless sent $ sendCCFrame conn $ ConnectionClose NoError 0 ""
     received <- isCloseReceived conn
     unless received $ do
         setCloseReceived conn

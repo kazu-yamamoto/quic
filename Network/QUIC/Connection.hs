@@ -159,10 +159,11 @@ module Network.QUIC.Connection (
   -- In this module
   , exitConnection
   , exitConnectionByStream
-  , sendFrame
+  , sendCCFrame
   , sendCCandExitConnection
   , isConnectionOpen
   , abortConnection
+  , sendFrames
   ) where
 
 import Control.Concurrent
@@ -196,15 +197,19 @@ exitConnectionByStream strm ue = E.throwTo tid ue
   where
     tid = connThreadId $ streamConnection strm
 
-sendFrame :: Connection -> Frame -> IO ()
-sendFrame conn frame = do
+
+sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
+sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames False
+
+sendCCFrame :: Connection -> Frame -> IO ()
+sendCCFrame conn frame = do
     lvl <- getEncryptionLevel conn
-    putOutput conn $ OutControl lvl [frame]
+    putOutput conn $ OutControl lvl [frame] True
     setCloseSent conn
 
 sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO ()
 sendCCandExitConnection conn err desc ftyp = do
-    sendFrame conn frame
+    sendCCFrame conn frame
     exitConnection conn quicexc
   where
     frame = ConnectionClose err ftyp desc
@@ -220,7 +225,7 @@ isConnectionOpen = isConnOpen
 --   of this connection.
 abortConnection :: Connection -> ApplicationProtocolError -> IO ()
 abortConnection conn err = do
-    sendFrame conn frame
+    sendCCFrame conn frame
     threadDelay 100000
     exitConnection conn quicexc
   where

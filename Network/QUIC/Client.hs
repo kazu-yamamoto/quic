@@ -106,14 +106,12 @@ migrationClient conn ChangeServerCID = do
     case mn of
       Nothing              -> return False
       Just (CIDInfo n _ _) -> do
-          let frames = [RetireConnectionID n]
-          putOutput conn $ OutControl RTT1Level frames
+          sendFrames conn RTT1Level [RetireConnectionID n]
           return True
 migrationClient conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
     x <- (+1) <$> getMyCIDSeqNum conn
-    let frames = [NewConnectionID cidInfo x]
-    putOutput conn $ OutControl RTT1Level frames
+    sendFrames conn RTT1Level [NewConnectionID cidInfo x]
     return True
 migrationClient conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0

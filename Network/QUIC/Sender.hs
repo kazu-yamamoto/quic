@@ -6,6 +6,7 @@ module Network.QUIC.Sender (
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Data.ByteString as B
 
 import Network.QUIC.Connection
@@ -222,9 +223,11 @@ discardInitialPacketNumberSpace conn
   | otherwise = return ()
 
 sendOutput :: Connection -> SendMany -> Output -> IO ()
-sendOutput conn send (OutControl lvl frames) = do
+sendOutput conn send (OutControl lvl frames cc) = do
     construct conn lvl frames >>= sendPacket conn send
     when (lvl == HandshakeLevel) $ discardInitialPacketNumberSpace conn
+    -- ConnectionIsClosed kills myself and is ignored by the logger
+    when cc $ E.throwIO ConnectionIsClosed
 sendOutput conn send (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
         lcs = convert lcs0
