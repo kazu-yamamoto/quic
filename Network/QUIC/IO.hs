@@ -33,21 +33,25 @@ sendStream s dat = sendStreamMany s [dat]
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany _   [] = return ()
-sendStreamMany s dats = do
+sendStreamMany s dats0 = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
-    let len = totalLen dats
-        conn = streamConnection s
     -- fixme: size check for 0RTT
     ready <- isConnection1RTTReady conn
     if not ready then do
         -- 0-RTT
+        let len = totalLen dats0
         atomically $ do
             addTxStreamData s len
             addTxData conn len
-        putSendStreamQ conn $ TxStreamData s dats len False
-      else do
+        putSendStreamQ conn $ TxStreamData s dats0 len False
+      else
+        flowControl dats0
+  where
+    conn = streamConnection s
+    flowControl dats = do
         -- 1-RTT
+        let len = totalLen dats
         eblocked <- isBlocked s len
         case eblocked of
           Right n
@@ -56,7 +60,7 @@ sendStreamMany s dats = do
             | otherwise -> do
                   let (dats1,dats2) = split n dats
                   putSendStreamQ conn $ TxStreamData s dats1 n False
-                  sendStreamMany s dats2
+                  flowControl dats2
           Left blocked  -> do
               putSendBlockedQ conn blocked
               waitWindowIsOpen s len

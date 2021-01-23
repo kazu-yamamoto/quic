@@ -52,6 +52,13 @@ receiver conn recv = handleLog logAction $ do
             used <- isMyCID conn cid
             unless used $ setMyCID conn cid
             processReceivedPacket conn rpkt
+{- -B and -A does not work due to this
+            unless used $ do
+                mn <- timeout (Microseconds 1000) $ choosePeerCID conn -- fixme
+                case mn of
+                  Nothing              -> return ()
+                  Just (CIDInfo n _ _) -> sendFrames conn RTT1Level [RetireConnectionID n]
+-}
           else do
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
