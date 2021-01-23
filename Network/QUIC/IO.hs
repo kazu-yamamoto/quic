@@ -46,13 +46,13 @@ sendStreamMany s dats0 = do
             addTxData conn len
         putSendStreamQ conn $ TxStreamData s dats0 len False
       else
-        flowControl dats0
+        flowControl dats0 False
   where
     conn = streamConnection s
-    flowControl dats = do
+    flowControl dats wait = do
         -- 1-RTT
         let len = totalLen dats
-        eblocked <- isBlocked s len
+        eblocked <- checkBlocked s len wait
         case eblocked of
           Right n
             | len == n  ->
@@ -60,11 +60,10 @@ sendStreamMany s dats0 = do
             | otherwise -> do
                   let (dats1,dats2) = split n dats
                   putSendStreamQ conn $ TxStreamData s dats1 n False
-                  flowControl dats2
+                  flowControl dats2 False
           Left blocked  -> do
               putSendBlockedQ conn blocked
-              waitWindowIsOpen s len
-              putSendStreamQ conn $ TxStreamData s dats len False
+              flowControl dats True
 
 split :: Int -> [BS.ByteString] -> ([BS.ByteString],[BS.ByteString])
 split n0 dats0 = loop n0 dats0 id
@@ -79,8 +78,8 @@ split n0 dats0 = loop n0 dats0 id
       where
         len = BS.length bs
 
-isBlocked :: Stream -> Int -> IO (Either Blocked Int)
-isBlocked s len = atomically $ do
+checkBlocked :: Stream -> Int -> Bool -> IO (Either Blocked Int)
+checkBlocked s len wait = atomically $ do
     let conn = streamConnection s
     strmFlow <- readStreamFlowTx s
     connFlow <- readConnectionFlowTx conn
@@ -88,6 +87,7 @@ isBlocked s len = atomically $ do
         connWindow = flowWindow connFlow
         minFlow = min strmWindow connWindow
         n = min len minFlow
+    when wait $ check (n > 0)
     if n > 0 then do
         addTxStreamData s n
         addTxData conn n
@@ -100,15 +100,6 @@ isBlocked s len = atomically $ do
               | cs        = StrmBlocked s (flowMaxData strmFlow)
               | otherwise = ConnBlocked (flowMaxData connFlow)
         return $ Left blocked
-
-waitWindowIsOpen :: Stream -> Int -> IO ()
-waitWindowIsOpen s len = atomically $ do
-    let conn = streamConnection s
-    strmWindow <- flowWindow <$> readStreamFlowTx s
-    connWindow <- flowWindow <$> readConnectionFlowTx conn
-    check (len <= strmWindow && len <= connWindow)
-    addTxStreamData s len
-    addTxData conn len
 
 ----------------------------------------------------------------
 
