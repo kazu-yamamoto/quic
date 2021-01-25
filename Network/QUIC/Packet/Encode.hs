@@ -6,6 +6,7 @@ module Network.QUIC.Packet.Encode (
   ) where
 
 import qualified Data.ByteString as B
+import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr
 
 import Network.QUIC.Connection
@@ -58,11 +59,12 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 
 encodePlainPacket :: Connection -> PlainPacket -> Maybe Int -> IO ([ByteString],Int)
 encodePlainPacket conn ppkt@(PlainPacket _ plain) mlen = do
-    let (buf,buflen) = headerBuffer conn
+    let (fbuf,buflen) = headerBuffer conn
         mlen' | isNoPaddings (plainMarks plain) = Nothing
               | otherwise                       = mlen
-    wbuf <- newWriteBuffer buf buflen
-    encodePlainPacket' conn wbuf ppkt mlen'
+    withForeignPtr fbuf $ \buf -> do
+        wbuf <- newWriteBuffer buf buflen
+        encodePlainPacket' conn wbuf ppkt mlen'
 
 encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO ([ByteString],Int)
 encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames _)) mlen = do
@@ -138,8 +140,9 @@ encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
 protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO ([ByteString],Int)
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     cipher <- getCipher conn lvl
-    let (buf,buflen) = payloadBuffer conn
-    (plaintext0,siz) <- encodeFramesWithPadding buf buflen frames
+    let (fbuf,buflen) = payloadBuffer conn
+    (plaintext0,siz) <- withForeignPtr fbuf $ \buf ->
+        encodeFramesWithPadding buf buflen frames
     here <- currentOffset wbuf
     let taglen = tagLength cipher
         (plaintext,padLen) = case mlen of

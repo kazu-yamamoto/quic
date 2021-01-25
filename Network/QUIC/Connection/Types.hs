@@ -9,7 +9,7 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.X509 (CertificateChain)
-import Foreign.Marshal.Alloc (mallocBytes, free)
+import GHC.ForeignPtr (ForeignPtr(..), mallocPlainForeignPtrBytes)
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 
@@ -146,8 +146,8 @@ data Connection = Connection {
   , connQLog          :: QLogger
   , connHooks         :: Hooks
   -- WriteBuffer
-  , headerBuffer      :: (Buffer,BufferSize) -- occupied by a sender
-  , payloadBuffer     :: (Buffer,BufferSize) -- occupied by a sender
+  , headerBuffer      :: (ForeignPtr Word8,BufferSize) -- occupied by a sender
+  , payloadBuffer     :: (ForeignPtr Word8,BufferSize) -- occupied by a sender
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
@@ -223,14 +223,8 @@ newConnection :: Role
 newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
     let hlen = maximumQUICHeaderSize
         plen = maximumUdpPayloadSize
-    hbuf <- mallocBytes hlen
-    pbuf <- mallocBytes plen
-    freeRef <- newIORef False
-    let freeBufs = do
-            freed <- atomicModifyIORef' freeRef $ \x -> (True,x)
-            unless freed $ do
-                free hbuf
-                free pbuf
+    hbuf <- mallocPlainForeignPtrBytes hlen
+    pbuf <- mallocPlainForeignPtrBytes plen
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
@@ -277,7 +271,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources
-        <*> newIORef freeBufs
+        <*> newIORef (return ())
         -- Recovery
         <*> newLDCC connstate qLog put
   where
