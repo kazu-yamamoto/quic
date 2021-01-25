@@ -32,6 +32,7 @@ module Network.QUIC.Connection (
   , getPeerCID
   , isMyCID
   , myCIDsInclude
+  , shouldUpdateMyCID
   , resetPeerCID
   , getNewMyCID
   , setMyCID

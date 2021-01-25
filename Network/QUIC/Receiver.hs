@@ -48,18 +48,17 @@ receiver conn recv = handleLog logAction $ do
         let CryptPacket hdr _ = rpCryptPacket rpkt
             cid = headerMyCID hdr
         included <- myCIDsInclude conn cid
-        if included then do
-            used <- isMyCID conn cid
-            unless used $ setMyCID conn cid
+        case included of
+          Just nseq -> do
+            shouldUpdate <- shouldUpdateMyCID conn nseq
+            when shouldUpdate $ setMyCID conn cid
             processReceivedPacket conn rpkt
-{- -B and -A does not work due to this
-            unless used $ do
-                mn <- timeout (Microseconds 1000) $ choosePeerCID conn -- fixme
-                case mn of
-                  Nothing              -> return ()
-                  Just (CIDInfo n _ _) -> sendFrames conn RTT1Level [RetireConnectionID n]
+{-
+            when (shouldUpdate && isServer conn) $ do
+                _ <- timeout (Microseconds 1000) $ choosePeerCID conn -- fixme
+                return ()
 -}
-          else do
+          _ -> do
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("receiver: " <> msg)
@@ -353,10 +352,10 @@ processFrame conn _ _ = sendCCandExitConnection conn ProtocolViolation "" 0
 -- But we should check other packets, too.
 isStateessReset :: Connection -> Header -> Crypt -> IO Bool
 isStateessReset conn header Crypt{..} = do
-    ok <- myCIDsInclude conn $ headerMyCID header
-    if ok then
-        return False
-      else case decodeStatelessResetToken cryptPacket of
+    included <- myCIDsInclude conn $ headerMyCID header
+    case included of
+      Just _ -> return False
+      _      -> case decodeStatelessResetToken cryptPacket of
              Nothing    -> return False
              Just token -> isStatelessRestTokenValid conn token
 

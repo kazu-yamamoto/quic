@@ -6,6 +6,7 @@ module Network.QUIC.Connection.Migration (
   , getPeerCID
   , isMyCID
   , myCIDsInclude
+  , shouldUpdateMyCID
   , resetPeerCID
   , getNewMyCID
   , getMyCIDSeqNum
@@ -50,9 +51,14 @@ isMyCID :: Connection -> CID -> IO Bool
 isMyCID Connection{..} cid =
     (== cid) . cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
 
-myCIDsInclude :: Connection -> CID -> IO Bool
+shouldUpdateMyCID :: Connection -> Int -> IO Bool
+shouldUpdateMyCID Connection{..} nseq = do
+    useq <- cidInfoSeq . usedCIDInfo <$> readIORef myCIDDB
+    return (nseq > useq)
+
+myCIDsInclude :: Connection -> CID -> IO (Maybe Int)
 myCIDsInclude Connection{..} cid =
-    isJust . findByCID cid . cidInfos <$> readIORef myCIDDB
+    (cidInfoSeq <$>) . findByCID cid . cidInfos <$> readIORef myCIDDB
 
 ----------------------------------------------------------------
 
