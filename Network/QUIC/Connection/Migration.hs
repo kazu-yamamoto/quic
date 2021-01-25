@@ -7,6 +7,7 @@ module Network.QUIC.Connection.Migration (
   , isMyCID
   , myCIDsInclude
   , shouldUpdateMyCID
+  , shouldUpdatePeerCID
   , resetPeerCID
   , getNewMyCID
   , getMyCIDSeqNum
@@ -16,6 +17,7 @@ module Network.QUIC.Connection.Migration (
   , retireMyCID
   , addPeerCID
   , choosePeerCID
+  , choosePeerCIDForPrivacy
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
   , setMigrationStarted
@@ -94,10 +96,24 @@ choosePeerCID conn@Connection{..} = do
         mncid <- pickPeerCID conn
         check $ isJust mncid
         let u = usedCIDInfo db
-        setPeerCID conn $ fromJust mncid
+        setPeerCID conn (fromJust mncid) True
         return u
     qlogCIDUpdate conn Remote
     return r
+
+shouldUpdatePeerCID :: Connection -> IO Bool
+shouldUpdatePeerCID Connection{..} = not . triggeredByMe <$> atomically (readTVar peerCIDDB)
+
+choosePeerCIDForPrivacy :: Connection -> IO ()
+choosePeerCIDForPrivacy conn = do
+    r <- atomically $ do
+        mncid <- pickPeerCID conn
+        case mncid of
+          Nothing   -> return False
+          Just ncid -> do
+              setPeerCID conn ncid False
+              return True
+    when r $ qlogCIDUpdate conn Remote
 
 pickPeerCID :: Connection -> STM (Maybe CIDInfo)
 pickPeerCID Connection{..} = do
@@ -106,9 +122,9 @@ pickPeerCID Connection{..} = do
       []        -> return Nothing
       cidInfo:_ -> return $ Just cidInfo
 
-setPeerCID :: Connection -> CIDInfo -> STM ()
-setPeerCID Connection{..} cidInfo =
-    modifyTVar' peerCIDDB $ set cidInfo
+setPeerCID :: Connection -> CIDInfo -> Bool -> STM ()
+setPeerCID Connection{..} cidInfo pri =
+    modifyTVar' peerCIDDB $ set cidInfo pri
 
 -- | After sending RetireConnectionID
 retirePeerCID :: Connection -> Int -> IO ()
@@ -147,7 +163,7 @@ setMyCID conn@Connection{..} ncid = do
   where
     findSet db = case findByCID ncid (cidInfos db) of
       Nothing      -> db
-      Just cidInfo -> set cidInfo db
+      Just cidInfo -> set cidInfo False db
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
@@ -164,11 +180,12 @@ findBySeq num = find (\x -> cidInfoSeq x == num)
 findBySRT :: StatelessResetToken -> [CIDInfo] -> Maybe CIDInfo
 findBySRT srt = find (\x -> cidInfoSRT x == srt)
 
-set :: CIDInfo -> CIDDB -> CIDDB
-set cidInfo db = db'
+set :: CIDInfo -> Bool -> CIDDB -> CIDDB
+set cidInfo pri db = db'
   where
     db' = db {
         usedCIDInfo = cidInfo
+      , triggeredByMe = pri
       }
 
 add :: CIDInfo -> CIDDB -> CIDDB

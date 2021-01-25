@@ -67,9 +67,10 @@ defaultServerRoleInfo = ServerInfo {
 
 -- fixme: limitation
 data CIDDB = CIDDB {
-    usedCIDInfo :: CIDInfo
-  , cidInfos    :: [CIDInfo]
-  , nextSeqNum  :: Int  -- only for mine
+    usedCIDInfo   :: CIDInfo
+  , cidInfos      :: [CIDInfo]
+  , nextSeqNum    :: Int  -- only for mine
+  , triggeredByMe :: Bool -- only for peer's
   } deriving (Show)
 
 newCIDDB :: CID -> CIDDB
@@ -77,6 +78,7 @@ newCIDDB cid = CIDDB {
     usedCIDInfo = cidInfo
   , cidInfos    = [cidInfo]
   , nextSeqNum  = 1
+  , triggeredByMe = False
   }
   where
     cidInfo = CIDInfo 0 cid (StatelessResetToken "")

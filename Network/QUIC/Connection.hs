@@ -33,6 +33,7 @@ module Network.QUIC.Connection (
   , isMyCID
   , myCIDsInclude
   , shouldUpdateMyCID
+  , shouldUpdatePeerCID
   , resetPeerCID
   , getNewMyCID
   , setMyCID
@@ -41,6 +42,7 @@ module Network.QUIC.Connection (
   , retireMyCID
   , addPeerCID
   , choosePeerCID
+  , choosePeerCIDForPrivacy
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
   , setMigrationStarted

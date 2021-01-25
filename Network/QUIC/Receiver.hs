@@ -53,11 +53,9 @@ receiver conn recv = handleLog logAction $ do
             shouldUpdate <- shouldUpdateMyCID conn nseq
             when shouldUpdate $ setMyCID conn cid
             processReceivedPacket conn rpkt
-{-
-            when (shouldUpdate && isServer conn) $ do
-                _ <- timeout (Microseconds 1000) $ choosePeerCID conn -- fixme
-                return ()
--}
+            shouldUpdatePeer <- if shouldUpdate then shouldUpdatePeerCID conn
+                                                else return False
+            when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
           _ -> do
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
