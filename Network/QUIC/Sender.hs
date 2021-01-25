@@ -204,8 +204,8 @@ sender conn send = handleLog logAction $ forever $ do
 sendBlocked :: Connection -> SendMany -> Blocked -> IO ()
 sendBlocked conn send blocked = do
     let frames = case blocked of
-          StrmBlocked strm n -> [StreamDataBlocked (streamId strm) n]
-          ConnBlocked n      -> [DataBlocked n]
+          StrmBlocked strm n   -> [StreamDataBlocked (streamId strm) n]
+          ConnBlocked n        -> [DataBlocked n]
           BothBlocked strm n m -> [StreamDataBlocked (streamId strm) n, DataBlocked m]
     construct conn RTT1Level frames >>= sendPacket conn send
 
