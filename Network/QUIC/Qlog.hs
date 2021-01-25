@@ -14,7 +14,9 @@ module Network.QUIC.Qlog (
   , qlogSentRetry
   , qlogParamsSet
   , qlogDebug
+  , qlogCIDUpdate
   , Debug(..)
+  , LR(..)
   , packetType
   , sw
   ) where
@@ -34,12 +36,17 @@ class Qlog a where
     qlog :: a -> LogStr
 
 newtype Debug = Debug String
+data LR = Local | Remote
 
 instance Show Debug where
     show (Debug msg) = msg
 
 instance Qlog Debug where
     qlog (Debug msg) = "{\"message\":" <> sw msg <> "}"
+
+instance Qlog LR where
+    qlog Local  = "{\"owner\":\"local\"}"
+    qlog Remote = "{\"owner\":\"remote\"}"
 
 instance Qlog RetryPacket where
     qlog RetryPacket{} = "{\"header\":{\"packet_type\":\"retry\",\"packet_number\":\"\"}}"
@@ -182,6 +189,7 @@ data QlogMsg = QRecvInitial
              | QLossTimerUpdated LogStr TimeMicrosecond
              | QDebug LogStr TimeMicrosecond
              | QParamsSet LogStr TimeMicrosecond
+             | QCIDUpdate LogStr TimeMicrosecond
 
 {-# INLINE toLogStrTime #-}
 toLogStrTime :: QlogMsg -> TimeMicrosecond -> LogStr
@@ -207,6 +215,8 @@ toLogStrTime (QLossTimerUpdated msg tim) base =
     "{\"time\":" <> swtim tim base <> ",\"name\":\"recovery:loss_timer_updated\",\"data\":" <> msg <> "}\n"
 toLogStrTime (QDebug msg tim) base =
     "{\"time\":" <> swtim tim base <> ",\"name\":\"debug\",\"data\":" <> msg <> "}\n"
+toLogStrTime (QCIDUpdate msg tim) base =
+    "{\"time\":" <> swtim tim base <> ",\"name\":\"connectivity:connection_id_updated\",\"data\":" <> msg <> "}\n"
 
 ----------------------------------------------------------------
 
@@ -265,3 +275,8 @@ qlogDebug :: KeepQlog q => q -> Debug -> IO ()
 qlogDebug q msg = do
     tim <- getTimeMicrosecond
     keepQlog q $ QDebug (qlog msg) tim
+
+qlogCIDUpdate :: KeepQlog q => q -> LR -> IO ()
+qlogCIDUpdate q lr = do
+    tim <- getTimeMicrosecond
+    keepQlog q $ QCIDUpdate (qlog lr) tim

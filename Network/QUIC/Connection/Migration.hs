@@ -29,6 +29,7 @@ import Data.List (delete, insert)
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Qlog
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -80,14 +81,17 @@ addPeerCID Connection{..} cidInfo = do
 
 -- | Using a new CID and sending RetireConnectionID
 choosePeerCID :: Connection -> IO CIDInfo
-choosePeerCID conn@Connection{..} = atomically $ do
-    let ref = peerCIDDB
-    db <- readTVar ref
-    mncid <- pickPeerCID conn
-    check $ isJust mncid
-    let u = usedCIDInfo db
-    setPeerCID conn $ fromJust mncid
-    return u
+choosePeerCID conn@Connection{..} = do
+    r <- atomically $ do
+        let ref = peerCIDDB
+        db <- readTVar ref
+        mncid <- pickPeerCID conn
+        check $ isJust mncid
+        let u = usedCIDInfo db
+        setPeerCID conn $ fromJust mncid
+        return u
+    qlogCIDUpdate conn Remote
+    return r
 
 pickPeerCID :: Connection -> STM (Maybe CIDInfo)
 pickPeerCID Connection{..} = do
@@ -131,7 +135,9 @@ arrange n db = (db', map cidInfoSeq toDrops)
 
 -- | Peer starts using a new CID.
 setMyCID :: Connection -> CID -> IO ()
-setMyCID Connection{..} ncid = atomicModifyIORef'' myCIDDB findSet
+setMyCID conn@Connection{..} ncid = do
+    atomicModifyIORef'' myCIDDB findSet
+    qlogCIDUpdate conn Local
   where
     findSet db = case findByCID ncid (cidInfos db) of
       Nothing      -> db
