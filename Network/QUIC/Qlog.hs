@@ -194,9 +194,9 @@ data QlogMsg = QRecvInitial
 {-# INLINE toLogStrTime #-}
 toLogStrTime :: QlogMsg -> TimeMicrosecond -> LogStr
 toLogStrTime QRecvInitial _ =
-    "{\"time\":0,\"name\":\"transport:packet_received\",\"data\":{\"packet_type\":\"initial\",\"header\":{\"packet_number\":\"\"}}}\n"
+    "{\"time\":0,\"name\":\"transport:packet_received\",\"data\":{\"header\":{\"packet_type\":\"initial\",\"packet_number\":\"\"}}}\n"
 toLogStrTime QSentRetry _ =
-    "{\"time\":0,\"name\":\"transport:packet_sent\",\"data\":{\"packet_type\":\"retry\",\"header\":{\"packet_number\":\"\"}}}\n"
+    "{\"time\":0,\"name\":\"transport:packet_sent\",\"data\":{\"header\":{\"packet_type\":\"retry\",\"packet_number\":\"\"}}}\n"
 toLogStrTime (QReceived msg tim) base =
     "{\"time\":" <> swtim tim base <> ",\"name\":\"transport:packet_received\",\"data\":" <> msg <> "}\n"
 toLogStrTime (QSent msg tim) base =
