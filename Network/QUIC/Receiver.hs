@@ -297,11 +297,17 @@ processFrame conn lvl (NewConnectionID cidInfo rpt) = do
         sendFrames conn RTT1Level $ map RetireConnectionID seqNums
 processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
-    when (isServer conn) $ case mcidInfo of
+    case mcidInfo of
       Nothing -> return ()
       Just (CIDInfo _ cid _) -> do
-          unregister <- getUnregister conn
-          unregister cid
+          when (isServer conn) $ do
+              unregister <- getUnregister conn
+              unregister cid
+          cidInfo <- getNewMyCID conn
+          when (isServer conn) $ do
+              register <- getRegister conn
+              register (cidInfoCID cidInfo) conn
+          sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
 processFrame conn RTT1Level (PathChallenge dat) =
     sendFrames conn RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
