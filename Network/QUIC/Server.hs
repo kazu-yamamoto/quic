@@ -315,7 +315,7 @@ dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ peers
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> stdoutLogger $ "dispatch: orphan 0RTT: " <> bhow peersa
-dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) _ peersa _ _ bytes tim  = do
+dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
@@ -335,7 +335,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) _ pe
                     -- fixme: should not block in this loop
                     mcidinfo <- timeout (Microseconds 100000) $ choosePeerCID conn
                     connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
-                    void $ forkIO $ migrator conn peersa dCID mcidinfo
+                    void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
 dispatch _ _ ipkt _ peersa _ _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow peersa <> ", " <> bhow ipkt
 
@@ -358,10 +358,9 @@ recvServer = readRecvQ
 
 ----------------------------------------------------------------
 
-migrator :: Connection -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
-migrator conn peersa1 dcid mcidinfo = handleLog logAction $ do
+migrator :: Connection -> SockAddr -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
+migrator conn mysa peersa1 dcid mcidinfo = handleLog logAction $ do
     (s0,q) <- getSockInfo conn
-    mysa <- getSocketName s0
     s1 <- udpServerConnectedSocket mysa peersa1
     setSockInfo conn (s1,q)
     void $ forkIO $ readerServer s1 q conn
