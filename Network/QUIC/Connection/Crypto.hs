@@ -15,6 +15,8 @@ module Network.QUIC.Connection.Crypto (
   , dropSecrets
   --
   , initializeCoder
+  , initializeCoder1RTT
+  , updateCoder1RTT
   , getCoder
   , getProtector
   ) where
@@ -91,6 +93,31 @@ initializeCoder conn lvl sec = do
     writeArray (coders conn) lvl coder
     writeArray (protectors conn) lvl protector
 
+initializeCoder1RTT :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
+initializeCoder1RTT conn sec = do
+    cipher <- getCipher conn RTT1Level
+    let (coder, protector) = genCoder (isClient conn) cipher sec
+        coder1 = Coder1RTT coder sec
+    writeArray (coders1RTT conn) False coder1
+    writeArray (protectors conn) RTT1Level protector
+    updateCoder1RTT conn True
+
+updateCoder1RTT :: Connection -> Bool -> IO ()
+updateCoder1RTT conn nextPhase = do
+    cipher <- getCipher conn RTT1Level
+    Coder1RTT _ secN <- readArray (coders1RTT conn) (not nextPhase)
+    let secN1 = updateSecret cipher secN
+    let (coderN1, _) = genCoder (isClient conn) cipher secN1
+    let nextCoder = Coder1RTT coderN1 secN1
+    writeArray (coders1RTT conn) nextPhase nextCoder
+
+updateSecret :: Cipher -> TrafficSecrets ApplicationSecret -> TrafficSecrets ApplicationSecret
+updateSecret cipher (ClientTrafficSecret cN, ServerTrafficSecret sN) = secN1
+  where
+    Secret cN1 = nextSecret cipher $ Secret cN
+    Secret sN1 = nextSecret cipher $ Secret sN
+    secN1 = (ClientTrafficSecret cN1, ServerTrafficSecret sN1)
+
 genCoder :: Bool -> Cipher -> TrafficSecrets a -> (Coder, Protector)
 genCoder cli cipher (ClientTrafficSecret c, ServerTrafficSecret s) = (coder, protector)
   where
@@ -111,9 +138,9 @@ genCoder cli cipher (ClientTrafficSecret c, ServerTrafficSecret s) = (coder, pro
     coder = Coder enc dec
     protector = Protector pro unp
 
--- fixme
-getCoder :: Connection -> EncryptionLevel -> IO Coder
-getCoder conn lvl = readArray (coders conn) lvl
+getCoder :: Connection -> EncryptionLevel -> Bool -> IO Coder
+getCoder conn RTT1Level k = coder1RTT <$> readArray (coders1RTT conn) k
+getCoder conn lvl       _ = readArray (coders conn) lvl
 
 getProtector :: Connection -> EncryptionLevel -> IO Protector
 getProtector conn lvl = readArray (protectors conn) lvl

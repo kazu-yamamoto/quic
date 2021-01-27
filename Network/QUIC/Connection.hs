@@ -24,6 +24,8 @@ module Network.QUIC.Connection (
   , dropSecrets
   , Coder(..)
   , initializeCoder
+  , initializeCoder1RTT
+  , updateCoder1RTT
   , getCoder
   , Protector(..)
   , getProtector

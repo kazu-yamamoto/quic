@@ -102,6 +102,17 @@ initialCoder = Coder {
   , decrypt = \_ _ _ -> Nothing
   }
 
+data Coder1RTT = Coder1RTT {
+    coder1RTT :: Coder
+  , secretN   :: TrafficSecrets ApplicationSecret
+  }
+
+initialCoder1RTT :: Coder1RTT
+initialCoder1RTT = Coder1RTT {
+    coder1RTT = initialCoder
+  , secretN   = (ClientTrafficSecret "", ServerTrafficSecret "")
+  }
+
 data Protector = Protector {
     protect   :: Sample -> Mask
   , unprotect :: Sample -> Mask
@@ -194,6 +205,7 @@ data Connection = Connection {
   , pendingQ          :: Array   EncryptionLevel (TVar [ReceivedPacket])
   , ciphers           :: IOArray EncryptionLevel Cipher
   , coders            :: IOArray EncryptionLevel Coder
+  , coders1RTT        :: IOArray Bool            Coder1RTT
   , protectors        :: IOArray EncryptionLevel Protector
   , negotiated        :: IORef Negotiated
   , handshakeCIDs     :: IORef AuthCIDs
@@ -275,7 +287,8 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher
-        <*> newArray (InitialLevel,RTT1Level) initialCoder -- fixme
+        <*> newArray (InitialLevel,HandshakeLevel) initialCoder
+        <*> newArray (False,True) initialCoder1RTT
         <*> newArray (InitialLevel,RTT1Level) initialProtector
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs

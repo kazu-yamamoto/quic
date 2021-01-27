@@ -124,7 +124,7 @@ handshakeClient conf conn myAuthCIDs = do
         rxLevelChanged hsr
     installKeysClient hsr ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
-        initializeCoder conn RTT1Level tss
+        initializeCoder1RTT conn tss
         setEncryptionLevel conn RTT1Level
         rxLevelChanged hsr
         setConnection1RTTReady conn
@@ -167,7 +167,7 @@ handshakeServer conf conn myAuthCIDs = do
         rxLevelChanged hsr
     installKeysServer _ ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
-        initializeCoder conn RTT1Level tss
+        initializeCoder1RTT conn tss
         -- will switch to RTT1Level after client Finished
         -- is received and verified
     done ctx = do

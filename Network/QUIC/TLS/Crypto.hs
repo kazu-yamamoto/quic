@@ -9,6 +9,7 @@ module Network.QUIC.TLS.Crypto (
   , serverInitialSecret
   , aeadKey
   , initialVector
+  , nextSecret
   , headerProtectionKey
   , makeNonce
   , encryptPayload
@@ -168,6 +169,11 @@ initialVector cipher (Secret secret) = IV iv
     bulk   = cipherBulk cipher
     ivSize = max 8 (bulkIVSize bulk + bulkExplicitIV bulk)
     iv     = hkdfExpandLabel hash secret "quic iv" "" ivSize
+
+nextSecret :: Cipher -> Secret -> Secret
+nextSecret cipher secN = Secret secN1
+  where
+    Key secN1 = genKey (Label "quic ku") cipher secN
 
 ----------------------------------------------------------------
 
