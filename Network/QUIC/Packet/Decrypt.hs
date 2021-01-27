@@ -24,12 +24,12 @@ import Network.QUIC.Types
 decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
 decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
     cipher <- getCipher conn lvl
-    coder <- getCoder conn lvl
+    protector <- getProtector conn lvl
     let proFlags = Flags (cryptPacket `B.index` 0)
         sampleOffset = cryptPktNumOffset + 4
         sampleLen = sampleLength cipher
         sample = Sample $ B.take sampleLen $ B.drop sampleOffset cryptPacket
-        makeMask = unprotect coder
+        makeMask = unprotect protector
         Mask mask = makeMask sample
         Just (mask1,mask2) = B.uncons mask
         rawFlags@(Flags flags) = unprotectFlags proFlags mask1
@@ -44,6 +44,7 @@ decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
         void $ copy p proHeader
         poke8 flags p 0
         void $ copy (p `plusPtr` cryptPktNumOffset) $ B.take epnLen bytePN
+    coder <- getCoder conn lvl
     let mpayload = decrypt coder ciphertext header pn
         rrMask | lvl == RTT1Level = 0x18
                | otherwise        = 0x0c

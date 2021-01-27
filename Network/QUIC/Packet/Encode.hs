@@ -179,7 +179,8 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
         return ([],0)
       else do
         -- protecting header
-        let makeMask = protect coder
+        protector <- getProtector conn lvl
+        let makeMask = protect protector
         protectHeader headerBeg pnBeg epnLen cipher makeMask ciphertext
         hdr <- toByteString wbuf
         return (hdr:ciphertext, padLen)

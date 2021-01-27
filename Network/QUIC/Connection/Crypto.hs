@@ -16,6 +16,7 @@ module Network.QUIC.Connection.Crypto (
   --
   , initializeCoder
   , getCoder
+  , getProtector
   ) where
 
 import Control.Concurrent.STM
@@ -100,8 +101,14 @@ initializeCoder conn lvl (ClientTrafficSecret c, ServerTrafficSecret s) = do
         rxHeaderKey = headerProtectionKey cipher rxSecret
         dec = decryptPayload cipher rxPayloadKey rxPayloadIV
         unp = protectionMask cipher rxHeaderKey
-    let coder = Coder enc dec pro unp
+    let coder = Coder enc dec
+        protector = Protector pro unp
     writeArray (coders conn) lvl coder
+    writeArray (protectors conn) lvl protector
 
+-- fixme
 getCoder :: Connection -> EncryptionLevel -> IO Coder
 getCoder conn lvl = readArray (coders conn) lvl
+
+getProtector :: Connection -> EncryptionLevel -> IO Protector
+getProtector conn lvl = readArray (protectors conn) lvl

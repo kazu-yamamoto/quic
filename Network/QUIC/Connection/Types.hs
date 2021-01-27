@@ -94,15 +94,22 @@ data MigrationState = NonMigration
 data Coder = Coder {
     encrypt :: PlainText  -> ByteString -> PacketNumber -> [CipherText]
   , decrypt :: CipherText -> ByteString -> PacketNumber -> Maybe PlainText
-  , protect   :: Sample -> Mask
-  , unprotect :: Sample -> Mask
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
     encrypt = \_ _ _ -> []
   , decrypt = \_ _ _ -> Nothing
-  , protect   = \_ -> Mask ""
+  }
+
+data Protector = Protector {
+    protect   :: Sample -> Mask
+  , unprotect :: Sample -> Mask
+  }
+
+initialProtector :: Protector
+initialProtector = Protector {
+    protect   = \_ -> Mask ""
   , unprotect = \_ -> Mask ""
   }
 
@@ -187,6 +194,7 @@ data Connection = Connection {
   , pendingQ          :: Array   EncryptionLevel (TVar [ReceivedPacket])
   , ciphers           :: IOArray EncryptionLevel Cipher
   , coders            :: IOArray EncryptionLevel Coder
+  , protectors        :: IOArray EncryptionLevel Protector
   , negotiated        :: IORef Negotiated
   , handshakeCIDs     :: IORef AuthCIDs
   -- Resources
@@ -267,7 +275,8 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher
-        <*> newArray (InitialLevel,RTT1Level) initialCoder
+        <*> newArray (InitialLevel,RTT1Level) initialCoder -- fixme
+        <*> newArray (InitialLevel,RTT1Level) initialProtector
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources

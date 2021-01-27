@@ -25,6 +25,8 @@ module Network.QUIC.Connection (
   , Coder(..)
   , initializeCoder
   , getCoder
+  , Protector(..)
+  , getProtector
   -- * Migration
   , getMyCID
   , getMyCIDs
