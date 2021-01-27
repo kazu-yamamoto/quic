@@ -173,7 +173,8 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     headerEnd <- currentOffset wbuf
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     -- payload
-    coder <- getCoder conn lvl False -- fixme
+    (keyPhase,_) <- getCurrentKeyPhase conn
+    coder <- getCoder conn lvl keyPhase
     let ciphertext = encrypt coder plaintext header pn
     if null ciphertext then
         return ([],0)

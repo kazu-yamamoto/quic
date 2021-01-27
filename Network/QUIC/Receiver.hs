@@ -121,6 +121,13 @@ processReceivedPacket conn rpkt = do
               stdoutLogger ("Drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr
             else do
+              (ckp,cpn) <- getCurrentKeyPhase conn
+              let Flags flags = plainFlags
+                  nkp = flags `testBit` 2
+              when (nkp /= ckp && plainPacketNumber > cpn) $ do
+                  setCurrentKeyPhase conn nkp plainPacketNumber
+                  -- fixme: fire
+                  updateCoder1RTT conn ckp -- ckp is now next
               mapM_ (processFrame conn lvl) plainFrames
               when ackEli $ do
                   case lvl of

@@ -207,6 +207,7 @@ data Connection = Connection {
   , coders            :: IOArray EncryptionLevel Coder
   , coders1RTT        :: IOArray Bool            Coder1RTT
   , protectors        :: IOArray EncryptionLevel Protector
+  , currentKeyPhase   :: IORef (Bool, PacketNumber)
   , negotiated        :: IORef Negotiated
   , handshakeCIDs     :: IORef AuthCIDs
   -- Resources
@@ -290,6 +291,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newArray (InitialLevel,HandshakeLevel) initialCoder
         <*> newArray (False,True) initialCoder1RTT
         <*> newArray (InitialLevel,RTT1Level) initialProtector
+        <*> newIORef (False,0)
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources

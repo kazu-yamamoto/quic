@@ -29,6 +29,8 @@ module Network.QUIC.Connection (
   , getCoder
   , Protector(..)
   , getProtector
+  , getCurrentKeyPhase
+  , setCurrentKeyPhase
   -- * Migration
   , getMyCID
   , getMyCIDs

@@ -44,7 +44,9 @@ decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
         void $ copy p proHeader
         poke8 flags p 0
         void $ copy (p `plusPtr` cryptPktNumOffset) $ B.take epnLen bytePN
-    coder <- getCoder conn lvl False -- fixme
+    let keyPhase | lvl == RTT1Level = flags `testBit` 2
+                 | otherwise        = False
+    coder <- getCoder conn lvl keyPhase
     let mpayload = decrypt coder ciphertext header pn
         rrMask | lvl == RTT1Level = 0x18
                | otherwise        = 0x0c

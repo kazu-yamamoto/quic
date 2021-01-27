@@ -19,6 +19,9 @@ module Network.QUIC.Connection.Crypto (
   , updateCoder1RTT
   , getCoder
   , getProtector
+  --
+  , getCurrentKeyPhase
+  , setCurrentKeyPhase
   ) where
 
 import Control.Concurrent.STM
@@ -144,3 +147,11 @@ getCoder conn lvl       _ = readArray (coders conn) lvl
 
 getProtector :: Connection -> EncryptionLevel -> IO Protector
 getProtector conn lvl = readArray (protectors conn) lvl
+
+----------------------------------------------------------------
+
+getCurrentKeyPhase :: Connection -> IO (Bool, PacketNumber)
+getCurrentKeyPhase Connection{..} = readIORef currentKeyPhase
+
+setCurrentKeyPhase :: Connection -> Bool -> PacketNumber -> IO ()
+setCurrentKeyPhase Connection{..} k pn = writeIORef currentKeyPhase (k, pn)
