@@ -85,26 +85,31 @@ dropSecrets Connection{..} lvl = writeArray coders lvl initialCoder
 ----------------------------------------------------------------
 
 initializeCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO ()
-initializeCoder conn lvl (ClientTrafficSecret c, ServerTrafficSecret s) = do
-    let txSecret | isClient conn = Secret c
-                 | otherwise     = Secret s
-    let rxSecret | isClient conn = Secret s
-                 | otherwise     = Secret c
+initializeCoder conn lvl sec = do
     cipher <- getCipher conn lvl
-    let txPayloadKey = aeadKey cipher txSecret
-        txPayloadIV  = initialVector cipher txSecret
-        txHeaderKey = headerProtectionKey cipher txSecret
-        enc = encryptPayload cipher txPayloadKey txPayloadIV
-        pro = protectionMask cipher txHeaderKey
-    let rxPayloadKey = aeadKey cipher rxSecret
-        rxPayloadIV  = initialVector cipher rxSecret
-        rxHeaderKey = headerProtectionKey cipher rxSecret
-        dec = decryptPayload cipher rxPayloadKey rxPayloadIV
-        unp = protectionMask cipher rxHeaderKey
-    let coder = Coder enc dec
-        protector = Protector pro unp
+    let (coder, protector) = genCoder (isClient conn) cipher sec
     writeArray (coders conn) lvl coder
     writeArray (protectors conn) lvl protector
+
+genCoder :: Bool -> Cipher -> TrafficSecrets a -> (Coder, Protector)
+genCoder cli cipher (ClientTrafficSecret c, ServerTrafficSecret s) = (coder, protector)
+  where
+    txSecret | cli           = Secret c
+             | otherwise     = Secret s
+    rxSecret | cli           = Secret s
+             | otherwise     = Secret c
+    txPayloadKey = aeadKey cipher txSecret
+    txPayloadIV  = initialVector cipher txSecret
+    txHeaderKey  = headerProtectionKey cipher txSecret
+    enc = encryptPayload cipher txPayloadKey txPayloadIV
+    pro = protectionMask cipher txHeaderKey
+    rxPayloadKey = aeadKey cipher rxSecret
+    rxPayloadIV  = initialVector cipher rxSecret
+    rxHeaderKey  = headerProtectionKey cipher rxSecret
+    dec = decryptPayload cipher rxPayloadKey rxPayloadIV
+    unp = protectionMask cipher rxHeaderKey
+    coder = Coder enc dec
+    protector = Protector pro unp
 
 -- fixme
 getCoder :: Connection -> EncryptionLevel -> IO Coder
