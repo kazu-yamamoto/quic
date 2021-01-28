@@ -175,7 +175,6 @@ module Network.QUIC.Connection (
   , sendFrames
   ) where
 
-import Control.Concurrent
 import qualified Control.Exception as E
 
 import Network.QUIC.Config
@@ -192,6 +191,7 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Stream
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | Closing a connection.
@@ -235,7 +235,7 @@ isConnectionOpen = isConnOpen
 abortConnection :: Connection -> ApplicationProtocolError -> IO ()
 abortConnection conn err = do
     sendCCFrame conn frame
-    threadDelay 100000
+    delay $ Microseconds 100000
     exitConnection conn quicexc
   where
     frame = ConnectionCloseApp err ""
