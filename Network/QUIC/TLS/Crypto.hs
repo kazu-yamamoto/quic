@@ -171,9 +171,12 @@ initialVector cipher (Secret secret) = IV iv
     iv     = hkdfExpandLabel hash secret "quic iv" "" ivSize
 
 nextSecret :: Cipher -> Secret -> Secret
-nextSecret cipher secN = Secret secN1
+nextSecret cipher (Secret secN) = Secret secN1
   where
-    Key secN1 = genKey (Label "quic ku") cipher secN
+    label    = "quic ku"
+    hash     = cipherHash cipher
+    hashSize = hashDigestSize hash
+    secN1    = hkdfExpandLabel hash secN label "" hashSize
 
 ----------------------------------------------------------------
 
