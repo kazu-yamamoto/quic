@@ -97,7 +97,8 @@ encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames ma
                       | otherwise        = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen
     quicBit <- greaseQuicBit <$> getPeerParameters conn
-    Flags flags' <- encodeShortHeaderFlags flags pp quicBit
+    (keyPhase,_) <- getCurrentKeyPhase conn
+    Flags flags' <- encodeShortHeaderFlags flags pp quicBit keyPhase
     headerBeg <- currentOffset wbuf
     write8 wbuf flags'
     -- dCID

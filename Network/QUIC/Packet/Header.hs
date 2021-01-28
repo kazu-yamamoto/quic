@@ -56,13 +56,14 @@ randomizeQuicBit flags quicBit
   | otherwise = return flags
 
 {-# INLINE encodeShortHeaderFlags #-}
-encodeShortHeaderFlags :: Flags Raw -> Flags Raw -> Bool -> IO (Flags Raw)
-encodeShortHeaderFlags (Flags fg) (Flags pp) quicBit =
+encodeShortHeaderFlags :: Flags Raw -> Flags Raw -> Bool -> Bool -> IO (Flags Raw)
+encodeShortHeaderFlags (Flags fg) (Flags pp) quicBit keyPhase =
     Flags <$> randomizeQuicBit flags quicBit
   where
     flags =          0b01000000
          .|. (fg .&. 0b00111100)
          .|. (pp .&. 0b00000011)
+         .|. (if keyPhase then 0b00000100 else 0b00000000)
 
 {-# INLINE encodeLongHeaderFlags #-}
 encodeLongHeaderFlags :: LongHeaderPacketType -> Flags Raw -> Flags Raw -> Bool -> IO (Flags Raw)
