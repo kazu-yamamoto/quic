@@ -182,6 +182,7 @@ processFrame conn lvl (StopSending sid _err) = do
               ||(isServer conn && isServerInitiated sid)) $
               sendCCandExitConnection conn StreamStateError "No such stream for STOP_SENDING" 0x05
       Just _strm -> connDebugLog conn "StopSending" -- fixme
+processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "CRYPTO" 0x06
@@ -214,6 +215,7 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
         addRxData conn $ BS.length dat             -- fixme: including 0RTT?
       else
         sendCCandExitConnection conn FlowControlError "" 0
+processFrame _    RTT1Level (StreamF _ _ [""] False) = return ()
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
