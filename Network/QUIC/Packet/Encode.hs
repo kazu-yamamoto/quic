@@ -75,21 +75,21 @@ encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain f
     encodeInt' wbuf $ fromIntegral $ B.length token
     copyByteString wbuf token
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen InitialLevel
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen InitialLevel False
 
 encodePlainPacket' conn wbuf (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames _)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf RTT0PacketType ver dCID sCID flags pn
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT0Level
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT0Level False
 
 encodePlainPacket' conn wbuf (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames _)) mlen = do
     -- flag ... sCID
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf HandshakePacketType ver dCID sCID flags pn
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen HandshakeLevel
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen HandshakeLevel False
 
 encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames marks)) mlen = do
     -- flag
@@ -104,7 +104,7 @@ encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames ma
     -- dCID
     let (dcid, _) = unpackCID dCID
     copyShortByteString wbuf dcid
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT1Level
+    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT1Level keyPhase
 
 ----------------------------------------------------------------
 
@@ -138,8 +138,8 @@ encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
 
 ----------------------------------------------------------------
 
-protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> IO ([ByteString],Int)
-protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
+protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> Bool -> IO ([ByteString],Int)
+protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase = do
     cipher <- getCipher conn lvl
     let (fbuf,buflen) = payloadBuffer conn
     (plaintext0,siz) <- withForeignPtr fbuf $ \buf ->
@@ -174,7 +174,6 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl = do
     headerEnd <- currentOffset wbuf
     header <- extractByteString wbuf (negate (headerEnd `minusPtr` headerBeg))
     -- payload
-    (keyPhase,_) <- getCurrentKeyPhase conn
     coder <- getCoder conn lvl keyPhase
     let ciphertext = encrypt coder plaintext header pn
     if null ciphertext then
