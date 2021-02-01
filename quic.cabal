@@ -205,3 +205,4 @@ executable client
                       , http2
                       , quic
                       , tls
+                      , unix-time

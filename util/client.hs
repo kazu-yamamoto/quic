@@ -11,9 +11,12 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
+import Data.UnixTime
+import Foreign.C.Types
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
+import Text.Printf
 
 import Network.QUIC
 import Network.TLS.QUIC
@@ -34,6 +37,7 @@ data Options = Options {
   , opt0RTT       :: Bool
   , optRetry      :: Bool
   , optQuantum    :: Bool
+  , optThroughput :: Bool
   , optMigration  :: Maybe Migration
   , optPacketSize :: Maybe Int
   } deriving Show
@@ -52,6 +56,7 @@ defaultOptions = Options {
   , opt0RTT       = False
   , optRetry      = False
   , optQuantum    = False
+  , optThroughput = False
   , optMigration  = Nothing
   , optPacketSize = Nothing
   }
@@ -112,6 +117,9 @@ options = [
   , Option ['A'] ["address-mobility"]
     (NoArg (\o -> o { optMigration = Just MigrateTo }))
     "use a new address and a new server CID"
+  , Option ['T'] ["throughput"]
+    (NoArg (\o -> o { optThroughput = True }))
+    "try measuring throughput. path must be specified"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -134,7 +142,7 @@ data Aux = Aux {
   , auxCheckClose :: IO Bool
   }
 
-type Cli = Aux -> Connection -> IO ()
+type Cli = Aux -> Connection -> IO ConnectionStats
 
 main :: IO ()
 main = do
@@ -193,7 +201,7 @@ main = do
 runClient :: ClientConfig -> Options -> Aux -> IO ()
 runClient conf opts@Options{..} aux@Aux{..} = do
     auxDebug "------------------------"
-    (info1,info2,res,mig, client') <- runQUICClient conf $ \conn -> do
+    (info1,info2,res,mig,client') <- runQUICClient conf $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ
@@ -204,9 +212,13 @@ runClient conf opts@Options{..} aux@Aux{..} = do
               x <- migrate conn mtyp
               auxDebug $ "Migration by " ++ show mtyp
               return x
-        client aux conn
+        t1 <- getUnixTime
+        stats <- client aux conn
+        print stats
+        t2 <- getUnixTime
         i2 <- getConnectionInfo conn
         r <- getResumptionInfo conn
+        printThroughput t1 t2 stats
         return (i1, i2, r, m, client)
     if optVerNego then do
         putStrLn "Result: (V) version negotiation ... OK"
@@ -278,6 +290,10 @@ runClient conf opts@Options{..} aux@Aux{..} = do
                  putStrLn "Result: (D) stream data ... OK"
                  closeReceived <- auxCheckClose
                  when closeReceived $ putStrLn "Result: (C) close received ... OK"
+                 case alpn info1 of
+                   Nothing   -> return ()
+                   Just alpn -> when ("h3" `BS.isPrefixOf` alpn) $
+                     putStrLn "Result: (3) H3 transaction ... OK"
                  exitSuccess
 
 runClient2 :: ClientConfig -> Options -> Aux -> ResumptionInfo -> Cli
@@ -308,7 +324,7 @@ clientHQ Aux{..} conn = do
         if bs == "" then do
             auxDebug "Connection finished"
             closeStream s
-            getConnectionStats conn >>= print
+            getConnectionStats conn
           else do
             auxShow bs
             loop s
@@ -336,7 +352,17 @@ clientH3 Aux{..} conn = do
         if bs == "" then do
             auxDebug "Connection finished"
             closeStream s0
-            getConnectionStats conn >>= print
+            getConnectionStats conn
           else do
             auxShow bs
             loop s0
+
+printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
+printThroughput t1 t2 ConnectionStats{..} =
+    printf "Throughput %.2f MB/s (%d bytes in %d msecs)\n" bytesPerSeconds rxBytes millisecs
+  where
+    UnixDiffTime (CTime s) u = t2 `diffUnixTime` t1
+    millisecs :: Int
+    millisecs = fromIntegral s * 1000 + fromIntegral u `div` 1000
+    bytesPerSeconds :: Double
+    bytesPerSeconds = fromIntegral rxBytes * (1000 :: Double) / fromIntegral millisecs / 1024 / 1024
