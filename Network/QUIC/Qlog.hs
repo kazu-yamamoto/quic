@@ -103,7 +103,7 @@ frameType UnknownFrame{}        = "unknown"
 frameExtra :: Frame -> LogStr
 frameExtra (Padding n) = ",\"payload_length\":" <> sw n
 frameExtra  Ping = ""
-frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" <> ack (fromAckInfo ai)
+frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" <> ack ai
 frameExtra ResetStream{} = ""
 frameExtra (StopSending _StreamId _ApplicationError) = ""
 frameExtra (CryptoF off dat) =  ",\"offset\":\"" <> sw off <> "\",\"length\":" <> sw (BS.length dat)
@@ -150,20 +150,20 @@ applicationProtoclError :: ApplicationProtocolError -> LogStr
 applicationProtoclError (ApplicationProtocolError n) = sw n
 
 {-# INLINE ack #-}
-ack :: [PacketNumber] -> LogStr
-ack ps = "[" <> foldr1 (<>) (intersperse "," (map shw (chop ps))) <> "]"
+ack :: AckInfo -> LogStr
+ack (AckInfo lpn r rs) = "[" <> ack1 fr fpn rs <> "]"
   where
-    shw [] = ""
-    shw [n] = "[\"" <> sw n <> "\"]"
-    shw ns  = "[\"" <> sw (head ns) <> "\",\"" <> sw (last ns) <> "\"]"
+    fpn = fromIntegral lpn - r
+    fr | r == 0    = "[" <> sw lpn <> "]"
+       | otherwise = "[" <> sw fpn <> "," <> sw lpn <> "]"
 
-chop :: [PacketNumber] -> [[PacketNumber]]
-chop [] = []
-chop xxs@(x:xs) = frst : rest
+ack1 :: LogStr -> Range -> [(Gap, Range)] -> LogStr
+ack1 ret _ []   = ret
+ack1 ret fpn ((g,r):grs) = ack1 ret' f grs
   where
-    (ys,zs) = span (\(a,b) -> a - b == 1) $ zip xs xxs
-    frst = x : map fst ys
-    rest = chop $ map fst zs
+    ret' = ("[" <> sw f <> "," <> sw l <> "]," <> ret)
+    l = fpn - g - 2
+    f = l - r
 
 ----------------------------------------------------------------
 
