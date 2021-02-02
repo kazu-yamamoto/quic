@@ -32,14 +32,15 @@ qpackServer = do
     server <- encStr 92 name
     return $ BS.concat [BS.pack[0,0,status,ct],server]
 
-qpackClient :: String -> IO ByteString
-qpackClient authority = do
+qpackClient :: String -> String -> IO ByteString
+qpackClient path authority = do
     let method = 0b1100_0000 .|. 17 -- :method: GET
         scheme = 0b1100_0000 .|. 22 -- :scheme: http
-        path   = 0b1100_0000 .|. 1  -- :path: /
-    auth <- encStr 0 $ C8.pack authority
-    ua <- encStr 95 name
-    return $ BS.concat [BS.pack [0,0,method,scheme,path]
+    path' <- encStr  1 $ C8.pack path
+    auth  <- encStr  0 $ C8.pack authority
+    ua    <- encStr 95 name
+    return $ BS.concat [BS.pack [0,0,method,scheme]
+                       ,path'
                        ,auth
                        ,ua]
 

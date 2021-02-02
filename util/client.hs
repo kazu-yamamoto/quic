@@ -16,49 +16,53 @@ import Foreign.C.Types
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
+import System.IO
 import Text.Printf
 
 import Network.QUIC
+import Network.QUIC.Internal hiding (RTT0)
 import Network.TLS.QUIC
 
 import Common
 import H3
 
 data Options = Options {
-    optDebugLog   :: Bool
-  , optShow       :: Bool
-  , optQLogDir    :: Maybe FilePath
-  , optKeyLogFile :: Maybe FilePath
-  , optGroups     :: Maybe String
-  , optValidate   :: Bool
-  , optHQ         :: Bool
-  , optVerNego    :: Bool
-  , optResumption :: Bool
-  , opt0RTT       :: Bool
-  , optRetry      :: Bool
-  , optQuantum    :: Bool
-  , optThroughput :: Bool
-  , optMigration  :: Maybe Migration
-  , optPacketSize :: Maybe Int
+    optDebugLog    :: Bool
+  , optShow        :: Bool
+  , optQLogDir     :: Maybe FilePath
+  , optKeyLogFile  :: Maybe FilePath
+  , optGroups      :: Maybe String
+  , optValidate    :: Bool
+  , optHQ          :: Bool
+  , optVerNego     :: Bool
+  , optResumption  :: Bool
+  , opt0RTT        :: Bool
+  , optRetry       :: Bool
+  , optQuantum     :: Bool
+  , optThroughput  :: Bool
+  , optInteractive :: Bool
+  , optMigration   :: Maybe Migration
+  , optPacketSize  :: Maybe Int
   } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
-    optDebugLog   = False
-  , optShow       = False
-  , optQLogDir    = Nothing
-  , optKeyLogFile = Nothing
-  , optGroups     = Nothing
-  , optHQ         = False
-  , optValidate   = False
-  , optVerNego    = False
-  , optResumption = False
-  , opt0RTT       = False
-  , optRetry      = False
-  , optQuantum    = False
-  , optThroughput = False
-  , optMigration  = Nothing
-  , optPacketSize = Nothing
+    optDebugLog    = False
+  , optShow        = False
+  , optQLogDir     = Nothing
+  , optKeyLogFile  = Nothing
+  , optGroups      = Nothing
+  , optHQ          = False
+  , optValidate    = False
+  , optVerNego     = False
+  , optResumption  = False
+  , opt0RTT        = False
+  , optRetry       = False
+  , optQuantum     = False
+  , optThroughput  = False
+  , optInteractive = False
+  , optMigration   = Nothing
+  , optPacketSize  = Nothing
   }
 
 usage :: String
@@ -90,6 +94,9 @@ options = [
   , Option ['s'] ["packet-size"]
     (ReqArg (\n o -> o { optPacketSize = Just (read n) }) "<int>")
     "specify QUIC packet size (UDP payload size)"
+  , Option ['i'] ["interactive"]
+    (NoArg (\o -> o { optInteractive = True }))
+    "prefer hq (HTTP/0.9)"
   , Option ['V'] ["vernego"]
     (NoArg (\o -> o { optVerNego = True }))
     "try version negotiation"
@@ -142,7 +149,7 @@ data Aux = Aux {
   , auxCheckClose :: IO Bool
   }
 
-type Cli = Aux -> Connection -> IO ConnectionStats
+type Cli = Aux -> Connection -> IO ()
 
 main :: IO ()
 main = do
@@ -213,7 +220,11 @@ runClient conf opts@Options{..} aux@Aux{..} = do
               auxDebug $ "Migration by " ++ show mtyp
               return x
         t1 <- getUnixTime
-        stats <- client aux conn
+        if optInteractive then do
+            console aux client conn
+          else do
+            client aux conn
+        stats <- getConnectionStats conn
         print stats
         t2 <- getUnixTime
         i2 <- getConnectionInfo conn
@@ -324,14 +335,13 @@ clientHQ Aux{..} conn = do
         if bs == "" then do
             auxDebug "Connection finished"
             closeStream s
-            getConnectionStats conn
           else do
             auxShow bs
             loop s
 
 clientH3 :: Cli
 clientH3 Aux{..} conn = do
-    hdrblk <- taglen 1 <$> qpackClient auxAuthority
+    hdrblk <- taglen 1 <$> qpackClient auxPath auxAuthority
     s0 <- stream conn
     s2 <- unidirectionalStream conn
     s6 <- unidirectionalStream conn
@@ -348,13 +358,12 @@ clientH3 Aux{..} conn = do
   where
     loop s0 = do
         bs <- recvStream s0 1024
-        auxDebug $ "SID: " ++ show (streamId s0)
         if bs == "" then do
-            auxDebug "Connection finished"
+            auxDebug "Fin received"
             closeStream s0
-            getConnectionStats conn
           else do
             auxShow bs
+            auxDebug $ show (BS.length bs) ++ " bytes received"
             loop s0
 
 printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
@@ -366,3 +375,35 @@ printThroughput t1 t2 ConnectionStats{..} =
     millisecs = fromIntegral s * 1000 + fromIntegral u `div` 1000
     bytesPerSeconds :: Double
     bytesPerSeconds = fromIntegral rxBytes * (1000 :: Double) / fromIntegral millisecs / 1024 / 1024
+
+console :: Aux -> (Aux -> Connection -> IO a) -> Connection -> IO ()
+console aux client conn = do
+    waitEstablished conn
+    putStrLn "g -- get"
+    putStrLn "k -- update key"
+    putStrLn "m -- migrate"
+    putStrLn "p -- ping"
+    putStrLn "q -- quit"
+    loop
+   where
+     loop = do
+         hSetBuffering stdout NoBuffering
+         putStr "> "
+         hSetBuffering stdout LineBuffering
+         l <- getLine
+         case l of
+           "q" -> putStrLn "bye"
+           "m" -> do
+               migrate conn MigrateTo >>= print
+               loop
+           "g" -> do
+               putStrLn $ "GET " ++ auxPath aux
+               _ <- client aux conn
+               loop
+           "p" -> do
+               putStrLn "Ping"
+               sendFrames conn RTT1Level [Ping]
+               loop
+           _   -> do
+               putStrLn "No such command"
+               loop
