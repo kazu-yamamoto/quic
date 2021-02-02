@@ -296,9 +296,9 @@ instance Qlog SentPacket where
 
 instance Qlog LostPacket where
     qlog (LostPacket SentPacket{..}) =
-        "{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\"" <>
+        "{\"header\":{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\"" <>
         ",\"packet_number\":" <> sw spPacketNumber <>
-        "}"
+        "}}"
       where
         PlainPacket hdr _ = spPlainPacket
 
