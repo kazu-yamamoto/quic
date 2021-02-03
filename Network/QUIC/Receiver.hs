@@ -152,8 +152,9 @@ processReceivedPacket conn rpkt = do
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
-processFrame conn lvl Ping =
-    sendFrames conn lvl []
+processFrame conn lvl Ping = do
+    -- see ackEli above
+    when (lvl /= RTT1Level) $ sendFrames conn lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ do
         sendCCandExitConnection conn ProtocolViolation "ACK" 0x02 -- fixme
