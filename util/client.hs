@@ -7,12 +7,12 @@ module Main where
 
 import Control.Concurrent
 import Control.Monad
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Data.UnixTime
 import Foreign.C.Types
+import Network.ByteOrder
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
@@ -39,10 +39,10 @@ data Options = Options {
   , opt0RTT        :: Bool
   , optRetry       :: Bool
   , optQuantum     :: Bool
-  , optThroughput  :: Bool
   , optInteractive :: Bool
   , optMigration   :: Maybe Migration
   , optPacketSize  :: Maybe Int
+  , optPerformance :: Int
   } deriving Show
 
 defaultOptions :: Options
@@ -59,10 +59,10 @@ defaultOptions = Options {
   , opt0RTT        = False
   , optRetry       = False
   , optQuantum     = False
-  , optThroughput  = False
   , optInteractive = False
   , optMigration   = Nothing
   , optPacketSize  = Nothing
+  , optPerformance = 0
   }
 
 usage :: String
@@ -124,9 +124,9 @@ options = [
   , Option ['A'] ["address-mobility"]
     (NoArg (\o -> o { optMigration = Just MigrateTo }))
     "use a new address and a new server CID"
-  , Option ['T'] ["throughput"]
-    (NoArg (\o -> o { optThroughput = True }))
-    "try measuring throughput. path must be specified"
+  , Option ['t'] ["performance"]
+    (ReqArg (\n o -> o { optPerformance = read n }) "<int>")
+    "measure performance"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -162,28 +162,29 @@ main = do
     let path | ipslen == 3 = ips !! 2
              | otherwise   = "/"
         addr:port:_ = ips
+        ccalpn ver
+          | optPerformance /= 0 = return $ Just ["perf"]
+          | otherwise = let (h3X, hqX) = makeProtos ver
+                            protos | optHQ     = [hqX,h3X]
+                                   | otherwise = [h3X,hqX]
+                        in return $ Just protos
+        confver vers
+          | optVerNego = GreasingVersion : vers
+          | otherwise  = vers
+        confparams params
+          | optQuantum = let bs = BS.replicate 1200 0
+                         in params { greaseParameter = Just bs }
+          | otherwise  = params
         conf = defaultClientConfig {
             ccServerName = addr
           , ccPortName   = port
-          , ccALPN       = \ver -> let (h3X, hqX) = makeProtos ver
-                                       protos
-                                         | optHQ     = [hqX,h3X]
-                                         | otherwise = [h3X,hqX]
-                                   in return $ Just protos
+          , ccALPN       = ccalpn
           , ccValidate   = optValidate
           , ccPacketSize = optPacketSize
           , ccDebugLog   = optDebugLog
           , ccConfig     = defaultConfig {
-                confVersions   = if optVerNego then
-                                   GreasingVersion : confVersions defaultConfig
-                                 else
-                                   confVersions defaultConfig
-              , confParameters = if optQuantum then
-                                   defaultParameters {
-                                       greaseParameter = Just (BS.pack (replicate 1200 0))
-                                     }
-                                 else
-                                   defaultParameters
+                confVersions   = confver $ confVersions defaultConfig
+              , confParameters = confparams $ confParameters defaultConfig
               , confKeyLog     = getLogger optKeyLogFile
               , confGroups     = getGroups optGroups
               , confQLog       = optQLogDir
@@ -212,7 +213,8 @@ runClient conf opts@Options{..} aux@Aux{..} = do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ
-              _                                       -> clientH3
+                         | "h3" `BS.isPrefixOf` proto -> clientH3
+              _                                       -> clientPF optPerformance
         m <- case optMigration of
           Nothing   -> return False
           Just mtyp -> do
@@ -365,6 +367,23 @@ clientH3 Aux{..} conn = do
             auxShow bs
             auxDebug $ show (BS.length bs) ++ " bytes received"
             loop s0
+
+clientPF :: Int -> Cli
+clientPF n Aux{..} conn = do
+    cmd <- withWriteBuffer 8 $ \wbuf -> write64 wbuf $ fromIntegral n
+    s <- stream conn
+    sendStream s cmd
+    shutdownStream s
+    loop s
+  where
+    loop s = do
+        bs <- recvStream s 1024
+        if bs == "" then do
+            auxDebug "Connection finished"
+            closeStream s
+          else do
+            auxShow bs
+            loop s
 
 printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
 printThroughput t1 t2 ConnectionStats{..} =

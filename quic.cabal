@@ -203,6 +203,7 @@ executable client
                       , bytestring
                       , filepath
                       , http2
+                      , network-byte-order
                       , quic
                       , tls
                       , unix-time
