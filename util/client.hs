@@ -387,13 +387,13 @@ clientPF n Aux{..} conn = do
 
 printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
 printThroughput t1 t2 ConnectionStats{..} =
-    printf "Throughput %.2f MB/s (%d bytes in %d msecs)\n" bytesPerSeconds rxBytes millisecs
+    printf "Throughput %.2f Mbps (%d bytes in %d msecs)\n" bytesPerSeconds rxBytes millisecs
   where
     UnixDiffTime (CTime s) u = t2 `diffUnixTime` t1
     millisecs :: Int
     millisecs = fromIntegral s * 1000 + fromIntegral u `div` 1000
     bytesPerSeconds :: Double
-    bytesPerSeconds = fromIntegral rxBytes * (1000 :: Double) / fromIntegral millisecs / 1024 / 1024
+    bytesPerSeconds = fromIntegral rxBytes * (1000 :: Double) * 8 / fromIntegral millisecs / 1024 / 1024
 
 console :: Aux -> (Aux -> Connection -> IO a) -> Connection -> IO ()
 console aux client conn = do
