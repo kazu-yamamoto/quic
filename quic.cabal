@@ -183,6 +183,7 @@ executable server
                       , bytestring
                       , filepath
                       , http2
+                      , network-byte-order
                       , quic
                       , tls
                       , tls-session-manager

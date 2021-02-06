@@ -9,10 +9,10 @@ module Main where
 import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Builder
 import qualified Data.List as L
+import Network.ByteOrder
 import Network.TLS (credentialLoadX509, Credentials(..))
 import qualified Network.TLS.SessionManager as SM
 import System.Console.GetOpt
@@ -87,6 +87,8 @@ serverOpts argv =
       (_,_,errs) -> showUsageAndExit $ concat errs
 
 chooseALPN :: Version -> [ByteString] -> IO ByteString
+chooseALPN _ protos
+  | "perf" `elem` protos = return "perf"
 chooseALPN ver protos = return $ case mh3idx of
     Nothing    -> case mhqidx of
       Nothing    -> ""
@@ -127,7 +129,8 @@ main = do
     runQUICServer conf $ \conn -> do
         info <- getConnectionInfo conn
         let server = case alpn info of
-              Just proto | "hq" `BS.isPrefixOf` proto -> serverHQ
+              Just proto | "perf" == proto            -> serverPF
+                         | "hq" `BS.isPrefixOf` proto -> serverHQ
               _                                       -> serverH3
         server conn
 
@@ -153,6 +156,24 @@ consume conn s = loop
           else do
             connDebugLog conn $ byteString bs
             loop
+
+serverPF :: Connection -> IO ()
+serverPF conn = connDebugLog conn "Connection terminated" `onE` do
+    s <- acceptStream conn
+    let sid = streamId s
+    when (isClientInitiatedBidirectional sid) $ do
+        bs <- recvStream s 8
+        n <- withReadBuffer bs read64
+        loop s n
+        closeStream s
+  where
+    bs1024 = BS.replicate 1024 65
+    loop _ 0 = return ()
+    loop s n
+      | n < 1024  = sendStream s $ BS.replicate (fromIntegral n) 65
+      | otherwise = do
+            sendStream s bs1024
+            loop s (n - 1024)
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do

@@ -42,7 +42,7 @@ data Options = Options {
   , optInteractive :: Bool
   , optMigration   :: Maybe Migration
   , optPacketSize  :: Maybe Int
-  , optPerformance :: Int
+  , optPerformance :: Word64
   } deriving Show
 
 defaultOptions :: Options
@@ -92,7 +92,7 @@ options = [
     (NoArg (\o -> o { optHQ = True }))
     "prefer hq (HTTP/0.9)"
   , Option ['s'] ["packet-size"]
-    (ReqArg (\n o -> o { optPacketSize = Just (read n) }) "<int>")
+    (ReqArg (\n o -> o { optPacketSize = Just (read n) }) "<size>")
     "specify QUIC packet size (UDP payload size)"
   , Option ['i'] ["interactive"]
     (NoArg (\o -> o { optInteractive = True }))
@@ -125,7 +125,7 @@ options = [
     (NoArg (\o -> o { optMigration = Just MigrateTo }))
     "use a new address and a new server CID"
   , Option ['t'] ["performance"]
-    (ReqArg (\n o -> o { optPerformance = read n }) "<int>")
+    (ReqArg (\n o -> o { optPerformance = read n }) "<size>")
     "measure performance"
   ]
 
@@ -368,9 +368,9 @@ clientH3 Aux{..} conn = do
             auxDebug $ show (BS.length bs) ++ " bytes received"
             loop s0
 
-clientPF :: Int -> Cli
+clientPF :: Word64 -> Cli
 clientPF n Aux{..} conn = do
-    cmd <- withWriteBuffer 8 $ \wbuf -> write64 wbuf $ fromIntegral n
+    cmd <- withWriteBuffer 8 $ \wbuf -> write64 wbuf n
     s <- stream conn
     sendStream s cmd
     shutdownStream s
