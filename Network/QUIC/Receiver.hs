@@ -328,7 +328,7 @@ processFrame conn _ (ConnectionClose err _ftyp reason)
         setCloseReceived conn
         onCloseReceived $ connHooks conn
         sent <- isCloseSent conn
-        unless sent $ do
+        when (not sent && isServer conn) $ do
             sendCCFrame conn $ ConnectionClose NoError 0 ""
             -- if sent, client/server already exits.
             exitConnection conn ConnectionIsClosed
