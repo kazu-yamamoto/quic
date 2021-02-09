@@ -106,64 +106,61 @@ onE :: IO b -> IO a -> IO a
 onE h b = E.onException b h
 
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
-testHandshake cc sc mode = void $ concurrently client server
+testHandshake cc sc mode = void $ concurrently server client
   where
-    client = runQUICClient cc $ \conn -> do
-        isConnectionOpen conn `shouldReturn` True
-        handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-        waitEstablished conn
-    server = runQUICServer sc serv
-      where
-        serv conn = stopQUICServer conn `onE` do
+    client = do
+        threadDelay 10000
+        runQUICClient cc $ \conn -> do
             isConnectionOpen conn `shouldReturn` True
-            handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
             waitEstablished conn
-            void $ acceptStream conn
+            handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+    server = runQUICServer sc $ \conn -> do
+        isConnectionOpen conn `shouldReturn` True
+        waitEstablished conn
+        handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+        stopQUICServer conn
+
+query :: BS.ByteString -> Connection -> IO ()
+query content conn = do
+    isConnectionOpen conn `shouldReturn` True
+    waitEstablished conn
+    s <- stream conn
+    sendStream s content
+    shutdownStream s
 
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
-testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently client server
+testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently server client
   where
-    runClient cc mode = runQUICClient cc $ \conn -> do
-        isConnectionOpen conn `shouldReturn` True
-        waitEstablished conn
-        -- SH/EE is necessary to check 0RTT
+    runClient cc mode action = runQUICClient cc $ \conn -> do
+        void $ action conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+        threadDelay 10000
         getResumptionInfo conn
     client = do
-        res <- runClient cc1 mode1
+        threadDelay 10000
+        res <- runClient cc1 mode1 $ query "first"
+        threadDelay 10000
         let cc2 = cc1 { ccResumption = res
                       , ccUse0RTT    = use0RTT
                       }
-        void $ runClient cc2 mode2
-    server = do
-        ref <- newIORef (0 :: Int)
-        runQUICServer sc $ serv ref
+        void $ runClient cc2 mode2 $ query "second"
+    server = runQUICServer sc serv
       where
-        hndl ref conn = do
-            n <- readIORef ref
-            if n >= 1 then stopQUICServer conn else writeIORef ref (n + 1)
-        serv ref conn = hndl ref conn `onE` do
-            isConnectionOpen conn `shouldReturn` True
-            waitEstablished conn
-            void $ acceptStream conn
+        serv conn = do
+            s <- acceptStream conn
+            bs <- recvStream s 1024
+            when (bs == "second") $ stopQUICServer conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
-testHandshake3 cc1 cc2 sc selector = void $ do
+testHandshake3 cc1 cc2 sc selector = do
     mvar <- newEmptyMVar
-    concurrently (clients mvar) (server mvar)
+    void $ concurrently (clients mvar) (server mvar)
   where
     clients mvar = do
-        let query content conn = do
-                isConnectionOpen conn `shouldReturn` True
-                waitEstablished conn
-                s <- stream conn
-                sendStream s content
-                shutdownStream s
+        threadDelay 10000
         runQUICClient cc1 (query "first") `shouldThrow` selector
         runQUICClient cc2 (\conn -> query "second" conn >> takeMVar mvar) `shouldReturn` ()
     server mvar = runQUICServer sc $ \conn -> do
-        isConnectionOpen conn `shouldReturn` True
-        waitEstablished conn
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
         putMVar mvar ()
