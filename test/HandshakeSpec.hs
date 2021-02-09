@@ -127,6 +127,7 @@ query content conn = do
     s <- stream conn
     sendStream s content
     shutdownStream s
+    void $ recvStream s 1024
 
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
 testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently server client
@@ -134,7 +135,6 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently server client
     runClient cc mode action = runQUICClient cc $ \conn -> do
         void $ action conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-        threadDelay 10000
         getResumptionInfo conn
     client = do
         threadDelay 10000
@@ -149,21 +149,20 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently server client
         serv conn = do
             s <- acceptStream conn
             bs <- recvStream s 1024
+            sendStream s "hello"
             when (bs == "second") $ stopQUICServer conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
-testHandshake3 cc1 cc2 sc selector = do
-    mvar <- newEmptyMVar
-    void $ concurrently (clients mvar) (server mvar)
+testHandshake3 cc1 cc2 sc selector = void $ concurrently server client
   where
-    clients mvar = do
+    client = do
         threadDelay 10000
-        runQUICClient cc1 (query "first") `shouldThrow` selector
-        runQUICClient cc2 (\conn -> query "second" conn >> takeMVar mvar) `shouldReturn` ()
-    server mvar = runQUICServer sc $ \conn -> do
+        runQUICClient cc1 (query "first")  `shouldThrow` selector
+        runQUICClient cc2 (query "second") `shouldReturn` ()
+    server = runQUICServer sc $ \conn -> do
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
-        putMVar mvar ()
+        sendStream s "hello"
         stopQUICServer conn
 
 newSessionManager :: IO SessionManager
