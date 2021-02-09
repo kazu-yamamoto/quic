@@ -22,8 +22,8 @@ import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
-import Data.Map (Map)
-import qualified Data.Map as M
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import Data.OrdPSQ (OrdPSQ)
 import qualified Data.OrdPSQ as PSQ
 import qualified GHC.IO.Exception as E
