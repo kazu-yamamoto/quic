@@ -135,14 +135,14 @@ tryReassemble Stream{..} x@(RxStreamData dat off len True) = do
       else case off0 `compare` off of
         LT -> do
             writeIORef streamStateRx si1
+            len0 <- length <$> readIORef streamReass
             atomicModifyIORef'' streamReass (push x)
-            return ([], False, False)
+            len1 <- length <$> readIORef streamReass
+            return ([], False, len0 == len1)
         EQ -> do
             let off1 = off0 + len
-            len0 <- length <$> readIORef streamReass
             writeIORef streamStateRx si1 { streamOffset = off1 }
-            len1 <- length <$> readIORef streamReass
-            return ([dat], True, len0 == len1) -- would ignore succeeding fragments
+            return ([dat], True, False)
         GT ->
             return ([], False, True)  -- ignoring
 
