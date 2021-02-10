@@ -40,8 +40,8 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
       , clientWantSessionResume = resumptionSession ccResumption
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
-    convTP = onTransportParametersCreated $ confHooks $ ccConfig
-    convExt = onTLSExtensionCreated $ confHooks $ ccConfig
+    convTP = onTransportParametersCreated $ confHooks ccConfig
+    convExt = onTLSExtensionCreated $ confHooks ccConfig
     qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters ccConfig
     eQparams = encodeParameters qparams
     tpId | ver == Version1 = extensionID_QuicTransportParameters
@@ -80,8 +80,8 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
       , serverDebug     = debug
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
-    convTP = onTransportParametersCreated $ confHooks $ scConfig
-    convExt = onTLSExtensionCreated $ confHooks $ scConfig
+    convTP = onTransportParametersCreated $ confHooks scConfig
+    convExt = onTLSExtensionCreated $ confHooks scConfig
     qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters scConfig
     eQparams = encodeParameters qparams
     tpId | ver == Version1 = extensionID_QuicTransportParameters

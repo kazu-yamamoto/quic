@@ -161,7 +161,7 @@ ack1 :: LogStr -> Range -> [(Gap, Range)] -> LogStr
 ack1 ret _ []   = ret
 ack1 ret fpn ((g,r):grs) = ack1 ret' f grs
   where
-    ret' = ("[" <> sw f <> "," <> sw l <> "]," <> ret)
+    ret' = "[" <> sw f <> "," <> sw l <> "]," <> ret
     l = fpn - g - 2
     f = l - r
 

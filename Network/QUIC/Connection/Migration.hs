@@ -102,7 +102,7 @@ choosePeerCID conn@Connection{..} = do
     return r
 
 shouldUpdatePeerCID :: Connection -> IO Bool
-shouldUpdatePeerCID Connection{..} = not . triggeredByMe <$> atomically (readTVar peerCIDDB)
+shouldUpdatePeerCID Connection{..} = not . triggeredByMe <$> readTVarIO peerCIDDB
 
 choosePeerCIDForPrivacy :: Connection -> IO ()
 choosePeerCIDForPrivacy conn = do
