@@ -7,7 +7,7 @@ module Network.QUIC.Sender (
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -23,7 +23,7 @@ import Network.QUIC.Types
 
 cryptoFrame :: Connection -> CryptoData -> EncryptionLevel -> IO Frame
 cryptoFrame conn crypto lvl = do
-    let len = B.length crypto
+    let len = BS.length crypto
     strm <- getCryptoStream conn lvl
     off <- getTxStreamOffset strm len
     return $ CryptoF off crypto
@@ -283,8 +283,8 @@ sendCryptoFragments conn send lcs = do
     loop _ build0 [] = do
         let spkts0 = build0 []
         unless (null spkts0) $ sendPacket conn send spkts0
-    loop len0 build0 ((lvl, bs) : xs) | B.length bs > len0 = do
-        let (target, rest) = B.splitAt len0 bs
+    loop len0 build0 ((lvl, bs) : xs) | BS.length bs > len0 = do
+        let (target, rest) = BS.splitAt len0 bs
         frame1 <- cryptoFrame conn target lvl
         spkts1 <- construct conn lvl [frame1]
         sendPacket conn send $ build0 spkts1
@@ -293,7 +293,7 @@ sendCryptoFragments conn send lcs = do
         frame1 <- cryptoFrame conn bs lvl
         spkts1 <- construct conn lvl [frame1]
         sendPacket conn send $ build0 spkts1
-    loop len0 build0 ((lvl, bs) : xs) | len0 - B.length bs < thresholdC = do
+    loop len0 build0 ((lvl, bs) : xs) | len0 - BS.length bs < thresholdC = do
         frame1 <- cryptoFrame conn bs lvl
         spkts1 <- construct conn lvl [frame1]
         sendPacket conn send $ build0 spkts1
@@ -301,7 +301,7 @@ sendCryptoFragments conn send lcs = do
     loop len0 build0 ((lvl, bs) : xs) = do
         frame1 <- cryptoFrame conn bs lvl
         spkts1 <- construct conn lvl [frame1]
-        let len1 = len0 - B.length bs
+        let len1 = len0 - BS.length bs
             build1 = build0 . (spkts1 ++)
         loop len1 build1 xs
 
@@ -399,11 +399,11 @@ splitChunks bs0 = loop bs0 0 id
     loop bbs@(b:bs) siz0 build
       | siz <= threshold  = let build' = build . (b :) in loop bs siz build'
       | siz <= limitation = let curr = build [b] in (curr, bs)
-      | len >  limitation = let (u,b') = B.splitAt (limitation - siz0) b
+      | len >  limitation = let (u,b') = BS.splitAt (limitation - siz0) b
                                 curr = build [u]
                                 bs' = b':bs
                             in (curr,bs')
       | otherwise         = let curr = build [] in (curr, bbs)
       where
-        len = B.length b
+        len = BS.length b
         siz = siz0 + len

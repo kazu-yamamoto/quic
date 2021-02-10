@@ -7,7 +7,7 @@ module Network.QUIC.Packet.Frame (
   , countZero -- testing
   ) where
 
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Foreign.Ptr (Ptr, plusPtr, minusPtr, alignPtr, castPtr)
 import Foreign.Storable (peek, alignment)
@@ -59,11 +59,11 @@ encodeFrame wbuf (StopSending sid (ApplicationProtocolError err)) = do
 encodeFrame wbuf (CryptoF off cdata) = do
     write8 wbuf 0x06
     encodeInt' wbuf $ fromIntegral off
-    encodeInt' wbuf $ fromIntegral $ B.length cdata
+    encodeInt' wbuf $ fromIntegral $ BS.length cdata
     copyByteString wbuf cdata
 encodeFrame wbuf (NewToken token) = do
     write8 wbuf 0x07
-    encodeInt' wbuf $ fromIntegral $ B.length token
+    encodeInt' wbuf $ fromIntegral $ BS.length token
     copyByteString wbuf token
 encodeFrame wbuf (StreamF sid off dats fin) = do
     let flag0 = 0x08 .|. 0x02 -- len

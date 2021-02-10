@@ -4,7 +4,7 @@ module Main where
 
 import Control.Concurrent
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import Network.TLS
 import System.Environment
 
@@ -46,5 +46,5 @@ client mvar = do
     (_cipher, handSecret, resuming) <- handleServerHello13 cparams cctx ch shRaw
     putStr "    Cipher = "
     print _cipher
-    _ <- makeClientFinished13 cparams cctx (B.concat sRaws) handSecret resuming
+    _ <- makeClientFinished13 cparams cctx (BS.concat sRaws) handSecret resuming
     return ()

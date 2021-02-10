@@ -4,7 +4,7 @@ module Network.QUIC.Utils where
 
 import Control.Monad (replicateM)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import Data.ByteString.Base16
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
@@ -37,7 +37,7 @@ getRandomBytes n = Short.pack <$> replicateM n getRandomOneByte
 
 {-# INLINE totalLen #-}
 totalLen :: [ByteString] -> Int
-totalLen = foldl' (+) 0 . map B.length
+totalLen = foldl' (+) 0 . map BS.length
 
 sum' :: (Functor f, Foldable f) => f Int -> Int
 sum' = foldl' (+) 0

@@ -2,7 +2,7 @@
 
 module IOSpec where
 
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
@@ -75,14 +75,14 @@ testSendRecv cc sc times = do
   where
     client mvar = runQUICClient cc $ \conn -> do
         strm <- stream conn
-        let bs = B.replicate 10000 0
+        let bs = BS.replicate 10000 0
         replicateM_ times $ sendStream strm bs
         shutdownStream strm
         takeMVar mvar
     server mvar = runQUICServer sc $ \conn -> do
         strm <- acceptStream conn
         bs <- recvStream strm 1024
-        let len = B.length bs
+        let len = BS.length bs
         n <- loop strm bs len
         n `shouldBe` (10000 * times)
         putMVar mvar ()
@@ -91,6 +91,6 @@ testSendRecv cc sc times = do
         loop _    "" n = return n
         loop strm _  n = do
             bs <- recvStream strm 1024
-            let len = B.length bs
+            let len = BS.length bs
                 n' = n + len
             loop strm bs n'

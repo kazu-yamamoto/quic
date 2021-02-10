@@ -3,7 +3,7 @@
 
 module TLSSpec where
 
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -51,7 +51,7 @@ spec = do
                 chp = headerProtectionKey defaultCipher (Secret cis)
             ----------------------------------------------------------------
             -- payload encryption
-            let clientCRYPTOframe = dec16 $ B.concat [
+            let clientCRYPTOframe = dec16 $ BS.concat [
                     "060040c4010000c003036660261ff947cea49cce6cfad687f457cf1b14531ba1"
                   , "4131a0e8f309a1d0b9c4000006130113031302010000910000000b0009000006"
                   , "736572766572ff01000100000a00140012001d00170018001901000101010201"
@@ -76,18 +76,18 @@ spec = do
             let padLen = bodyLen
                        - 4  -- packet number length
                        - 16 -- GCM encrypt expansion
-                       - B.length clientCRYPTOframe
-                clientCRYPTOframePadded = clientCRYPTOframe `B.append` B.pack (replicate padLen 0)
+                       - BS.length clientCRYPTOframe
+                clientCRYPTOframePadded = clientCRYPTOframe `BS.append` BS.pack (replicate padLen 0)
             let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ $ dec16 "00000002"
             let add = AddDat clientPacketHeader
-            let ciphertext = B.concat $ encryptPayload' defaultCipher ckey nonce plaintext add
+            let ciphertext = BS.concat $ encryptPayload' defaultCipher ckey nonce plaintext add
             let Just plaintext' = decryptPayload' defaultCipher ckey nonce ciphertext add
             plaintext' `shouldBe` plaintext
 
             ----------------------------------------------------------------
             -- header protection
-            let sample = Sample (B.take 16 ciphertext)
+            let sample = Sample (BS.take 16 ciphertext)
             sample `shouldBe` Sample (dec16 "fb66bc5f93032b7ddd89fe0ff15d9c4f")
             let Mask mask = protectionMask defaultCipher chp sample
-            B.take 5 mask `shouldBe` dec16 "d64a952459"
+            BS.take 5 mask `shouldBe` dec16 "d64a952459"

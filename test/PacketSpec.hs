@@ -3,7 +3,7 @@
 module PacketSpec where
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import Data.IORef
 import qualified Network.Socket as NS
 import Test.Hspec
@@ -39,14 +39,14 @@ spec = do
             (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt lvl
             let ppkt = PlainPacket header plain
-            clientInitialPacketBinary' <- B.concat . fst <$> encodePlainPacket clientConn ppkt Nothing
+            clientInitialPacketBinary' <- BS.concat . fst <$> encodePlainPacket clientConn ppkt Nothing
             (PacketIC (CryptPacket header' crypt') lvl', _) <- decodePacket clientInitialPacketBinary'
             Just plain' <- decryptCrypt serverConn crypt' lvl'
             header' `shouldBe` header
             plainFrames plain' `shouldBe` plainFrames plain
 
 clientInitialPacketBinary :: ByteString
-clientInitialPacketBinary = dec16 $ B.concat [
+clientInitialPacketBinary = dec16 $ BS.concat [
     "c5ff00001d088394c8f03e5157080000449e4a95245bfb66bc5f93032b7ddd89"
   , "fe0ff15d9c4f7050fccdb71c1cd80512d4431643a53aafa1b0b518b44968b18b"
   , "8d3e7a4d04c30b3ed9410325b2abb2dafb1c12f8b70479eb8df98abcaf95dd8f"

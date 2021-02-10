@@ -7,7 +7,7 @@ module Network.QUIC.Packet.Decode (
   , decodeStatelessResetToken
   ) where
 
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 
 import Network.QUIC.Exception
@@ -44,7 +44,7 @@ decodePacket bs = handleLogR logAction $ withReadBuffer bs $ \rbuf -> do
     let short = isShort proFlags
     pkt <- decode rbuf proFlags short
     siz <- savingSize rbuf
-    let rest = B.drop siz bs
+    let rest = BS.drop siz bs
     return (pkt, rest)
   where
     logAction msg = do
@@ -89,7 +89,7 @@ makeLongCrypt bs rbuf = do
     len <- fromIntegral <$> decodeInt' rbuf
     here <- savingSize rbuf
     ff rbuf len
-    let pkt = B.take (here + len) bs
+    let pkt = BS.take (here + len) bs
     return $ Crypt here pkt 0
 
 ----------------------------------------------------------------
@@ -131,5 +131,5 @@ decodeStatelessResetToken bs
   | len < 21  = Nothing
   | otherwise = Just $ StatelessResetToken $ Short.toShort token
   where
-    len = B.length bs
-    (_,token) = B.splitAt (len - 16) bs
+    len = BS.length bs
+    (_,token) = BS.splitAt (len - 16) bs

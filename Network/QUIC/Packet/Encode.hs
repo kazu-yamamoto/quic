@@ -5,7 +5,7 @@ module Network.QUIC.Packet.Encode (
   , encodePlainPacket
   ) where
 
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr
 
@@ -72,7 +72,7 @@ encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain f
     headerBeg <- currentOffset wbuf
     (epn, epnLen) <- encodeLongHeaderPP conn wbuf InitialPacketType ver dCID sCID flags pn
     -- token
-    encodeInt' wbuf $ fromIntegral $ B.length token
+    encodeInt' wbuf $ fromIntegral $ BS.length token
     copyByteString wbuf token
     -- length .. payload
     protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen InitialLevel False
@@ -147,18 +147,18 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     here <- currentOffset wbuf
     let taglen = tagLength cipher
         (plaintext,padLen) = case mlen of
-                      Nothing -> let ptxt = B.take siz plaintext0
+                      Nothing -> let ptxt = BS.take siz plaintext0
                                  in (ptxt, 0)
                       Just expectedSize ->
                           let headerSize = (here `minusPtr` headerBeg)
                                          + (if lvl /= RTT1Level then 2 else 0)
                                          + epnLen
                               plainSize = expectedSize - headerSize - taglen
-                              ptxt = B.take plainSize plaintext0
+                              ptxt = BS.take plainSize plaintext0
                               pdlen = plainSize - siz
                           in (ptxt,pdlen)
     when (lvl /= RTT1Level) $ do
-        let len = epnLen + B.length plaintext + taglen
+        let len = epnLen + BS.length plaintext + taglen
         -- length: assuming 2byte length
         encodeInt'2 wbuf $ fromIntegral len
     pnBeg <- currentOffset wbuf
@@ -191,7 +191,7 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
 protectHeader :: Buffer -> Buffer -> Int -> Cipher -> (Sample -> Mask) -> [CipherText] -> IO ()
 protectHeader headerBeg pnBeg epnLen cipher makeMask [ctxt0,tag0] = do
     flags <- Flags <$> peek8 headerBeg 0
-    let Flags proFlags = protectFlags flags (mask `B.index` 0)
+    let Flags proFlags = protectFlags flags (mask `BS.index` 0)
     poke8 proFlags headerBeg 0
     shuffle 0
     when (epnLen >= 2) $ shuffle 1
@@ -199,14 +199,14 @@ protectHeader headerBeg pnBeg epnLen cipher makeMask [ctxt0,tag0] = do
     when (epnLen == 4) $ shuffle 3
   where
     slen = sampleLength cipher
-    ctxt1 | B.length ctxt0 >= slen + 4 = ctxt0 -- fast path
-          | otherwise                  = ctxt0 `B.append` tag0
-    ctxt2 = B.drop (4 - epnLen) ctxt1
-    sample = Sample $ B.take slen ctxt2
+    ctxt1 | BS.length ctxt0 >= slen + 4 = ctxt0 -- fast path
+          | otherwise                   = ctxt0 `BS.append` tag0
+    ctxt2 = BS.drop (4 - epnLen) ctxt1
+    sample = Sample $ BS.take slen ctxt2
     -- throw an exception if length sample < slen
     Mask mask = makeMask sample
     shuffle n = do
         p0 <- peek8 pnBeg n
-        let pp0 = p0 `xor` (mask `B.index` (n + 1))
+        let pp0 = p0 `xor` (mask `BS.index` (n + 1))
         poke8 pp0 pnBeg n
 protectHeader _ _ _ _ _ _ = return ()

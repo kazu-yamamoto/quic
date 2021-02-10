@@ -5,8 +5,8 @@ module Network.QUIC.Packet.Decrypt (
     decryptCrypt
   ) where
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Internal as B
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Internal as BS
 import Foreign.Ptr
 import Network.ByteOrder
 
@@ -25,25 +25,25 @@ decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
 decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
     cipher <- getCipher conn lvl
     protector <- getProtector conn lvl
-    let proFlags = Flags (cryptPacket `B.index` 0)
+    let proFlags = Flags (cryptPacket `BS.index` 0)
         sampleOffset = cryptPktNumOffset + 4
         sampleLen = sampleLength cipher
-        sample = Sample $ B.take sampleLen $ B.drop sampleOffset cryptPacket
+        sample = Sample $ BS.take sampleLen $ BS.drop sampleOffset cryptPacket
         makeMask = unprotect protector
         Mask mask = makeMask sample
-        Just (mask1,mask2) = B.uncons mask
+        Just (mask1,mask2) = BS.uncons mask
         rawFlags@(Flags flags) = unprotectFlags proFlags mask1
         epnLen = decodePktNumLength rawFlags
-        epn = B.take epnLen $ B.drop cryptPktNumOffset cryptPacket
+        epn = BS.take epnLen $ BS.drop cryptPktNumOffset cryptPacket
         bytePN = bsXOR mask2 epn
         headerSize = cryptPktNumOffset + epnLen
-        (proHeader, ciphertext) = B.splitAt headerSize cryptPacket
+        (proHeader, ciphertext) = BS.splitAt headerSize cryptPacket
     peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
     let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
-    header <- B.create headerSize $ \p -> do
+    header <- BS.create headerSize $ \p -> do
         void $ copy p proHeader
         poke8 flags p 0
-        void $ copy (p `plusPtr` cryptPktNumOffset) $ B.take epnLen bytePN
+        void $ copy (p `plusPtr` cryptPktNumOffset) $ BS.take epnLen bytePN
     let keyPhase | lvl == RTT1Level = flags `testBit` 2
                  | otherwise        = False
     coder <- getCoder conn lvl keyPhase
@@ -70,4 +70,4 @@ decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
         return Nothing
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
-toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ B.unpack bs
+toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ BS.unpack bs

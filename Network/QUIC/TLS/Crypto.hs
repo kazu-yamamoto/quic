@@ -50,9 +50,9 @@ import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (throwCryptoError, maybeCryptoError)
 import qualified Crypto.MAC.Poly1305 as Poly1305
 import qualified Data.ByteArray as Byte (convert, xor)
-import qualified Data.ByteString as B
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
-import qualified Data.ByteString.Internal as B
+import qualified Data.ByteString.Internal as BS
 import qualified Data.ByteString.Short as Short
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, plusPtr)
@@ -214,7 +214,7 @@ aes128gcmDecrypt (Key key) =
     let aes = throwCryptoError (cipherInit key) :: AES128
     in \(Nonce nonce) ciphertag (AddDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-          (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+          (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
           authtag = AuthTag $ Byte.convert tag
        in aeadSimpleDecrypt aead ad ciphertext authtag
 
@@ -232,7 +232,7 @@ aes256gcmDecrypt (Key key) =
     let aes = throwCryptoError (cipherInit key) :: AES256
     in \(Nonce nonce) ciphertag (AddDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-          (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+          (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
           authtag = AuthTag $ Byte.convert tag
       in aeadSimpleDecrypt aead ad ciphertext authtag
 
@@ -249,7 +249,7 @@ chacha20poly1305Decrypt :: Key -> Nonce -> CipherText -> AddDat -> Maybe PlainTe
 chacha20poly1305Decrypt (Key key) (Nonce nonce) ciphertag (AddDat ad) = do
     st <- maybeCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
     let st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st)
-        (ciphertext, tag) = B.splitAt (B.length ciphertag - 16) ciphertag
+        (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
         (plaintext, st3) = ChaChaPoly.decrypt ciphertext st2
         Poly1305.Auth tag' = ChaChaPoly.finalize st3
     if tag == Byte.convert tag' then Just plaintext else Nothing
@@ -322,7 +322,7 @@ chachaEncrypt :: Key -> Sample -> Mask
 chachaEncrypt (Key key) (Sample sample0) = Mask mask
   where
     -- fixme: cryptonite hard-codes the counter, sigh
-    (_counter,nonce) = B.splitAt 4 sample0
+    (_counter,nonce) = BS.splitAt 4 sample0
     st = ChaCha.initialize 20 key nonce
     (mask,_) = ChaCha.combine st "\x0\x0\x0\x0\x0"
 
@@ -355,13 +355,13 @@ bsXOR = Byte.xor
 bsXORpad :: ByteString -> ByteString -> ByteString
 bsXORpad (PS fp0 off0 len0) (PS fp1 off1 len1)
   | len0 < len1 = error "bsXORpad"
-  | otherwise = B.unsafeCreate len0 $ \dst ->
+  | otherwise = BS.unsafeCreate len0 $ \dst ->
   withForeignPtr fp0 $ \p0 ->
     withForeignPtr fp1 $ \p1 -> do
         let src0 = p0 `plusPtr` off0
         let src1 = p1 `plusPtr` off1
         let diff = len0 - len1
-        B.memcpy dst src0 diff
+        BS.memcpy dst src0 diff
         loop (dst `plusPtr` diff) (src0 `plusPtr` diff) src1 len1
   where
     loop :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Int -> IO ()
@@ -374,23 +374,23 @@ bsXORpad (PS fp0 off0 len0) (PS fp1 off1 len1)
 
 {-
 bsXORpad' :: ByteString -> ByteString -> ByteString
-bsXORpad' iv pn = B.pack $ zipWith xor ivl pnl
+bsXORpad' iv pn = BS.pack $ zipWith xor ivl pnl
   where
-    ivl = B.unpack iv
-    diff = B.length iv - B.length pn
-    pnl = replicate diff 0 ++ B.unpack pn
+    ivl = BS.unpack iv
+    diff = BS.length iv - BS.length pn
+    pnl = replicate diff 0 ++ BS.unpack pn
 -}
 
 ----------------------------------------------------------------
 
 calculateIntegrityTag :: Version -> CID -> ByteString -> ByteString
 calculateIntegrityTag ver oCID pseudo0 =
-    B.concat $ aes128gcmEncrypt key nonce "" (AddDat pseudo)
+    BS.concat $ aes128gcmEncrypt key nonce "" (AddDat pseudo)
   where
     (ocid, ocidlen) = unpackCID oCID
-    pseudo = B.concat [B.singleton ocidlen
-                      , Short.fromShort ocid
-                      ,pseudo0]
+    pseudo = BS.concat [BS.singleton ocidlen
+                       ,Short.fromShort ocid
+                       ,pseudo0]
     key | ver == Version1 = Key "\xbe\x0c\x69\x0b\x9f\x66\x57\x5a\x1d\x76\x6b\x54\xe3\x68\xc8\x4e"
         | ver >= Draft29  = Key "\xcc\xce\x18\x7e\xd0\x9a\x09\xd0\x57\x28\x15\x5a\x6c\xb9\x6b\xe1"
         | otherwise       = Key "\x4d\x32\xec\xdb\x2a\x21\x33\xc8\x41\xe4\x04\x3d\xf2\x7d\x44\x30"
