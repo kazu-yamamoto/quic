@@ -149,7 +149,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently server client
         serv conn = do
             s <- acceptStream conn
             bs <- recvStream s 1024
-            sendStream s "hello"
+            sendStream s "bye"
             when (bs == "second") $ stopQUICServer conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
@@ -162,7 +162,7 @@ testHandshake3 cc1 cc2 sc selector = void $ concurrently server client
     server = runQUICServer sc $ \conn -> do
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
-        sendStream s "hello"
+        sendStream s "bye"
         stopQUICServer conn
 
 newSessionManager :: IO SessionManager
