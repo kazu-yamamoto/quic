@@ -90,14 +90,9 @@ putRxStreamData s rx@(RxStreamData dat off _ _) = do
         return False
       else do
         (dats,fin1,_) <- tryReassemble s rx
-        loop fin1 dats
+        mapM_ (\d -> when (d /= "") $ putRecvStreamQ s d) dats
+        when fin1 $ putRecvStreamQ s ""
         return True
-  where
-    loop False []    = return ()
-    loop True  []    = putRecvStreamQ s ""
-    loop fin1 (d:ds) = do
-        when (d /= "") $ putRecvStreamQ s d
-        loop fin1 ds
 
 tryReassemble :: Stream -> RxStreamData -> IO ([StreamData], Fin, Bool) -- dup
 tryReassemble Stream{}   (RxStreamData "" _  _ False) = return ([], False, False)
