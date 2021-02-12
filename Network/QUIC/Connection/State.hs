@@ -186,6 +186,7 @@ getRxBytes Connection{..} = readTVarIO bytesRx
 setAddressValidated :: Connection -> IO ()
 setAddressValidated Connection{..} = atomically $ writeTVar addressValidated True
 
+-- Three times rule for anti amplification
 waitAntiAmplificationFree :: Connection -> Int -> IO ()
 waitAntiAmplificationFree Connection{..} siz = do
     ok <- atomically cond
