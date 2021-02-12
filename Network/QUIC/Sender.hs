@@ -40,7 +40,9 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
                  `orElse` (Nothing <$  checkWindowOpenSTM ldcc maxSiz))
         case mx of
           Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
-            sendPingPacket conn send lvl
+            ok <- if isClient conn then return True
+                                   else checkAntiAmplificationFree conn
+            when ok $ sendPingPacket conn send lvl
             go maxSiz
           _ -> do
             when (isJust mx) $ qlogDebug conn $ Debug "probe new"

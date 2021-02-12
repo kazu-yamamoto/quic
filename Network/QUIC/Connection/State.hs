@@ -31,6 +31,7 @@ module Network.QUIC.Connection.State (
   , getRxBytes
   , setAddressValidated
   , waitAntiAmplificationFree
+  , checkAntiAmplificationFree
   ) where
 
 import Control.Concurrent.STM
@@ -203,3 +204,13 @@ waitAntiAmplificationFree Connection{..} siz = do
             tx <- readTVar bytesTx
             rx <- readTVar bytesRx
             return (tx + siz <= 3 * rx)
+
+checkAntiAmplificationFree :: Connection -> IO Bool
+checkAntiAmplificationFree Connection{..} = atomically $ do
+    validated <- readTVar addressValidated
+    if validated then
+        return True
+      else do
+        tx <- readTVar bytesTx
+        rx <- readTVar bytesRx
+        return (tx <= 3 * rx)
