@@ -102,7 +102,7 @@ library
                        Network.QUIC.Types.Time
                        Network.QUIC.Utils
   -- other-extensions:
-  build-depends:       base >= 4.7 && < 5
+  build-depends:       base >= 4.9 && < 5
                      , array
                      , base16-bytestring >= 1.0
                      , bytestring
@@ -143,7 +143,7 @@ test-suite spec
                         TLSSpec
                         TransportError
                         TypesSpec
-  build-depends:        base >= 4 && < 5
+  build-depends:        base >= 4.9 && < 5
                       , QuickCheck
                       , async
                       , base16-bytestring >= 1.0
@@ -155,6 +155,7 @@ test-suite spec
                       , quic
                       , tls
                       , unix-time
+  default-extensions:  Strict StrictData
 
 test-suite doctests
   type:                 exitcode-stdio-1.0
@@ -162,10 +163,11 @@ test-suite doctests
   hs-source-dirs:       test
   main-is:              doctests.hs
 
-  build-depends:        base >= 4.7 && < 5
+  build-depends:        base >= 4.9 && < 5
                       , doctest >= 0.10.1
 
   ghc-options: -Wall
+  default-extensions:  Strict StrictData
 
 executable server
   if flag(devel)
@@ -178,7 +180,7 @@ executable server
   other-modules:        H3
                         Common
   ghc-options:          -Wall -threaded -rtsopts
-  build-depends:        base >= 4.0 && < 5
+  build-depends:        base >= 4.9 && < 5
                       , base16-bytestring
                       , bytestring
                       , filepath
@@ -187,6 +189,7 @@ executable server
                       , quic
                       , tls
                       , tls-session-manager
+  default-extensions:  Strict StrictData
 
 executable client
   if flag(devel)
@@ -199,7 +202,7 @@ executable client
   other-modules:        H3
                         Common
   ghc-options:          -Wall -threaded -rtsopts
-  build-depends:        base >= 4.0 && < 5
+  build-depends:        base >= 4.9 && < 5
                       , base16-bytestring
                       , bytestring
                       , filepath
@@ -208,3 +211,4 @@ executable client
                       , quic
                       , tls
                       , unix-time
+  default-extensions:  Strict StrictData
