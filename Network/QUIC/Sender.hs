@@ -41,7 +41,7 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
         case mx of
           Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
             ok <- if isClient conn then return True
-                                   else checkAntiAmplificationFree conn
+                                   else checkAntiAmplificationFree conn maxSiz
             when ok $ sendPingPacket conn send lvl
             go maxSiz
           _ -> do

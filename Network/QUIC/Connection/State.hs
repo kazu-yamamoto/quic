@@ -189,28 +189,23 @@ setAddressValidated Connection{..} = atomically $ writeTVar addressValidated Tru
 
 -- Three times rule for anti amplification
 waitAntiAmplificationFree :: Connection -> Int -> IO ()
-waitAntiAmplificationFree Connection{..} siz = do
-    ok <- atomically cond
+waitAntiAmplificationFree conn@Connection{..} siz = do
+    ok <- checkAntiAmplificationFree conn siz
     unless ok $ do
         beforeAntiAmp connLDCC
-        atomically (cond >>= check)
+        atomically (checkAntiAmplificationFreeSTM conn siz >>= check)
         -- setLossDetectionTimer is called eventually.
-  where
-    cond = do
-        validated <- readTVar addressValidated
-        if validated then
-            return True
-          else do
-            tx <- readTVar bytesTx
-            rx <- readTVar bytesRx
-            return (tx + siz <= 3 * rx)
 
-checkAntiAmplificationFree :: Connection -> IO Bool
-checkAntiAmplificationFree Connection{..} = atomically $ do
+checkAntiAmplificationFreeSTM :: Connection -> Int -> STM Bool
+checkAntiAmplificationFreeSTM Connection{..} siz = do
     validated <- readTVar addressValidated
     if validated then
         return True
       else do
         tx <- readTVar bytesTx
         rx <- readTVar bytesRx
-        return (tx <= 3 * rx)
+        return (tx + siz <= 3 * rx)
+
+checkAntiAmplificationFree :: Connection -> Int -> IO Bool
+checkAntiAmplificationFree conn siz =
+    atomically $ checkAntiAmplificationFreeSTM conn siz
