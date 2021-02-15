@@ -40,9 +40,7 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
                  `orElse` (Nothing <$  checkWindowOpenSTM ldcc maxSiz))
         case mx of
           Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
-            ok <- if isClient conn then return True
-                                   else checkAntiAmplificationFree conn maxSiz
-            when ok $ sendPingPacket conn send lvl
+            sendPingPacket conn send lvl
             go maxSiz
           _ -> do
             when (isJust mx) $ qlogDebug conn $ Debug "probe new"
@@ -74,30 +72,33 @@ sendPacket conn send spkts = getMaxPacketSize conn >>= go
 sendPingPacket :: Connection -> SendMany -> EncryptionLevel -> IO ()
 sendPingPacket conn send lvl = do
     maxSiz <- getMaxPacketSize conn
-    let ldcc = connLDCC conn
-    mp <- releaseOldest ldcc lvl
-    frames <- case mp of
-      Nothing -> do
-          qlogDebug conn $ Debug "probe ping"
-          return [Ping]
-      Just spkt -> do
-          qlogDebug conn $ Debug "probe old"
-          let PlainPacket _ plain0 = spPlainPacket spkt
-          adjustForRetransmit conn $ plainFrames plain0
-    xs <- construct conn lvl frames
-    if null xs then
-        qlogDebug conn $ Debug "ping NULL"
-      else do
-        let spkt = last xs
-            ping = spPlainPacket spkt
-        (bss,padlen) <- encodePlainPacket conn ping (Just maxSiz)
-        now <- getTimeMicrosecond
-        send bss
-        addTxBytes conn $ totalLen bss
-        let sentPacket0 = fixSentPacket spkt bss padlen
-            sentPacket = sentPacket0 { spTimeSent = now }
-        qlogSent conn sentPacket now
-        onPacketSent ldcc sentPacket
+    ok <- if isClient conn then return True
+          else checkAntiAmplificationFree conn maxSiz
+    when ok $ do
+        let ldcc = connLDCC conn
+        mp <- releaseOldest ldcc lvl
+        frames <- case mp of
+          Nothing -> do
+              qlogDebug conn $ Debug "probe ping"
+              return [Ping]
+          Just spkt -> do
+              qlogDebug conn $ Debug "probe old"
+              let PlainPacket _ plain0 = spPlainPacket spkt
+              adjustForRetransmit conn $ plainFrames plain0
+        xs <- construct conn lvl frames
+        if null xs then
+            qlogDebug conn $ Debug "ping NULL"
+          else do
+            let spkt = last xs
+                ping = spPlainPacket spkt
+            (bss,padlen) <- encodePlainPacket conn ping (Just maxSiz)
+            now <- getTimeMicrosecond
+            send bss
+            addTxBytes conn $ totalLen bss
+            let sentPacket0 = fixSentPacket spkt bss padlen
+                sentPacket = sentPacket0 { spTimeSent = now }
+            qlogSent conn sentPacket now
+            onPacketSent ldcc sentPacket
 
 ----------------------------------------------------------------
 
