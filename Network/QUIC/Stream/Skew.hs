@@ -6,6 +6,7 @@ module Network.QUIC.Stream.Skew (
   , insert
   , deleteMin
 --  , deleteMin'
+--  , showSkew
   ) where
 
 import Control.Applicative hiding (empty)
@@ -38,15 +39,6 @@ shrinkSeq s0 n = case viewl s of
     | otherwise     -> shrink x n <| xs
   where
     s = Seq.dropWhileL (\y -> not (start y <= n && n <= next y)) s0
-
-{-
-data F = F Int Int deriving Show
-
-instance Frag F where
-    start  (F s _)   = s
-    next   (F _ e)   = e
-    shrink (F s e) n = if s <= n && n <= e then F n e else error "shrink"
--}
 
 ----------------------------------------------------------------
 
@@ -100,3 +92,23 @@ merge t1@(Node l1 f1 r1) t2@(Node l2 f2 r2)
         | s2 <= s1 && e1 <= e2 = f2
         | s1 <= s2             = f1 >< (shrink f2 e1)
         | otherwise            = f2 >< (shrink f1 e2)
+
+{-
+data F = F Int Int deriving Show
+
+instance Frag F where
+    start  (F s _)   = s
+    next   (F _ e)   = e
+    shrink (F s e) n = if s <= n && n <= e then F n e else error "shrink"
+
+showSkew :: Show a => Skew a -> String
+showSkew = showSkew' ""
+
+showSkew' :: Show a => String -> Skew a -> String
+showSkew' _    Leaf = "\n"
+showSkew' pref (Node l x r) = show x ++ "\n"
+                           ++ pref ++ "+ " ++ showSkew' pref' l
+                           ++ pref ++ "+ " ++ showSkew' pref' r
+  where
+    pref' = "  " ++ pref
+-}
