@@ -32,8 +32,10 @@ instance Frag a => Frag (Seq a) where
 
 shrinkSeq :: Frag a => Seq a -> Int -> Seq a
 shrinkSeq s0 n = case viewl s of
-  EmptyL  -> error "shrinkSeq"
-  x :< xs -> shrink x n <| xs
+  EmptyL -> error "shrinkSeq"
+  x :< xs
+    | start xs == n -> xs
+    | otherwise     -> shrink x n <| xs
   where
     s = Seq.dropWhileL (\y -> not (start y <= n && n <= next y)) s0
 
