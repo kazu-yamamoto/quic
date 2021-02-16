@@ -14,9 +14,22 @@ module Network.QUIC.Stream.Skew (
 
 import Control.Applicative hiding (empty)
 import Data.Maybe
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
+import Data.Sequence (Seq(..), viewl, viewr, ViewL(..), ViewR(..), singleton)
 import Prelude hiding (minimum, maximum, null)
+
+----------------------------------------------------------------
+
+class Frag a where
+    start :: a -> Int
+    next  :: a -> Int
+
+instance Frag a => Frag (Seq a) where
+    start s = case viewl s of
+      EmptyL -> error "Seq is empty"
+      x :< _ -> start x
+    next s = case viewr s of
+      EmptyR -> error "Seq is empty"
+      _ :> x -> next x
 
 ----------------------------------------------------------------
 
@@ -31,14 +44,23 @@ null :: Skew a -> Bool
 null Leaf         = True
 null (Node _ _ _) = False
 
-singleton :: a -> Skew a
-singleton x = Node Leaf (Seq.singleton x) Leaf
-
 ----------------------------------------------------------------
 
 -- | Insertion. Worst-case: O(N), amortized: O(log N).
-insert :: Ord a => a -> Skew a -> Skew a
-insert x t = merge (singleton x) t
+insert :: Frag a => a -> Skew a -> Skew a
+insert x Leaf = Node Leaf (singleton x) Leaf
+-- insert x t = merge (singleton x) t
+insert x t@(Node l s r)
+  | n1 == s2  = Node l (x :<| s) r
+  | n2 == s1  = Node l (s :|> x) r
+  | n1 <  s2  = Node Leaf (singleton x) t
+  | n2 <  s1  = Node r s (merge l (Node Leaf (singleton x) Leaf))
+  | otherwise = t
+  where
+    s1 = start x
+    n1 = next x
+    s2 = start s
+    n2 = next s
 
 ----------------------------------------------------------------
 
@@ -50,20 +72,20 @@ minimum (Node _ x _) = Just x
 ----------------------------------------------------------------
 
 -- | Deleting the minimum element. Worst-case: O(N), amortized: O(log N).
-deleteMin :: Ord a => Skew a -> Skew a
+deleteMin :: Frag a => Skew a -> Skew a
 deleteMin Leaf         = Leaf
 deleteMin (Node l _ r) = merge l r
 
-deleteMin2 :: Ord a => Skew a -> Maybe (Seq a, Skew a)
+deleteMin2 :: Frag a => Skew a -> Maybe (Seq a, Skew a)
 deleteMin2 Leaf = Nothing
 deleteMin2 h    = (, deleteMin h) <$> minimum h
 
 ----------------------------------------------------------------
 
 -- | Merging two heaps. Worst-case: O(N), amortized: O(log N).
-merge :: Ord a => Skew a -> Skew a -> Skew a
+merge :: Frag a => Skew a -> Skew a -> Skew a
 merge t1 Leaf = t1
 merge Leaf t2 = t2
-merge t1@(Node l1 x1 r1) t2@(Node l2 x2 r2)
-  | x1 <= x2  = Node r1 x1 (merge l1 t2)
-  | otherwise = Node r2 x2 (merge l2 t1)
+merge t1@(Node l1 s1 r1) t2@(Node l2 s2 r2)
+  | start s2 < start s2 = Node r1 s1 (merge l1 t2)
+  | otherwise           = Node r2 s2 (merge l2 t1)
