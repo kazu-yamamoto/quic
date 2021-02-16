@@ -14,11 +14,13 @@ module Network.QUIC.Stream.Skew (
 
 import Control.Applicative hiding (empty)
 import Data.Maybe
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import Prelude hiding (minimum, maximum, null)
 
 ----------------------------------------------------------------
 
-data Skew a = Leaf | Node (Skew a) a (Skew a) deriving Show
+data Skew a = Leaf | Node (Skew a) (Seq a) (Skew a) deriving Show
 
 ----------------------------------------------------------------
 
@@ -30,7 +32,7 @@ null Leaf         = True
 null (Node _ _ _) = False
 
 singleton :: a -> Skew a
-singleton x = Node Leaf x Leaf
+singleton x = Node Leaf (Seq.singleton x) Leaf
 
 ----------------------------------------------------------------
 
@@ -41,7 +43,7 @@ insert x t = merge (singleton x) t
 ----------------------------------------------------------------
 
 -- | Finding the minimum element. Worst-case: O(1).
-minimum :: Skew a -> Maybe a
+minimum :: Skew a -> Maybe (Seq a)
 minimum Leaf         = Nothing
 minimum (Node _ x _) = Just x
 
@@ -52,7 +54,7 @@ deleteMin :: Ord a => Skew a -> Skew a
 deleteMin Leaf         = Leaf
 deleteMin (Node l _ r) = merge l r
 
-deleteMin2 :: Ord a => Skew a -> Maybe (a, Skew a)
+deleteMin2 :: Ord a => Skew a -> Maybe (Seq a, Skew a)
 deleteMin2 Leaf = Nothing
 deleteMin2 h    = (, deleteMin h) <$> minimum h
 
@@ -62,10 +64,6 @@ deleteMin2 h    = (, deleteMin h) <$> minimum h
 merge :: Ord a => Skew a -> Skew a -> Skew a
 merge t1 Leaf = t1
 merge Leaf t2 = t2
-merge t1 t2
-  | minimum t1 <= minimum t2 = join t1 t2
-  | otherwise                = join t2 t1
-
-join :: Ord a => Skew a -> Skew a -> Skew a
-join (Node l x r) t = Node r x (merge l t)
-join _ _ = error "join"
+merge t1@(Node l1 x1 r1) t2@(Node l2 x2 r2)
+  | x1 <= x2  = Node r1 x1 (merge l1 t2)
+  | otherwise = Node r2 x2 (merge l2 t1)
