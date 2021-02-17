@@ -18,27 +18,27 @@ import Prelude hiding (minimum)
 ----------------------------------------------------------------
 
 class Frag a where
-    start  :: a -> Int
-    next   :: a -> Int
-    shrink :: a -> Int -> a
+    currOff :: a -> Int
+    nextOff :: a -> Int
+    shrink  :: a -> Int -> a
 
 instance Frag a => Frag (Seq a) where
-    start s = case viewl s of
+    currOff s = case viewl s of
       EmptyL -> error "Seq is empty"
-      x :< _ -> start x
-    next s = case viewr s of
+      x :< _ -> currOff x
+    nextOff s = case viewr s of
       EmptyR -> error "Seq is empty"
-      _ :> x -> next x
+      _ :> x -> nextOff x
     shrink = shrinkSeq
 
 shrinkSeq :: Frag a => Seq a -> Int -> Seq a
 shrinkSeq s0 n = case viewl s of
   EmptyL -> error "shrinkSeq"
   x :< xs
-    | start xs == n -> xs
+    | currOff xs == n -> xs
     | otherwise     -> shrink x n <| xs
   where
-    s = Seq.dropWhileL (\y -> not (start y <= n && n <= next y)) s0
+    s = Seq.dropWhileL (\y -> not (currOff y <= n && n <= nextOff y)) s0
 
 ----------------------------------------------------------------
 
@@ -82,10 +82,10 @@ merge t1@(Node l1 f1 r1) t2@(Node l2 f2 r2)
   | e2 < s1   = Node r2 f2 (merge l2 t1)
   | otherwise = Node (merge l1 l2) f12 (merge r1 r2)
   where
-    s1 = start f1
-    e1 = next  f1
-    s2 = start f2
-    e2 = next  f2
+    s1 = currOff f1
+    e1 = nextOff f1
+    s2 = currOff f2
+    e2 = nextOff f2
     f12 | e1 == s2             = f1 >< f2
         | s1 == e2             = f2 >< f1
         | s1 <= s2 && e2 <= e1 = f1
@@ -97,9 +97,9 @@ merge t1@(Node l1 f1 r1) t2@(Node l2 f2 r2)
 data F = F Int Int deriving Show
 
 instance Frag F where
-    start  (F s _)   = s
-    next   (F _ e)   = e
-    shrink (F s e) n = if s <= n && n <= e then F n e else error "shrink"
+    currOff (F s _)   = s
+    nextOff (F _ e)   = e
+    shrink  (F s e) n = if s <= n && n <= e then F n e else error "shrink"
 
 showSkew :: Show a => Skew a -> String
 showSkew = showSkew' ""
