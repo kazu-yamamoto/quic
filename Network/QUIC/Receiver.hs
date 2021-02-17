@@ -373,6 +373,7 @@ isStateessReset conn header Crypt{..} = do
              Nothing    -> return False
              Just token -> isStatelessRestTokenValid conn token
 
+-- Return value indicates duplication.
 putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO Bool
 putRxCrypto conn lvl rx = handleLogR logAction $ do
     strm <- getCryptoStream conn lvl
