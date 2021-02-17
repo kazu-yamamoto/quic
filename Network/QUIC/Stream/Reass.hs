@@ -7,12 +7,16 @@ module Network.QUIC.Stream.Reass (
   , tryReassemble
   ) where
 
+import Data.Sequence (Seq)
+import qualified Data.Sequence as Seq
 import qualified Data.ByteString as BS
 
 import Network.QUIC.Imports
 import Network.QUIC.Logger
+import Network.QUIC.Stream.Frag
 import Network.QUIC.Stream.Misc
 import Network.QUIC.Stream.Queue
+import qualified Network.QUIC.Stream.Skew as Skew
 import Network.QUIC.Stream.Types
 import Network.QUIC.Types
 
@@ -94,69 +98,58 @@ putRxStreamData s rx@(RxStreamData dat off _ _) = do
         when fin1 $ putRecvStreamQ s ""
         return True
 
-tryReassemble :: Stream -> RxStreamData -> IO ([StreamData], Fin)
-tryReassemble Stream{}   (RxStreamData "" _  _ False) = return ([], False)
+ignored :: (Seq StreamData, Bool)
+ignored = (Seq.empty, False)
+
+-- fin of StreamState off fin means see-fin-already.
+tryReassemble :: Stream -> RxStreamData -> IO (Seq StreamData, Fin)
+tryReassemble Stream{}   (RxStreamData "" _  _ False) = return ignored
 tryReassemble Stream{..} (RxStreamData "" off _ True) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
+    let si1 = si0 { streamFin = True }
     if fin0 then do
         stdoutLogger "Illegal Fin" -- fixme
-        return ([], False)
-      else case off0 `compare` off of
-        LT -> do
-            let si1 = si0 { streamFin = True }
+        return ignored
+      else case off `compare` off0 of
+        LT -> return ignored
+        EQ -> do
             writeIORef streamStateRx si1
-            return   ([], False)
-        EQ -> return ([], True)   -- would ignore succeeding fragments
-        GT -> return ([], False)  -- ignoring ""
+            return (Seq.empty, True)
+        GT -> do
+            writeIORef streamStateRx si1
+            return ignored
 tryReassemble Stream{..} x@(RxStreamData dat off len False) = do
-    si0@(StreamState off0 fin0) <- readIORef streamStateRx
-    case off0 `compare` off of
-      LT -> do
-          atomicModifyIORef'' streamReass (push x)
-          return ([], False)
+    si0@(StreamState off0 _) <- readIORef streamStateRx
+    case off `compare` off0 of
+      LT -> return ignored
       EQ -> do
           let off1 = off0 + len
-          xs0 <- readIORef streamReass
-          let (dats,xs,off2) = split off1 xs0
-          writeIORef streamStateRx si0 { streamOffset = off2 }
-          writeIORef streamReass xs
-          let fin1 = null xs && fin0
-          return (dat:dats, fin1)
-      GT ->
-          return ([], False)  -- ignoring
+          mdats <- atomicModifyIORef' streamReass (Skew.deleteMinIf off1)
+          case mdats of
+            Nothing   -> do
+                writeIORef streamStateRx si0 { streamOffset = off1 }
+                return (Seq.singleton dat, False)
+            Just dats -> do
+                let off2 = nextOff dats
+                    dats' = dat Seq.<| (rxstrmData <$> dats)
+                writeIORef streamStateRx si0 { streamOffset = off2 }
+                return (dats', False)
+      GT -> do
+          atomicModifyIORef'' streamReass (Skew.insert x)
+          return ignored
 tryReassemble Stream{..} x@(RxStreamData dat off len True) = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0 { streamFin = True }
     if fin0 then do
         stdoutLogger "Illegal Fin" -- fixme
-        return ([], False)
-      else case off0 `compare` off of
-        LT -> do
-            writeIORef streamStateRx si1
-            atomicModifyIORef'' streamReass (push x)
-            return ([], False)
+        return ignored
+      else case off `compare` off0 of
+        LT -> return ignored
         EQ -> do
             let off1 = off0 + len
             writeIORef streamStateRx si1 { streamOffset = off1 }
-            return ([dat], True)
-        GT ->
-            return ([], False)  -- ignoring
-
-push :: RxStreamData -> [RxStreamData] -> [RxStreamData]
-push x0@(RxStreamData _ off0 len0 _) xs0 = loop xs0
-  where
-    loop [] = [x0]
-    loop xxs@(x@(RxStreamData _ off len _):xs)
-      | off0 <  off && off0 + len0 <= off = x0 : xxs
-      | off0 <  off                       = xxs -- ignoring
-      | off0 == off                       = xxs -- ignoring
-      |                off + len <= off0  = x : loop xs
-      | otherwise                         = xxs -- ignoring
-
-split :: Offset -> [RxStreamData] -> ([StreamData],[RxStreamData],Offset)
-split off0 xs0 = loop off0 xs0 id
-  where
-    loop off' [] build = (build [], [], off')
-    loop off' xxs@(RxStreamData dat off len _ : xs) build
-      | off' == off = loop (off + len) xs (build . (dat :))
-      | otherwise   = (build [], xxs, off')
+            return (Seq.singleton dat, True)
+        GT -> do
+            writeIORef streamStateRx si1
+            atomicModifyIORef'' streamReass (Skew.insert x)
+            return ignored

@@ -5,11 +5,11 @@ module Network.QUIC.Stream.Skew (
   , empty
   , insert
   , deleteMin
+  , deleteMinIf
 --  , deleteMin'
 --  , showSkew
   ) where
 
-import Control.Applicative hiding (empty)
 import Data.Maybe
 import Data.Sequence (Seq(..), (><))
 import qualified Data.Sequence as Seq
@@ -44,9 +44,13 @@ deleteMin' :: Frag a => Skew a -> Skew a
 deleteMin' Leaf         = Leaf
 deleteMin' (Node l _ r) = merge l r
 
-deleteMin :: Frag a => Skew a -> Maybe (Seq a, Skew a)
-deleteMin Leaf = Nothing
-deleteMin h    = (, deleteMin' h) <$> minimum h
+deleteMin :: Frag a => Skew a -> (Skew a, Maybe (Seq a))
+deleteMin h = (deleteMin' h, minimum h)
+
+deleteMinIf :: Frag a => Int -> Skew a -> (Skew a, Maybe (Seq a))
+deleteMinIf off h = case minimum h of
+  jf@(Just f) | currOff f == off -> (deleteMin' h, jf)
+  _                              -> (h, Nothing)
 
 ----------------------------------------------------------------
 

@@ -20,6 +20,8 @@ import qualified Data.ByteString as BS
 import {-# Source #-} Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Frag
+import Network.QUIC.Stream.Skew
+import qualified Network.QUIC.Stream.Skew as Skew
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -30,12 +32,12 @@ data Stream = Stream {
   , streamConnection :: Connection
   -- "counter" is equivalent to "offset".
   -- It is duplicated but used for API level flow control.
-  , streamFlowTx     :: TVar  Flow           -- counter, maxDax
-  , streamFlowRx     :: IORef Flow           -- counter, maxDax
-  , streamStateTx    :: IORef StreamState    -- offset, fin
-  , streamStateRx    :: IORef StreamState    -- offset, fin
-  , streamRecvQ      :: RecvStreamQ          -- input bytestring
-  , streamReass      :: IORef [RxStreamData] -- input stream fragments to streamQ
+  , streamFlowTx     :: TVar  Flow        -- counter, maxDax
+  , streamFlowRx     :: IORef Flow        -- counter, maxDax
+  , streamStateTx    :: IORef StreamState -- offset, fin
+  , streamStateRx    :: IORef StreamState -- offset, fin
+  , streamRecvQ      :: RecvStreamQ       -- input bytestring
+  , streamReass      :: IORef (Skew RxStreamData) -- input stream fragments to streamQ
   }
 
 instance Show Stream where
@@ -47,7 +49,7 @@ newStream conn sid = Stream sid conn <$> newTVarIO defaultFlow
                                      <*> newIORef  emptyStreamState
                                      <*> newIORef  emptyStreamState
                                      <*> newRecvStreamQ
-                                     <*> newIORef []
+                                     <*> newIORef Skew.empty
 
 ----------------------------------------------------------------
 
@@ -55,11 +57,16 @@ type Length = Int
 
 data TxStreamData = TxStreamData Stream [StreamData] Length Fin
 
-data RxStreamData = RxStreamData StreamData Offset Length Fin deriving (Eq, Show)
+data RxStreamData = RxStreamData {
+    rxstrmData :: StreamData
+  , rxstrmOff  :: Offset
+  , rxstrmLen  :: Length
+  , rxstrmFin  :: Fin
+  } deriving (Eq, Show)
 
 instance Frag RxStreamData where
-    currOff (RxStreamData _ off _ _)   = off
-    nextOff (RxStreamData _ off len _) = off + len
+    currOff r = rxstrmOff r
+    nextOff r = rxstrmOff r + rxstrmLen r
     shrink  (RxStreamData bs off len fin) off' =
         let n = off' - off
             bs'  = BS.drop n bs
