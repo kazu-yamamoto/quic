@@ -49,7 +49,7 @@ deleteMin h = (deleteMin' h, minimum h)
 
 deleteMinIf :: Frag a => Int -> Skew a -> (Skew a, Maybe (Seq a))
 deleteMinIf off h = case minimum h of
-  jf@(Just f) | currOff f == off -> (deleteMin' h, jf)
+  jf@(Just f) | currOff f <= off -> (deleteMin' h, jf)
   _                              -> (h, Nothing)
 
 ----------------------------------------------------------------
@@ -61,18 +61,18 @@ merge Leaf t2 = t2
 merge t1@(Node l1 f1 r1) t2@(Node l2 f2 r2)
   | e1 < s2   = Node r1 f1 (merge l1 t2)
   | e2 < s1   = Node r2 f2 (merge l2 t1)
-  | otherwise = Node (merge l1 l2) f12 (merge r1 r2)
+  | otherwise = let f12 | e1 == s2             = f1 >< f2
+                        | s1 == e2             = f2 >< f1
+                        | s1 <= s2 && e2 <= e1 = f1
+                        | s2 <= s1 && e1 <= e2 = f2
+                        | s1 <= s2             = f1 >< (shrink f2 e1)
+                        | otherwise            = f2 >< (shrink f1 e2)
+                in Node (merge l1 l2) f12 (merge r1 r2)
   where
     s1 = currOff f1
     e1 = nextOff f1
     s2 = currOff f2
     e2 = nextOff f2
-    f12 | e1 == s2             = f1 >< f2
-        | s1 == e2             = f2 >< f1
-        | s1 <= s2 && e2 <= e1 = f1
-        | s2 <= s1 && e1 <= e2 = f2
-        | s1 <= s2             = f1 >< (shrink f2 e1)
-        | otherwise            = f2 >< (shrink f1 e2)
 
 {-
 showSkew :: Show a => Skew a -> String
