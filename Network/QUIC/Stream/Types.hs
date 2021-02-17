@@ -15,9 +15,11 @@ module Network.QUIC.Stream.Types (
   ) where
 
 import Control.Concurrent.STM
+import qualified Data.ByteString as BS
 
 import {-# Source #-} Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Stream.Frag
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -52,7 +54,17 @@ newStream conn sid = Stream sid conn <$> newTVarIO defaultFlow
 type Length = Int
 
 data TxStreamData = TxStreamData Stream [StreamData] Length Fin
+
 data RxStreamData = RxStreamData StreamData Offset Length Fin deriving (Eq, Show)
+
+instance Frag RxStreamData where
+    currOff (RxStreamData _ off _ _)   = off
+    nextOff (RxStreamData _ off len _) = off + len
+    shrink  (RxStreamData bs off len fin) off' =
+        let n = off' - off
+            bs'  = BS.drop n bs
+            len' = len - n
+        in RxStreamData bs' off' len' fin
 
 ----------------------------------------------------------------
 

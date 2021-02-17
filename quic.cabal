@@ -79,9 +79,11 @@ library
                        Network.QUIC.Server
                        Network.QUIC.Socket
                        Network.QUIC.Stream
+                       Network.QUIC.Stream.Frag
                        Network.QUIC.Stream.Misc
                        Network.QUIC.Stream.Queue
                        Network.QUIC.Stream.Reass
+                       Network.QUIC.Stream.Skew
                        Network.QUIC.Stream.Table
                        Network.QUIC.Stream.Types
                        Network.QUIC.TLS

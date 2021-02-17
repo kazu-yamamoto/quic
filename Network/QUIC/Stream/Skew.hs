@@ -11,34 +11,11 @@ module Network.QUIC.Stream.Skew (
 
 import Control.Applicative hiding (empty)
 import Data.Maybe
-import Data.Sequence (Seq(..), viewl, viewr, ViewL(..), ViewR(..), (<|), (><))
+import Data.Sequence (Seq(..), (><))
 import qualified Data.Sequence as Seq
 import Prelude hiding (minimum)
 
-----------------------------------------------------------------
-
-class Frag a where
-    currOff :: a -> Int
-    nextOff :: a -> Int
-    shrink  :: a -> Int -> a
-
-instance Frag a => Frag (Seq a) where
-    currOff s = case viewl s of
-      EmptyL -> error "Seq is empty"
-      x :< _ -> currOff x
-    nextOff s = case viewr s of
-      EmptyR -> error "Seq is empty"
-      _ :> x -> nextOff x
-    shrink = shrinkSeq
-
-shrinkSeq :: Frag a => Seq a -> Int -> Seq a
-shrinkSeq s0 n = case viewl s of
-  EmptyL -> error "shrinkSeq"
-  x :< xs
-    | currOff xs == n -> xs
-    | otherwise     -> shrink x n <| xs
-  where
-    s = Seq.dropWhileL (\y -> not (currOff y <= n && n <= nextOff y)) s0
+import Network.QUIC.Stream.Frag
 
 ----------------------------------------------------------------
 
@@ -94,13 +71,6 @@ merge t1@(Node l1 f1 r1) t2@(Node l2 f2 r2)
         | otherwise            = f2 >< (shrink f1 e2)
 
 {-
-data F = F Int Int deriving Show
-
-instance Frag F where
-    currOff (F s _)   = s
-    nextOff (F _ e)   = e
-    shrink  (F s e) n = if s <= n && n <= e then F n e else error "shrink"
-
 showSkew :: Show a => Skew a -> String
 showSkew = showSkew' ""
 
