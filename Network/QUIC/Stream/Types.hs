@@ -67,7 +67,7 @@ data RxStreamData = RxStreamData {
 instance Frag RxStreamData where
     currOff r = rxstrmOff r
     nextOff r = rxstrmOff r + rxstrmLen r
-    shrink  (RxStreamData bs off len fin) off' =
+    shrink off'  (RxStreamData bs off len fin) =
         let n = off' - off
             bs'  = BS.drop n bs
             len' = len - n

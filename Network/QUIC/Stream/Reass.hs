@@ -131,9 +131,10 @@ tryReassemble Stream{..} x@(RxStreamData dat off len False) = do
                 return (Seq.singleton dat, False)
             Just dats -> do
                 let off2 = nextOff dats
+                    fin = hasFin dats
                     dats' = dat Seq.<| (rxstrmData <$> dats)
                 writeIORef streamStateRx si0 { streamOffset = off2 }
-                return (dats', False)
+                return (dats', fin)
       GT -> do
           atomicModifyIORef'' streamReass (Skew.insert x)
           return ignored
@@ -153,3 +154,8 @@ tryReassemble Stream{..} x@(RxStreamData dat off len True) = do
             writeIORef streamStateRx si1
             atomicModifyIORef'' streamReass (Skew.insert x)
             return ignored
+
+hasFin :: Seq RxStreamData -> Bool
+hasFin s = case Seq.viewr s of
+  Seq.EmptyR -> False
+  _ Seq.:> x -> rxstrmFin x
