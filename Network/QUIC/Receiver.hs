@@ -377,12 +377,9 @@ isStateessReset conn header Crypt{..} = do
 putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO Bool
 putRxCrypto conn lvl rx = handleLogR logAction $ do
     strm <- getCryptoStream conn lvl
-    (dats,_) <- tryReassemble strm rx
-    if null dats then
-        return True
-      else do
-        mapM_ (putCrypto conn . InpHandshake lvl) dats
-        return False
+    let put = putCrypto conn . InpHandshake lvl
+        putFin = return ()
+    tryReassemble strm rx put putFin
   where
     logAction _ = do
         stdoutLogger ("No crypto stearm entry for " <> bhow lvl)

@@ -93,67 +93,74 @@ putRxStreamData s rx@(RxStreamData dat off _ _) = do
     if BS.length dat + off > lim then
         return False
       else do
-        (dats,fin1) <- tryReassemble s rx
-        mapM_ (\d -> when (d /= "") $ putRecvStreamQ s d) dats
-        when fin1 $ putRecvStreamQ s ""
+        _ <- tryReassemble s rx put putFin
         return True
-
-ignored :: (Seq StreamData, Bool)
-ignored = (Seq.empty, False)
+  where
+    put "" = return ()
+    put d  = putRecvStreamQ s d
+    putFin = putRecvStreamQ s ""
 
 -- fin of StreamState off fin means see-fin-already.
-tryReassemble :: Stream -> RxStreamData -> IO (Seq StreamData, Fin)
-tryReassemble Stream{}   (RxStreamData "" _  _ False) = return ignored
-tryReassemble Stream{..} (RxStreamData "" off _ True) = do
+-- return value indicates duplication
+tryReassemble :: Stream -> RxStreamData -> (StreamData -> IO ()) -> IO () -> IO Bool
+tryReassemble Stream{}   (RxStreamData "" _  _ False) _ _ = return True
+tryReassemble Stream{..} (RxStreamData "" off _ True) _ putFin = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0 { streamFin = True }
     if fin0 then do
         stdoutLogger "Illegal Fin" -- fixme
-        return ignored
+        return True
       else case off `compare` off0 of
-        LT -> return ignored
+        LT -> return True
         EQ -> do
             writeIORef streamStateRx si1
-            return (Seq.empty, True)
+            putFin
+            return False
         GT -> do
             writeIORef streamStateRx si1
-            return ignored
-tryReassemble Stream{..} x@(RxStreamData dat off len False) = do
+            return False
+tryReassemble Stream{..} x@(RxStreamData dat off len False) put putFin = do
     si0@(StreamState off0 _) <- readIORef streamStateRx
     case off `compare` off0 of
-      LT -> return ignored
+      LT -> return True
       EQ -> do
-          let off1 = off0 + len
-          mdats <- atomicModifyIORef' streamReass (Skew.deleteMinIf off1)
-          case mdats of
-            Nothing   -> do
-                writeIORef streamStateRx si0 { streamOffset = off1 }
-                return (Seq.singleton dat, False)
-            Just dats -> do
-                let off2 = nextOff dats
-                    fin = hasFin dats
-                    dats' = dat Seq.<| (rxstrmData <$> dats)
-                writeIORef streamStateRx si0 { streamOffset = off2 }
-                return (dats', fin)
+          put dat
+          loop si0 (off0 + len)
+          return False
       GT -> do
           atomicModifyIORef'' streamReass (Skew.insert x)
-          return ignored
-tryReassemble Stream{..} x@(RxStreamData dat off len True) = do
+          return False
+  where
+    loop si0 xff = do
+        mdats <- atomicModifyIORef' streamReass (Skew.deleteMinIf xff)
+        case mdats of
+           Nothing   -> writeIORef streamStateRx si0 { streamOffset = xff }
+           Just dats -> do
+               mapM_ (put . rxstrmData) dats
+               let xff1 = nextOff dats
+               if hasFin dats then do
+                   putFin
+                 else do
+                   loop si0 xff1
+
+tryReassemble Stream{..} x@(RxStreamData dat off len True) put putFin = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0 { streamFin = True }
     if fin0 then do
         stdoutLogger "Illegal Fin" -- fixme
-        return ignored
+        return True
       else case off `compare` off0 of
-        LT -> return ignored
+        LT -> return True
         EQ -> do
             let off1 = off0 + len
             writeIORef streamStateRx si1 { streamOffset = off1 }
-            return (Seq.singleton dat, True)
+            put dat
+            putFin
+            return False
         GT -> do
             writeIORef streamStateRx si1
             atomicModifyIORef'' streamReass (Skew.insert x)
-            return ignored
+            return False
 
 hasFin :: Seq RxStreamData -> Bool
 hasFin s = case Seq.viewr s of
