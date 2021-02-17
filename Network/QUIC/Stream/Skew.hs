@@ -49,8 +49,11 @@ deleteMin h = (deleteMin' h, minimum h)
 
 deleteMinIf :: Frag a => Int -> Skew a -> (Skew a, Maybe (Seq a))
 deleteMinIf off h = case minimum h of
-  jf@(Just f) | currOff f <= off -> (deleteMin' h, shrink off <$> jf)
-  _                              -> (h, Nothing)
+  jf@(Just f)
+    | currOff f == off                   -> (deleteMin' h, jf)
+    | currOff f < off && off < nextOff f -> (deleteMin' h, shrink off <$> jf)
+    | nextOff f <= off                   -> (deleteMin' h, Nothing)
+  _                                      -> (h, Nothing)
 
 ----------------------------------------------------------------
 
