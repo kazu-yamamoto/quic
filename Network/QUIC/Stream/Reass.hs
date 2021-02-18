@@ -132,13 +132,13 @@ tryReassemble Stream{..} x@(RxStreamData dat off len False) put putFin = do
           return False
   where
     loop si0 xff = do
-        mdats <- atomicModifyIORef' streamReass (Skew.deleteMinIf xff)
-        case mdats of
+        mrxs <- atomicModifyIORef' streamReass (Skew.deleteMinIf xff)
+        case mrxs of
            Nothing   -> writeIORef streamStateRx si0 { streamOffset = xff }
-           Just dats -> do
-               mapM_ (put . rxstrmData) dats
-               let xff1 = nextOff dats
-               if hasFin dats then do
+           Just rxs -> do
+               mapM_ (put . rxstrmData) rxs
+               let xff1 = nextOff rxs
+               if hasFin rxs then do
                    putFin
                  else do
                    loop si0 xff1
