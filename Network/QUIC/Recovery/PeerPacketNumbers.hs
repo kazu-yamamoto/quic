@@ -12,7 +12,7 @@ module Network.QUIC.Recovery.PeerPacketNumbers (
   , fromPeerPacketNumbers
   ) where
 
-import qualified Data.Set as Set
+import qualified Data.IntSet as IntSet
 
 import Network.QUIC.Imports hiding (range)
 import Network.QUIC.Recovery.Types
@@ -25,32 +25,32 @@ import Network.QUIC.Types
 getPeerPacketNumbers :: LDCC -> EncryptionLevel -> IO PeerPacketNumbers
 getPeerPacketNumbers LDCC{..} lvl = get <$> readIORef peerPacketNumbers
   where
-    get (PeerPacketNumbers pns)  = PeerPacketNumbers . Set.map (convert lvl) . Set.filter (range lvl) $ pns
+    get (PeerPacketNumbers pns)  = PeerPacketNumbers . IntSet.map (convert lvl) . IntSet.filter (range lvl) $ pns
 
 {-# INLINE addPeerPacketNumbers #-}
 addPeerPacketNumbers :: LDCC -> EncryptionLevel -> PacketNumber -> IO ()
 addPeerPacketNumbers LDCC{..} lvl pn = atomicModifyIORef'' peerPacketNumbers add
   where
-    add (PeerPacketNumbers pns) = PeerPacketNumbers $ Set.insert (convert lvl pn) pns
+    add (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.insert (convert lvl pn) pns
 
 {-# INLINE delPeerPacketNumbers #-}
 delPeerPacketNumbers :: LDCC -> EncryptionLevel -> PacketNumber -> IO ()
 delPeerPacketNumbers LDCC{..} lvl pn = atomicModifyIORef'' peerPacketNumbers del
   where
-    del (PeerPacketNumbers pns) = PeerPacketNumbers $ Set.delete (convert lvl pn) pns
+    del (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.delete (convert lvl pn) pns
 
 {-# INLINE clearPeerPacketNumbers #-}
 clearPeerPacketNumbers :: LDCC -> EncryptionLevel -> IO ()
 clearPeerPacketNumbers LDCC{..} lvl = atomicModifyIORef'' peerPacketNumbers clear
   where
-    clear (PeerPacketNumbers pns) = PeerPacketNumbers $ Set.filter (not . range lvl) pns
+    clear (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.filter (not . range lvl) pns
 
 {-# INLINE reducePeerPacketNumbers #-}
 reducePeerPacketNumbers :: LDCC -> EncryptionLevel -> PeerPacketNumbers -> IO ()
 reducePeerPacketNumbers LDCC{..} lvl (PeerPacketNumbers pns) = atomicModifyIORef'' peerPacketNumbers reduce
   where
-    pns' = Set.map (convert lvl) pns
-    reduce (PeerPacketNumbers pns0) = PeerPacketNumbers (pns0 Set.\\ pns')
+    pns' = IntSet.map (convert lvl) pns
+    reduce (PeerPacketNumbers pns0) = PeerPacketNumbers (pns0 IntSet.\\ pns')
 
 {-# INLINE setPreviousRTT1PPNs #-}
 setPreviousRTT1PPNs :: LDCC -> PeerPacketNumbers -> IO ()
@@ -82,8 +82,8 @@ range RTT1Level      pn = 0 <= pn
 
 {-# INLINE nullPeerPacketNumbers #-}
 nullPeerPacketNumbers :: PeerPacketNumbers -> Bool
-nullPeerPacketNumbers (PeerPacketNumbers pns) = Set.null pns
+nullPeerPacketNumbers (PeerPacketNumbers pns) = IntSet.null pns
 
 {-# INLINE fromPeerPacketNumbers #-}
 fromPeerPacketNumbers :: PeerPacketNumbers -> [PacketNumber]
-fromPeerPacketNumbers (PeerPacketNumbers pns) = Set.toDescList pns
+fromPeerPacketNumbers (PeerPacketNumbers pns) = IntSet.toDescList pns
