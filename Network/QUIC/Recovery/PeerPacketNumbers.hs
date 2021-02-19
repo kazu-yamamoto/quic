@@ -23,34 +23,33 @@ import Network.QUIC.Types
 
 {-# INLINE getPeerPacketNumbers #-}
 getPeerPacketNumbers :: LDCC -> EncryptionLevel -> IO PeerPacketNumbers
-getPeerPacketNumbers LDCC{..} lvl = get <$> readIORef peerPacketNumbers
-  where
-    get (PeerPacketNumbers pns)  = PeerPacketNumbers . IntSet.map (convert lvl) . IntSet.filter (range lvl) $ pns
+getPeerPacketNumbers LDCC{..} lvl = readIORef (peerPacketNumbers ! lvl)
 
 {-# INLINE addPeerPacketNumbers #-}
 addPeerPacketNumbers :: LDCC -> EncryptionLevel -> PacketNumber -> IO ()
-addPeerPacketNumbers LDCC{..} lvl pn = atomicModifyIORef'' peerPacketNumbers add
+addPeerPacketNumbers LDCC{..} lvl pn =
+    atomicModifyIORef'' (peerPacketNumbers ! lvl) add
   where
-    add (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.insert (convert lvl pn) pns
+    add (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.insert pn pns
 
 {-# INLINE delPeerPacketNumbers #-}
 delPeerPacketNumbers :: LDCC -> EncryptionLevel -> PacketNumber -> IO ()
-delPeerPacketNumbers LDCC{..} lvl pn = atomicModifyIORef'' peerPacketNumbers del
+delPeerPacketNumbers LDCC{..} lvl pn =
+    atomicModifyIORef'' (peerPacketNumbers ! lvl) del
   where
-    del (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.delete (convert lvl pn) pns
+    del (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.delete pn pns
 
 {-# INLINE clearPeerPacketNumbers #-}
 clearPeerPacketNumbers :: LDCC -> EncryptionLevel -> IO ()
-clearPeerPacketNumbers LDCC{..} lvl = atomicModifyIORef'' peerPacketNumbers clear
-  where
-    clear (PeerPacketNumbers pns) = PeerPacketNumbers $ IntSet.filter (not . range lvl) pns
+clearPeerPacketNumbers LDCC{..} lvl =
+    atomicModifyIORef'' (peerPacketNumbers ! lvl) $ \_ -> emptyPeerPacketNumbers
 
 {-# INLINE reducePeerPacketNumbers #-}
 reducePeerPacketNumbers :: LDCC -> EncryptionLevel -> PeerPacketNumbers -> IO ()
-reducePeerPacketNumbers LDCC{..} lvl (PeerPacketNumbers pns) = atomicModifyIORef'' peerPacketNumbers reduce
+reducePeerPacketNumbers LDCC{..} lvl (PeerPacketNumbers pns) =
+    atomicModifyIORef'' (peerPacketNumbers ! lvl) reduce
   where
-    pns' = IntSet.map (convert lvl) pns
-    reduce (PeerPacketNumbers pns0) = PeerPacketNumbers (pns0 IntSet.\\ pns')
+    reduce (PeerPacketNumbers pns0) = PeerPacketNumbers (pns0 IntSet.\\ pns)
 
 {-# INLINE setPreviousRTT1PPNs #-}
 setPreviousRTT1PPNs :: LDCC -> PeerPacketNumbers -> IO ()
@@ -59,24 +58,6 @@ setPreviousRTT1PPNs LDCC{..} ppns = writeIORef previousRTT1PPNs ppns
 {-# INLINE getPreviousRTT1PPNs #-}
 getPreviousRTT1PPNs :: LDCC -> IO PeerPacketNumbers
 getPreviousRTT1PPNs LDCC{..} = readIORef previousRTT1PPNs
-
-----------------------------------------------------------------
-
-initialMagic, handshakeMagic :: PacketNumber
-initialMagic   = -2000
-handshakeMagic = -1000
-
-convert :: EncryptionLevel -> PacketNumber -> PacketNumber
-convert InitialLevel   pn = initialMagic - pn
-convert RTT0Level      pn = pn
-convert HandshakeLevel pn = handshakeMagic - pn
-convert RTT1Level      pn = pn
-
-range :: EncryptionLevel -> PacketNumber -> Bool
-range InitialLevel   pn = pn <= initialMagic
-range RTT0Level      pn = 0 <= pn
-range HandshakeLevel pn = initialMagic < pn && pn <= handshakeMagic
-range RTT1Level      pn = 0 <= pn
 
 ----------------------------------------------------------------
 
