@@ -1,11 +1,9 @@
 module Network.QUIC.Types.Ack where
 
-import Data.Set (Set)
-import qualified Data.Set as Set
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 
-import Network.QUIC.Imports
-
-type PacketNumber = Int64
+type PacketNumber = Int
 
 type Range = Int
 type Gap   = Int
@@ -96,9 +94,9 @@ fromAckInfoToPred (AckInfo lpn fr grs) =
 
 ----------------------------------------------------------------
 
-newtype PeerPacketNumbers = PeerPacketNumbers (Set PacketNumber)
+newtype PeerPacketNumbers = PeerPacketNumbers IntSet
                           deriving (Eq, Show)
 
 emptyPeerPacketNumbers :: PeerPacketNumbers
-emptyPeerPacketNumbers = PeerPacketNumbers Set.empty
+emptyPeerPacketNumbers = PeerPacketNumbers IntSet.empty
 

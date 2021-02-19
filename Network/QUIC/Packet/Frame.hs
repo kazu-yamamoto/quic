@@ -38,7 +38,7 @@ encodeFrame wbuf (Padding n) = replicateM_ n $ write8 wbuf 0x00
 encodeFrame wbuf Ping = write8 wbuf 0x01
 encodeFrame wbuf (Ack (AckInfo largest range1 ranges) (Milliseconds delay)) = do
     write8 wbuf 0x02
-    encodeInt' wbuf largest
+    encodeInt' wbuf $ fromIntegral largest
     encodeInt' wbuf $ fromIntegral delay
     encodeInt' wbuf $ fromIntegral $ length ranges
     encodeInt' wbuf $ fromIntegral range1
@@ -234,7 +234,7 @@ decodeCrypto rbuf = do
 
 decodeAck :: ReadBuffer -> IO Frame
 decodeAck rbuf = do
-    largest <- decodeInt' rbuf
+    largest <- fromIntegral <$> decodeInt' rbuf
     delay   <- fromIntegral <$> decodeInt' rbuf
     count   <- fromIntegral <$> decodeInt' rbuf
     range1  <- fromIntegral <$> decodeInt' rbuf

@@ -255,10 +255,23 @@ data LDCC = LDCC {
   , ptoPing           :: TVar (Maybe EncryptionLevel)
   , speedingUp        :: IORef Bool
   , pktNumPersistent  :: IORef PacketNumber
-  , peerPacketNumbers :: IORef PeerPacketNumbers -- squeezing three to one
+  , peerPacketNumbers :: Array EncryptionLevel (IORef PeerPacketNumbers)
   , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
   , timerQ            :: TimerQ
   }
+
+makePPN :: IO (Array EncryptionLevel (IORef PeerPacketNumbers))
+makePPN = do
+    ref1 <- newIORef emptyPeerPacketNumbers
+    ref2 <- newIORef emptyPeerPacketNumbers
+    ref3 <- newIORef emptyPeerPacketNumbers
+    -- using the ref for RTT0Level and RTT1Level
+    let lst = [(InitialLevel,   ref1)
+              ,(RTT0Level,      ref3)
+              ,(HandshakeLevel, ref2)
+              ,(RTT1Level,      ref3)]
+        arr = array (InitialLevel,RTT1Level) lst
+    return arr
 
 newLDCC :: ConnState -> QLogger -> (PlainPacket -> IO ()) -> IO LDCC
 newLDCC cs qLog put = LDCC cs qLog put
@@ -273,7 +286,7 @@ newLDCC cs qLog put = LDCC cs qLog put
     <*> newTVarIO Nothing
     <*> newIORef False
     <*> newIORef maxBound
-    <*> newIORef emptyPeerPacketNumbers
+    <*> makePPN
     <*> newIORef emptyPeerPacketNumbers
     <*> newTQueueIO
 
