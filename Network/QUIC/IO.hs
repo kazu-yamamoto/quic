@@ -9,7 +9,9 @@ import qualified Data.ByteString as BS
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Stream
+import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | Creating a bidirectional stream.
@@ -135,7 +137,27 @@ acceptStream conn = do
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned.
 recvStream :: Stream -> Int -> IO ByteString
-recvStream s n = takeRecvStreamQwithSize s n
+recvStream s n = do
+    bs <- takeRecvStreamQwithSize s n
+    window <- getRxStreamWindow s
+    let conn = streamConnection s
+        sid = streamId s
+    let initialWindow = initialRxMaxStreamData conn sid
+    when (window <= (initialWindow .>>. 1)) $ do
+        newMax <- addRxMaxStreamData s initialWindow
+        sendFrames conn RTT1Level [MaxStreamData sid newMax]
+        fire (Microseconds 50000) $ do
+            newMax' <- getRxMaxStreamData s
+            sendFrames conn RTT1Level [MaxStreamData sid newMax']
+    cwindow <- getRxDataWindow conn
+    let cinitialWindow = initialMaxData $ getMyParameters conn
+    when (cwindow <= (cinitialWindow .>>. 1)) $ do
+        newMax <- addRxMaxData conn cinitialWindow
+        sendFrames conn RTT1Level [MaxData newMax]
+        fire (Microseconds 50000) $ do
+            newMax' <- getRxMaxData conn
+            sendFrames conn RTT1Level [MaxData newMax']
+    return bs
 
 -- | Closing a stream with an error code.
 resetStream :: Stream -> ApplicationProtocolError -> IO ()
