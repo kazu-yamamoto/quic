@@ -32,58 +32,72 @@ import Network.QUIC.Imports
 -- >>> enc16 $ encodeInt 37
 -- "25"
 encodeInt :: Int64  -> ByteString
-encodeInt i = unsafeCreate n $ \p -> do
-    let p' = p `plusPtr` (n - 1)
-    go tag n i p'
+encodeInt i = unsafeCreate n $ go tag n i'
   where
-    (tag,n) = tagLen i
+    (tag,n,i') = tagLen i
 {-# NOINLINE encodeInt #-}
 
 encodeInt8 :: Int64  -> ByteString
-encodeInt8 i = unsafeCreate n $ \p -> do
-    let p' = p `plusPtr` (n - 1)
-    go tag n i p'
+encodeInt8 i = unsafeCreate n $ go tag n i
   where
     n = 8
     tag = 0b11000000
 {-# NOINLINE encodeInt8 #-}
 
-go :: Word8 -> Int -> Int64 -> Ptr Word8 -> IO ()
-go _   0 _ _ = return ()
-go tag 1 x p = poke p (tag .|. fromIntegral x)
-go tag n x p = do
-    poke p (fromIntegral x)
-    let n' = n - 1
-        x' = x .>>. 8
-        p' = p `plusPtr` (-1)
-    go tag n' x' p'
-
-tagLen :: Int64 -> (Word8, Int)
-tagLen i | i <=         63 = (0b00000000, 1)
-         | i <=      16383 = (0b01000000, 2)
-         | i <= 1073741823 = (0b10000000, 4)
-         | otherwise       = (0b11000000, 8)
-
 encodeInt' :: WriteBuffer -> Int64 -> IO ()
-encodeInt' wbuf i = mapM_ (write8 wbuf) ws
+encodeInt' wbuf i = go' tag n i' wbuf
   where
-    (tag,n) = tagLen i
-    ws = decomp tag n [] i
+    (tag,n,i') = tagLen i
 
 encodeInt'2 :: WriteBuffer -> Int64 -> IO ()
-encodeInt'2 wbuf i = do
-    let ws = decomp 0b01000000 2 [] i
-    mapM_ (write8 wbuf) ws
+encodeInt'2 wbuf i = go' tag n i' wbuf
+  where
+    tag = 0b01000000
+    n = 2
+    i' = i .<<. 48
 
-decomp :: Word8 -> Int -> [Word8] -> Int64 -> [Word8]
-decomp _   0 ws _ = ws
-decomp tag 1 ws x = w:ws
+tagLen :: Int64 -> (Word8, Int, Int64)
+tagLen i | i <=         63 = (0b00000000, 1, i .<<. 56)
+         | i <=      16383 = (0b01000000, 2, i .<<. 48)
+         | i <= 1073741823 = (0b10000000, 4, i .<<. 32)
+         | otherwise       = (0b11000000, 8, i)
+{-# INLINE tagLen #-}
+
+msb8 :: Int64 -> Word8
+msb8 i = fromIntegral (i .>>. 56)
+{-# INLINE msb8 #-}
+
+go :: Word8 -> Int -> Int64 -> Ptr Word8 -> IO ()
+go tag n0 i0 p0 = do
+    poke p0 (tag .|. msb8 i0)
+    let n' = n0 - 1
+        i' = i0 .<<. 8
+        p' = p0 `plusPtr` 1
+    loop n' i' p'
   where
-    w  = fromIntegral x .|. tag
-decomp tag n ws x = decomp tag (n-1) (w:ws) x'
+    loop 0 _ _ = return ()
+    loop n i p = do
+        poke p $ msb8 i
+        let n' = n - 1
+            i' = i .<<. 8
+            p' = p `plusPtr` 1
+        loop n' i' p'
+{-# INLINE go #-}
+
+go' :: Word8 -> Int -> Int64 -> WriteBuffer -> IO ()
+go' tag n0 i0 wbuf = do
+    write8 wbuf (tag .|. msb8 i0)
+    let n' = n0 - 1
+        i' = i0 .<<. 8
+    loop n' i'
   where
-    x' = x .>>. 8
-    w  = fromIntegral x
+    loop 0 _ = return ()
+    loop n i = do
+        write8 wbuf $ msb8 i
+        let n' = n - 1
+            i' = i .<<. 8
+        loop n' i'
+{-# INLINE go' #-}
 
 ----------------------------------------------------------------
 
