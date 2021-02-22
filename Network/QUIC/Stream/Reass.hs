@@ -104,7 +104,7 @@ putRxStreamData s rx@(RxStreamData dat off _ _) = do
 -- return value indicates duplication
 tryReassemble :: Stream -> RxStreamData -> (StreamData -> IO ()) -> IO () -> IO Bool
 tryReassemble Stream{}   (RxStreamData "" _  _ False) _ _ = return True
-tryReassemble Stream{..} (RxStreamData "" off _ True) _ putFin = do
+tryReassemble Stream{..} x@(RxStreamData "" off _ True) _ putFin = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0 { streamFin = True }
     if fin0 then do
@@ -118,6 +118,7 @@ tryReassemble Stream{..} (RxStreamData "" off _ True) _ putFin = do
             return False
         GT -> do
             writeIORef streamStateRx si1
+            atomicModifyIORef'' streamReass (Skew.insert x)
             return False
 tryReassemble Stream{..} x@(RxStreamData dat off len False) put putFin = do
     si0@(StreamState off0 _) <- readIORef streamStateRx
