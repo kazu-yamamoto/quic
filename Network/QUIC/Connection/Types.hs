@@ -15,13 +15,13 @@ import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Connector
+import Network.QUIC.Crypto
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Stream
-import Network.QUIC.TLS
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

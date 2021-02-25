@@ -1,7 +1,7 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.TLS.Crypto (
+module Network.QUIC.Crypto (
   -- * Payload encryption
     defaultCipher
   , initialSecrets

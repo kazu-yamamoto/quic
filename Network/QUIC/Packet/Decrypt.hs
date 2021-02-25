@@ -11,12 +11,12 @@ import Foreign.Ptr
 import Network.ByteOrder
 
 import Network.QUIC.Connection
+import Network.QUIC.Crypto
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Number
-import Network.QUIC.TLS
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

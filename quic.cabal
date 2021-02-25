@@ -42,11 +42,12 @@ library
                        Network.QUIC.Connection.StreamTable
                        Network.QUIC.Connection.Types
                        Network.QUIC.Connector
+                       Network.QUIC.Crypto
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
-                       Network.QUIC.Info
                        Network.QUIC.IO
                        Network.QUIC.Imports
+                       Network.QUIC.Info
                        Network.QUIC.Logger
                        Network.QUIC.Packet
                        Network.QUIC.Packet.Decode
@@ -58,8 +59,8 @@ library
                        Network.QUIC.Packet.Token
                        Network.QUIC.Packet.Version
                        Network.QUIC.Parameters
-                       Network.QUIC.Qlog
                        Network.QUIC.QLogger
+                       Network.QUIC.Qlog
                        Network.QUIC.Receiver
                        Network.QUIC.Recovery
                        Network.QUIC.Recovery.Constants
@@ -87,8 +88,6 @@ library
                        Network.QUIC.Stream.Table
                        Network.QUIC.Stream.Types
                        Network.QUIC.TLS
-                       Network.QUIC.TLS.Crypto
-                       Network.QUIC.TLS.Handshaker
                        Network.QUIC.Timeout
                        Network.QUIC.Types
                        Network.QUIC.Types.Ack

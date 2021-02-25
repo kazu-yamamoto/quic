@@ -17,6 +17,7 @@ import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
+import Network.QUIC.Crypto
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
@@ -24,7 +25,6 @@ import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Socket
-import Network.QUIC.TLS
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 

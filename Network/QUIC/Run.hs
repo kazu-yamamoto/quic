@@ -20,20 +20,20 @@ import Network.QUIC.Client
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
+import Network.QUIC.Crypto
 import Network.QUIC.Exception
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
-import Network.QUIC.Qlog
 import Network.QUIC.QLogger
+import Network.QUIC.Qlog
 import Network.QUIC.Receiver
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Server
 import Network.QUIC.Socket
-import Network.QUIC.TLS
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 

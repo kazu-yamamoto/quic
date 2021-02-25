@@ -15,7 +15,6 @@ import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Version
-import Network.QUIC.TLS
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

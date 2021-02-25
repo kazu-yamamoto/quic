@@ -10,13 +10,13 @@ import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr
 
 import Network.QUIC.Connection
+import Network.QUIC.Crypto
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Number
 import Network.QUIC.Packet.Version
 import Network.QUIC.Parameters
-import Network.QUIC.TLS
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
