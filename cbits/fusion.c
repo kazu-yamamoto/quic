@@ -1057,3 +1057,8 @@ int ptls_fusion_is_supported_by_cpu(void)
     return 1;
 }
 #endif
+
+ptls_aead_context_t *aead_context_new() {
+   ptls_aead_context_t *p = malloc(sizeof(struct aesgcm_context));
+   return p;
+}

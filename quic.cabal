@@ -45,6 +45,7 @@ library
                        Network.QUIC.Connection.Types
                        Network.QUIC.Connector
                        Network.QUIC.Crypto
+                       Network.QUIC.CryptoFusion
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.IO
