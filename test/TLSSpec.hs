@@ -20,28 +20,28 @@ instance Eq (ServerTrafficSecret a) where
 
 spec :: Spec
 spec = do
-    let ver = Draft29
+    let ver = Version1
     describe "test vector" $ do
         it "describes the examples of Keys" $ do
             ----------------------------------------------------------------
             -- shared keys
             let dcID = makeCID (dec16s "8394c8f03e515708")
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret ver dcID
-            client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "0088119288f1d866733ceeed15ff9d50902cf82952eee27e9d4d4918ea371d87")
+            client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "c00cf151ca5be075ed0ebfb5c80323c42d6b7db67881289af4008f1f6c357aea")
             let ckey = aeadKey defaultCipher (Secret cis)
-            ckey `shouldBe` Key (dec16 "175257a31eb09dea9366d8bb79ad80ba")
+            ckey `shouldBe` Key (dec16 "1f369613dd76d5467730efcbe3b1a22d")
             let civ = initialVector defaultCipher (Secret cis)
-            civ `shouldBe` IV (dec16 "6b26114b9cba2b63a9e8dd4f")
+            civ `shouldBe` IV (dec16 "fa044b2f42a3fd3b46fb255c")
             let chp = headerProtectionKey defaultCipher (Secret cis)
-            chp `shouldBe` Key (dec16 "9ddd12c994c0698b89374a9c077a3077")
+            chp `shouldBe` Key (dec16 "9f50449e04a0e810283a1e9933adedd2")
             let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret ver dcID
-            server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "006f881359244dd9ad1acf85f595bad67c13f9f5586f5e64e1acae1d9ea8f616")
+            server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b")
             let skey = aeadKey defaultCipher (Secret sis)
-            skey `shouldBe` Key (dec16 "149d0b1662ab871fbe63c49b5e655a5d")
+            skey `shouldBe` Key (dec16 "cf3a5331653c364c88f0f379b6067e37")
             let siv = initialVector defaultCipher (Secret sis)
-            siv `shouldBe` IV (dec16 "bab2b12a4c76016ace47856d")
+            siv `shouldBe` IV (dec16 "0ac1493ca1905853b0bba03e")
             let shp = headerProtectionKey defaultCipher (Secret sis)
-            shp `shouldBe` Key (dec16 "c0c499a65a60024a18a250974ea01dfa")
+            shp `shouldBe` Key (dec16 "c206b8d9b9f0f37644430b490eeaa314")
 
         it "describes the examples of Client Initial" $ do
             let dcID = makeCID (dec16s "8394c8f03e515708")
@@ -52,18 +52,19 @@ spec = do
             ----------------------------------------------------------------
             -- payload encryption
             let clientCRYPTOframe = dec16 $ BS.concat [
-                    "060040c4010000c003036660261ff947cea49cce6cfad687f457cf1b14531ba1"
-                  , "4131a0e8f309a1d0b9c4000006130113031302010000910000000b0009000006"
-                  , "736572766572ff01000100000a00140012001d00170018001901000101010201"
-                  , "03010400230000003300260024001d00204cfdfcd178b784bf328cae793b136f"
-                  , "2aedce005ff183d7bb1495207236647037002b0003020304000d0020001e0403"
-                  , "05030603020308040805080604010501060102010402050206020202002d0002"
-                  , "0101001c00024001"
+                    "060040f1010000ed0303ebf8fa56f12939b9584a3896472ec40bb863cfd3e868"
+                  , "04fe3a47f06a2b69484c00000413011302010000c000000010000e00000b6578"
+                  , "616d706c652e636f6dff01000100000a00080006001d00170018001000070005"
+                  , "04616c706e000500050100000000003300260024001d00209370b2c9caa47fba"
+                  , "baf4559fedba753de171fa71f50f1ce15d43e994ec74d748002b000302030400"
+                  , "0d0010000e0403050306030203080408050806002d00020101001c0002400100"
+                  , "3900320408ffffffffffffffff05048000ffff07048000ffff08011001048000"
+                  , "75300901100f088394c8f03e51570806048000ffff"
                   ]
-            let clientPacketHeader = dec16 "c3ff00001d088394c8f03e5157080000449e00000002"
-            -- c3ff00001d08 8394c8f03e5157080000449e00000002
+            let clientPacketHeader = dec16 "c300000001088394c8f03e5157080000449e00000002"
+            -- c30000000108 8394c8f03e515708 0000449e 00000002
             -- c3 (11000011)    -- flags
-            -- ff00001d         -- version draft 29
+            -- 00000001         -- version 1
             -- 08               -- dcid len
             -- 8394c8f03e515708 -- dcid
             -- 00               -- scid len
@@ -88,6 +89,6 @@ spec = do
             ----------------------------------------------------------------
             -- header protection
             let sample = Sample (BS.take 16 ciphertext)
-            sample `shouldBe` Sample (dec16 "fb66bc5f93032b7ddd89fe0ff15d9c4f")
+            sample `shouldBe` Sample (dec16 "d1b1c98dd7689fb8ec11d242b123dc9b")
             let Mask mask = protectionMask defaultCipher chp sample
-            BS.take 5 mask `shouldBe` dec16 "d64a952459"
+            BS.take 5 mask `shouldBe` dec16 "437b9aec36"
