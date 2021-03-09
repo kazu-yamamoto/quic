@@ -907,7 +907,7 @@ void aead_do_encrypt(struct st_ptls_aead_context_t *_ctx, void *output, const vo
     ptls_fusion_aesgcm_encrypt(ctx->aesgcm, output, input, inlen, calc_counter(ctx, seq), aad, aadlen, supp);
 }
 
-static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen, uint64_t seq,
+size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                               const void *aad, size_t aadlen)
 {
     struct aesgcm_context *ctx = (void *)_ctx;
@@ -954,12 +954,12 @@ static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
     return 0;
 }
 
-static int aes128gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
+int aes128gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
     return aesgcm_setup(ctx, is_enc, key, iv, PTLS_AES128_KEY_SIZE);
 }
 
-static int aes256gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
+int aes256gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
     return aesgcm_setup(ctx, is_enc, key, iv, PTLS_AES256_KEY_SIZE);
 }
@@ -1062,3 +1062,11 @@ ptls_aead_context_t *aead_context_new() {
    ptls_aead_context_t *p = malloc(sizeof(struct aesgcm_context));
    return p;
 }
+
+static void clear_memory(void *p, size_t len)
+{
+    if (len != 0)
+        memset(p, 0, len);
+}
+
+void (*volatile ptls_clear_memory)(void *p, size_t len) = clear_memory;
