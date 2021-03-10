@@ -5,6 +5,7 @@ module Network.QUIC.Types.Integer (
   , encodeInt8
   , encodeInt'
   , encodeInt'2
+  , encodeInt'4
   , decodeInt
   , decodeInt'
   ) where
@@ -55,6 +56,13 @@ encodeInt'2 wbuf i = go' tag n i' wbuf
     tag = 0b01000000
     n = 2
     i' = i .<<. 48
+
+encodeInt'4 :: WriteBuffer -> Int64 -> IO ()
+encodeInt'4 wbuf i = go' tag n i' wbuf
+  where
+    tag = 0b10000000
+    n = 4
+    i' = i .<<. 32
 
 tagLen :: Int64 -> (Word8, Int, Int64)
 tagLen i | i <=         63 = (0b00000000, 1, i .<<. 56)

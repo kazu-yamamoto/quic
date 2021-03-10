@@ -3,15 +3,17 @@
 module Network.QUIC.Utils where
 
 import Control.Monad (replicateM)
-import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base16
+import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
 import Data.Char (chr)
 import Data.Either (fromRight)
 import Data.List (foldl')
 import Data.Word
+import Foreign.ForeignPtr (withForeignPtr)
+import Foreign.Ptr (Ptr, plusPtr)
 import System.Random (randomIO)
 
 dec16 :: ByteString -> ByteString
@@ -41,3 +43,7 @@ totalLen = foldl' (\n bs -> (n + BS.length bs)) 0
 
 sum' :: (Functor f, Foldable f) => f Int -> Int
 sum' = foldl' (+) 0
+
+withByteString :: ByteString -> (Ptr Word8 -> IO a) -> IO a
+withByteString (PS fptr off _) f = withForeignPtr fptr $ \ptr ->
+  f (ptr `plusPtr` off)

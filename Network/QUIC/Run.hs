@@ -14,7 +14,6 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import Data.X509 (CertificateChain)
 import qualified Network.Socket as NS
-import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Client
 import Network.QUIC.Config
@@ -39,7 +38,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data ConnRes = ConnRes Connection SendMany Receive AuthCIDs
+data ConnRes = ConnRes Connection SendBuf Receive AuthCIDs
 
 connResConnection :: ConnRes -> Connection
 connResConnection (ConnRes conn _ _ _) = conn
@@ -98,9 +97,9 @@ createClientConnection conf@ClientConfig{..} ver = do
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
-        send bss = do
+        send buf siz = do
             (s,_) <- readIORef sref
-            void $ NSB.sendMany s bss
+            void $ NS.sendBuf s buf siz
         recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
@@ -189,9 +188,9 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     let cls = do
             (s,_) <- readIORef sref
             NS.close s
-        send bss = void $ do
+        send buf siz = void $ do
             (s,_) <- readIORef sref
-            NSB.sendMany s bss
+            NS.sendBuf s buf siz
         recv = recvServer accRecvQ
     let Just myCID = initSrcCID accMyAuthCIDs
         Just ocid  = origDstCID accMyAuthCIDs

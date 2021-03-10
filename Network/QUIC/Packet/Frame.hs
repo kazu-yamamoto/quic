@@ -22,16 +22,16 @@ encodeFrames :: [Frame] -> IO ByteString
 encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
   mapM_ (encodeFrame wbuf) frames
 
-encodeFramesWithPadding :: Buffer -> BufferSize -> [Frame] -> IO (ByteString, Int)
+encodeFramesWithPadding :: Buffer
+                        -> BufferSize
+                        -> [Frame]
+                        -> IO Int   -- ^ payload size without paddings
 encodeFramesWithPadding buf siz frames = do
     zeroMemory buf $ fromIntegral siz -- padding
     wbuf <- newWriteBuffer buf siz
     save wbuf
     mapM_ (encodeFrame wbuf) frames
-    size <- savingSize wbuf
-    goBack wbuf
-    bs <- extractByteString wbuf siz
-    return (bs, size)
+    savingSize wbuf
 
 encodeFrame :: WriteBuffer -> Frame -> IO ()
 encodeFrame wbuf (Padding n) = replicateM_ n $ write8 wbuf 0x00
@@ -136,8 +136,10 @@ encodeFrame wbuf (UnknownFrame typ) =
 
 ----------------------------------------------------------------
 
-decodeFrames :: ByteString -> IO (Maybe [Frame])
-decodeFrames bs = withReadBuffer bs $ loop id
+decodeFrames :: Buffer -> BufferSize -> IO (Maybe [Frame])
+decodeFrames buf bufsiz = do
+    rbuf <- newReadBuffer buf bufsiz
+    loop id rbuf
   where
     loop frames rbuf = do
         ok <- (>= 1) <$> remainingSize rbuf

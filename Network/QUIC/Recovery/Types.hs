@@ -75,14 +75,12 @@ mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
   , spAckEliciting      = ackeli
   }
 
-fixSentPacket :: SentPacket -> [ByteString] -> Int -> SentPacket
-fixSentPacket spkt bss padLen = spkt {
+fixSentPacket :: SentPacket -> Int -> Int -> SentPacket
+fixSentPacket spkt bytes padLen = spkt {
     spPlainPacket = if padLen /= 0 then addPadding padLen $ spPlainPacket spkt
                                    else spPlainPacket spkt
-  , spSentBytes   = sentBytes
+  , spSentBytes   = bytes
   }
-  where
-    sentBytes = totalLen bss
 
 addPadding :: Int -> PlainPacket -> PlainPacket
 addPadding n (PlainPacket hdr plain) = PlainPacket hdr plain'

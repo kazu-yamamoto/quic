@@ -1,6 +1,6 @@
 module Network.QUIC.Types (
     Bytes
-  , SendMany
+  , SendBuf
   , Receive
   , Close
   , Direction(..)
@@ -30,6 +30,6 @@ import Network.QUIC.Types.Queue
 import Network.QUIC.Types.Resumption
 import Network.QUIC.Types.Time
 
-type SendMany = [ByteString] -> IO ()
-type Receive  = IO ReceivedPacket
+type SendBuf = Buffer -> Int -> IO ()
+type Receive = IO ReceivedPacket
 type Close = IO ()

@@ -26,6 +26,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.OrdPSQ (OrdPSQ)
 import qualified Data.OrdPSQ as PSQ
+import Foreign.Marshal.Alloc
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Socket hiding (accept)
@@ -146,29 +147,33 @@ runDispatcher d conf ssa@(s,_) =
     forkFinally (dispatcher d conf ssa) (\_ -> close s)
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
-dispatcher d conf (s,mysa) = handleLog logAction $ do
---    let (opt,_cmsgid) = case mysa of
---          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
---          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
---          _               -> error "dispatcher"
---    setSocketOption s opt 1
-    forever $ do
---        (peersa, bs0, _cmsgs, _) <- recv
-        (bs0, peersa) <- recv
-        let bytes = BS.length bs0 -- both Initial and 0RTT
-        now <- getTimeMicrosecond
-        -- macOS overrides the local address of the socket
-        -- if in_pktinfo is used.
--- #if defined(darwin_HOST_OS)
---         let cmsgs' = []
--- #else
---         let cmsgs' = filterCmsg _cmsgid _cmsgs
--- #endif
-        (pkt, bs0RTT) <- decodePacket bs0
---        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
-        let send bs = void $ NSB.sendTo s bs peersa
-        dispatch d conf pkt mysa peersa send bs0RTT bytes now
+dispatcher d conf (s,mysa) = handleLog logAction $
+    E.bracket (mallocBytes maximumUdpPayloadSize)
+              free
+              body
   where
+    body buf = do
+    --    let (opt,_cmsgid) = case mysa of
+    --          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
+    --          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
+    --          _               -> error "dispatcher"
+    --    setSocketOption s opt 1
+        forever $ do
+    --        (peersa, bs0, _cmsgs, _) <- recv
+            (bs0, peersa) <- recv
+            let bytes = BS.length bs0 -- both Initial and 0RTT
+            now <- getTimeMicrosecond
+            -- macOS overrides the local address of the socket
+            -- if in_pktinfo is used.
+    -- #if defined(darwin_HOST_OS)
+    --         let cmsgs' = []
+    -- #else
+    --         let cmsgs' = filterCmsg _cmsgid _cmsgs
+    -- #endif
+            (pkt, bs0RTT) <- decodePacket bs0
+    --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
+            let send bs = void $ NSB.sendTo s bs peersa
+            dispatch d conf pkt mysa peersa send buf bs0RTT bytes now
     logAction msg = stdoutLogger ("dispatcher: " <> msg)
     recv = do
 --        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
@@ -192,10 +197,10 @@ dispatcher d conf (s,mysa) = handleLog logAction $ do
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> Int -> TimeMicrosecond -> IO ()
+dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Buffer -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..}
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _) lvl)
-         mysa peersa send bs0RTT bytes tim
+         mysa peersa send _ bs0RTT bytes tim
   | bytes < defaultQUICPacketSize = do
         stdoutLogger $ "dispatch: too small " <> bhow bytes <> ", " <> bhow peersa
   | ver `notElem` confVersions scConfig = do
@@ -309,19 +314,20 @@ dispatch Dispatch{..} ServerConfig{..}
           Just newtoken -> do
               bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
               send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ peersa _ _ bytes tim = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ peersa _ _ _ bytes tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> stdoutLogger $ "dispatch: orphan 0RTT: " <> bhow peersa
-dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ _ bytes tim  = do
+dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ buf _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
           stdoutLogger $ "dispatch: CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
-          mplain <- decryptCrypt conn crypt RTT1Level
+          let bufsiz = maximumUdpPayloadSize
+          mplain <- decryptCrypt conn buf bufsiz crypt RTT1Level
           case mplain of
             Nothing -> connDebugLog conn "dispatch: cannot decrypt"
             Just plain -> do
@@ -336,7 +342,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                     connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                     void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
-dispatch _ _ ipkt _ peersa _ _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow peersa <> ", " <> bhow ipkt
+dispatch _ _ ipkt _ peersa _ _ _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow peersa <> ", " <> bhow ipkt
 
 ----------------------------------------------------------------
 

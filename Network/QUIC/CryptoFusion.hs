@@ -1,10 +1,16 @@
-module Network.QUIC.CryptoFusion where
+module Network.QUIC.CryptoFusion (
+    FusionContext
+  , emptyFusionContext
+  , fusionSetup
+  , fusionNewContext
+  , fusionDisposeKey
+  , fusionEncrypt
+  , fusionDecrypt
+  ) where
 
-import qualified Data.ByteString as BS
-import Data.ByteString.Internal
 import Foreign.C.Types
-import Foreign.ForeignPtr
 import Foreign.Ptr
+import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Crypto
 import Network.QUIC.Imports
@@ -66,9 +72,11 @@ foreign import ccall unsafe "aead_do_decrypt"
                   -> CSize     -- AAD length
                   -> IO CSize
 
-withByteString :: ByteString -> (Ptr Word8 -> IO a) -> IO a
-withByteString (PS fptr off _) f = withForeignPtr fptr $ \ptr ->
-  f (ptr `plusPtr` off)
+fusionSetup :: Cipher -> FusionContext -> Key -> IV -> IO ()
+fusionSetup cipher
+  | cipher == cipher_TLS13_AES128GCM_SHA256        = fusionSetupAES128GCM
+  | cipher == cipher_TLS13_AES256GCM_SHA384        = fusionSetupAES256GCM
+  | otherwise                                      = error "fusionSetup"
 
 fusionSetupAES128GCM :: FusionContext -> Key -> IV -> IO ()
 fusionSetupAES128GCM pctx (Key key) (IV iv) =
@@ -80,18 +88,21 @@ fusionSetupAES256GCM pctx (Key key) (IV iv) =
     withByteString key $ \keyp ->
         withByteString iv $ \ivp -> void $ c_aes256gcm_setup pctx 0 keyp ivp
 
-fusionEncrypt :: FusionContext -> PlainText -> AddDat -> PacketNumber -> Buffer -> IO ()
-fusionEncrypt pctx inp (AddDat add) pn buf = do
-    let ilen = fromIntegral $ BS.length inp
-        alen = fromIntegral $ BS.length add
-        pn'  = fromIntegral pn
-    withByteString inp $ \inpp -> withByteString add $ \addp ->
-      c_aead_do_encrypt pctx buf inpp ilen pn' addp alen nullPtr
+fusionEncrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO ()
+fusionEncrypt pctx ibuf ilen abuf alen pn obuf =
+    c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen' nullPtr
+  where
+    pn' = fromIntegral pn
+    ilen' = fromIntegral ilen
+    alen' = fromIntegral alen
 
-fusionDecrypt :: FusionContext -> CipherText -> AddDat -> PacketNumber -> Buffer -> IO Int
-fusionDecrypt pctx inp (AddDat add) pn buf = do
-    let ilen = fromIntegral $ BS.length inp
-        alen = fromIntegral $ BS.length add
-        pn'  = fromIntegral pn
-    withByteString inp $ \inpp -> withByteString add $ \addp ->
-      fromIntegral <$> c_aead_do_decrypt pctx buf inpp ilen pn' addp alen
+fusionDecrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
+fusionDecrypt pctx ibuf ilen abuf alen pn buf =
+    fromIntegral <$> c_aead_do_decrypt pctx buf ibuf ilen' pn' abuf alen'
+  where
+    pn' = fromIntegral pn
+    ilen' = fromIntegral ilen
+    alen' = fromIntegral alen
+
+emptyFusionContext :: FusionContext
+emptyFusionContext = nullPtr
