@@ -175,7 +175,17 @@ setOriginalDestinationConnectionId :: Parameters -> Parameters
 setOriginalDestinationConnectionId params = params { originalDestinationConnectionId = dummyCID }
 
 setPreferredAddress :: Parameters -> Parameters
-setPreferredAddress params = params { preferredAddress = Just "DUMMY" }
+setPreferredAddress params = params { preferredAddress = Just prefAddr }
+  where
+    prefAddr = BS.concat
+        [ "\x7f\x00\x00\x01"
+        , "\x01\xbb"
+        , "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        , "\x00\x00"
+        , "\x08"
+        , "\x00\x01\x02\x03\x04\x05\x06\x07"
+        , "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f"
+        ]
 
 setRetrySourceConnectionId :: Parameters -> Parameters
 setRetrySourceConnectionId params = params { retrySourceConnectionId = dummyCID }
@@ -201,7 +211,7 @@ largeOffset lvl plain
   | lvl == RTT1Level = plain { plainFrames = fake : plainFrames plain }
   | otherwise        = plain
   where
-    fake = StreamF 0 1000000 ["GET /\r\n"] True
+    fake = StreamF 0 100000000 ["GET /\r\n"] True
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
