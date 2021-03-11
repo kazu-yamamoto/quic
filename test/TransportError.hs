@@ -211,7 +211,7 @@ largeOffset lvl plain
   | lvl == RTT1Level = plain { plainFrames = fake : plainFrames plain }
   | otherwise        = plain
   where
-    fake = StreamF 0 1000000 ["GET /\r\n"] True
+    fake = StreamF 0 100000000 ["GET /\r\n"] True
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
