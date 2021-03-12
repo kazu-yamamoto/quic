@@ -159,7 +159,6 @@ module Network.QUIC.Connection (
   , connHooks
   , Hooks(..)
   , connLDCC
-  , encodeBuffer
   , Input(..)
   , Crypto(..)
   , Output(..)

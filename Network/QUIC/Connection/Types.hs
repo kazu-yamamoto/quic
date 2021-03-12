@@ -9,7 +9,6 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.X509 (CertificateChain)
-import GHC.ForeignPtr (ForeignPtr(..), mallocPlainForeignPtrBytes)
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 
@@ -168,8 +167,6 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
-  -- WriteBuffer
-  , encodeBuffer      :: (ForeignPtr Word8,BufferSize) -- occupied by a sender
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
@@ -246,12 +243,10 @@ newConnection :: Role
               -> IORef (Socket,RecvQ)
               -> IO Connection
 newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
-    let elen = maximumUdpPayloadSize
-    ebuf <- mallocPlainForeignPtrBytes elen
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate debugLog qLog hooks (ebuf,elen)
+    Connection connstate debugLog qLog hooks
         -- Info
         <$> newIORef initialRoleInfo
         <*> newIORef ver
