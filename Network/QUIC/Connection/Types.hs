@@ -9,6 +9,7 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.X509 (CertificateChain)
+import Foreign.Ptr
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 
@@ -92,13 +93,13 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
-    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO ()
+    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> Supplement -> IO ()
   , decrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt = \_ _ _ _ _ _ -> return ()
+    encrypt = \_ _ _ _ _ _ _ -> return ()
   , decrypt = \_ _ _ _ _ _ -> return (-1)
   }
 
@@ -118,13 +119,13 @@ initialCoder1RTT = Coder1RTT {
   }
 
 data Protector = Protector {
-    protect   :: Sample -> Mask
-  , unprotect :: Sample -> Mask
+    supplement :: Supplement
+  , unprotect  :: Sample -> Mask
   }
 
 initialProtector :: Protector
 initialProtector = Protector {
-    protect   = \_ -> Mask ""
+    supplement = nullPtr
   , unprotect = \_ -> Mask ""
   }
 

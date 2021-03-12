@@ -6,11 +6,12 @@ module Network.QUIC.Packet.Encode (
   ) where
 
 import qualified Data.ByteString as BS
-import Foreign.ForeignPtr (newForeignPtr_)
 import Foreign.Ptr
+import Foreign.Storable (peek)
 
 import Network.QUIC.Connection
 import Network.QUIC.Crypto
+import Network.QUIC.CryptoFusion
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
@@ -145,27 +146,29 @@ protectPayloadHeader conn wbuf encodeBuf frames pn epn epnLen headerBeg mlen lvl
     let encodeBufLen = 1500 - 20 - 8
     payloadWithoutPaddingSiz <- encodeFramesWithPadding encodeBuf encodeBufLen frames
     cipher <- getCipher conn lvl
+    coder <- getCoder conn lvl keyPhase
+    supp <- supplement <$> getProtector conn lvl
+    -- before length or packer number
+    lengthOrPNBeg <- currentOffset wbuf
     (packetLen, headerLen, plainLen, tagLen, padLen)
-        <- calcLen cipher payloadWithoutPaddingSiz
-    writeLen $ epnLen + plainLen + tagLen
+        <- calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
+    when (lvl /= RTT1Level) $ writeLen (epnLen + plainLen + tagLen)
     pnBeg <- currentOffset wbuf
     writeEpn epnLen
     -- payload
-    coder <- getCoder conn lvl keyPhase
     cryptoBeg <- currentOffset wbuf
+    let sampleBeg = pnBeg `plusPtr` 4
+    fusionSetSample supp sampleBeg
     -- fixme: error handling
-    encrypt coder encodeBuf plainLen headerBeg headerLen pn cryptoBeg
+    encrypt coder encodeBuf plainLen headerBeg headerLen pn cryptoBeg supp
     -- protecting header
-    protector <- getProtector conn lvl
-    fptr <- newForeignPtr_ cryptoBeg
-    let makeMask = protect protector
-        ctxt = PS fptr 0 (plainLen + tagLen)
-    protectHeader headerBeg pnBeg epnLen cipher makeMask ctxt
+    maskBeg <- fusionGetMask supp
+    protectHeader headerBeg pnBeg epnLen maskBeg
     return (packetLen, padLen)
   where
-    calcLen cipher payloadWithoutPaddingSiz = do
-        here <- currentOffset wbuf
-        let headerLen = (here `minusPtr` headerBeg)
+    calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz = do
+        let headerLen = (lengthOrPNBeg `minusPtr` headerBeg)
+                      -- length: assuming 2byte length
                       + (if lvl /= RTT1Level then 2 else 0)
                       + epnLen
         let tagLen = tagLength cipher
@@ -175,9 +178,8 @@ protectPayloadHeader conn wbuf encodeBuf frames pn epn epnLen headerBeg mlen lvl
             packetLen = headerLen + plainLen + tagLen
             padLen = plainLen - payloadWithoutPaddingSiz
         return (packetLen, headerLen, plainLen, tagLen, padLen)
-    writeLen len = when (lvl /= RTT1Level) $ do
-        -- length: assuming 2byte length
-        encodeInt'2 wbuf $ fromIntegral len
+    -- length: assuming 2byte length
+    writeLen len = encodeInt'2 wbuf $ fromIntegral len
     writeEpn 1 = write8  wbuf $ fromIntegral epn
     writeEpn 2 = write16 wbuf $ fromIntegral epn
     writeEpn 3 = write24 wbuf epn
@@ -185,22 +187,22 @@ protectPayloadHeader conn wbuf encodeBuf frames pn epn epnLen headerBeg mlen lvl
 
 ----------------------------------------------------------------
 
-protectHeader :: Buffer -> Buffer -> Int -> Cipher -> (Sample -> Mask) -> CipherText -> IO ()
-protectHeader headerBeg pnBeg epnLen cipher makeMask ctxt1 = do
-    flags <- Flags <$> peek8 headerBeg 0
-    let Flags proFlags = protectFlags flags (mask `BS.index` 0)
-    poke8 proFlags headerBeg 0
-    shuffle 0
-    when (epnLen >= 2) $ shuffle 1
-    when (epnLen >= 3) $ shuffle 2
-    when (epnLen == 4) $ shuffle 3
+protectHeader :: Buffer -> Buffer -> Int -> Buffer -> IO ()
+protectHeader headerBeg pnBeg epnLen maskBeg = do
+    shuffleFlag
+    shufflePN 0
+    when (epnLen >= 2) $ shufflePN 1
+    when (epnLen >= 3) $ shufflePN 2
+    when (epnLen == 4) $ shufflePN 3
   where
-    slen = sampleLength cipher
-    ctxt2 = BS.drop (4 - epnLen) ctxt1
-    sample = Sample $ BS.take slen ctxt2
-    -- throw an exception if length sample < slen
-    Mask mask = makeMask sample
-    shuffle n = do
+    mask n = peek (maskBeg `plusPtr` n)
+    shuffleFlag = do
+        flags <- Flags <$> peek8 headerBeg 0
+        mask0 <- mask 0
+        let Flags proFlags = protectFlags flags mask0
+        poke8 proFlags headerBeg 0
+    shufflePN n = do
         p0 <- peek8 pnBeg n
-        let pp0 = p0 `xor` (mask `BS.index` (n + 1))
+        maskn1 <- mask (n + 1)
+        let pp0 = p0 `xor` maskn1
         poke8 pp0 pnBeg n
