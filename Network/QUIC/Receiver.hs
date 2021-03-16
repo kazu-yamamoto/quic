@@ -335,18 +335,19 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
         setCloseReceived conn
         let quicexc = ApplicationProtocolErrorIsReceived err reason
         exitConnection conn quicexc
-processFrame conn lvl HandshakeDone = do
-    when (isServer conn || lvl /= RTT1Level) $
+processFrame conn lvl HandshakeDone
+  | isServer conn || lvl /= RTT1Level =
         sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e
-    onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
-    fire (Microseconds 100000) $ do
-        dropSecrets conn RTT0Level
-        dropSecrets conn HandshakeLevel
-        clearCryptoStream conn HandshakeLevel
-        clearCryptoStream conn RTT1Level
-    setConnectionEstablished conn
-    -- to receive NewSessionTicket
-    fire (Microseconds 1000000) $ killHandshaker conn
+  | otherwise = do
+        onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
+        fire (Microseconds 100000) $ do
+            dropSecrets conn RTT0Level
+            dropSecrets conn HandshakeLevel
+            clearCryptoStream conn HandshakeLevel
+            clearCryptoStream conn RTT1Level
+        setConnectionEstablished conn
+        -- to receive NewSessionTicket
+        fire (Microseconds 1000000) $ killHandshaker conn
 processFrame conn _ _ = sendCCandExitConnection conn ProtocolViolation "" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.

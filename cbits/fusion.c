@@ -1074,6 +1074,11 @@ ptls_aead_context_t *aead_context_new() {
    return p;
 }
 
+void aead_context_free(ptls_aead_context_t *p) {
+  aesgcm_dispose_crypto(p);
+  free(p);
+}
+
 static void clear_memory(void *p, size_t len)
 {
     if (len != 0)
@@ -1092,6 +1097,12 @@ ptls_aead_supplementary_encryption_t *supplement_new(uint8_t *key, uint siz) {
   ptls_aead_supplementary_encryption_t *supp = &(suppctx->fusion_supp);
   supp->ctx = ctrctx;
   return supp;
+}
+
+void supplement_free(ptls_aead_supplementary_encryption_t *supp) {
+  ptls_cipher_context_t *ctx = (ptls_cipher_context_t *)&(((struct supplement_context *)supp)->fusion_ctr);
+  ctr_dispose(ctx);
+  free(supp);
 }
 
 void supplement_set_sample(ptls_aead_supplementary_encryption_t *supp, uint8_t *sample) {

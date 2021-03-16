@@ -61,17 +61,23 @@ sendPacket conn send buf0 spkts0 = getMaxPacketSize conn >>= go
     buildPackets buf bufsiz siz [spkt] build0 = do
         let pkt = spPlainPacket spkt
         (bytes,padlen) <- encodePlainPacket conn buf bufsiz pkt $ Just siz
-        let sentPacket = fixSentPacket spkt bytes padlen
-        return (build0 [sentPacket], bufsiz - bytes)
+        if bytes < 0 then
+            return (build0 [], bufsiz)
+          else do
+            let sentPacket = fixSentPacket spkt bytes padlen
+            return (build0 [sentPacket], bufsiz - bytes)
     buildPackets buf bufsiz siz (spkt:spkts) build0 = do
         let pkt = spPlainPacket spkt
         (bytes,padlen) <- encodePlainPacket conn buf bufsiz pkt Nothing
-        let sentPacket = fixSentPacket spkt bytes padlen
-        let build0' = build0 . (sentPacket :)
-            buf' = buf `plusPtr` bytes
-            bufsiz' = bufsiz - bytes
-            siz' = siz - spSentBytes sentPacket
-        buildPackets buf' bufsiz' siz' spkts build0'
+        if bytes < 0 then
+            buildPackets buf bufsiz siz spkts build0
+          else do
+            let sentPacket = fixSentPacket spkt bytes padlen
+            let build0' = build0 . (sentPacket :)
+                buf' = buf `plusPtr` bytes
+                bufsiz' = bufsiz - bytes
+                siz' = siz - spSentBytes sentPacket
+            buildPackets buf' bufsiz' siz' spkts build0'
 
 ----------------------------------------------------------------
 

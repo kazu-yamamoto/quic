@@ -148,23 +148,28 @@ protectPayloadHeader conn wbuf encodeBuf frames pn epn epnLen headerBeg mlen lvl
     cipher <- getCipher conn lvl
     coder <- getCoder conn lvl keyPhase
     supp <- supplement <$> getProtector conn lvl
-    -- before length or packer number
-    lengthOrPNBeg <- currentOffset wbuf
-    (packetLen, headerLen, plainLen, tagLen, padLen)
-        <- calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
-    when (lvl /= RTT1Level) $ writeLen (epnLen + plainLen + tagLen)
-    pnBeg <- currentOffset wbuf
-    writeEpn epnLen
-    -- payload
-    cryptoBeg <- currentOffset wbuf
-    let sampleBeg = pnBeg `plusPtr` 4
-    fusionSetSample supp sampleBeg
-    -- fixme: error handling
-    encrypt coder encodeBuf plainLen headerBeg headerLen pn cryptoBeg supp
-    -- protecting header
-    maskBeg <- fusionGetMask supp
-    protectHeader headerBeg pnBeg epnLen maskBeg
-    return (packetLen, padLen)
+    if nullPtr == supp then
+        return (-1, -1)
+      else do
+        -- before length or packer number
+        lengthOrPNBeg <- currentOffset wbuf
+        (packetLen, headerLen, plainLen, tagLen, padLen)
+            <- calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
+        when (lvl /= RTT1Level) $ writeLen (epnLen + plainLen + tagLen)
+        pnBeg <- currentOffset wbuf
+        writeEpn epnLen
+        -- payload
+        cryptoBeg <- currentOffset wbuf
+        let sampleBeg = pnBeg `plusPtr` 4
+        fusionSetSample supp sampleBeg
+        len <- encrypt coder encodeBuf plainLen headerBeg headerLen pn cryptoBeg supp
+        if len < 0 then
+             return (-1, -1)
+          else do
+            -- protecting header
+            maskBeg <- fusionGetMask supp
+            protectHeader headerBeg pnBeg epnLen maskBeg
+            return (packetLen, padLen)
   where
     calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz = do
         let headerLen = (lengthOrPNBeg `minusPtr` headerBeg)

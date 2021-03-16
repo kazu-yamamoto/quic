@@ -2,12 +2,14 @@ module Network.QUIC.CryptoFusion (
     FusionContext
   , emptyFusionContext
   , fusionNewContext
+  , fusionFreeContext
   , fusionSetup
   , fusionDisposeKey
   , fusionEncrypt
   , fusionDecrypt
   , Supplement
-  , fusionSupplementSetup
+  , fusionSetupSupplement
+  , fusionFreeSupplement
   , fusionSetSample
   , fusionGetMask
   ) where
@@ -30,6 +32,9 @@ fusionNewContext = c_aead_context_new
 
 emptyFusionContext :: FusionContext
 emptyFusionContext = nullPtr
+
+fusionFreeContext :: FusionContext -> IO ()
+fusionFreeContext = c_aead_context_free
 
 ----------------------------------------------------------------
 
@@ -56,9 +61,10 @@ fusionDisposeKey = c_aesgcm_dispose_crypto
 
 ----------------------------------------------------------------
 
-fusionEncrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> Supplement -> IO ()
-fusionEncrypt pctx ibuf ilen abuf alen pn obuf supp =
+fusionEncrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> Supplement -> IO Int
+fusionEncrypt pctx ibuf ilen abuf alen pn obuf supp = do
     c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen' supp
+    return (ilen + 16) -- fixme
   where
     pn' = fromIntegral pn
     ilen' = fromIntegral ilen
@@ -77,13 +83,18 @@ fusionDecrypt pctx ibuf ilen abuf alen pn buf =
 data SupplementOpaque
 type Supplement = Ptr SupplementOpaque
 
-fusionSupplementSetup :: Cipher -> Key -> IO Supplement
-fusionSupplementSetup cipher (Key hpkey) =
+fusionSetupSupplement :: Cipher -> Key -> IO Supplement
+fusionSetupSupplement cipher (Key hpkey) =
     withByteString hpkey $ \hpkeyp -> c_supplement_new hpkeyp keylen
  where
   keylen
     | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
     | otherwise                               = 32
+
+fusionFreeSupplement :: Supplement -> IO ()
+fusionFreeSupplement p
+  | p == nullPtr = return ()
+  | otherwise    = c_supplement_free p
 
 fusionSetSample :: Supplement -> Ptr Word8 -> IO ()
 fusionSetSample = c_supplement_set_sample
@@ -95,6 +106,9 @@ fusionGetMask   = c_supplement_get_mask
 
 foreign import ccall unsafe "aead_context_new"
     c_aead_context_new :: IO FusionContext
+
+foreign import ccall unsafe "aead_context_free"
+    c_aead_context_free :: FusionContext -> IO ()
 
 foreign import ccall unsafe "aes128gcm_setup"
     c_aes128gcm_setup :: FusionContext
@@ -136,6 +150,9 @@ foreign import ccall unsafe "aead_do_decrypt"
 
 foreign import ccall unsafe "supplement_new"
     c_supplement_new :: Ptr Word8 -> CInt -> IO Supplement
+
+foreign import ccall unsafe "supplement_free"
+    c_supplement_free :: Supplement -> IO ()
 
 foreign import ccall unsafe "supplement_set_sample"
     c_supplement_set_sample :: Supplement -> Ptr Word8 -> IO ()

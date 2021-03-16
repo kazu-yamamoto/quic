@@ -93,29 +93,29 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
-    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> Supplement -> IO ()
+    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> Supplement -> IO Int
   , decrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
+  , fctxTX  :: FusionContext
+  , fctxRX  :: FusionContext
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt = \_ _ _ _ _ _ _ -> return ()
-  , decrypt = \_ _ _ _ _ _ -> return (-1)
+    encrypt = \_ _ _ _ _ _ _ -> return (-1)
+  , decrypt = \_ _ _ _ _ _   -> return (-1)
+  , fctxTX  = emptyFusionContext
+  , fctxRX  = emptyFusionContext
   }
 
 data Coder1RTT = Coder1RTT {
     coder1RTT :: Coder
   , secretN   :: TrafficSecrets ApplicationSecret
-  , fctxTX    :: FusionContext
-  , fctxRX    :: FusionContext
   }
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
     coder1RTT = initialCoder
   , secretN   = (ClientTrafficSecret "", ServerTrafficSecret "")
-  , fctxTX    = emptyFusionContext
-  , fctxRX    = emptyFusionContext
   }
 
 data Protector = Protector {
