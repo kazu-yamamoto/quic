@@ -183,6 +183,5 @@ onPacketNumberSpaceDiscarded ldcc lvl = do
           InitialLevel -> (HandshakeLevel,"initial")
           _            -> (RTT1Level, "handshake")
     qlogDebug ldcc $ Debug (label ++ " discarded")
-    discardPacketNumberSpace ldcc lvl
     void $ discard ldcc lvl
     setLossDetectionTimer ldcc lvl'

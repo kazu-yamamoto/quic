@@ -222,7 +222,7 @@ discardInitialPacketNumberSpace :: Connection -> IO ()
 discardInitialPacketNumberSpace conn
   | isClient conn = do
         let ldcc = connLDCC conn
-        discarded <- getPacketNumberSpaceDiscarded ldcc InitialLevel
+        discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
         unless discarded $ do
             dropSecrets conn InitialLevel
             clearCryptoStream conn InitialLevel

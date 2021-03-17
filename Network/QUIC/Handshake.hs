@@ -174,10 +174,14 @@ handshakeServer conf conn myAuthCIDs = do
         setEncryptionLevel conn RTT1Level
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
         clearKillHandshaker conn
-        onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
         fire (Microseconds 100000) $ do
-            dropSecrets conn RTT0Level
-            dropSecrets conn HandshakeLevel
+            let ldcc = connLDCC conn
+            discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
+            unless discarded0 $ dropSecrets conn RTT0Level
+            discarded1 <- getAndSetPacketNumberSpaceDiscarded ldcc HandshakeLevel
+            unless discarded1 $ do
+                dropSecrets conn HandshakeLevel
+                onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
             clearCryptoStream conn HandshakeLevel
             clearCryptoStream conn RTT1Level
         setConnection1RTTReady conn

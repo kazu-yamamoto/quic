@@ -16,6 +16,7 @@ module Network.QUIC.Recovery (
   , setPreviousRTT1PPNs
   , getSpeedingUp
   , getPacketNumberSpaceDiscarded
+  , getAndSetPacketNumberSpaceDiscarded
   , setMaxAckDaley
   -- PeerPacketNumbers
   , getPeerPacketNumbers

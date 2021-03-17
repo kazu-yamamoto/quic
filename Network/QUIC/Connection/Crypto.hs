@@ -88,34 +88,39 @@ setNegotiated Connection{..} mode mproto appSecInf =
 dropSecrets :: Connection -> EncryptionLevel -> IO ()
 dropSecrets conn@Connection{..} lvl = do
     coder <- getCoder conn lvl False
+    writeArray coders lvl initialCoder
     fusionFreeContext $ fctxTX coder
     fusionFreeContext $ fctxRX coder
-    writeArray coders lvl initialCoder
     Protector supp unp <- getProtector conn lvl
     writeArray protectors lvl initialProtector { unprotect = unp }
     fusionFreeSupplement supp
 
 ----------------------------------------------------------------
 
-initializeCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO ()
-initializeCoder conn lvl sec = do
+initCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO (Coder, Protector)
+initCoder conn lvl sec = do
     cipher <- getCipher conn lvl
     fctxt <- fusionNewContext
     fctxr <- fusionNewContext
-    (coder, protector) <- genCoder (isClient conn) cipher sec fctxt fctxr
+    genCoder (isClient conn) cipher sec fctxt fctxr
+
+initializeCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO ()
+initializeCoder conn lvl sec = do
+    (coder, protector) <- initCoder conn lvl sec
     writeArray (coders conn) lvl coder
     writeArray (protectors conn) lvl protector
 
 initializeCoder1RTT :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 initializeCoder1RTT conn sec = do
-    cipher <- getCipher conn RTT1Level
-    fctxt <- fusionNewContext
-    fctxr <- fusionNewContext
-    (coder, protector) <- genCoder (isClient conn) cipher sec fctxt fctxr
-    let coder1 = Coder1RTT coder sec
-    writeArray (coders1RTT conn) False coder1
-    writeArray (protectors conn) RTT1Level protector
+    initCoder1RTT False
+    initCoder1RTT True
     updateCoder1RTT conn True
+  where
+    initCoder1RTT keyPhase = do
+        (coder, protector) <- initCoder conn RTT1Level sec
+        let coder1 = Coder1RTT coder sec
+        writeArray (coders1RTT conn) keyPhase coder1
+        writeArray (protectors conn) RTT1Level protector
 
 updateCoder1RTT :: Connection -> Bool -> IO ()
 updateCoder1RTT conn nextPhase = do

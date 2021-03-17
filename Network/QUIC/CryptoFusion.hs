@@ -34,7 +34,9 @@ emptyFusionContext :: FusionContext
 emptyFusionContext = nullPtr
 
 fusionFreeContext :: FusionContext -> IO ()
-fusionFreeContext = c_aead_context_free
+fusionFreeContext p
+  | p == nullPtr = return ()
+  | otherwise    = c_aead_context_free p
 
 ----------------------------------------------------------------
 

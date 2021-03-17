@@ -93,11 +93,12 @@ processReceivedPacketHandshake conn buf rpkt = do
                     || (lvl == InitialLevel && mycid == headerMyCID hdr)) $ do
                   setAddressValidated conn
               when (lvl == HandshakeLevel) $ do
-                  discarded <- getPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
+                  let ldcc = connLDCC conn
+                  discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
                   unless discarded $ do
                       dropSecrets conn InitialLevel
                       clearCryptoStream conn InitialLevel
-                      onPacketNumberSpaceDiscarded (connLDCC conn) InitialLevel
+                      onPacketNumberSpaceDiscarded ldcc InitialLevel
               processReceivedPacket conn buf rpkt
 
 processReceivedPacket :: Connection -> Buffer -> ReceivedPacket -> IO ()
@@ -339,10 +340,14 @@ processFrame conn lvl HandshakeDone
   | isServer conn || lvl /= RTT1Level =
         sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e
   | otherwise = do
-        onPacketNumberSpaceDiscarded (connLDCC conn) HandshakeLevel
         fire (Microseconds 100000) $ do
-            dropSecrets conn RTT0Level
-            dropSecrets conn HandshakeLevel
+            let ldcc = connLDCC conn
+            discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
+            unless discarded0 $ dropSecrets conn RTT0Level
+            discarded1 <- getAndSetPacketNumberSpaceDiscarded ldcc HandshakeLevel
+            unless discarded1 $ do
+                dropSecrets conn HandshakeLevel
+                onPacketNumberSpaceDiscarded ldcc HandshakeLevel
             clearCryptoStream conn HandshakeLevel
             clearCryptoStream conn RTT1Level
         setConnectionEstablished conn
