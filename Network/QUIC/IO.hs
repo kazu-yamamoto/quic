@@ -37,6 +37,11 @@ data Blocked = BothBlocked Stream Int Int
              | StrmBlocked Stream Int
              deriving Show
 
+addTx :: Connection -> Stream -> Int -> IO ()
+addTx conn s len = atomically $ do
+    addTxStreamData s len
+    addTxData conn len
+
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany _   [] = return ()
@@ -48,10 +53,8 @@ sendStreamMany s dats0 = do
     ready <- isConnection1RTTReady conn
     if not ready then do
         -- 0-RTT
-        atomically $ do
-            addTxStreamData s len
-            addTxData conn len
         putSendStreamQ conn $ TxStreamData s dats0 len False
+        addTx conn s len
       else
         flowControl dats0 len False
   where
@@ -61,11 +64,13 @@ sendStreamMany s dats0 = do
         eblocked <- checkBlocked s len wait
         case eblocked of
           Right n
-            | len == n  ->
+            | len == n  -> do
                   putSendStreamQ conn $ TxStreamData s dats len False
+                  addTx conn s n
             | otherwise -> do
                   let (dats1,dats2) = split n dats
                   putSendStreamQ conn $ TxStreamData s dats1 n False
+                  addTx conn s n
                   flowControl dats2 (len - n) False
           Left blocked  -> do
               -- fixme: RTT0Level?
@@ -103,9 +108,7 @@ checkBlocked s len wait = atomically $ do
         minFlow = min strmWindow connWindow
         n = min len minFlow
     when wait $ check (n > 0)
-    if n > 0 then do
-        addTxStreamData s n
-        addTxData conn n
+    if n > 0 then
         return $ Right n
       else do
         let cs = len > strmWindow
