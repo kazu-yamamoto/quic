@@ -39,21 +39,20 @@ sendStreamMany s dats0 = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     -- fixme: size check for 0RTT
+    let len = totalLen dats0
     ready <- isConnection1RTTReady conn
     if not ready then do
         -- 0-RTT
-        let len = totalLen dats0
         atomically $ do
             addTxStreamData s len
             addTxData conn len
         putSendStreamQ conn $ TxStreamData s dats0 len False
       else
-        flowControl dats0 False
+        flowControl dats0 len False
   where
     conn = streamConnection s
-    flowControl dats wait = do
+    flowControl dats len wait = do
         -- 1-RTT
-        let len = totalLen dats
         eblocked <- checkBlocked s len wait
         case eblocked of
           Right n
@@ -62,11 +61,11 @@ sendStreamMany s dats0 = do
             | otherwise -> do
                   let (dats1,dats2) = split n dats
                   putSendStreamQ conn $ TxStreamData s dats1 n False
-                  flowControl dats2 False
+                  flowControl dats2 (len - n) False
           Left blocked  -> do
               -- fixme: RTT0Level?
               sendBlocked conn RTT1Level blocked
-              flowControl dats True
+              flowControl dats len True
 
 sendBlocked :: Connection -> EncryptionLevel -> Blocked -> IO ()
 sendBlocked conn lvl blocked = sendFrames conn lvl frames
