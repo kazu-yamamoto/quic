@@ -139,10 +139,13 @@ acceptStream conn = do
 recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = do
     bs <- takeRecvStreamQwithSize s n
+    let len = BS.length bs
+        conn = streamConnection s
+    addRxStreamData s len
+    addRxData conn len
     window <- getRxStreamWindow s
-    let conn = streamConnection s
-        sid = streamId s
-    let initialWindow = initialRxMaxStreamData conn sid
+    let sid = streamId s
+        initialWindow = initialRxMaxStreamData conn sid
     when (window <= (initialWindow .>>. 1)) $ do
         newMax <- addRxMaxStreamData s initialWindow
         sendFrames conn RTT1Level [MaxStreamData sid newMax]

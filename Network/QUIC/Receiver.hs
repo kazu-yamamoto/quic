@@ -212,21 +212,14 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
-    if ok then
-        addRxData conn $ BS.length dat             -- fixme: including 0RTT?
-      else
-        sendCCandExitConnection conn FlowControlError "" 0
+    unless ok $ sendCCandExitConnection conn FlowControlError "" 0
 processFrame _    RTT1Level (StreamF _ _ [""] False) = return ()
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
-    if ok then do
-        addRxStreamData strm len
-        addRxData conn len
-      else
-        sendCCandExitConnection conn FlowControlError "" 0
+    unless ok $ sendCCandExitConnection conn FlowControlError "" 0
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "MAX_DATA" 0x010
