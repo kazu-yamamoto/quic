@@ -21,6 +21,7 @@ module Network.QUIC.Stream (
   , readStreamFlowTx
   , addTxStreamData
   , setTxMaxStreamData
+  , readStreamFlowRx
   , addRxStreamData
   , setRxMaxStreamData
   , addRxMaxStreamData
