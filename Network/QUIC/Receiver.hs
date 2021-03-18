@@ -246,7 +246,8 @@ processFrame conn lvl (MaxStreams dir n) = do
         setMyMaxStreams conn n
       else
         setMyUniMaxStreams conn n
-processFrame conn lvl DataBlocked{} = do
+processFrame _conn _lvl DataBlocked{} = do return ()
+{-
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "DATA_BLOCKED" 0x14
     newMax <- getRxMaxData conn
@@ -254,7 +255,9 @@ processFrame conn lvl DataBlocked{} = do
     fire (Microseconds 50000) $ do
         newMax' <- getRxMaxData conn
         sendFrames conn RTT1Level [MaxData newMax']
-processFrame conn lvl (StreamDataBlocked sid _) = do
+-}
+processFrame _conn _lvl (StreamDataBlocked _sid _) = do return ()
+{-
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STREAM_DATA_BLOCKED" 0x15
     mstrm <- findStream conn sid
@@ -266,6 +269,7 @@ processFrame conn lvl (StreamDataBlocked sid _) = do
           fire (Microseconds 50000) $ do
               newMax' <- getRxMaxStreamData strm
               sendFrames conn RTT1Level [MaxStreamData sid newMax']
+-}
 processFrame conn lvl frame@(StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCandExitConnection conn ProtocolViolation "STREAMS_BLOCKED" 0
