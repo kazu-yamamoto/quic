@@ -32,6 +32,11 @@ sendStream s dat = sendStreamMany s [dat]
 
 ----------------------------------------------------------------
 
+data Blocked = BothBlocked Stream Int Int
+             | ConnBlocked Int
+             | StrmBlocked Stream Int
+             deriving Show
+
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany _   [] = return ()

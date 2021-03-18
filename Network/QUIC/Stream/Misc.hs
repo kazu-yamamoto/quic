@@ -16,8 +16,6 @@ module Network.QUIC.Stream.Misc (
   , addRxMaxStreamData
   , getRxMaxStreamData
   , getRxStreamWindow
-  --
-  , Blocked(..)
   ) where
 
 import Control.Concurrent.STM

@@ -10,7 +10,6 @@ module Network.QUIC.Stream (
   , StreamState(..)
   , RecvStreamQ(..)
   , RxStreamData(..)
-  , Blocked(..)
   , Length
   -- * Misc
   , getTxStreamOffset
