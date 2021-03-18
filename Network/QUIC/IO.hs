@@ -64,8 +64,17 @@ sendStreamMany s dats0 = do
                   putSendStreamQ conn $ TxStreamData s dats1 n False
                   flowControl dats2 False
           Left blocked  -> do
-              putSendBlockedQ conn blocked
+              -- fixme: RTT0Level?
+              sendBlocked conn RTT1Level blocked
               flowControl dats True
+
+sendBlocked :: Connection -> EncryptionLevel -> Blocked -> IO ()
+sendBlocked conn lvl blocked = sendFrames conn lvl frames
+  where
+    frames = case blocked of
+      StrmBlocked strm n   -> [StreamDataBlocked (streamId strm) n]
+      ConnBlocked n        -> [DataBlocked n]
+      BothBlocked strm n m -> [StreamDataBlocked (streamId strm) n, DataBlocked m]
 
 split :: Int -> [BS.ByteString] -> ([BS.ByteString],[BS.ByteString])
 split n0 dats0 = loop n0 dats0 id

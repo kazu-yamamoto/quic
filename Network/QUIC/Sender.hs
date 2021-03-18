@@ -184,33 +184,20 @@ mkHeader conn lvl = do
 ----------------------------------------------------------------
 
 data Switch = SwPing EncryptionLevel
-            | SwBlck Blocked
             | SwOut  Output
             | SwStrm TxStreamData
 
 sender :: Connection -> SendMany -> IO ()
 sender conn send = handleLog logAction $ forever $ do
     x <- atomically ((SwPing <$> takePingSTM (connLDCC conn))
-            `orElse` (SwBlck <$> takeSendBlockQSTM conn)
             `orElse` (SwOut  <$> takeOutputSTM conn)
             `orElse` (SwStrm <$> takeSendStreamQSTM conn))
     case x of
       SwPing lvl -> sendPingPacket conn send lvl
-      SwBlck blk -> sendBlocked conn send blk
       SwOut  out -> sendOutput conn send out
       SwStrm tx  -> sendTxStreamData conn send tx
   where
     logAction msg = connDebugLog conn ("sender: " <> msg)
-
-----------------------------------------------------------------
-
-sendBlocked :: Connection -> SendMany -> Blocked -> IO ()
-sendBlocked conn send blocked = do
-    let frames = case blocked of
-          StrmBlocked strm n   -> [StreamDataBlocked (streamId strm) n]
-          ConnBlocked n        -> [DataBlocked n]
-          BothBlocked strm n m -> [StreamDataBlocked (streamId strm) n, DataBlocked m]
-    construct conn RTT1Level frames >>= sendPacket conn send
 
 ----------------------------------------------------------------
 
