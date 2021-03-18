@@ -43,14 +43,6 @@ putSendStreamQ conn out = atomically $ writeTBQueue (sharedSendStreamQ $ shared 
 
 ----------------------------------------------------------------
 
-takeSendBlockQSTM :: Connection -> STM Blocked
-takeSendBlockQSTM conn = readTQueue $ sharedSendBlockedQ $ shared conn
-
-putSendBlockedQ :: Connection -> Blocked -> IO ()
-putSendBlockedQ conn blk = atomically $ writeTQueue (sharedSendBlockedQ $ shared conn) blk
-
-----------------------------------------------------------------
-
 readMigrationQ :: Connection -> IO ReceivedPacket
 readMigrationQ conn = atomically $ readTQueue $ migrationQ conn
 

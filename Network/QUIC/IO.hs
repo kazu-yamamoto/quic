@@ -32,6 +32,16 @@ sendStream s dat = sendStreamMany s [dat]
 
 ----------------------------------------------------------------
 
+data Blocked = BothBlocked Stream Int Int
+             | ConnBlocked Int
+             | StrmBlocked Stream Int
+             deriving Show
+
+addTx :: Connection -> Stream -> Int -> IO ()
+addTx conn s len = atomically $ do
+    addTxStreamData s len
+    addTxData conn len
+
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
 sendStreamMany _   [] = return ()
@@ -39,33 +49,41 @@ sendStreamMany s dats0 = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     -- fixme: size check for 0RTT
+    let len = totalLen dats0
     ready <- isConnection1RTTReady conn
     if not ready then do
         -- 0-RTT
-        let len = totalLen dats0
-        atomically $ do
-            addTxStreamData s len
-            addTxData conn len
         putSendStreamQ conn $ TxStreamData s dats0 len False
+        addTx conn s len
       else
-        flowControl dats0 False
+        flowControl dats0 len False
   where
     conn = streamConnection s
-    flowControl dats wait = do
+    flowControl dats len wait = do
         -- 1-RTT
-        let len = totalLen dats
         eblocked <- checkBlocked s len wait
         case eblocked of
           Right n
-            | len == n  ->
+            | len == n  -> do
                   putSendStreamQ conn $ TxStreamData s dats len False
+                  addTx conn s n
             | otherwise -> do
                   let (dats1,dats2) = split n dats
                   putSendStreamQ conn $ TxStreamData s dats1 n False
-                  flowControl dats2 False
+                  addTx conn s n
+                  flowControl dats2 (len - n) False
           Left blocked  -> do
-              putSendBlockedQ conn blocked
-              flowControl dats True
+              -- fixme: RTT0Level?
+              sendBlocked conn RTT1Level blocked
+              flowControl dats len True
+
+sendBlocked :: Connection -> EncryptionLevel -> Blocked -> IO ()
+sendBlocked conn lvl blocked = sendFrames conn lvl frames
+  where
+    frames = case blocked of
+      StrmBlocked strm n   -> [StreamDataBlocked (streamId strm) n]
+      ConnBlocked n        -> [DataBlocked n]
+      BothBlocked strm n m -> [StreamDataBlocked (streamId strm) n, DataBlocked m]
 
 split :: Int -> [BS.ByteString] -> ([BS.ByteString],[BS.ByteString])
 split n0 dats0 = loop n0 dats0 id
@@ -90,9 +108,7 @@ checkBlocked s len wait = atomically $ do
         minFlow = min strmWindow connWindow
         n = min len minFlow
     when wait $ check (n > 0)
-    if n > 0 then do
-        addTxStreamData s n
-        addTxData conn n
+    if n > 0 then
         return $ Right n
       else do
         let cs = len > strmWindow
@@ -139,10 +155,13 @@ acceptStream conn = do
 recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = do
     bs <- takeRecvStreamQwithSize s n
+    let len = BS.length bs
+        conn = streamConnection s
+    addRxStreamData s len
+    addRxData conn len
     window <- getRxStreamWindow s
-    let conn = streamConnection s
-        sid = streamId s
-    let initialWindow = initialRxMaxStreamData conn sid
+    let sid = streamId s
+        initialWindow = initialRxMaxStreamData conn sid
     when (window <= (initialWindow .>>. 1)) $ do
         newMax <- addRxMaxStreamData s initialWindow
         sendFrames conn RTT1Level [MaxStreamData sid newMax]

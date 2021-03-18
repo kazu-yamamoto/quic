@@ -10,7 +10,6 @@ module Network.QUIC.Stream.Types (
   , StreamState(..)
   , RecvStreamQ(..)
   , RxStreamData(..)
-  , Blocked(..)
   , Length
   ) where
 
@@ -106,9 +105,3 @@ data RecvStreamQ = RecvStreamQ {
 
 newRecvStreamQ :: IO RecvStreamQ
 newRecvStreamQ = RecvStreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
-
-----------------------------------------------------------------
-
-data Blocked = BothBlocked Stream Int Int
-             | ConnBlocked Int
-             | StrmBlocked Stream Int

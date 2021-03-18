@@ -11,13 +11,12 @@ module Network.QUIC.Stream.Misc (
   , readStreamFlowTx
   , addTxStreamData
   , setTxMaxStreamData
+  , readStreamFlowRx
   , addRxStreamData
   , setRxMaxStreamData
   , addRxMaxStreamData
   , getRxMaxStreamData
   , getRxStreamWindow
-  --
-  , Blocked(..)
   ) where
 
 import Control.Concurrent.STM
@@ -101,3 +100,6 @@ getRxMaxStreamData Stream{..} = flowMaxData <$> readIORef streamFlowRx
 
 getRxStreamWindow :: Stream -> IO Int
 getRxStreamWindow Stream{..} = flowWindow <$> readIORef streamFlowRx
+
+readStreamFlowRx :: Stream -> IO Flow
+readStreamFlowRx Stream{..} = readIORef streamFlowRx
