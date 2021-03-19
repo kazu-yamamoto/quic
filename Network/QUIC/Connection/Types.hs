@@ -93,39 +93,39 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
-    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> Supplement -> IO Int
+    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
   , decrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-  , fctxTX  :: FusionContext
-  , fctxRX  :: FusionContext
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt = \_ _ _ _ _ _ _ -> return (-1)
-  , decrypt = \_ _ _ _ _ _   -> return (-1)
-  , fctxTX  = emptyFusionContext
-  , fctxRX  = emptyFusionContext
+    encrypt = \_ _ _ _ _ _ -> return (-1)
+  , decrypt = \_ _ _ _ _ _ -> return (-1)
   }
 
 data Coder1RTT = Coder1RTT {
-    coder1RTT :: Coder
-  , secretN   :: TrafficSecrets ApplicationSecret
+    coder1RTT  :: Coder
+  , secretN    :: TrafficSecrets ApplicationSecret
+  , supplement :: ~Supplement
   }
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
-    coder1RTT = initialCoder
-  , secretN   = (ClientTrafficSecret "", ServerTrafficSecret "")
+    coder1RTT  = initialCoder
+  , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
+  , supplement = undefined
   }
 
 data Protector = Protector {
-    supplement :: Supplement
-  , unprotect  :: Sample -> Mask
+    setSample :: Ptr Word8 -> IO ()
+  , getMask   :: IO (Ptr Word8)
+  , unprotect :: Sample -> Mask
   }
 
 initialProtector :: Protector
 initialProtector = Protector {
-    supplement = nullPtr
+    setSample = \_ -> return ()
+  , getMask   = return nullPtr
   , unprotect = \_ -> Mask ""
   }
 

@@ -1,21 +1,18 @@
 module Network.QUIC.CryptoFusion (
     FusionContext
-  , emptyFusionContext
   , fusionNewContext
-  , fusionFreeContext
   , fusionSetup
-  , fusionDisposeKey
   , fusionEncrypt
   , fusionDecrypt
   , Supplement
   , fusionSetupSupplement
-  , fusionFreeSupplement
   , fusionSetSample
   , fusionGetMask
   ) where
 
 import Foreign.C.Types
 import Foreign.Ptr
+import Foreign.ForeignPtr
 import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Crypto
@@ -25,18 +22,10 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 data FusionContextOpaque
-type FusionContext = Ptr FusionContextOpaque
+newtype FusionContext = FC (ForeignPtr FusionContextOpaque)
 
 fusionNewContext :: IO FusionContext
-fusionNewContext = c_aead_context_new
-
-emptyFusionContext :: FusionContext
-emptyFusionContext = nullPtr
-
-fusionFreeContext :: FusionContext -> IO ()
-fusionFreeContext p
-  | p == nullPtr = return ()
-  | otherwise    = c_aead_context_free p
+fusionNewContext = FC <$> (c_aead_context_new >>= newForeignPtr p_aead_context_free)
 
 ----------------------------------------------------------------
 
@@ -47,34 +36,31 @@ fusionSetup cipher
   | otherwise                                      = error "fusionSetup"
 
 fusionSetupAES128 :: FusionContext -> Key -> IV -> IO ()
-fusionSetupAES128 pctx (Key key) (IV iv) = do
+fusionSetupAES128 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
     withByteString key $ \keyp ->
         withByteString iv $ \ivp -> void $ c_aes128gcm_setup pctx 0 keyp ivp
 
 fusionSetupAES256 :: FusionContext -> Key -> IV -> IO ()
-fusionSetupAES256 pctx (Key key) (IV iv) = do
+fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
     withByteString key $ \keyp ->
         withByteString iv $ \ivp -> void $ c_aes256gcm_setup pctx 0 keyp ivp
 
 ----------------------------------------------------------------
 
-fusionDisposeKey :: FusionContext -> IO ()
-fusionDisposeKey = c_aesgcm_dispose_crypto
-
-----------------------------------------------------------------
-
-fusionEncrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> Supplement -> IO Int
-fusionEncrypt pctx ibuf ilen abuf alen pn obuf supp = do
-    c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen' supp
-    return (ilen + 16) -- fixme
+fusionEncrypt :: FusionContext -> Supplement -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
+fusionEncrypt (FC fctx) (SP fsupp) ibuf ilen abuf alen pn obuf =
+    withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
+        c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen' psupp
+        return (ilen + 16) -- fixme
   where
     pn' = fromIntegral pn
     ilen' = fromIntegral ilen
     alen' = fromIntegral alen
 
 fusionDecrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-fusionDecrypt pctx ibuf ilen abuf alen pn buf =
-    fromIntegral <$> c_aead_do_decrypt pctx buf ibuf ilen' pn' abuf alen'
+fusionDecrypt (FC fctx) ibuf ilen abuf alen pn buf =
+    withForeignPtr fctx $ \pctx ->
+        fromIntegral <$> c_aead_do_decrypt pctx buf ibuf ilen' pn' abuf alen'
   where
     pn' = fromIntegral pn
     ilen' = fromIntegral ilen
@@ -83,65 +69,62 @@ fusionDecrypt pctx ibuf ilen abuf alen pn buf =
 ----------------------------------------------------------------
 
 data SupplementOpaque
-type Supplement = Ptr SupplementOpaque
+newtype Supplement = SP (ForeignPtr SupplementOpaque)
 
 fusionSetupSupplement :: Cipher -> Key -> IO Supplement
-fusionSetupSupplement cipher (Key hpkey) =
-    withByteString hpkey $ \hpkeyp -> c_supplement_new hpkeyp keylen
+fusionSetupSupplement cipher (Key hpkey) = withByteString hpkey $ \hpkeyp ->
+  SP <$> (c_supplement_new hpkeyp keylen >>= newForeignPtr p_supplement_free)
  where
   keylen
     | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
     | otherwise                               = 32
 
-fusionFreeSupplement :: Supplement -> IO ()
-fusionFreeSupplement p
-  | p == nullPtr = return ()
-  | otherwise    = c_supplement_free p
-
 fusionSetSample :: Supplement -> Ptr Word8 -> IO ()
-fusionSetSample = c_supplement_set_sample
+fusionSetSample (SP fsupp) p = withForeignPtr fsupp $ \psupp ->
+  c_supplement_set_sample psupp p
 
 fusionGetMask :: Supplement -> IO (Ptr Word8)
-fusionGetMask   = c_supplement_get_mask
+fusionGetMask (SP fsupp) = withForeignPtr fsupp $ c_supplement_get_mask
 
 ----------------------------------------------------------------
 
 foreign import ccall unsafe "aead_context_new"
-    c_aead_context_new :: IO FusionContext
+    c_aead_context_new :: IO (Ptr FusionContextOpaque)
 
-foreign import ccall unsafe "aead_context_free"
-    c_aead_context_free :: FusionContext -> IO ()
+foreign import ccall unsafe "&aead_context_free"
+    p_aead_context_free :: FunPtr (Ptr FusionContextOpaque -> IO ())
 
 foreign import ccall unsafe "aes128gcm_setup"
-    c_aes128gcm_setup :: FusionContext
+    c_aes128gcm_setup :: Ptr FusionContextOpaque
                       -> CInt       -- dummy
                       -> Ptr Word8  -- key
                       -> Ptr Word8  -- iv
                       -> IO CInt
 
 foreign import ccall unsafe "aes256gcm_setup"
-    c_aes256gcm_setup :: FusionContext
+    c_aes256gcm_setup :: Ptr FusionContextOpaque
                       -> CInt       -- dummy
                       -> Ptr Word8  -- key
                       -> Ptr Word8  -- iv
                       -> IO CInt
-
+{-
 foreign import ccall unsafe "aesgcm_dispose_crypto"
     c_aesgcm_dispose_crypto :: FusionContext -> IO ()
+-}
 
 foreign import ccall unsafe "aead_do_encrypt"
-    c_aead_do_encrypt :: FusionContext
+    c_aead_do_encrypt :: Ptr FusionContextOpaque
                       -> Ptr Word8 -- output
                       -> Ptr Word8 -- input
                       -> CSize     -- input length
                       -> CULong    -- sequence
                       -> Ptr Word8 -- AAD
                       -> CSize     -- AAD length
-                      -> Supplement
+                      -> Ptr SupplementOpaque
                       -> IO ()
 
 foreign import ccall unsafe "aead_do_decrypt"
-    c_aead_do_decrypt :: FusionContext
+    c_aead_do_decrypt :: Ptr FusionContextOpaque
                       -> Ptr Word8 -- output
                       -> Ptr Word8 -- input
                       -> CSize     -- input length
@@ -151,13 +134,13 @@ foreign import ccall unsafe "aead_do_decrypt"
                       -> IO CSize
 
 foreign import ccall unsafe "supplement_new"
-    c_supplement_new :: Ptr Word8 -> CInt -> IO Supplement
+    c_supplement_new :: Ptr Word8 -> CInt -> IO (Ptr SupplementOpaque)
 
-foreign import ccall unsafe "supplement_free"
-    c_supplement_free :: Supplement -> IO ()
+foreign import ccall unsafe "&supplement_free"
+    p_supplement_free :: FunPtr (Ptr SupplementOpaque -> IO ())
 
 foreign import ccall unsafe "supplement_set_sample"
-    c_supplement_set_sample :: Supplement -> Ptr Word8 -> IO ()
+    c_supplement_set_sample :: Ptr SupplementOpaque -> Ptr Word8 -> IO ()
 
 foreign import ccall unsafe "supplement_get_mask"
-    c_supplement_get_mask :: Supplement -> IO (Ptr Word8)
+    c_supplement_get_mask :: Ptr SupplementOpaque -> IO (Ptr Word8)

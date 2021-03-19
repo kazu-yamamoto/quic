@@ -11,7 +11,6 @@ import Foreign.Storable (peek)
 
 import Network.QUIC.Connection
 import Network.QUIC.Crypto
-import Network.QUIC.CryptoFusion
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
@@ -147,27 +146,27 @@ protectPayloadHeader conn wbuf encodeBuf frames pn epn epnLen headerBeg mlen lvl
     payloadWithoutPaddingSiz <- encodeFramesWithPadding encodeBuf encodeBufLen frames
     cipher <- getCipher conn lvl
     coder <- getCoder conn lvl keyPhase
-    supp <- supplement <$> getProtector conn lvl
-    if nullPtr == supp then
-        return (-1, -1)
+    protector <- getProtector conn lvl
+    -- before length or packer number
+    lengthOrPNBeg <- currentOffset wbuf
+    (packetLen, headerLen, plainLen, tagLen, padLen)
+        <- calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
+    when (lvl /= RTT1Level) $ writeLen (epnLen + plainLen + tagLen)
+    pnBeg <- currentOffset wbuf
+    writeEpn epnLen
+    -- payload
+    cryptoBeg <- currentOffset wbuf
+    let sampleBeg = pnBeg `plusPtr` 4
+    setSample protector sampleBeg
+    len <- encrypt coder encodeBuf plainLen headerBeg headerLen pn cryptoBeg
+    if len < 0 then
+         return (-1, -1)
       else do
-        -- before length or packer number
-        lengthOrPNBeg <- currentOffset wbuf
-        (packetLen, headerLen, plainLen, tagLen, padLen)
-            <- calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
-        when (lvl /= RTT1Level) $ writeLen (epnLen + plainLen + tagLen)
-        pnBeg <- currentOffset wbuf
-        writeEpn epnLen
-        -- payload
-        cryptoBeg <- currentOffset wbuf
-        let sampleBeg = pnBeg `plusPtr` 4
-        fusionSetSample supp sampleBeg
-        len <- encrypt coder encodeBuf plainLen headerBeg headerLen pn cryptoBeg supp
-        if len < 0 then
-             return (-1, -1)
+        -- protecting header
+        maskBeg <- getMask protector
+        if maskBeg == nullPtr then
+            return (-1, -1)
           else do
-            -- protecting header
-            maskBeg <- fusionGetMask supp
             protectHeader headerBeg pnBeg epnLen maskBeg
             return (packetLen, padLen)
   where
