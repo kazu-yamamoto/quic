@@ -237,7 +237,9 @@ sendOutput conn send buf (OutControl lvl frames cc) = do
     when cc $ E.throwIO ConnectionIsClosed
 sendOutput conn send buf (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
-        lcs = convert lcs0
+        (lcs,wait) = convert lcs0
+    -- only for h3spec
+    when wait $ wait0RTTReady conn
     sendCryptoFragments conn send buf lcs
 sendOutput conn send buf (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0

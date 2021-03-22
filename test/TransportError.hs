@@ -152,7 +152,7 @@ setOnTransportParametersCreated f hooks = hooks { onTransportParametersCreated =
 setOnTLSExtensionCreated :: ([ExtensionRaw] -> [ExtensionRaw]) -> Hooks -> Hooks
 setOnTLSExtensionCreated f params = params { onTLSExtensionCreated = f }
 
-setOnTLSHandshakeCreated :: ([(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]) -> Hooks -> Hooks
+setOnTLSHandshakeCreated :: ([(EncryptionLevel,CryptoData)] -> ([(EncryptionLevel,CryptoData)],Bool)) -> Hooks -> Hooks
 setOnTLSHandshakeCreated f hooks = hooks { onTLSHandshakeCreated = f }
 
 ----------------------------------------------------------------
@@ -285,22 +285,22 @@ ncidLargeRPT frame = frame
 
 ----------------------------------------------------------------
 
-cryptoKeyUpdate :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
-cryptoKeyUpdate [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append fin "\x18\x00\x00\x01\x01")]
-cryptoKeyUpdate lcs = lcs
+cryptoKeyUpdate :: [(EncryptionLevel,CryptoData)] -> ([(EncryptionLevel,CryptoData)],Bool)
+cryptoKeyUpdate [(HandshakeLevel,fin)] = ([(HandshakeLevel,BS.append fin "\x18\x00\x00\x01\x01")],False)
+cryptoKeyUpdate lcs = (lcs,False)
 
-cryptoKeyUpdate2 :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
+cryptoKeyUpdate2 :: [(EncryptionLevel,CryptoData)] -> ([(EncryptionLevel,CryptoData)],Bool)
 -- [] is intentionally created in RTT1Level for h3spec
-cryptoKeyUpdate2 [] = [(RTT1Level,"\x18\x00\x00\x01\x01")]
-cryptoKeyUpdate2 lcs = lcs
+cryptoKeyUpdate2 []  = ([(RTT1Level,"\x18\x00\x00\x01\x01")],False)
+cryptoKeyUpdate2 lcs = (lcs,False)
 
-cryptoEndOfEarlyData :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
-cryptoEndOfEarlyData [(HandshakeLevel,fin)] = [(HandshakeLevel,BS.append "\x05\x00\x00\x00" fin)]
-cryptoEndOfEarlyData lcs = lcs
+cryptoEndOfEarlyData :: [(EncryptionLevel,CryptoData)] -> ([(EncryptionLevel,CryptoData)],Bool)
+cryptoEndOfEarlyData [(HandshakeLevel,fin)] = ([(HandshakeLevel,BS.append "\x05\x00\x00\x00" fin)],False)
+cryptoEndOfEarlyData lcs = (lcs,False)
 
-crypto0RTT :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
-crypto0RTT [(InitialLevel,ch)] = [(InitialLevel,ch),(RTT0Level,"\x08\x00\x00\x02\x00\x00")]
-crypto0RTT lcs = lcs
+crypto0RTT :: [(EncryptionLevel,CryptoData)] -> ([(EncryptionLevel,CryptoData)],Bool)
+crypto0RTT [(InitialLevel,ch)] = ([(InitialLevel,ch),(RTT0Level,"\x08\x00\x00\x02\x00\x00")],True)
+crypto0RTT lcs = (lcs,False)
 
 ----------------------------------------------------------------
 

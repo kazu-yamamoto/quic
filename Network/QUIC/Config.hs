@@ -21,7 +21,7 @@ data Hooks = Hooks {
   , onPlainCreated  :: EncryptionLevel -> Plain -> Plain
   , onTransportParametersCreated :: Parameters -> Parameters
   , onTLSExtensionCreated :: [ExtensionRaw] -> [ExtensionRaw]
-  , onTLSHandshakeCreated :: [(EncryptionLevel,CryptoData)] -> [(EncryptionLevel,CryptoData)]
+  , onTLSHandshakeCreated :: [(EncryptionLevel,CryptoData)] -> ([(EncryptionLevel,CryptoData)],Bool)
   , onResetStreamReceived :: Stream -> ApplicationProtocolError -> IO ()
   }
 
@@ -33,7 +33,7 @@ defaultHooks = Hooks {
   , onPlainCreated  = \_l p -> p
   , onTransportParametersCreated = id
   , onTLSExtensionCreated = id
-  , onTLSHandshakeCreated = id
+  , onTLSHandshakeCreated = \lcs -> (lcs, False)
   , onResetStreamReceived = \_ _ -> return ()
   }
 
