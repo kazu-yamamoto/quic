@@ -213,8 +213,8 @@ setPeerParams conn _ctx ps0 = do
               setParams params
               qlogParamsSet conn (params,"remote")
     err = do
-        sendCCFrame conn $ ConnectionClose TransportParameterError 0 ""
-        let qerr = TransportErrorIsSent TransportParameterError ""
+        sendCCFrame conn $ ConnectionClose TransportParameterError 0 "Transport parametter error"
+        let qerr = TransportErrorIsSent TransportParameterError "Transport parametter error"
         exitConnection conn qerr
         -- converted into Error_Misc and ignored in "tell"
         E.throwIO qerr

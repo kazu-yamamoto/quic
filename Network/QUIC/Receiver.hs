@@ -171,7 +171,7 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
         sendCCandExitConnection conn ProtocolViolation "RESET_STREAM" 0x04
     when ((isClient conn && isClientInitiatedUnidirectional sid)
         ||(isServer conn && isServerInitiatedUnidirectional sid)) $
-        sendCCandExitConnection conn StreamStateError "Send-only stream" 0x04
+        sendCCandExitConnection conn StreamStateError "Received in a send-only stream" 0x04
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> return ()
@@ -212,28 +212,28 @@ processFrame conn lvl (CryptoF off cdat) = do
               sendCCandExitConnection conn (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT" 0x06
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
-        sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN" 0x07
+        sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN for server or in 1-RTT" 0x07
     setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
-    unless ok $ sendCCandExitConnection conn FlowControlError "" 0
+    unless ok $ sendCCandExitConnection conn FlowControlError "Flow control error in 0-RTT" 0
 processFrame _    RTT1Level (StreamF _ _ [""] False) = return ()
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
-    unless ok $ sendCCandExitConnection conn FlowControlError "" 0
+    unless ok $ sendCCandExitConnection conn FlowControlError "Flow control error in 1-RTT" 0
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCandExitConnection conn ProtocolViolation "MAX_DATA" 0x010
+        sendCCandExitConnection conn ProtocolViolation "MAX_DATA in Initial or Handshake" 0x010
     setTxMaxData conn n
 processFrame conn lvl (MaxStreamData sid n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCandExitConnection conn ProtocolViolation "MAX_STREAM_DATA" 0x011
+        sendCCandExitConnection conn ProtocolViolation "MAX_STREAM_DATA in Initial or Handshake" 0x011
     when ((isClient conn && isServerInitiatedUnidirectional sid)
         ||(isServer conn && isClientInitiatedUnidirectional sid)) $
         sendCCandExitConnection conn StreamStateError "Receive-only stream" 0x11
@@ -246,9 +246,9 @@ processFrame conn lvl (MaxStreamData sid n) = do
       Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCandExitConnection conn ProtocolViolation "MAX_STREAMS" 0
+        sendCCandExitConnection conn ProtocolViolation "MAX_STREAMS in Initial or Handshake" 0
     when (n > 2^(60 :: Int)) $
-        sendCCandExitConnection conn FrameEncodingError "MAX_STREAMS" 0
+        sendCCandExitConnection conn FrameEncodingError "Too large MAX_STREAMS" 0
     if dir == Bidirectional then
         setMyMaxStreams conn n
       else
@@ -279,17 +279,17 @@ processFrame _conn _lvl (StreamDataBlocked _sid _) = do return ()
 -}
 processFrame conn lvl frame@(StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCandExitConnection conn ProtocolViolation "STREAMS_BLOCKED" 0
+        sendCCandExitConnection conn ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake" 0
     when (n > 2^(60 :: Int)) $
-        sendCCandExitConnection conn FrameEncodingError "MAX_STREAMS" 0
+        sendCCandExitConnection conn FrameEncodingError "Too large STREAMS_BLOCKED" 0
     print frame
 processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCandExitConnection conn ProtocolViolation "NEW_CONNECTION_ID" 0x18
+        sendCCandExitConnection conn ProtocolViolation "NEW_CONNECTION_ID in Initial or Handshake" 0x18
     addPeerCID conn cidInfo
     let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
     when (cidlen < 1 || 20 < cidlen || rpt > cidInfoSeq cidInfo) $
-        sendCCandExitConnection conn FrameEncodingError "NEW_CONNECTION_ID" 0x18
+        sendCCandExitConnection conn FrameEncodingError "NEW_CONNECTION_ID parameter error" 0x18
     when (rpt >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         sendFrames conn RTT1Level $ map RetireConnectionID seqNums
@@ -338,7 +338,7 @@ processFrame conn _ (ConnectionCloseApp err reason) = do
         exitConnection conn quicexc
 processFrame conn lvl HandshakeDone
   | isServer conn || lvl /= RTT1Level =
-        sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE" 0x1e
+        sendCCandExitConnection conn ProtocolViolation "HANDSHAKE_DONE for server" 0x1e
   | otherwise = do
         fire (Microseconds 100000) $ do
             let ldcc = connLDCC conn
@@ -353,7 +353,7 @@ processFrame conn lvl HandshakeDone
         setConnectionEstablished conn
         -- to receive NewSessionTicket
         fire (Microseconds 1000000) $ killHandshaker conn
-processFrame conn _ _ = sendCCandExitConnection conn ProtocolViolation "" 0
+processFrame conn _ _ = sendCCandExitConnection conn ProtocolViolation "Frame is not allowed" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.
