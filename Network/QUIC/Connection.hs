@@ -167,6 +167,7 @@ module Network.QUIC.Connection (
   , exitConnectionByStream
   , sendCCFrame
   , sendCCandExitConnection
+  , sendCCandExitConnection'
   , isConnectionOpen
   , abortConnection
   , sendFrames
@@ -216,6 +217,20 @@ sendCCFrame conn frame = do
 sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO ()
 sendCCandExitConnection conn err desc ftyp = do
     sendCCFrame conn frame
+    exitConnection conn quicexc
+  where
+    frame = ConnectionClose err ftyp desc
+    quicexc = TransportErrorIsSent err desc
+
+sendCCFrame' :: Connection -> EncryptionLevel -> Frame -> IO ()
+sendCCFrame' conn lvl frame = do
+    putOutput conn $ OutControl lvl [frame] True
+    setCloseSent conn
+
+sendCCandExitConnection' :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
+sendCCandExitConnection' conn lvl err desc ftyp = do
+    Prelude.putStrLn $ "sendCCFrame' (8) " ++ show err
+    sendCCFrame' conn lvl frame
     exitConnection conn quicexc
   where
     frame = ConnectionClose err ftyp desc

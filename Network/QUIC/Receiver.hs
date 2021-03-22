@@ -193,7 +193,7 @@ processFrame conn lvl (StopSending sid _err) = do
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $ do
-        sendCCandExitConnection conn ProtocolViolation "CRYPTO" 0x06
+        sendCCandExitConnection' conn InitialLevel ProtocolViolation "CRYPTO in 0-RTT" 0x06
     let len = BS.length cdat
         rx = RxStreamData cdat off len False
     case lvl of

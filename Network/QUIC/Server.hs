@@ -238,7 +238,8 @@ dispatch Dispatch{..} ServerConfig{..}
               insertRecvQDict srcTable key q
               writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
               let reg = registerConnectionDict dstTable
-                  unreg = unregisterConnectionDict dstTable
+                  unreg = \cid -> do
+                      fire (Microseconds 300000) $ unregisterConnectionDict dstTable cid
                   ent = Accept {
                       accVersion      = ver
                     , accMyAuthCIDs   = myAuthCIDs
