@@ -4,7 +4,9 @@ module PacketSpec where
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Internal as BS
 import Data.IORef
+import Foreign.Marshal.Alloc
 import qualified Network.Socket as NS
 import Test.Hspec
 
@@ -36,11 +38,14 @@ spec = do
             serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref
             initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
             (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
-            Just plain <- decryptCrypt serverConn crypt lvl
+            let dlen = 2048
+            dbuf <- mallocBytes dlen
+            Just plain <- decryptCrypt serverConn dbuf dlen crypt lvl
             let ppkt = PlainPacket header plain
-            clientInitialPacketBinary' <- BS.concat . fst <$> encodePlainPacket clientConn ppkt Nothing
+            clientInitialPacketBinary' <- BS.createAndTrim 2048 $ \buf -> do
+                fst <$> encodePlainPacket clientConn buf 2048 ppkt Nothing
             (PacketIC (CryptPacket header' crypt') lvl', _) <- decodePacket clientInitialPacketBinary'
-            Just plain' <- decryptCrypt serverConn crypt' lvl'
+            Just plain' <- decryptCrypt serverConn dbuf dlen crypt' lvl'
             header' `shouldBe` header
             plainFrames plain' `shouldBe` plainFrames plain
 

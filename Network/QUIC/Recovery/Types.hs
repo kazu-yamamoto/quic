@@ -75,14 +75,12 @@ mkSentPacket mypn lvl ppkt ppns ackeli = SentPacket {
   , spAckEliciting      = ackeli
   }
 
-fixSentPacket :: SentPacket -> [ByteString] -> Int -> SentPacket
-fixSentPacket spkt bss padLen = spkt {
+fixSentPacket :: SentPacket -> Int -> Int -> SentPacket
+fixSentPacket spkt bytes padLen = spkt {
     spPlainPacket = if padLen /= 0 then addPadding padLen $ spPlainPacket spkt
                                    else spPlainPacket spkt
-  , spSentBytes   = sentBytes
+  , spSentBytes   = bytes
   }
-  where
-    sentBytes = totalLen bss
 
 addPadding :: Int -> PlainPacket -> PlainPacket
 addPadding n (PlainPacket hdr plain) = PlainPacket hdr plain'
@@ -222,6 +220,16 @@ type TimerQ = TQueue (Maybe TimerSet)
 
 ----------------------------------------------------------------
 
+makeSpaceDiscarded :: IO (Array EncryptionLevel (IORef Bool))
+makeSpaceDiscarded = do
+    i1 <- newIORef False
+    i2 <- newIORef False
+    i3 <- newIORef False
+    i4 <- newIORef False
+    let lst = [(InitialLevel,i1),(RTT0Level,i2),(HandshakeLevel,i3),(RTT1Level,i4)]
+        arr = array (InitialLevel,RTT1Level) lst
+    return arr
+
 makeSentPackets :: IO (Array EncryptionLevel (IORef SentPackets))
 makeSentPackets = do
     i1 <- newIORef emptySentPackets
@@ -246,7 +254,7 @@ data LDCC = LDCC {
   , putRetrans        :: PlainPacket -> IO ()
   , recoveryRTT       :: IORef RTT
   , recoveryCC        :: TVar CC
-  , spaceDiscarded    :: IOArray EncryptionLevel Bool
+  , spaceDiscarded    :: Array EncryptionLevel (IORef Bool)
   , sentPackets       :: Array EncryptionLevel (IORef SentPackets)
   , lossDetection     :: Array EncryptionLevel (IORef LossDetection)
   , timerKey          :: IORef (Maybe TimeoutKey)
@@ -277,7 +285,7 @@ newLDCC :: ConnState -> QLogger -> (PlainPacket -> IO ()) -> IO LDCC
 newLDCC cs qLog put = LDCC cs qLog put
     <$> newIORef initialRTT
     <*> newTVarIO initialCC
-    <*> newArray (InitialLevel,RTT1Level) False
+    <*> makeSpaceDiscarded
     <*> makeSentPackets
     <*> makeLossDetection
     <*> newIORef Nothing

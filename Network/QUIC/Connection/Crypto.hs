@@ -31,6 +31,7 @@ import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
+import Network.QUIC.CryptoFusion
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -85,22 +86,24 @@ setNegotiated Connection{..} mode mproto appSecInf =
 ----------------------------------------------------------------
 
 dropSecrets :: Connection -> EncryptionLevel -> IO ()
-dropSecrets Connection{..} lvl = writeArray coders lvl initialCoder
+dropSecrets Connection{..} lvl = do
+    writeArray coders lvl initialCoder
+    writeArray protectors lvl initialProtector
 
 ----------------------------------------------------------------
 
 initializeCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO ()
 initializeCoder conn lvl sec = do
     cipher <- getCipher conn lvl
-    let (coder, protector) = genCoder (isClient conn) cipher sec
+    (coder, protector, _) <- genCoder (isClient conn) cipher sec
     writeArray (coders conn) lvl coder
     writeArray (protectors conn) lvl protector
 
 initializeCoder1RTT :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 initializeCoder1RTT conn sec = do
     cipher <- getCipher conn RTT1Level
-    let (coder, protector) = genCoder (isClient conn) cipher sec
-        coder1 = Coder1RTT coder sec
+    (coder, protector, supp) <- genCoder (isClient conn) cipher sec
+    let coder1 = Coder1RTT coder sec supp
     writeArray (coders1RTT conn) False coder1
     writeArray (protectors conn) RTT1Level protector
     updateCoder1RTT conn True
@@ -108,10 +111,10 @@ initializeCoder1RTT conn sec = do
 updateCoder1RTT :: Connection -> Bool -> IO ()
 updateCoder1RTT conn nextPhase = do
     cipher <- getCipher conn RTT1Level
-    Coder1RTT _ secN <- readArray (coders1RTT conn) (not nextPhase)
+    Coder1RTT _ secN supp <- readArray (coders1RTT conn) (not nextPhase)
     let secN1 = updateSecret cipher secN
-    let (coderN1, _) = genCoder (isClient conn) cipher secN1
-    let nextCoder = Coder1RTT coderN1 secN1
+    coderN1 <- genCoder1RTT (isClient conn) cipher secN1 supp
+    let nextCoder = Coder1RTT coderN1 secN1 supp
     writeArray (coders1RTT conn) nextPhase nextCoder
 
 updateSecret :: Cipher -> TrafficSecrets ApplicationSecret -> TrafficSecrets ApplicationSecret
@@ -121,8 +124,20 @@ updateSecret cipher (ClientTrafficSecret cN, ServerTrafficSecret sN) = secN1
     Secret sN1 = nextSecret cipher $ Secret sN
     secN1 = (ClientTrafficSecret cN1, ServerTrafficSecret sN1)
 
-genCoder :: Bool -> Cipher -> TrafficSecrets a -> (Coder, Protector)
-genCoder cli cipher (ClientTrafficSecret c, ServerTrafficSecret s) = (coder, protector)
+genCoder :: Bool -> Cipher -> TrafficSecrets a -> IO (Coder, Protector, Supplement)
+genCoder cli cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
+    fctxt <- fusionNewContext
+    fctxr <- fusionNewContext
+    fusionSetup cipher fctxt txPayloadKey txPayloadIV
+    fusionSetup cipher fctxr rxPayloadKey rxPayloadIV
+    supp <- fusionSetupSupplement cipher txHeaderKey
+    let enc = fusionEncrypt fctxt supp
+        dec = fusionDecrypt fctxr
+        coder = Coder enc dec
+    let set = fusionSetSample supp
+        get = fusionGetMask supp
+    let protector = Protector set get unp
+    return (coder, protector, supp)
   where
     txSecret | cli           = Secret c
              | otherwise     = Secret s
@@ -131,15 +146,30 @@ genCoder cli cipher (ClientTrafficSecret c, ServerTrafficSecret s) = (coder, pro
     txPayloadKey = aeadKey cipher txSecret
     txPayloadIV  = initialVector cipher txSecret
     txHeaderKey  = headerProtectionKey cipher txSecret
-    enc = encryptPayload cipher txPayloadKey txPayloadIV
-    pro = protectionMask cipher txHeaderKey
     rxPayloadKey = aeadKey cipher rxSecret
     rxPayloadIV  = initialVector cipher rxSecret
     rxHeaderKey  = headerProtectionKey cipher rxSecret
-    dec = decryptPayload cipher rxPayloadKey rxPayloadIV
     unp = protectionMask cipher rxHeaderKey
-    coder = Coder enc dec
-    protector = Protector pro unp
+
+genCoder1RTT :: Bool -> Cipher -> TrafficSecrets a -> Supplement -> IO Coder
+genCoder1RTT cli cipher (ClientTrafficSecret c, ServerTrafficSecret s) supp = do
+    fctxt <- fusionNewContext
+    fctxr <- fusionNewContext
+    fusionSetup cipher fctxt txPayloadKey txPayloadIV
+    fusionSetup cipher fctxr rxPayloadKey rxPayloadIV
+    let enc = fusionEncrypt fctxt supp
+        dec = fusionDecrypt fctxr
+        coder = Coder enc dec
+    return coder
+  where
+    txSecret | cli           = Secret c
+             | otherwise     = Secret s
+    rxSecret | cli           = Secret s
+             | otherwise     = Secret c
+    txPayloadKey = aeadKey cipher txSecret
+    txPayloadIV  = initialVector cipher txSecret
+    rxPayloadKey = aeadKey cipher rxSecret
+    rxPayloadIV  = initialVector cipher rxSecret
 
 getCoder :: Connection -> EncryptionLevel -> Bool -> IO Coder
 getCoder conn RTT1Level k = coder1RTT <$> readArray (coders1RTT conn) k

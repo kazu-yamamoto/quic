@@ -11,6 +11,8 @@ category:            Web
 build-type:          Simple
 -- extra-source-files:  ChangeLog.md
 cabal-version:       >= 1.10
+extra-source-files:  cbits/*.h
+extra-source-files:  cbits/picotls/*.h
 
 ----------------------------------------------------------------
 
@@ -43,6 +45,7 @@ library
                        Network.QUIC.Connection.Types
                        Network.QUIC.Connector
                        Network.QUIC.Crypto
+                       Network.QUIC.CryptoFusion
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.IO
@@ -127,6 +130,9 @@ library
   default-language:    Haskell2010
   ghc-options:         -Wall -Wcompat
   default-extensions:  Strict StrictData
+  if arch(x86_64) || arch(aarch64)
+    cc-options:        -mavx2 -maes -mpclmul
+    c-sources:         cbits/fusion.c
 
 test-suite spec
   Type:                 exitcode-stdio-1.0

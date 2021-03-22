@@ -21,8 +21,8 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
-decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
+decryptCrypt :: Connection -> Buffer -> BufferSize -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
+decryptCrypt conn decBuf bufsiz Crypt{..} lvl = handleLogR logAction $ do
     cipher <- getCipher conn lvl
     protector <- getProtector conn lvl
     let proFlags = Flags (cryptPacket `BS.index` 0)
@@ -36,34 +36,39 @@ decryptCrypt conn Crypt{..} lvl = handleLogR logAction $ do
         epnLen = decodePktNumLength rawFlags
         epn = BS.take epnLen $ BS.drop cryptPktNumOffset cryptPacket
         bytePN = bsXOR mask2 epn
-        headerSize = cryptPktNumOffset + epnLen
-        (proHeader, ciphertext) = BS.splitAt headerSize cryptPacket
+        headerLen = cryptPktNumOffset + epnLen
+        (proHeader, ciphertext) = BS.splitAt headerLen cryptPacket
+        ilen = BS.length ciphertext
     peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
     let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
-    header <- BS.create headerSize $ \p -> do
+    header <- BS.create headerLen $ \p -> do
         void $ copy p proHeader
         poke8 flags p 0
         void $ copy (p `plusPtr` cryptPktNumOffset) $ BS.take epnLen bytePN
     let keyPhase | lvl == RTT1Level = flags `testBit` 2
                  | otherwise        = False
     coder <- getCoder conn lvl keyPhase
-    let mpayload = decrypt coder ciphertext header pn
-        rrMask | lvl == RTT1Level = 0x18
+    siz <- withByteString ciphertext $ \ibuf ->
+               withByteString header $ \abuf -> do
+        let ilen' = fromIntegral ilen
+            alen' = fromIntegral headerLen
+        decrypt coder ibuf ilen' abuf alen' pn decBuf
+    let rrMask | lvl == RTT1Level = 0x18
                | otherwise        = 0x0c
         marks | flags .&. rrMask == 0 = defaultPlainMarks
               | otherwise             = setIllegalReservedBits defaultPlainMarks
-    case mpayload of
-      Nothing      -> return Nothing
-      Just payload -> do
-          mframes <- decodeFrames payload
-          case mframes of
-            Nothing -> do
-                let marks' = setUnknownFrame marks
-                return $ Just $ Plain rawFlags pn [] marks'
-            Just frames -> do
-                let marks' | null frames = setNoFrames marks
-                           | otherwise   = marks
-                return $ Just $ Plain rawFlags pn frames marks'
+    if siz < 0 then
+        return Nothing
+      else do
+        mframes <- decodeFrames decBuf siz
+        case mframes of
+          Nothing -> do
+              let marks' = setUnknownFrame marks
+              return $ Just $ Plain rawFlags pn [] marks'
+          Just frames -> do
+              let marks' | null frames = setNoFrames marks
+                         | otherwise   = marks
+              return $ Just $ Plain rawFlags pn frames marks'
   where
     logAction msg = do
         connDebugLog conn ("decryptCrypt: " <> msg)

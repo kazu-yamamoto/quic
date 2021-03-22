@@ -5,8 +5,8 @@ module Network.QUIC.Recovery.Misc (
   , setPktNumPersistent
   , setSpeedingUp
   , getSpeedingUp
-  , discardPacketNumberSpace
   , getPacketNumberSpaceDiscarded
+  , getAndSetPacketNumberSpaceDiscarded
   , setMaxAckDaley
   ) where
 
@@ -37,11 +37,13 @@ getSpeedingUp LDCC{..} = readIORef speedingUp
 
 ----------------------------------------------------------------
 
-discardPacketNumberSpace :: LDCC -> EncryptionLevel -> IO ()
-discardPacketNumberSpace LDCC{..} lvl = writeArray spaceDiscarded lvl True
-
 getPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO Bool
-getPacketNumberSpaceDiscarded LDCC{..} lvl = readArray spaceDiscarded lvl
+getPacketNumberSpaceDiscarded LDCC{..} lvl =
+    readIORef (spaceDiscarded ! lvl)
+
+getAndSetPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO Bool
+getAndSetPacketNumberSpaceDiscarded LDCC{..} lvl =
+    atomicModifyIORef' (spaceDiscarded ! lvl) (\b -> (True,b))
 
 ----------------------------------------------------------------
 

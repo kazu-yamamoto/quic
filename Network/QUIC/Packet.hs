@@ -1,7 +1,6 @@
 module Network.QUIC.Packet (
   -- * Encode
-    encodePacket
-  , encodeVersionNegotiationPacket
+    encodeVersionNegotiationPacket
   , encodeRetryPacket
   , encodePlainPacket
   -- * Decode

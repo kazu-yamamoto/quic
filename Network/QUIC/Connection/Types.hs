@@ -9,13 +9,14 @@ import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.X509 (CertificateChain)
-import GHC.ForeignPtr (ForeignPtr(..), mallocPlainForeignPtrBytes)
+import Foreign.Ptr
 import Network.Socket (Socket)
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
+import Network.QUIC.CryptoFusion
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Parameters
@@ -92,35 +93,39 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
-    encrypt :: PlainText  -> ByteString -> PacketNumber -> [CipherText]
-  , decrypt :: CipherText -> ByteString -> PacketNumber -> Maybe PlainText
+    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
+  , decrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt = \_ _ _ -> []
-  , decrypt = \_ _ _ -> Nothing
+    encrypt = \_ _ _ _ _ _ -> return (-1)
+  , decrypt = \_ _ _ _ _ _ -> return (-1)
   }
 
 data Coder1RTT = Coder1RTT {
-    coder1RTT :: Coder
-  , secretN   :: TrafficSecrets ApplicationSecret
+    coder1RTT  :: Coder
+  , secretN    :: TrafficSecrets ApplicationSecret
+  , supplement :: ~Supplement
   }
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
-    coder1RTT = initialCoder
-  , secretN   = (ClientTrafficSecret "", ServerTrafficSecret "")
+    coder1RTT  = initialCoder
+  , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
+  , supplement = undefined
   }
 
 data Protector = Protector {
-    protect   :: Sample -> Mask
+    setSample :: Ptr Word8 -> IO ()
+  , getMask   :: IO (Ptr Word8)
   , unprotect :: Sample -> Mask
   }
 
 initialProtector :: Protector
 initialProtector = Protector {
-    protect   = \_ -> Mask ""
+    setSample = \_ -> return ()
+  , getMask   = return nullPtr
   , unprotect = \_ -> Mask ""
   }
 
@@ -163,9 +168,6 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
-  -- WriteBuffer
-  , headerBuffer      :: (ForeignPtr Word8,BufferSize) -- occupied by a sender
-  , payloadBuffer     :: (ForeignPtr Word8,BufferSize) -- occupied by a sender
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
@@ -242,14 +244,10 @@ newConnection :: Role
               -> IORef (Socket,RecvQ)
               -> IO Connection
 newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
-    let hlen = maximumQUICHeaderSize
-        plen = maximumUdpPayloadSize
-    hbuf <- mallocPlainForeignPtrBytes hlen
-    pbuf <- mallocPlainForeignPtrBytes plen
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate debugLog qLog hooks (hbuf,hlen) (pbuf,plen)
+    Connection connstate debugLog qLog hooks
         -- Info
         <$> newIORef initialRoleInfo
         <*> newIORef ver
