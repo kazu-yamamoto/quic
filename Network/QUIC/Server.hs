@@ -214,7 +214,7 @@ dispatch Dispatch{..} ServerConfig{..}
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst False
-          _                  -> stdoutLogger $ "dispatch: Just (1) " <> bhow peersa
+          _                  -> return ()
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -226,7 +226,7 @@ dispatch Dispatch{..} ServerConfig{..}
                   mq <- lookupConnectionDict dstTable dCID
                   case mq of
                     Nothing -> pushToAcceptFirst True
-                    _       -> stdoutLogger $ "dispatch: Just (2) " <> bhow peersa
+                    _       -> return ()
           _ -> sendRetry
   where
     pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
@@ -315,11 +315,11 @@ dispatch Dispatch{..} ServerConfig{..}
           Just newtoken -> do
               bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
               send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ peersa _ _ _ bytes tim = do
+dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
-      Nothing -> stdoutLogger $ "dispatch: orphan 0RTT: " <> bhow peersa
+      Nothing -> return ()
 dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ buf _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
@@ -343,7 +343,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                     connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                     void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
-dispatch _ _ ipkt _ peersa _ _ _ _ _ = stdoutLogger $ "dispatch: orphan " <> bhow peersa <> ", " <> bhow ipkt
+dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return()
 
 ----------------------------------------------------------------
 
