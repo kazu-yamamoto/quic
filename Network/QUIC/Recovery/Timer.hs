@@ -140,9 +140,8 @@ updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
     mgr <- getSystemTimerManager
     let tim = timerTime tmi
     duration@(Microseconds us) <- getTimeoutInMicrosecond tim
-    if us <= 0 then do
+    if us <= 0 then
         qlogDebug ldcc $ Debug "updateLossDetectionTimer: minus"
-        -- cancelLossDetectionTimer conn -- don't cancel
       else do
         key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
         mk <- atomicModifyIORef' timerKey (Just key,)
@@ -164,6 +163,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
               let tmi = TimerInfo earliestLossTime lvl LossTime
               updateLossDetectionTimer ldcc tmi
       Nothing -> do
+          -- See beforeAntiAmp
           CC{..} <- readTVarIO recoveryCC
           validated <- peerCompletedAddressValidation ldcc
           if numOfAckEliciting <= 0 && validated then
@@ -176,7 +176,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
               -- Determine which PN space to arm PTO for.
               mx <- getPtoTimeAndSpace ldcc
               case mx of
-                Nothing -> cancelLossDetectionTimer ldcc
+                Nothing -> return ()
                 Just (ptoTime, lvl) -> do
                     when (lvl0 == lvl) $ do
                         let tmi = TimerInfo ptoTime lvl PTO
@@ -200,10 +200,7 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
           Just tmi -> do
             let lvl = timerLevel tmi
             discarded <- getPacketNumberSpaceDiscarded ldcc lvl
-            if discarded then
-                cancelLossDetectionTimer ldcc
-              else
-                lossTimeOrPTO lvl tmi
+            unless discarded $ lossTimeOrPTO lvl tmi
   where
     lossTimeOrPTO lvl tmi = do
         qlogLossTimerExpired ldcc
