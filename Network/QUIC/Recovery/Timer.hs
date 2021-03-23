@@ -5,7 +5,6 @@
 module Network.QUIC.Recovery.Timer (
     getLossTimeAndSpace
   , getPtoTimeAndSpace
-  , cancelLossDetectionTimer
   , setLossDetectionTimer
   , beforeAntiAmp
   , ldccTimer
@@ -215,8 +214,8 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
           LossTime -> do
               -- Time threshold loss Detection
               lostPackets <- detectAndRemoveLostPackets ldcc lvl
-              when (null lostPackets) $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: null"
               lostPackets' <- mergeLostCandidatesAndClear ldcc lostPackets
+              when (null lostPackets') $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: null"
               onPacketsLost ldcc lostPackets'
               retransmit ldcc lostPackets'
               setLossDetectionTimer ldcc lvl
