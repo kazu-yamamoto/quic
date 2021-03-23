@@ -91,7 +91,15 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
 ----------------------------------------------------------------
 
 cancelLossDetectionTimer :: LDCC -> IO ()
-cancelLossDetectionTimer = cancelLossDetectionTimer'
+cancelLossDetectionTimer ldcc@LDCC{..} = do
+    mk <- atomicModifyIORef' timerKey (Nothing,)
+    case mk of
+      Nothing -> return ()
+      Just k -> do
+          mgr <- getSystemTimerManager
+          unregisterTimeout mgr k
+          writeIORef timerInfo Nothing
+          qlogLossTimerCancelled ldcc
 
 updateLossDetectionTimer :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer ldcc@LDCC{..} tmi = do
@@ -116,17 +124,6 @@ ldccTimer ldcc@LDCC{..} = forever $ do
     case x of
       Empty    -> return ()
       Next tmi -> updateLossDetectionTimer' ldcc tmi
-
-cancelLossDetectionTimer' :: LDCC -> IO ()
-cancelLossDetectionTimer' ldcc@LDCC{..} = do
-    mk <- atomicModifyIORef' timerKey (Nothing,)
-    case mk of
-      Nothing -> return ()
-      Just k -> do
-          mgr <- getSystemTimerManager
-          unregisterTimeout mgr k
-          writeIORef timerInfo Nothing
-          qlogLossTimerCancelled ldcc
 
 updateLossDetectionTimer' :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
