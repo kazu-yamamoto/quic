@@ -209,7 +209,9 @@ instance Show TimerType where
     show PTO      = "pto"
 
 data TimerExpired = TimerExpired
+
 data TimerCancelled = TimerCancelled
+
 data TimerInfo = TimerInfo {
     timerTime  :: TimeMicrosecond
   , timerLevel :: EncryptionLevel
