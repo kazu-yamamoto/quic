@@ -257,7 +257,9 @@ data LDCC = LDCC {
   , spaceDiscarded    :: Array EncryptionLevel (IORef Bool)
   , sentPackets       :: Array EncryptionLevel (IORef SentPackets)
   , lossDetection     :: Array EncryptionLevel (IORef LossDetection)
+  -- The current timer key
   , timerKey          :: IORef (Maybe TimeoutKey)
+  -- The current timer value
   , timerInfo         :: IORef (Maybe TimerSet)
   , lostCandidates    :: TVar SentPackets
   , ptoPing           :: TVar (Maybe EncryptionLevel)
@@ -265,6 +267,7 @@ data LDCC = LDCC {
   , pktNumPersistent  :: IORef PacketNumber
   , peerPacketNumbers :: Array EncryptionLevel (IORef PeerPacketNumbers)
   , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
+  -- Pending timer value
   , timerQ            :: TimerQ
   }
 
