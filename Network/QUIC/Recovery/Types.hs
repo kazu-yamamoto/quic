@@ -19,6 +19,7 @@ module Network.QUIC.Recovery.Types (
   , MetricsDiff(..)
   , TimerType(..)
   , TimerInfo(..)
+  , TimerInfoQ(..)
   , TimerCancelled
   , TimerExpired
   , makeSentPackets
@@ -218,7 +219,10 @@ data TimerInfo = TimerInfo {
   , timerType  :: TimerType
   } deriving (Eq, Show)
 
-type TimerQ = TQueue (Maybe TimerInfo)
+data TimerInfoQ = Empty
+                | Delayed
+                | Next TimerInfo
+                deriving (Eq)
 
 ----------------------------------------------------------------
 
@@ -270,7 +274,7 @@ data LDCC = LDCC {
   , peerPacketNumbers :: Array EncryptionLevel (IORef PeerPacketNumbers)
   , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
   -- Pending timer value
-  , timerQ            :: TimerQ
+  , timerInfoQ        :: TVar TimerInfoQ
   }
 
 makePPN :: IO (Array EncryptionLevel (IORef PeerPacketNumbers))
@@ -301,7 +305,7 @@ newLDCC cs qLog put = LDCC cs qLog put
     <*> newIORef maxBound
     <*> makePPN
     <*> newIORef emptyPeerPacketNumbers
-    <*> newTQueueIO
+    <*> newTVarIO Empty
 
 instance KeepQlog LDCC where
     keepQlog = ldccQlogger

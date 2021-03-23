@@ -96,7 +96,7 @@ cancelLossDetectionTimer ldcc@LDCC{..} = do
     case mtmi of
       Nothing -> cancelLossDetectionTimer' ldcc
       Just tmi
-        | timerLevel tmi == RTT1Level -> atomically $ writeTQueue timerQ Nothing
+        | timerLevel tmi == RTT1Level -> atomically $ writeTVar timerInfoQ Delayed
         | otherwise                   -> cancelLossDetectionTimer' ldcc
 
 updateLossDetectionTimer :: LDCC -> TimerInfo -> IO ()
@@ -105,27 +105,24 @@ updateLossDetectionTimer ldcc@LDCC{..} tmi = do
     when (mtmi /= Just tmi) $ do
         if timerLevel tmi == RTT1Level then
             if timerType tmi == LossTime then do
-              void $ atomically $ flushTQueue timerQ
+              atomically $ writeTVar timerInfoQ Empty
               updateLossDetectionTimer' ldcc tmi
             else
-              atomically $ writeTQueue timerQ $ Just tmi
+              atomically $ writeTVar timerInfoQ $ Next tmi
           else
             updateLossDetectionTimer' ldcc tmi
 
 ldccTimer :: LDCC -> IO ()
 ldccTimer ldcc@LDCC{..} = forever $ do
     atomically $ do
-        isEmpty <- isEmptyTQueue timerQ
-        check (not isEmpty)
+        x <- readTVar timerInfoQ
+        check (x /= Empty)
     delay $ Microseconds 10000
-    xs <- atomically $ flushTQueue timerQ
-    if null xs then
-        return ()
-      else do
-        let x = last xs
-        case x of
-          Nothing  -> cancelLossDetectionTimer' ldcc
-          Just tmi -> updateLossDetectionTimer' ldcc tmi
+    x <- readTVarIO timerInfoQ
+    case x of
+      Empty    -> return ()
+      Delayed  -> cancelLossDetectionTimer' ldcc
+      Next tmi -> updateLossDetectionTimer' ldcc tmi
 
 cancelLossDetectionTimer' :: LDCC -> IO ()
 cancelLossDetectionTimer' ldcc@LDCC{..} = do
