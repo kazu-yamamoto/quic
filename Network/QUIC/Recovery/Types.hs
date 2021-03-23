@@ -18,7 +18,7 @@ module Network.QUIC.Recovery.Types (
   , initialLossDetection
   , MetricsDiff(..)
   , TimerType(..)
-  , TimerSet(..)
+  , TimerInfo(..)
   , TimerCancelled
   , TimerExpired
   , makeSentPackets
@@ -210,13 +210,13 @@ instance Show TimerType where
 
 data TimerExpired = TimerExpired
 data TimerCancelled = TimerCancelled
-data TimerSet = TimerSet {
+data TimerInfo = TimerInfo {
     timerTime  :: TimeMicrosecond
   , timerLevel :: EncryptionLevel
   , timerType  :: TimerType
   } deriving (Eq, Show)
 
-type TimerQ = TQueue (Maybe TimerSet)
+type TimerQ = TQueue (Maybe TimerInfo)
 
 ----------------------------------------------------------------
 
@@ -260,7 +260,7 @@ data LDCC = LDCC {
   -- The current timer key
   , timerKey          :: IORef (Maybe TimeoutKey)
   -- The current timer value
-  , timerInfo         :: IORef (Maybe TimerSet)
+  , timerInfo         :: IORef (Maybe TimerInfo)
   , lostCandidates    :: TVar SentPackets
   , ptoPing           :: TVar (Maybe EncryptionLevel)
   , speedingUp        :: IORef Bool
@@ -342,8 +342,8 @@ instance Qlog TimerCancelled where
 instance Qlog TimerExpired where
     qlog TimerExpired   = "{\"event_type\":\"expired\"}"
 
-instance Qlog (TimerSet,Microseconds) where
-    qlog (TimerSet{..},us) = "{\"event_type\":\"set\"" <>
+instance Qlog (TimerInfo,Microseconds) where
+    qlog (TimerInfo{..},us) = "{\"event_type\":\"set\"" <>
                              ",\"timer_type\":\"" <> sw timerType <> "\"" <>
                              ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
                              ",\"delta\":" <> delta us <>
@@ -376,7 +376,7 @@ qlogContestionStateUpdated q mode = do
     tim <- getTimeMicrosecond
     keepQlog q $ QCongestionStateUpdated (qlog mode) tim
 
-qlogLossTimerUpdated :: KeepQlog q => q -> (TimerSet,Microseconds) -> IO ()
+qlogLossTimerUpdated :: KeepQlog q => q -> (TimerInfo,Microseconds) -> IO ()
 qlogLossTimerUpdated q tmi = do
     tim <- getTimeMicrosecond
     keepQlog q $ QLossTimerUpdated (qlog tmi) tim

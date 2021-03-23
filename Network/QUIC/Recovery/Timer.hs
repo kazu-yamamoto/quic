@@ -99,7 +99,7 @@ cancelLossDetectionTimer ldcc@LDCC{..} = do
         | timerLevel tmi == RTT1Level -> atomically $ writeTQueue timerQ Nothing
         | otherwise                   -> cancelLossDetectionTimer' ldcc
 
-updateLossDetectionTimer :: LDCC -> TimerSet -> IO ()
+updateLossDetectionTimer :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer ldcc@LDCC{..} tmi = do
     mtmi <- readIORef timerInfo
     when (mtmi /= Just tmi) $ do
@@ -138,7 +138,7 @@ cancelLossDetectionTimer' ldcc@LDCC{..} = do
           writeIORef timerInfo Nothing
           qlogLossTimerCancelled ldcc
 
-updateLossDetectionTimer' :: LDCC -> TimerSet -> IO ()
+updateLossDetectionTimer' :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
     mgr <- getSystemTimerManager
     let tim = timerTime tmi
@@ -164,7 +164,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
       Just (earliestLossTime,lvl) -> do
           when (lvl0 == lvl) $ do
               -- Time threshold loss detection.
-              let tmi = TimerSet earliestLossTime lvl LossTime
+              let tmi = TimerInfo earliestLossTime lvl LossTime
               updateLossDetectionTimer ldcc tmi
       Nothing -> do
           CC{..} <- readTVarIO recoveryCC
@@ -182,7 +182,7 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
                 Nothing -> cancelLossDetectionTimer ldcc
                 Just (ptoTime, lvl) -> do
                     when (lvl0 == lvl) $ do
-                        let tmi = TimerSet ptoTime lvl PTO
+                        let tmi = TimerInfo ptoTime lvl PTO
                         updateLossDetectionTimer ldcc tmi
 
 beforeAntiAmp :: LDCC -> IO ()
