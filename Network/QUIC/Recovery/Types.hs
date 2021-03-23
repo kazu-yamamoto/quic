@@ -220,7 +220,6 @@ data TimerInfo = TimerInfo {
   } deriving (Eq, Show)
 
 data TimerInfoQ = Empty
-                | Delayed
                 | Next TimerInfo
                 deriving (Eq)
 

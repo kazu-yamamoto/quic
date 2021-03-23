@@ -91,13 +91,7 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
 ----------------------------------------------------------------
 
 cancelLossDetectionTimer :: LDCC -> IO ()
-cancelLossDetectionTimer ldcc@LDCC{..} = do
-    mtmi <- readIORef timerInfo
-    case mtmi of
-      Nothing -> cancelLossDetectionTimer' ldcc
-      Just tmi
-        | timerLevel tmi == RTT1Level -> atomically $ writeTVar timerInfoQ Delayed
-        | otherwise                   -> cancelLossDetectionTimer' ldcc
+cancelLossDetectionTimer = cancelLossDetectionTimer'
 
 updateLossDetectionTimer :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer ldcc@LDCC{..} tmi = do
@@ -121,7 +115,6 @@ ldccTimer ldcc@LDCC{..} = forever $ do
     x <- readTVarIO timerInfoQ
     case x of
       Empty    -> return ()
-      Delayed  -> cancelLossDetectionTimer' ldcc
       Next tmi -> updateLossDetectionTimer' ldcc tmi
 
 cancelLossDetectionTimer' :: LDCC -> IO ()
