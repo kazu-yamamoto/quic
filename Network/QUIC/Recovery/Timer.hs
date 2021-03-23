@@ -92,6 +92,7 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
 
 cancelLossDetectionTimer :: LDCC -> IO ()
 cancelLossDetectionTimer ldcc@LDCC{..} = do
+    atomically $ writeTVar timerInfoQ Empty
     mk <- atomicModifyIORef' timerKey (Nothing,)
     case mk of
       Nothing -> return ()
