@@ -24,6 +24,7 @@ import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Recovery.Utils
+import Network.QUIC.Recovery.Constants
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 
@@ -84,8 +85,9 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
                 loop ls
               else do
                   rtt <- readIORef recoveryRTT
-                  let pto = backOff (calcPTO rtt $ Just l) (ptoCount rtt)
-                  let ptoTime = timeOfLastAckElicitingPacket `addMicroseconds` pto
+                  let pto0 = backOff (calcPTO rtt $ Just l) (ptoCount rtt)
+                      pto = max pto0 kGranularity
+                      ptoTime = timeOfLastAckElicitingPacket `addMicroseconds` pto
                   return $ Just (ptoTime, l)
 
 ----------------------------------------------------------------
@@ -116,7 +118,7 @@ ldccTimer ldcc@LDCC{..} = forever $ do
     atomically $ do
         x <- readTVar timerInfoQ
         check (x /= Empty)
-    delay $ Microseconds 10000
+    delay timerGranularity
     updateWithNext ldcc
 
 updateWithNext :: LDCC -> IO ()
@@ -129,19 +131,21 @@ updateWithNext ldcc@LDCC{..} = do
 updateLossDetectionTimer' :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
     atomically $ writeTVar timerInfoQ Empty
-    mgr <- getSystemTimerManager
     let tim = timerTime tmi
-    duration@(Microseconds us) <- getTimeoutInMicrosecond tim
-    if us <= 0 then
-        qlogDebug ldcc $ Debug "updateLossDetectionTimer: minus"
-      else do
+    Microseconds us0 <- getTimeoutInMicrosecond tim
+    let us | us0 <= 0  = 10000 -- fixme
+           | otherwise = us0
+    update us
+    qlogLossTimerUpdated ldcc (tmi, Microseconds us) -- fixme tmi
+  where
+    update us = do
+        mgr <- getSystemTimerManager
         key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
         mk <- atomicModifyIORef' timerKey (Just key,)
         case mk of
           Nothing -> return ()
           Just k  -> unregisterTimeout mgr k
         writeIORef timerInfo $ Just tmi
-        qlogLossTimerUpdated ldcc (tmi,duration)
 
 ----------------------------------------------------------------
 
