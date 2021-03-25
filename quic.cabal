@@ -208,6 +208,7 @@ executable client
   hs-source-dirs:       util
   main-is:              client.hs
   other-modules:        H3
+                        ClientX
                         Common
   ghc-options:          -Wall -threaded -rtsopts
   build-depends:        base >= 4.9 && < 5

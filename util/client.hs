@@ -11,20 +11,19 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Data.UnixTime
+import Data.Word
 import Foreign.C.Types
-import Network.ByteOrder
+import Network.TLS.QUIC
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
 import System.IO
 import Text.Printf
 
+import ClientX
+import Common
 import Network.QUIC
 import Network.QUIC.Internal hiding (RTT0)
-import Network.TLS.QUIC
-
-import Common
-import H3
 
 data Options = Options {
     optDebugLog    :: Bool
@@ -140,16 +139,6 @@ clientOpts argv =
     case getOpt Permute options argv of
       (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
       (_,_,errs) -> showUsageAndExit $ concat errs
-
-data Aux = Aux {
-    auxPath :: String
-  , auxAuthority :: String
-  , auxDebug :: String -> IO ()
-  , auxShow :: ByteString -> IO ()
-  , auxCheckClose :: IO Bool
-  }
-
-type Cli = Aux -> Connection -> IO ()
 
 main :: IO ()
 main = do
@@ -323,67 +312,6 @@ runClient2 conf Options{..} aux@Aux{..} res client = do
         ccResumption = res
       , ccUse0RTT    = opt0RTT && is0RTTPossible res
       }
-
-clientHQ :: Cli
-clientHQ Aux{..} conn = do
-    let cmd = C8.pack ("GET " ++ auxPath ++ "\r\n")
-    s <- stream conn
-    sendStream s cmd
-    shutdownStream s
-    loop s
-  where
-    loop s = do
-        bs <- recvStream s 1024
-        if bs == "" then do
-            auxDebug "Connection finished"
-            closeStream s
-          else do
-            auxShow bs
-            loop s
-
-clientH3 :: Cli
-clientH3 Aux{..} conn = do
-    hdrblk <- taglen 1 <$> qpackClient auxPath auxAuthority
-    s0 <- stream conn
-    s2 <- unidirectionalStream conn
-    s6 <- unidirectionalStream conn
-    s10 <- unidirectionalStream conn
-    -- 0: control, 4 settings
-    sendStream s2 (BS.pack [0,4,8,1,80,0,6,128,0,128,0])
-    -- 2: from encoder to decoder
-    sendStream s6 (BS.pack [2])
-    -- 3: from decoder to encoder
-    sendStream s10 (BS.pack [3])
-    sendStream s0 hdrblk
-    shutdownStream s0
-    loop s0
-  where
-    loop s0 = do
-        bs <- recvStream s0 1024
-        if bs == "" then do
-            auxDebug "Fin received"
-            closeStream s0
-          else do
-            auxShow bs
-            auxDebug $ show (BS.length bs) ++ " bytes received"
-            loop s0
-
-clientPF :: Word64 -> Cli
-clientPF n Aux{..} conn = do
-    cmd <- withWriteBuffer 8 $ \wbuf -> write64 wbuf n
-    s <- stream conn
-    sendStream s cmd
-    shutdownStream s
-    loop s
-  where
-    loop s = do
-        bs <- recvStream s 1024
-        if bs == "" then do
-            auxDebug "Connection finished"
-            closeStream s
-          else do
-            auxShow bs
-            loop s
 
 printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
 printThroughput t1 t2 ConnectionStats{..} =
