@@ -107,11 +107,7 @@ updateLossDetectionTimer ldcc@LDCC{..} tmi = do
     mtmi <- readIORef timerInfo
     when (mtmi /= Just tmi) $ do
         if timerLevel tmi == RTT1Level then
-            if timerType tmi == LossTime then do
-              atomically $ writeTVar timerInfoQ Empty
-              updateLossDetectionTimer' ldcc tmi
-            else
-              atomically $ writeTVar timerInfoQ $ Next tmi
+            atomically $ writeTVar timerInfoQ $ Next tmi
           else
             updateLossDetectionTimer' ldcc tmi
 
@@ -121,6 +117,10 @@ ldccTimer ldcc@LDCC{..} = forever $ do
         x <- readTVar timerInfoQ
         check (x /= Empty)
     delay $ Microseconds 10000
+    updateWithNext ldcc
+
+updateWithNext :: LDCC -> IO ()
+updateWithNext ldcc@LDCC{..} = do
     x <- readTVarIO timerInfoQ
     case x of
       Empty    -> return ()
@@ -128,6 +128,7 @@ ldccTimer ldcc@LDCC{..} = forever $ do
 
 updateLossDetectionTimer' :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
+    atomically $ writeTVar timerInfoQ Empty
     mgr <- getSystemTimerManager
     let tim = timerTime tmi
     duration@(Microseconds us) <- getTimeoutInMicrosecond tim
@@ -138,7 +139,7 @@ updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
         mk <- atomicModifyIORef' timerKey (Just key,)
         case mk of
           Nothing -> return ()
-          Just k -> unregisterTimeout mgr k
+          Just k  -> unregisterTimeout mgr k
         writeIORef timerInfo $ Just tmi
         qlogLossTimerUpdated ldcc (tmi,duration)
 
@@ -191,7 +192,10 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
           Just tmi -> do
             let lvl = timerLevel tmi
             discarded <- getPacketNumberSpaceDiscarded ldcc lvl
-            unless discarded $ lossTimeOrPTO lvl tmi
+            if discarded then
+                updateWithNext ldcc
+              else
+                lossTimeOrPTO lvl tmi
   where
     lossTimeOrPTO lvl tmi = do
         qlogLossTimerExpired ldcc
