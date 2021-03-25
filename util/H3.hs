@@ -9,7 +9,6 @@ module H3 (
   , qpackServer
   , taglen
   , html
-  , makeProtos
   ) where
 
 import Data.Bits
@@ -19,7 +18,6 @@ import qualified Data.ByteString.Char8 as C8
 import Data.Word
 import Network.HPACK.Internal
 
-import Network.QUIC
 import Network.QUIC.Internal
 
 name :: ByteString
@@ -62,11 +60,3 @@ taglen i bs = BS.concat [tag,len,bs]
 
 html :: ByteString
 html = "<html><head><title>Welcome to QUIC in Haskell</title></head><body><p>Welcome to QUIC in Haskell. This server asks clients to retry if no token/retry_token is provided. HTTP 0.9, HTTP/3 and QPACK implementations are a toy and hard-coded. No path validation at this moment.</p></body></html>"
-
-makeProtos :: Version -> (ByteString, ByteString)
-makeProtos Version1 = ("h3","hq-interop")
-makeProtos ver = (h3X,hqX)
-  where
-    verbs = C8.pack $ show $ fromVersion ver
-    h3X = "h3-" `BS.append` verbs
-    hqX = "hq-" `BS.append` verbs

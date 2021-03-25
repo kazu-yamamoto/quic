@@ -186,6 +186,7 @@ executable server
   main-is:              server.hs
   other-modules:        H3
                         Common
+                        ServerX
   ghc-options:          -Wall -threaded -rtsopts
   build-depends:        base >= 4.9 && < 5
                       , base16-bytestring

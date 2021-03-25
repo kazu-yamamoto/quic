@@ -1,10 +1,16 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Common (
     getGroups
   , getLogger
+  , makeProtos
   ) where
 
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as C8
 import Data.Maybe
-import Network.TLS
+import Network.TLS hiding (Version)
 
 import Network.QUIC
 
@@ -36,3 +42,11 @@ split c s = case break (c==) s of
 getLogger :: Maybe FilePath -> (String -> IO ())
 getLogger Nothing     = \_ -> return ()
 getLogger (Just file) = \msg -> appendFile file (msg ++ "\n")
+
+makeProtos :: Version -> (ByteString, ByteString)
+makeProtos Version1 = ("h3","hq-interop")
+makeProtos ver = (h3X,hqX)
+  where
+    verbs = C8.pack $ show $ fromVersion ver
+    h3X = "h3-" `BS.append` verbs
+    hqX = "hq-" `BS.append` verbs
