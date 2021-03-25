@@ -25,35 +25,6 @@ serverHQ conn = connDebugLog conn "Connection terminated" `onE` do
         sendStream s html
         closeStream s
 
-consume :: Connection -> Stream -> IO ()
-consume conn s = loop
-  where
-    loop = do
-        bs <- recvStream s 1024
-        if bs == "" then
-            connDebugLog conn "FIN received"
-          else do
-            connDebugLog conn $ byteString bs
-            loop
-
-serverPF :: Connection -> IO ()
-serverPF conn = connDebugLog conn "Connection terminated" `onE` do
-    s <- acceptStream conn
-    let sid = streamId s
-    when (isClientInitiatedBidirectional sid) $ do
-        bs <- recvStream s 8
-        n <- withReadBuffer bs read64
-        loop s n
-        closeStream s
-  where
-    bs1024 = BS.replicate 1024 65
-    loop _ 0 = return ()
-    loop s n
-      | n < 1024  = sendStream s $ BS.replicate (fromIntegral n) 65
-      | otherwise = do
-            sendStream s bs1024
-            loop s (n - 1024)
-
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
     s3 <- unidirectionalStream conn
@@ -79,6 +50,35 @@ serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
                 sendStreamMany s hdrbdy
                 closeStream s
         loop hdrbdy
+
+serverPF :: Connection -> IO ()
+serverPF conn = connDebugLog conn "Connection terminated" `onE` do
+    s <- acceptStream conn
+    let sid = streamId s
+    when (isClientInitiatedBidirectional sid) $ do
+        bs <- recvStream s 8
+        n <- withReadBuffer bs read64
+        loop s n
+        closeStream s
+  where
+    bs1024 = BS.replicate 1024 65
+    loop _ 0 = return ()
+    loop s n
+      | n < 1024  = sendStream s $ BS.replicate (fromIntegral n) 65
+      | otherwise = do
+            sendStream s bs1024
+            loop s (n - 1024)
+
+consume :: Connection -> Stream -> IO ()
+consume conn s = loop
+  where
+    loop = do
+        bs <- recvStream s 1024
+        if bs == "" then
+            connDebugLog conn "FIN received"
+          else do
+            connDebugLog conn $ byteString bs
+            loop
 
 onE :: IO b -> IO a -> IO a
 h `onE` b = b `E.onException` h
