@@ -5,7 +5,6 @@
 module Network.QUIC.Recovery.Timer (
     getLossTimeAndSpace
   , getPtoTimeAndSpace
-  , cancelLossDetectionTimer
   , setLossDetectionTimer
   , beforeAntiAmp
   , ldccTimer
@@ -25,6 +24,7 @@ import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Recovery.Utils
+import Network.QUIC.Recovery.Constants
 import Network.QUIC.Timeout
 import Network.QUIC.Types
 
@@ -85,51 +85,16 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
                 loop ls
               else do
                   rtt <- readIORef recoveryRTT
-                  let pto = backOff (calcPTO rtt $ Just l) (ptoCount rtt)
-                  let ptoTime = timeOfLastAckElicitingPacket `addMicroseconds` pto
+                  let pto0 = backOff (calcPTO rtt $ Just l) (ptoCount rtt)
+                      pto = max pto0 kGranularity
+                      ptoTime = timeOfLastAckElicitingPacket `addMicroseconds` pto
                   return $ Just (ptoTime, l)
 
 ----------------------------------------------------------------
 
 cancelLossDetectionTimer :: LDCC -> IO ()
 cancelLossDetectionTimer ldcc@LDCC{..} = do
-    mtmi <- readIORef timerInfo
-    case mtmi of
-      Nothing -> cancelLossDetectionTimer' ldcc
-      Just tmi
-        | timerLevel tmi == RTT1Level -> atomically $ writeTQueue timerQ Nothing
-        | otherwise                   -> cancelLossDetectionTimer' ldcc
-
-updateLossDetectionTimer :: LDCC -> TimerSet -> IO ()
-updateLossDetectionTimer ldcc@LDCC{..} tmi = do
-    mtmi <- readIORef timerInfo
-    when (mtmi /= Just tmi) $ do
-        if timerLevel tmi == RTT1Level then
-            if timerType tmi == LossTime then do
-              void $ atomically $ flushTQueue timerQ
-              updateLossDetectionTimer' ldcc tmi
-            else
-              atomically $ writeTQueue timerQ $ Just tmi
-          else
-            updateLossDetectionTimer' ldcc tmi
-
-ldccTimer :: LDCC -> IO ()
-ldccTimer ldcc@LDCC{..} = forever $ do
-    atomically $ do
-        isEmpty <- isEmptyTQueue timerQ
-        check (not isEmpty)
-    delay $ Microseconds 10000
-    xs <- atomically $ flushTQueue timerQ
-    if null xs then
-        return ()
-      else do
-        let x = last xs
-        case x of
-          Nothing  -> cancelLossDetectionTimer' ldcc
-          Just tmi -> updateLossDetectionTimer' ldcc tmi
-
-cancelLossDetectionTimer' :: LDCC -> IO ()
-cancelLossDetectionTimer' ldcc@LDCC{..} = do
+    atomically $ writeTVar timerInfoQ Empty
     mk <- atomicModifyIORef' timerKey (Nothing,)
     case mk of
       Nothing -> return ()
@@ -139,22 +104,48 @@ cancelLossDetectionTimer' ldcc@LDCC{..} = do
           writeIORef timerInfo Nothing
           qlogLossTimerCancelled ldcc
 
-updateLossDetectionTimer' :: LDCC -> TimerSet -> IO ()
+updateLossDetectionTimer :: LDCC -> TimerInfo -> IO ()
+updateLossDetectionTimer ldcc@LDCC{..} tmi = do
+    mtmi <- readIORef timerInfo
+    when (mtmi /= Just tmi) $ do
+        if timerLevel tmi == RTT1Level then
+            atomically $ writeTVar timerInfoQ $ Next tmi
+          else
+            updateLossDetectionTimer' ldcc tmi
+
+ldccTimer :: LDCC -> IO ()
+ldccTimer ldcc@LDCC{..} = forever $ do
+    atomically $ do
+        x <- readTVar timerInfoQ
+        check (x /= Empty)
+    delay timerGranularity
+    updateWithNext ldcc
+
+updateWithNext :: LDCC -> IO ()
+updateWithNext ldcc@LDCC{..} = do
+    x <- readTVarIO timerInfoQ
+    case x of
+      Empty    -> return ()
+      Next tmi -> updateLossDetectionTimer' ldcc tmi
+
+updateLossDetectionTimer' :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
-    mgr <- getSystemTimerManager
+    atomically $ writeTVar timerInfoQ Empty
     let tim = timerTime tmi
-    duration@(Microseconds us) <- getTimeoutInMicrosecond tim
-    if us <= 0 then do
-        qlogDebug ldcc $ Debug "updateLossDetectionTimer: minus"
-        -- cancelLossDetectionTimer conn -- don't cancel
-      else do
+    Microseconds us0 <- getTimeoutInMicrosecond tim
+    let us | us0 <= 0  = 10000 -- fixme
+           | otherwise = us0
+    update us
+    qlogLossTimerUpdated ldcc (tmi, Microseconds us) -- fixme tmi
+  where
+    update us = do
+        mgr <- getSystemTimerManager
         key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
         mk <- atomicModifyIORef' timerKey (Just key,)
         case mk of
           Nothing -> return ()
-          Just k -> unregisterTimeout mgr k
+          Just k  -> unregisterTimeout mgr k
         writeIORef timerInfo $ Just tmi
-        qlogLossTimerUpdated ldcc (tmi,duration)
 
 ----------------------------------------------------------------
 
@@ -165,9 +156,10 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
       Just (earliestLossTime,lvl) -> do
           when (lvl0 == lvl) $ do
               -- Time threshold loss detection.
-              let tmi = TimerSet earliestLossTime lvl LossTime
+              let tmi = TimerInfo earliestLossTime lvl LossTime
               updateLossDetectionTimer ldcc tmi
       Nothing -> do
+          -- See beforeAntiAmp
           CC{..} <- readTVarIO recoveryCC
           validated <- peerCompletedAddressValidation ldcc
           if numOfAckEliciting <= 0 && validated then
@@ -180,10 +172,10 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
               -- Determine which PN space to arm PTO for.
               mx <- getPtoTimeAndSpace ldcc
               case mx of
-                Nothing -> cancelLossDetectionTimer ldcc
+                Nothing -> return ()
                 Just (ptoTime, lvl) -> do
                     when (lvl0 == lvl) $ do
-                        let tmi = TimerSet ptoTime lvl PTO
+                        let tmi = TimerInfo ptoTime lvl PTO
                         updateLossDetectionTimer ldcc tmi
 
 beforeAntiAmp :: LDCC -> IO ()
@@ -205,7 +197,7 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
             let lvl = timerLevel tmi
             discarded <- getPacketNumberSpaceDiscarded ldcc lvl
             if discarded then
-                cancelLossDetectionTimer ldcc
+                updateWithNext ldcc
               else
                 lossTimeOrPTO lvl tmi
   where
@@ -215,8 +207,8 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
           LossTime -> do
               -- Time threshold loss Detection
               lostPackets <- detectAndRemoveLostPackets ldcc lvl
-              when (null lostPackets) $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: null"
               lostPackets' <- mergeLostCandidatesAndClear ldcc lostPackets
+              when (null lostPackets') $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: null"
               onPacketsLost ldcc lostPackets'
               retransmit ldcc lostPackets'
               setLossDetectionTimer ldcc lvl

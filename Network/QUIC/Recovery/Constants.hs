@@ -5,6 +5,9 @@ import Network.QUIC.Imports
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Types
 
+timerGranularity :: Microseconds
+timerGranularity = Microseconds 10000
+
 -- | Maximum reordering in packets before packet threshold loss
 --   detection considers a packet lost.
 kPacketThreshold :: PacketNumber
@@ -18,7 +21,8 @@ kTimeThreshold x = x + (x .>>. 3) -- 9/8
 
 -- | Timer granularity.
 kGranularity :: Microseconds
-kGranularity = Microseconds 5000
+-- kGranularity = Microseconds 5000
+kGranularity = timerGranularity * 2
 
 -- | Default limit on the initial bytes in flight.
 kInitialWindow :: Int -> Int

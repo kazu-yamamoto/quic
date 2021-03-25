@@ -208,7 +208,7 @@ sender conn send = handleLog logAction $
   where
     body buf = forever $ do
         x <- atomically ((SwPing <$> takePingSTM (connLDCC conn))
-                   `orElse` (SwOut  <$> takeOutputSTM conn)
+                `orElse` (SwOut  <$> takeOutputSTM conn)
                 `orElse` (SwStrm <$> takeSendStreamQSTM conn))
         case x of
           SwPing lvl -> sendPingPacket   conn send buf lvl

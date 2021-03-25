@@ -31,44 +31,46 @@ decryptCrypt conn decBuf bufsiz Crypt{..} lvl = handleLogR logAction $ do
         sample = Sample $ BS.take sampleLen $ BS.drop sampleOffset cryptPacket
         makeMask = unprotect protector
         Mask mask = makeMask sample
-        Just (mask1,mask2) = BS.uncons mask
-        rawFlags@(Flags flags) = unprotectFlags proFlags mask1
-        epnLen = decodePktNumLength rawFlags
-        epn = BS.take epnLen $ BS.drop cryptPktNumOffset cryptPacket
-        bytePN = bsXOR mask2 epn
-        headerLen = cryptPktNumOffset + epnLen
-        (proHeader, ciphertext) = BS.splitAt headerLen cryptPacket
-        ilen = BS.length ciphertext
-    peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
-    let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
-    header <- BS.create headerLen $ \p -> do
-        void $ copy p proHeader
-        poke8 flags p 0
-        void $ copy (p `plusPtr` cryptPktNumOffset) $ BS.take epnLen bytePN
-    let keyPhase | lvl == RTT1Level = flags `testBit` 2
-                 | otherwise        = False
-    coder <- getCoder conn lvl keyPhase
-    siz <- withByteString ciphertext $ \ibuf ->
-               withByteString header $ \abuf -> do
-        let ilen' = fromIntegral ilen
-            alen' = fromIntegral headerLen
-        decrypt coder ibuf ilen' abuf alen' pn decBuf
-    let rrMask | lvl == RTT1Level = 0x18
-               | otherwise        = 0x0c
-        marks | flags .&. rrMask == 0 = defaultPlainMarks
-              | otherwise             = setIllegalReservedBits defaultPlainMarks
-    if siz < 0 then
-        return Nothing
-      else do
-        mframes <- decodeFrames decBuf siz
-        case mframes of
-          Nothing -> do
-              let marks' = setUnknownFrame marks
-              return $ Just $ Plain rawFlags pn [] marks'
-          Just frames -> do
-              let marks' | null frames = setNoFrames marks
-                         | otherwise   = marks
-              return $ Just $ Plain rawFlags pn frames marks'
+    case BS.uncons mask of
+      Nothing -> return Nothing
+      Just (mask1,mask2) -> do
+        let rawFlags@(Flags flags) = unprotectFlags proFlags mask1
+            epnLen = decodePktNumLength rawFlags
+            epn = BS.take epnLen $ BS.drop cryptPktNumOffset cryptPacket
+            bytePN = bsXOR mask2 epn
+            headerLen = cryptPktNumOffset + epnLen
+            (proHeader, ciphertext) = BS.splitAt headerLen cryptPacket
+            ilen = BS.length ciphertext
+        peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
+        let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
+        header <- BS.create headerLen $ \p -> do
+            void $ copy p proHeader
+            poke8 flags p 0
+            void $ copy (p `plusPtr` cryptPktNumOffset) $ BS.take epnLen bytePN
+        let keyPhase | lvl == RTT1Level = flags `testBit` 2
+                     | otherwise        = False
+        coder <- getCoder conn lvl keyPhase
+        siz <- withByteString ciphertext $ \ibuf ->
+                   withByteString header $ \abuf -> do
+            let ilen' = fromIntegral ilen
+                alen' = fromIntegral headerLen
+            decrypt coder ibuf ilen' abuf alen' pn decBuf
+        let rrMask | lvl == RTT1Level = 0x18
+                   | otherwise        = 0x0c
+            marks | flags .&. rrMask == 0 = defaultPlainMarks
+                  | otherwise             = setIllegalReservedBits defaultPlainMarks
+        if siz < 0 then
+            return Nothing
+          else do
+            mframes <- decodeFrames decBuf siz
+            case mframes of
+              Nothing -> do
+                  let marks' = setUnknownFrame marks
+                  return $ Just $ Plain rawFlags pn [] marks'
+              Just frames -> do
+                  let marks' | null frames = setNoFrames marks
+                             | otherwise   = marks
+                  return $ Just $ Plain rawFlags pn frames marks'
   where
     logAction msg = do
         connDebugLog conn ("decryptCrypt: " <> msg)

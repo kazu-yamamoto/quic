@@ -18,7 +18,8 @@ module Network.QUIC.Recovery.Types (
   , initialLossDetection
   , MetricsDiff(..)
   , TimerType(..)
-  , TimerSet(..)
+  , TimerInfo(..)
+  , TimerInfoQ(..)
   , TimerCancelled
   , TimerExpired
   , makeSentPackets
@@ -209,14 +210,18 @@ instance Show TimerType where
     show PTO      = "pto"
 
 data TimerExpired = TimerExpired
+
 data TimerCancelled = TimerCancelled
-data TimerSet = TimerSet {
+
+data TimerInfo = TimerInfo {
     timerTime  :: TimeMicrosecond
   , timerLevel :: EncryptionLevel
   , timerType  :: TimerType
   } deriving (Eq, Show)
 
-type TimerQ = TQueue (Maybe TimerSet)
+data TimerInfoQ = Empty
+                | Next TimerInfo
+                deriving (Eq)
 
 ----------------------------------------------------------------
 
@@ -257,15 +262,18 @@ data LDCC = LDCC {
   , spaceDiscarded    :: Array EncryptionLevel (IORef Bool)
   , sentPackets       :: Array EncryptionLevel (IORef SentPackets)
   , lossDetection     :: Array EncryptionLevel (IORef LossDetection)
+  -- The current timer key
   , timerKey          :: IORef (Maybe TimeoutKey)
-  , timerInfo         :: IORef (Maybe TimerSet)
+  -- The current timer value
+  , timerInfo         :: IORef (Maybe TimerInfo)
   , lostCandidates    :: TVar SentPackets
   , ptoPing           :: TVar (Maybe EncryptionLevel)
   , speedingUp        :: IORef Bool
   , pktNumPersistent  :: IORef PacketNumber
   , peerPacketNumbers :: Array EncryptionLevel (IORef PeerPacketNumbers)
   , previousRTT1PPNs  :: IORef PeerPacketNumbers -- for RTT1
-  , timerQ            :: TimerQ
+  -- Pending timer value
+  , timerInfoQ        :: TVar TimerInfoQ
   }
 
 makePPN :: IO (Array EncryptionLevel (IORef PeerPacketNumbers))
@@ -296,7 +304,7 @@ newLDCC cs qLog put = LDCC cs qLog put
     <*> newIORef maxBound
     <*> makePPN
     <*> newIORef emptyPeerPacketNumbers
-    <*> newTQueueIO
+    <*> newTVarIO Empty
 
 instance KeepQlog LDCC where
     keepQlog = ldccQlogger
@@ -339,8 +347,8 @@ instance Qlog TimerCancelled where
 instance Qlog TimerExpired where
     qlog TimerExpired   = "{\"event_type\":\"expired\"}"
 
-instance Qlog (TimerSet,Microseconds) where
-    qlog (TimerSet{..},us) = "{\"event_type\":\"set\"" <>
+instance Qlog (TimerInfo,Microseconds) where
+    qlog (TimerInfo{..},us) = "{\"event_type\":\"set\"" <>
                              ",\"timer_type\":\"" <> sw timerType <> "\"" <>
                              ",\"packet_number_space\":\"" <> packetNumberSpace timerLevel <> "\"" <>
                              ",\"delta\":" <> delta us <>
@@ -373,7 +381,7 @@ qlogContestionStateUpdated q mode = do
     tim <- getTimeMicrosecond
     keepQlog q $ QCongestionStateUpdated (qlog mode) tim
 
-qlogLossTimerUpdated :: KeepQlog q => q -> (TimerSet,Microseconds) -> IO ()
+qlogLossTimerUpdated :: KeepQlog q => q -> (TimerInfo,Microseconds) -> IO ()
 qlogLossTimerUpdated q tmi = do
     tim <- getTimeMicrosecond
     keepQlog q $ QLossTimerUpdated (qlog tmi) tim
