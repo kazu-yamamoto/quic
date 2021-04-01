@@ -319,7 +319,7 @@ instance Connector LDCC where
 ----------------------------------------------------------------
 
 instance Qlog SentPacket where
-    qlog SentPacket{..} = "{\"raw\":{\"length\":" <> sw spSentBytes <> "},\"header\":{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"},\"frames\":" <> "[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]" <> "}"
+    qlog SentPacket{..} = "{\"raw\":{\"length\":" <> sw spSentBytes <> "},\"header\":{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"},\"frames\":" <> "[" <> foldr (<>) "" (intersperse "," (map qlog plainFrames)) <> "]" <> "}"
       where
         PlainPacket hdr Plain{..} = spPlainPacket
 
