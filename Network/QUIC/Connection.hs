@@ -173,6 +173,7 @@ module Network.QUIC.Connection (
   , sendFrames
   ) where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 
 import Network.QUIC.Config
@@ -196,14 +197,15 @@ import Network.QUIC.Types
 --   'QUICException' is thrown to the main thread
 --   of this connection.
 exitConnection :: Connection -> QUICException -> IO ()
-exitConnection Connection{..} ue = E.throwTo connThreadId ue
-
+exitConnection Connection{..} ue = do
+    tid <- myThreadId
+    if tid == connThreadId then
+        E.throwIO ue
+      else
+        E.throwTo connThreadId ue
 
 exitConnectionByStream :: Stream -> QUICException -> IO ()
-exitConnectionByStream strm ue = E.throwTo tid ue
-  where
-    tid = connThreadId $ streamConnection strm
-
+exitConnectionByStream strm ue = exitConnection (streamConnection strm) ue
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
 sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames False
