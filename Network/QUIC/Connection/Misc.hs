@@ -25,6 +25,7 @@ module Network.QUIC.Connection.Misc (
   ) where
 
 import Control.Concurrent
+import qualified Control.Exception as E
 import Network.Socket
 import System.Mem.Weak
 
@@ -124,7 +125,9 @@ setMaxPacketSize Connection{..} n = writeIORef (maxPacketSize connState) n
 ----------------------------------------------------------------
 
 addResource :: Connection -> IO () -> IO ()
-addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f >> fs
+addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f' >> fs
+  where
+    f' = f `E.catch` (\(E.SomeException _) -> return ())
 
 freeResources :: Connection -> IO ()
 freeResources Connection{..} = do
