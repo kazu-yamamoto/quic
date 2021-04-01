@@ -61,7 +61,7 @@ instance Qlog CryptPacket where
     qlog (CryptPacket hdr _) = qlog hdr
 
 instance Qlog PlainPacket where
-    qlog (PlainPacket hdr Plain{..}) = "{\"header\":{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"},\"frames\":[" <> foldr1 (<>) (intersperse "," (map qlog plainFrames)) <> "]}"
+    qlog (PlainPacket hdr Plain{..}) = "{\"header\":{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"},\"frames\":[" <> foldr (<>) "" (intersperse "," (map qlog plainFrames)) <> "]}"
 
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"header\":{\"packet_type\":\"stateless_reset\",\"packet_number\":\"\"}}"
