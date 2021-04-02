@@ -12,7 +12,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, getPeerName, close)
+import Network.Socket (Socket, getPeerName)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Connection
@@ -133,4 +133,4 @@ rebind conn microseconds = do
     v <- getVersion conn
     mytid <- myThreadId
     void $ forkIO $ readerClient mytid [v] s1 q conn -- versions are dummy
-    fire microseconds $ close s0
+    fire microseconds $ shutdownAndClose s0

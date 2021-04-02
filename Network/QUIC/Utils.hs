@@ -2,6 +2,7 @@
 
 module Network.QUIC.Utils where
 
+import qualified Control.Exception as E
 import Control.Monad (replicateM)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base16
@@ -14,6 +15,7 @@ import Data.List (foldl')
 import Data.Word
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, plusPtr)
+import qualified Network.Socket as NS
 import System.Random (randomIO)
 
 dec16 :: ByteString -> ByteString
@@ -47,3 +49,8 @@ sum' = foldl' (+) 0
 withByteString :: ByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteString (PS fptr off _) f = withForeignPtr fptr $ \ptr ->
   f (ptr `plusPtr` off)
+
+shutdownAndClose :: NS.Socket -> IO ()
+shutdownAndClose s = do
+    NS.shutdown s NS.ShutdownBoth `E.catch` \(E.SomeException _) -> return ()
+    NS.close s

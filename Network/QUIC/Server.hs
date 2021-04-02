@@ -144,7 +144,7 @@ accept = readAcceptQ . acceptQ
 
 runDispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ThreadId
 runDispatcher d conf ssa@(s,_) =
-    forkFinally (dispatcher d conf ssa) (\_ -> close s)
+    forkFinally (dispatcher d conf ssa) $ \_ -> shutdownAndClose s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
 dispatcher d conf (s,mysa) = handleLog logAction $
@@ -374,6 +374,6 @@ migrator conn mysa peersa1 dcid mcidinfo = handleLog logAction $ do
     setMyCID conn dcid
     validatePath conn mcidinfo
     _ <- timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ q)
-    close s0
+    shutdownAndClose s0
   where
     logAction msg = connDebugLog conn ("migrator: " <> msg)
