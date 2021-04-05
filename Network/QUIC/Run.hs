@@ -151,7 +151,7 @@ handshakeClientConnection conf@ClientConfig{..} (ConnRes conn send recv myAuthCI
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
-runQUICServer conf server = handleLogR debugLog $ do
+runQUICServer conf server = handleLogUnit debugLog $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
