@@ -201,7 +201,7 @@ data Switch = SwPing EncryptionLevel
             | SwStrm TxStreamData
 
 sender :: Connection -> SendBuf -> IO ()
-sender conn send = handleLog logAction $
+sender conn send = handleLogT logAction abort $
     E.bracket (mallocBytes (maximumUdpPayloadSize * 2))
               free
               body
@@ -215,6 +215,7 @@ sender conn send = handleLog logAction $
           SwOut  out -> sendOutput       conn send buf out
           SwStrm tx  -> sendTxStreamData conn send buf tx
     logAction msg = connDebugLog conn ("sender: " <> msg)
+    abort = exitConnection conn InternalException
 
 ----------------------------------------------------------------
 
@@ -233,8 +234,8 @@ sendOutput :: Connection -> SendBuf -> Buffer -> Output -> IO ()
 sendOutput conn send buf (OutControl lvl frames cc) = do
     construct conn lvl frames >>= sendPacket conn send buf
     when (lvl == HandshakeLevel) $ discardInitialPacketNumberSpace conn
-    -- ConnectionIsClosed kills myself and is ignored by the logger
-    when cc $ E.throwIO ConnectionIsClosed
+    -- For a client, CC is sent when the client exits.
+    when (cc && isServer conn) $ exitConnection conn ConnectionIsClosed
 sendOutput conn send buf (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
         (lcs,wait) = convert lcs0

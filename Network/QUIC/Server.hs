@@ -147,7 +147,7 @@ runDispatcher d conf ssa@(s,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> shutdownAndClose s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
-dispatcher d conf (s,mysa) = handleLog logAction $
+dispatcher d conf (s,mysa) = handleLogR logAction $
     E.bracket (mallocBytes maximumUdpPayloadSize)
               free
               body
@@ -349,7 +349,7 @@ dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return()
 
 -- | readerServer dies when the socket is closed.
 readerServer :: Socket -> RecvQ -> Connection -> IO ()
-readerServer s q conn = handleLog logAction $ forever $ do
+readerServer s q conn = handleLogR logAction $ forever $ do
     bs <- NSB.recv s maximumUdpPayloadSize
     let bytes = BS.length bs
     now <- getTimeMicrosecond
@@ -365,7 +365,7 @@ recvServer = readRecvQ
 ----------------------------------------------------------------
 
 migrator :: Connection -> SockAddr -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
-migrator conn mysa peersa1 dcid mcidinfo = handleLog logAction $ do
+migrator conn mysa peersa1 dcid mcidinfo = handleLogR logAction $ do
     (s0,q) <- getSockInfo conn
     s1 <- udpServerConnectedSocket mysa peersa1
     setSockInfo conn (s1,q)

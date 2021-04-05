@@ -51,6 +51,7 @@ runQUICClient conf client = do
     when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
     E.bracket (forkIO timeouter)
               killThread
+              -- Don't use handleLogRun here because of a return value.
               (\_ -> E.bracket (connect conf) freeResources clientAndClose)
   where
     clientAndClose conn = client conn `E.finally` do
@@ -150,7 +151,7 @@ handshakeClientConnection conf@ClientConfig{..} (ConnRes conn send recv myAuthCI
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
-runQUICServer conf server = handleLog debugLog $ do
+runQUICServer conf server = handleLogR debugLog $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
@@ -161,7 +162,7 @@ runQUICServer conf server = handleLog debugLog $ do
                body = handshakeServerConnection conf
         -- Typically, ConnectionIsClosed breaks acceptStream.
         -- And the exception should be ignored.
-        void $ forkIO (handleLog debugLog $ E.bracket create freeResources serverAndClose)
+        void $ forkIO (handleLogRun debugLog $ E.bracket create freeResources serverAndClose)
   where
     serverAndClose conn = do
         server conn

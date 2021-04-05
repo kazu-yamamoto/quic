@@ -25,7 +25,7 @@ import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
-receiver conn recv = handleLog logAction $
+receiver conn recv = handleLogT logAction abort $
     E.bracket (mallocBytes maximumUdpPayloadSize)
               free
               body
@@ -65,6 +65,7 @@ receiver conn recv = handleLog logAction $
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("receiver: " <> msg)
+    abort = exitConnection conn InternalException
 
 processReceivedPacketHandshake :: Connection -> Buffer -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn buf rpkt = do
