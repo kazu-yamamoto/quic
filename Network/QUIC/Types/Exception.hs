@@ -23,6 +23,7 @@ data QUICException =
   | NoVersionIsSpecified
   | VersionNegotiationFailed
   | BadThingHappen E.SomeException
+  | InternalException
   deriving (Show)
 
 instance E.Exception QUICException

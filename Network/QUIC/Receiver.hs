@@ -25,7 +25,7 @@ import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
-receiver conn recv = handleLog logAction $
+receiver conn recv = handleLogT logAction abort $
     E.bracket (mallocBytes maximumUdpPayloadSize)
               free
               body
@@ -65,6 +65,7 @@ receiver conn recv = handleLog logAction $
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("receiver: " <> msg)
+    abort = exitConnection conn InternalException
 
 processReceivedPacketHandshake :: Connection -> Buffer -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn buf rpkt = do
@@ -213,7 +214,7 @@ processFrame conn lvl (CryptoF off cdat) = do
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN for server or in 1-RTT" 0x07
-    setNewToken conn token
+    when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat

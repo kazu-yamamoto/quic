@@ -30,7 +30,7 @@ import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
 readerClient :: ThreadId -> [Version] -> Socket -> RecvQ -> Connection -> IO ()
-readerClient tid myVers s q conn = handleLog logAction $ forever $ do
+readerClient tid myVers s q conn = handleLogUnit logAction $ forever $ do
     bs <- NSB.recv s maximumUdpPayloadSize
     now <- getTimeMicrosecond
     let udpPayloadSize = BS.length bs
