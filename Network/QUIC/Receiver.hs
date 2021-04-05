@@ -214,7 +214,7 @@ processFrame conn lvl (CryptoF off cdat) = do
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         sendCCandExitConnection conn ProtocolViolation "NEW_TOKEN for server or in 1-RTT" 0x07
-    setNewToken conn token
+    when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- getStream conn sid
     let len = BS.length dat
