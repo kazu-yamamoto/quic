@@ -73,12 +73,14 @@ testSendRecv cc sc times = do
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
   where
-    client mvar = runQUICClient cc $ \conn -> do
-        strm <- stream conn
-        let bs = BS.replicate 10000 0
-        replicateM_ times $ sendStream strm bs
-        shutdownStream strm
-        takeMVar mvar
+    client mvar = do
+        threadDelay 10000
+        runQUICClient cc $ \conn -> do
+            strm <- stream conn
+            let bs = BS.replicate 10000 0
+            replicateM_ times $ sendStream strm bs
+            shutdownStream strm
+            takeMVar mvar
     server mvar = runQUICServer sc $ \conn -> do
         strm <- acceptStream conn
         bs <- recvStream strm 1024
