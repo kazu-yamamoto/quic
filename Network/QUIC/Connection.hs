@@ -208,12 +208,12 @@ exitConnectionByStream :: Stream -> QUICException -> IO ()
 exitConnectionByStream strm ue = exitConnection (streamConnection strm) ue
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
-sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames False
+sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames
 
 sendCCFrame :: Connection -> Frame -> IO ()
 sendCCFrame conn frame = do
     lvl <- getEncryptionLevel conn
-    putOutput conn $ OutControl lvl [frame] True
+    putOutput conn $ OutControl lvl [frame]
     setCloseSent conn
 
 sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO ()
@@ -227,7 +227,7 @@ sendCCandExitConnection conn err desc ftyp = do
 
 sendCCFrame' :: Connection -> EncryptionLevel -> Frame -> IO ()
 sendCCFrame' conn lvl frame = do
-    putOutput conn $ OutControl lvl [frame] True
+    putOutput conn $ OutControl lvl [frame]
     setCloseSent conn
 
 sendCCandExitConnection' :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
