@@ -32,6 +32,10 @@ handleLogT logAction postProcess action = do
       Right () -> return ()
       Left se
         | Just E.ThreadKilled <- E.fromException se -> return ()
+        | Just ExitConnection <- E.fromException se -> do
+              -- an exception is already sent to the main thread.
+              -- no postProcess is necessary.
+              return ()
         | otherwise -> do
               logAction $ bhow se
               postProcess

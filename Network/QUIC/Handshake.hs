@@ -217,7 +217,6 @@ setPeerParams conn _ctx ps0 = do
         let qerr = TransportErrorIsSent TransportParameterError "Transport parametter error"
         exitConnection conn qerr
         -- converted into Error_Misc and ignored in "tell"
-        E.throwIO qerr
     checkAuthCIDs params = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do
