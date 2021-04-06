@@ -220,7 +220,7 @@ sendCCFrame conn frame = do
 sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO a
 sendCCandExitConnection conn err desc ftyp = do
     sendCCFrame conn frame
-    delay (Microseconds 100000)
+    delay $ Microseconds 100000
     exitConnection conn quicexc
   where
     frame = ConnectionClose err ftyp desc
@@ -234,7 +234,7 @@ sendCCFrame' conn lvl frame = do
 sendCCandExitConnection' :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO a
 sendCCandExitConnection' conn lvl err desc ftyp = do
     sendCCFrame' conn lvl frame
-    delay (Microseconds 100000)
+    delay $ Microseconds 100000
     exitConnection conn quicexc
   where
     frame = ConnectionClose err ftyp desc
