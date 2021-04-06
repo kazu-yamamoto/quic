@@ -122,7 +122,6 @@ testHandshake cc sc mode = void $ concurrently server client
 
 query :: BS.ByteString -> Connection -> IO ()
 query content conn = do
-    isConnectionOpen conn `shouldReturn` True
     waitEstablished conn
     s <- stream conn
     sendStream s content
