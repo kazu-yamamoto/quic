@@ -107,7 +107,7 @@ delayedAck conn@Connection{..} = do
         join $ atomicModifyIORef' delayedAckCancel (new,)
         sendAck
   where
-    sendAck = putOutput conn $ OutControl RTT1Level [] False
+    sendAck = putOutput conn $ OutControl RTT1Level []
     check 1 = (0,   (1,  True))
     check n = (n+1, (n, False))
 

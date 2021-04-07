@@ -68,7 +68,7 @@ recvTLS conn hsr level =
                 n <- recvCompleted hsr
                 -- Sending ACKs for three times rule
                 when ((n `mod` 3) == 1) $
-                    sendCryptoData conn $ OutControl HandshakeLevel [] False
+                    sendCryptoData conn $ OutControl HandshakeLevel []
             return (Right bs)
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
@@ -82,9 +82,9 @@ sendTLS conn hsr x = do
     convertLevel (CryptHandshakeSecret, bs) = return (HandshakeLevel, bs)
     convertLevel (CryptApplicationSecret, bs) = return (RTT1Level, bs)
 
-internalError, unexpectedMessage :: String -> TLS.TLSError
+internalError :: String -> TLS.TLSError
 internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
-unexpectedMessage msg = TLS.Error_Protocol (msg, True, TLS.UnexpectedMessage)
+-- unexpectedMessage msg = TLS.Error_Protocol (msg, True, TLS.UnexpectedMessage)
 
 ----------------------------------------------------------------
 
@@ -213,11 +213,10 @@ setPeerParams conn _ctx ps0 = do
               setParams params
               qlogParamsSet conn (params,"remote")
     err = do
-        sendCCFrame conn $ ConnectionClose TransportParameterError 0 "Transport parametter error"
-        let qerr = TransportErrorIsSent TransportParameterError "Transport parametter error"
-        exitConnection conn qerr
-        -- converted into Error_Misc and ignored in "tell"
-        E.throwIO qerr
+        sendCCandExitConnection conn TransportParameterError "Transport parametter error" 0
+        -- The thrown exception is converted into Error_Misc and ignored in
+        -- "tell"
+
     checkAuthCIDs params = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do
@@ -260,7 +259,8 @@ getErrorCause e =
 notifyPeer :: Connection -> TLS.TLSError -> IO ()
 notifyPeer conn err = do
     sendCCFrame conn frame
-    exitConnection conn $ HandshakeFailed ad
+    delay $ Microseconds 100000
+    E.throwTo (connThreadId conn) $ HandshakeFailed ad
   where
     ad = errorToAlertDescription err
     frame = ConnectionClose (cryptoError ad) 0 ""

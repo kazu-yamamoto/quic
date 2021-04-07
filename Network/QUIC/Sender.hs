@@ -231,11 +231,9 @@ discardInitialPacketNumberSpace conn
   | otherwise = return ()
 
 sendOutput :: Connection -> SendBuf -> Buffer -> Output -> IO ()
-sendOutput conn send buf (OutControl lvl frames cc) = do
+sendOutput conn send buf (OutControl lvl frames) = do
     construct conn lvl frames >>= sendPacket conn send buf
     when (lvl == HandshakeLevel) $ discardInitialPacketNumberSpace conn
-    -- For a client, CC is sent when the client exits.
-    when (cc && isServer conn) $ exitConnection conn ConnectionIsClosed
 sendOutput conn send buf (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
         (lcs,wait) = convert lcs0

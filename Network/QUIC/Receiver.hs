@@ -41,7 +41,6 @@ receiver conn recv = handleLogT logAction abort $
         case mx of
           Nothing -> do
               exitConnection conn ConnectionIsTimeout
-              E.throwIO ConnectionIsTimeout -- fixme
           Just x  -> return x
     loopHandshake buf = do
         rpkt <- recvTimeout
@@ -152,7 +151,7 @@ processReceivedPacket conn buf rpkt = do
               qlogReceived conn StatelessReset tim
               connDebugLog conn "Connection is reset statelessly"
               setCloseReceived conn
-              E.throwTo (connThreadId conn) ConnectionIsReset
+              exitConnection conn ConnectionIsReset
             else do
               qlogDropped conn hdr
               connDebugLog conn $ "Cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)

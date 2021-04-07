@@ -31,6 +31,7 @@ instance E.Exception QUICException
 
 data InternalControl = NextVersion Version
                      | MustNotReached
+                     | ExitConnection
                      deriving (Eq, Show)
 
 instance E.Exception InternalControl

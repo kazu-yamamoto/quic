@@ -142,7 +142,7 @@ closeStream s = do
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
         n <- getPeerMaxStreams conn
-        putOutput conn $ OutControl RTT1Level [MaxStreams Unidirectional n] False
+        putOutput conn $ OutControl RTT1Level [MaxStreams Unidirectional n]
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream
@@ -183,7 +183,7 @@ resetStream :: Stream -> ApplicationProtocolError -> IO ()
 resetStream s aerr = do
     let conn = streamConnection s
     lvl <- getEncryptionLevel conn
-    putOutput conn $ OutControl lvl [frame] False
+    putOutput conn $ OutControl lvl [frame]
     -- fixme: some operations are necessary here.
   where
     frame = ResetStream (streamId s) aerr 0
