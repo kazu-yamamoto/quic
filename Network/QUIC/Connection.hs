@@ -82,6 +82,7 @@ module Network.QUIC.Connection (
   , setConnection0RTTReady
   , setConnection1RTTReady
   , setConnectionEstablished
+  , setConnectionClosing
   , setCloseSent
   , setCloseReceived
   , isCloseSent
@@ -166,14 +167,12 @@ module Network.QUIC.Connection (
   , exitConnection
   , exitConnectionByStream
   , sendCCFrame
-  , sendCCandExitConnection
-  , sendCCandExitConnection'
+  , sendCCFrameAndBreak
   , isConnectionOpen
-  , abortConnection
   , sendFrames
+  , abortConnection
   ) where
 
-import Control.Concurrent
 import qualified Control.Exception as E
 
 import Network.QUIC.Config
@@ -194,51 +193,27 @@ import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | Closing a connection.
---   'QUICException' is thrown to the main thread
---   of this connection.
 exitConnection :: Connection -> QUICException -> IO a
-exitConnection Connection{..} ue = do
-    tid <- myThreadId
-    if tid == connThreadId then
-        E.throwIO ue
-      else do
-        E.throwTo connThreadId ue
-        E.throwIO ExitConnection
+exitConnection _ ue = E.throwIO ue
 
 exitConnectionByStream :: Stream -> QUICException -> IO a
 exitConnectionByStream strm ue = exitConnection (streamConnection strm) ue
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
-sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames
+sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames Nothing
 
-sendCCFrame :: Connection -> Frame -> IO ()
-sendCCFrame conn frame = do
-    lvl <- getEncryptionLevel conn
-    putOutput conn $ OutControl lvl [frame]
+sendCCFrame :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
+sendCCFrame conn lvl err desc ftyp = do
+    putOutput conn $ OutControl lvl [frame] $ Just quicexc
     setCloseSent conn
-
-sendCCandExitConnection :: Connection -> TransportError -> ShortByteString -> FrameType -> IO a
-sendCCandExitConnection conn err desc ftyp = do
-    sendCCFrame conn frame
-    delay $ Microseconds 100000
-    exitConnection conn quicexc
-  where
+ where
     frame = ConnectionClose err ftyp desc
     quicexc = TransportErrorIsSent err desc
 
-sendCCFrame' :: Connection -> EncryptionLevel -> Frame -> IO ()
-sendCCFrame' conn lvl frame = do
-    putOutput conn $ OutControl lvl [frame]
-    setCloseSent conn
-
-sendCCandExitConnection' :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO a
-sendCCandExitConnection' conn lvl err desc ftyp = do
-    sendCCFrame' conn lvl frame
-    delay $ Microseconds 100000
-    exitConnection conn quicexc
-  where
-    frame = ConnectionClose err ftyp desc
-    quicexc = TransportErrorIsSent err desc
+sendCCFrameAndBreak :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
+sendCCFrameAndBreak conn lvl err desc ftyp = do
+    sendCCFrame conn lvl err desc ftyp
+    E.throwIO BreakForever
 
 -- | Checking if a connection is open.
 isConnectionOpen :: Connection -> IO Bool
@@ -250,9 +225,11 @@ isConnectionOpen = isConnOpen
 --   of this connection.
 abortConnection :: Connection -> ApplicationProtocolError -> IO a
 abortConnection conn err = do
-    sendCCFrame conn frame
+    lvl <- getEncryptionLevel conn
+    putOutput conn $ OutControl lvl [frame] $ Just quicexc
+    setCloseSent conn
     delay $ Microseconds 100000
-    exitConnection conn quicexc
+    E.throwIO quicexc -- fixme
   where
     frame = ConnectionCloseApp err ""
     quicexc = ApplicationProtocolErrorIsSent err ""

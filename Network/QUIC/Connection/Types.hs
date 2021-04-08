@@ -337,7 +337,7 @@ serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
 newtype Input = InpStream Stream deriving Show
 data   Crypto = InpHandshake EncryptionLevel ByteString deriving Show
 
-data Output = OutControl   EncryptionLevel [Frame]
+data Output = OutControl   EncryptionLevel [Frame] (Maybe QUICException)
             | OutHandshake [(EncryptionLevel,ByteString)]
             | OutRetrans   PlainPacket
             deriving Show

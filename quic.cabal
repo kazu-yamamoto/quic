@@ -108,6 +108,7 @@ library
   -- other-extensions:
   build-depends:       base >= 4.9 && < 5
                      , array
+                     , async
                      , base16-bytestring >= 1.0
                      , bytestring
                      , containers

@@ -6,6 +6,7 @@ module Network.QUIC.Connection.State (
   , setConnection1RTTReady
   , isConnectionEstablished
   , setConnectionEstablished
+  , setConnectionClosing
   , isCloseSent
   , setCloseSent
   , isCloseReceived
@@ -58,6 +59,9 @@ setConnection1RTTReady conn = do
 
 setConnectionEstablished :: Connection -> IO ()
 setConnectionEstablished conn = setConnectionState conn Established
+
+setConnectionClosing :: Connection -> IO ()
+setConnectionClosing conn = setConnectionState conn Closing
 
 ----------------------------------------------------------------
 

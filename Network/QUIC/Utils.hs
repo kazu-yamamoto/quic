@@ -2,10 +2,10 @@
 
 module Network.QUIC.Utils where
 
-import qualified Control.Exception as E
 import Control.Monad (replicateM)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base16
+import qualified Data.ByteString.Char8 as C8
 import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
@@ -51,6 +51,7 @@ withByteString (PS fptr off _) f = withForeignPtr fptr $ \ptr ->
   f (ptr `plusPtr` off)
 
 shutdownAndClose :: NS.Socket -> IO ()
-shutdownAndClose s = do
-    NS.shutdown s NS.ShutdownBoth `E.catch` \(E.SomeException _) -> return ()
-    NS.close s
+shutdownAndClose s = NS.close s
+
+shortpack :: String -> ShortByteString
+shortpack = Short.toShort . C8.pack

@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Handshake where
 
-import Control.Concurrent
 import qualified Control.Exception as E
 import Data.ByteString
 import qualified Network.TLS as TLS
@@ -68,7 +68,7 @@ recvTLS conn hsr level =
                 n <- recvCompleted hsr
                 -- Sending ACKs for three times rule
                 when ((n `mod` 3) == 1) $
-                    sendCryptoData conn $ OutControl HandshakeLevel []
+                    sendCryptoData conn $ OutControl HandshakeLevel [] Nothing
             return (Right bs)
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
@@ -88,7 +88,7 @@ internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
 
 ----------------------------------------------------------------
 
-handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO ()
+handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO (IO ())
 handshakeClient conf conn myAuthCIDs = do
     ver <- getVersion conn
     hsr <- newHndStateRef
@@ -101,16 +101,10 @@ handshakeClient conf conn myAuthCIDs = do
                            }
         setter = setResumptionSession conn
         handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT
-    tid <- forkIO (handshaker `E.catch` tell)
-    qlogParamsSet conn (confParameters (ccConfig conf), "local")
-    setKillHandshaker conn tid
-    if use0RTT then
-       wait0RTTReady conn
-     else
-       wait1RTTReady conn
+        handshaker' = handshaker `E.catch` sendCCTLSError conn
+    qlogParamsSet conn (confParameters (ccConfig conf), "local") -- fixme
+    return $ handshaker'
   where
-    tell (TLS.HandshakeFailed (TLS.Error_Misc _)) = return () -- thread blocked
-    tell e = notifyPeer conn $ getErrorCause e
     installKeysClient _ _ctx (InstallEarlyKeys Nothing) = return ()
     installKeysClient _ _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
         setCipher conn RTT0Level cphr
@@ -137,7 +131,7 @@ handshakeClient conf conn myAuthCIDs = do
 
 ----------------------------------------------------------------
 
-handshakeServer :: ServerConfig -> Connection -> AuthCIDs -> IO ()
+handshakeServer :: ServerConfig -> Connection -> AuthCIDs -> IO (IO ())
 handshakeServer conf conn myAuthCIDs = do
     ver <- getVersion conn
     hsr <- newHndStateRef
@@ -148,12 +142,9 @@ handshakeServer conf conn myAuthCIDs = do
                            , quicDone = done
                            }
         handshaker = serverHandshaker qc conf ver myAuthCIDs
-    tid <- forkIO (handshaker `E.catch` tell)
-    setKillHandshaker conn tid
-    wait1RTTReady conn
+        handshaker' = handshaker `E.catch` sendCCTLSError conn
+    return $ handshaker'
   where
-    tell (TLS.HandshakeFailed (TLS.Error_Misc _)) = return () -- thread blocked
-    tell e = notifyPeer conn $ getErrorCause e
     installKeysServer _ _ctx (InstallEarlyKeys Nothing) = return ()
     installKeysServer _ _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
         setCipher conn RTT0Level cphr
@@ -173,7 +164,6 @@ handshakeServer conf conn myAuthCIDs = do
     done ctx = do
         setEncryptionLevel conn RTT1Level
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
-        clearKillHandshaker conn
         fire (Microseconds 100000) $ do
             let ldcc = connLDCC conn
             discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
@@ -191,6 +181,8 @@ handshakeServer conf conn myAuthCIDs = do
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
 
+----------------------------------------------------------------
+
 setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
 setPeerParams conn _ctx ps0 = do
     ver <- getVersion conn
@@ -206,16 +198,12 @@ setPeerParams conn _ctx ps0 = do
     setPP (Just bs) = do
         let mparams = decodeParameters bs
         case mparams of
-          Nothing     -> err
+          Nothing     -> sendCCParamError
           Just params -> do
               checkAuthCIDs params
               checkInvalid params
               setParams params
               qlogParamsSet conn (params,"remote")
-    err = do
-        sendCCandExitConnection conn TransportParameterError "Transport parametter error" 0
-        -- The thrown exception is converted into Error_Misc and ignored in
-        -- "tell"
 
     checkAuthCIDs params = do
         ver <- getVersion conn
@@ -228,16 +216,16 @@ setPeerParams conn _ctx ps0 = do
     check _ Nothing = return ()
     check v0 v1
       | v0 == v1  = return ()
-      | otherwise = err
+      | otherwise = sendCCParamError
     checkInvalid params = do
-        when (maxUdpPayloadSize params < 1200) err
-        when (ackDelayExponent params > 20) err
-        when (maxAckDelay params >= 2^(14 :: Int)) err
+        when (maxUdpPayloadSize params < 1200) sendCCParamError
+        when (ackDelayExponent params > 20) sendCCParamError
+        when (maxAckDelay params >= 2^(14 :: Int)) sendCCParamError
         when (isServer conn) $ do
-            when (isJust $ originalDestinationConnectionId params) err
-            when (isJust $ preferredAddress params) err
-            when (isJust $ retrySourceConnectionId params) err
-            when (isJust $ statelessResetToken params) err
+            when (isJust $ originalDestinationConnectionId params) sendCCParamError
+            when (isJust $ preferredAddress params) sendCCParamError
+            when (isJust $ retrySourceConnectionId params) sendCCParamError
+            when (isJust $ statelessResetToken params) sendCCParamError
     setParams params = do
         setPeerParameters conn params
         case statelessResetToken params of
@@ -249,22 +237,6 @@ setPeerParams conn _ctx ps0 = do
         setMyMaxStreams conn $ initialMaxStreamsBidi params
         setMyUniMaxStreams conn $ initialMaxStreamsUni params
 
-getErrorCause :: TLS.TLSException -> TLS.TLSError
-getErrorCause (TLS.HandshakeFailed e) = e
-getErrorCause (TLS.Terminated _ _ e) = e
-getErrorCause e =
-    let msg = "unexpected TLS exception: " ++ show e
-     in TLS.Error_Protocol (msg, True, TLS.InternalError)
-
-notifyPeer :: Connection -> TLS.TLSError -> IO ()
-notifyPeer conn err = do
-    sendCCFrame conn frame
-    delay $ Microseconds 100000
-    E.throwTo (connThreadId conn) $ HandshakeFailed ad
-  where
-    ad = errorToAlertDescription err
-    frame = ConnectionClose (cryptoError ad) 0 ""
-
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do
     appPro <- TLS.getNegotiatedProtocol ctx
@@ -272,3 +244,30 @@ storeNegotiated conn ctx appSecInf = do
     let mode = fromMaybe FullHandshake (minfo >>= TLS.infoTLS13HandshakeMode)
     setNegotiated conn mode appPro appSecInf
 
+----------------------------------------------------------------
+
+sendCCParamError :: IO ()
+sendCCParamError = E.throwIO WrongTransportParameter
+
+sendCCTLSError :: Connection -> E.SomeException -> IO ()
+sendCCTLSError conn se
+  | Just E.ThreadKilled <- E.fromException se = return ()
+  | Just (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) <- E.fromException se = do
+        lvl <- getEncryptionLevel conn
+        sendCCFrame conn lvl TransportParameterError "Transport parametter error" 0
+  | Just (e :: TLS.TLSException) <- E.fromException se = do
+        lvl <- getEncryptionLevel conn
+        let tlserr = getErrorCause e
+            err = cryptoError $ errorToAlertDescription tlserr
+            msg = shortpack $ errorToAlertMessage tlserr
+        sendCCFrame conn lvl err msg 0
+  | otherwise = do
+        lvl <- getEncryptionLevel conn
+        sendCCFrame conn lvl InternalError "TLS thread error" 0
+
+getErrorCause :: TLS.TLSException -> TLS.TLSError
+getErrorCause (TLS.HandshakeFailed e) = e
+getErrorCause (TLS.Terminated _ _ e)  = e
+getErrorCause e =
+    let msg = "unexpected TLS exception: " ++ show e
+     in TLS.Error_Protocol (msg, True, TLS.InternalError)

@@ -22,23 +22,17 @@ handleLogRun logAction action = E.handle handler action
     handler se
       | Just E.ThreadKilled     <- E.fromException se = return ()
       | Just ConnectionIsClosed <- E.fromException se = return ()
-      | Just InternalException  <- E.fromException se = return ()
       | otherwise                                     = logAction $ bhow se
 
-handleLogT :: DebugLogger -> IO () -> IO () -> IO ()
-handleLogT logAction postProcess action = do
-    ex <- E.try action
-    case ex of
-      Right () -> return ()
-      Left se
-        | Just E.ThreadKilled <- E.fromException se -> return ()
-        | Just ExitConnection <- E.fromException se -> do
-              -- an exception is already sent to the main thread.
-              -- no postProcess is necessary.
-              return ()
-        | otherwise -> do
-              logAction $ bhow se
-              postProcess
+handleLogT :: DebugLogger -> IO () -> IO ()
+handleLogT logAction action = E.handle handler action
+  where
+    handler se@(E.SomeException e)
+      | Just E.ThreadKilled     <- E.fromException se = return ()
+      | Just BreakForever       <- E.fromException se = return ()
+      | otherwise                                     = do
+            _ <- E.throwIO e
+            logAction $ bhow se
 
 -- Log and return a value
 handleLogR :: forall a . (Builder -> IO a) -> IO a -> IO a

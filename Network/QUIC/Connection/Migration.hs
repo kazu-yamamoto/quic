@@ -252,12 +252,12 @@ validatePath :: Connection -> Maybe CIDInfo -> IO ()
 validatePath conn Nothing = do
     pdat <- newPathData
     setChallenges conn [pdat]
-    putOutput conn $ OutControl RTT1Level [PathChallenge pdat]
+    putOutput conn $ OutControl RTT1Level [PathChallenge pdat] Nothing
     waitResponse conn
 validatePath conn (Just (CIDInfo retiredSeqNum _ _)) = do
     pdat <- newPathData
     setChallenges conn [pdat]
-    putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum]
+    putOutput conn $ OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum] Nothing
     waitResponse conn
     retirePeerCID conn retiredSeqNum
 

@@ -11,6 +11,7 @@ module Network.QUIC.Run (
   ) where
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Data.X509 (CertificateChain)
 import qualified Network.Socket as NS
@@ -38,57 +39,58 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data ConnRes = ConnRes Connection SendBuf Receive AuthCIDs
+data ConnRes = ConnRes Connection SendBuf Receive AuthCIDs (IO ())
 
 connResConnection :: ConnRes -> Connection
-connResConnection (ConnRes conn _ _ _) = conn
+connResConnection (ConnRes conn _ _ _ _) = conn
 
 ----------------------------------------------------------------
 
 -- | Running a QUIC client.
 runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
 runQUICClient conf client = do
+    -- Don't use handleLogRun here because of a return value.
     when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
-    E.bracket (forkIO timeouter)
-              killThread
-              -- Don't use handleLogRun here because of a return value.
-              (\_ -> E.bracket (connect conf) freeResources clientAndClose)
+    E.bracket setup teardown $ \_ -> do
+        let firstVersion = head $ confVersions $ ccConfig conf
+        runClient conf client firstVersion
   where
-    clientAndClose conn = client conn `E.finally` do
-        sent <- isCloseSent conn
-        unless sent $ sendCCFrame conn $ ConnectionClose NoError 0 ""
-        delay $ Microseconds 100000
+    setup = forkIO timeouter
+    teardown = killThread
 
--- | Connecting the server specified in 'ClientConfig' and returning a 'Connection'.
-connect :: ClientConfig -> IO Connection
-connect conf = do
-    let firstVersion = head $ confVersions $ ccConfig conf
-    ex0 <- E.try $ connect' firstVersion
-    case ex0 of
-      Right conn0 -> return conn0
-      Left se0 -> case check se0 of
-        Left  se0' -> E.throwIO se0'
-        Right ver -> do
-            ex1 <- E.try $ connect' ver
-            case ex1 of
-              Right conn1 -> return conn1
-              Left se1 -> case check se1 of
-                Left  se1' -> E.throwIO se1'
-                Right _    -> E.throwIO VersionNegotiationFailed
+runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
+runClient conf client ver = do
+    E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
+        void $ forkIO reader -- dies when the socket is closed
+        handshaker <- handshakeClient conf conn myAuthCIDs
+        let cli = do
+                let use0RTT = ccUse0RTT conf
+                if use0RTT then
+                    wait0RTTReady conn
+                  else
+                    wait1RTTReady conn
+                setToken conn $ resumptionToken $ ccResumption conf
+                client conn
+            cli' = cli `E.finally` do
+                sent <- isCloseSent conn
+                lvl <- getEncryptionLevel conn
+                unless sent $ sendCCFrame conn lvl NoError "" 0
+                delay $ Microseconds 100000
+            ldcc = connLDCC conn
+            runThreads = foldr1 concurrently_ [handshaker
+                                              ,sender   conn send
+                                              ,receiver conn recv
+                                              ,resender  ldcc
+                                              ,ldccTimer ldcc
+                                              ]
+            runThreads' = race runThreads cli'
+        ex <- runThreads'
+        case ex of
+          Left () -> E.throwIO MustNotReached
+          Right x -> return x
   where
-    connect' ver = E.bracketOnError open clse body
-      where
-        open = createClientConnection conf ver
-        clse connRes = do
-            let conn = connResConnection connRes
-            sendCCFrame conn $ ConnectionClose NoError 0 ""
-            delay $ Microseconds 100000
-            freeResources conn
-        body = handshakeClientConnection conf
-    check se
-      | Just (NextVersion ver)    <- E.fromException se = Right ver
-      | Just (e :: QUICException) <- E.fromException se = Left e
-      | otherwise                                       = Left $ BadThingHappen se
+    open = createClientConnection conf ver
+    clse = freeResources . connResConnection
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
@@ -125,25 +127,8 @@ createClientConnection conf@ClientConfig{..} ver = do
     --
     mytid <- myThreadId
     --
-    void $ forkIO $ readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
-    return $ ConnRes conn send recv myAuthCIDs
-
-handshakeClientConnection :: ClientConfig -> ConnRes -> IO Connection
-handshakeClientConnection conf@ClientConfig{..} (ConnRes conn send recv myAuthCIDs) = handleLogE logAction $ do
-    setToken conn $ resumptionToken ccResumption
-    tid0 <- forkIO $ sender   conn send
-    tid1 <- forkIO $ receiver conn recv
-    tid2 <- forkIO $ resender $ connLDCC conn
-    tid3 <- forkIO $ ldccTimer $ connLDCC conn
-    addThreadIdResource conn tid0
-    addThreadIdResource conn tid1
-    addThreadIdResource conn tid2
-    addThreadIdResource conn tid3
-    handshakeClient conf conn myAuthCIDs
-    addResource conn $ killHandshaker conn
-    return conn
-  where
-    logAction msg = connDebugLog conn $ "handshakeClientConnection: " <> msg
+    let reader = readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
+    return $ ConnRes conn send recv myAuthCIDs reader
 
 ----------------------------------------------------------------
 
@@ -155,31 +140,45 @@ runQUICServer conf server = handleLogUnit debugLog $ do
     mainThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
-        let create = E.bracketOnError open clse body
-             where
-               open = createServerConnection conf dispatch acc mainThreadId
-               clse = freeResources . connResConnection
-               body = handshakeServerConnection conf
-        -- Typically, ConnectionIsClosed breaks acceptStream.
-        -- And the exception should be ignored.
-        void $ forkIO (handleLogRun debugLog $ E.bracket create freeResources serverAndClose)
+        void $ forkIO (runServer conf server dispatch mainThreadId acc)
   where
-    serverAndClose conn = do
-        server conn
-        delay $ Microseconds 10000
-        sendCCFrame conn $ ConnectionClose NoError 0 ""
-        void $ timeout (Microseconds 100000) $ waitClosed conn -- fixme: timeout
     debugLog msg = stdoutLogger ("runQUICServer: " <> msg)
     setup = do
         dispatch <- newDispatch
         -- fixme: the case where sockets cannot be created.
         ssas <- mapM  udpServerListenSocket $ scAddresses conf
         tids <- mapM (runDispatcher dispatch conf) ssas
-        ttid <- forkIO timeouter
+        ttid <- forkIO timeouter -- fixme
         return (dispatch, ttid:tids)
     teardown (dispatch, tids) = do
         clearDispatch dispatch
         mapM_ killThread tids
+
+-- Typically, ConnectionIsClosed breaks acceptStream.
+-- And the exception should be ignored.
+runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
+runServer conf server dispatch mainThreadId acc = handleLogRun debugLog $
+    E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
+        void $ forkIO reader -- dies when the socket is closed
+        handshaker <- handshakeServer conf conn myAuthCIDs
+        let svr = do
+                wait1RTTReady conn
+                afterHandshakeServer conn
+                server conn
+                sendCCFrame conn RTT1Level NoError "" 0
+            ldcc = connLDCC conn
+            runThreads = foldr1 concurrently_ [svr
+                                              ,handshaker
+                                              ,sender   conn send
+                                              ,receiver conn recv
+                                              ,resender  ldcc
+                                              ,ldccTimer ldcc
+                                              ]
+        runThreads
+  where
+    open = createServerConnection conf dispatch acc mainThreadId
+    clse = freeResources . connResConnection
+    debugLog msg = stdoutLogger ("runServer: " <> msg)
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes
@@ -229,20 +228,11 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
         myCIDs <- getMyCIDs conn
         mapM_ accUnregister myCIDs
     --
-    void $ forkIO $ readerServer s0 accRecvQ conn -- dies when s0 is closed.
-    return $ ConnRes conn send recv accMyAuthCIDs
+    let reader = readerServer s0 accRecvQ conn -- dies when s0 is closed.
+    return $ ConnRes conn send recv accMyAuthCIDs reader
 
-handshakeServerConnection :: ServerConfig -> ConnRes -> IO Connection
-handshakeServerConnection conf (ConnRes conn send recv myAuthCIDs) = handleLogE logAction $ do
-    tid0 <- forkIO $ sender conn send
-    tid1 <- forkIO $ receiver conn recv
-    tid2 <- forkIO $ resender $ connLDCC conn
-    tid3 <- forkIO $ ldccTimer $ connLDCC conn
-    addThreadIdResource conn tid0
-    addThreadIdResource conn tid1
-    addThreadIdResource conn tid2
-    addThreadIdResource conn tid3
-    handshakeServer conf conn myAuthCIDs
+afterHandshakeServer :: Connection -> IO ()
+afterHandshakeServer conn = handleLogE logAction $ do
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn
@@ -253,10 +243,8 @@ handshakeServerConnection conf (ConnRes conn send recv myAuthCIDs) = handleLogE 
     token <- encryptToken mgr cryptoToken
     let ncid = NewConnectionID cidInfo 0
     sendFrames conn RTT1Level [NewToken token,ncid,HandshakeDone]
-    addResource conn $ killHandshaker conn
-    return conn
   where
-    logAction msg = connDebugLog conn $ "handshakeServerConnection: " <> msg
+    logAction msg = connDebugLog conn $ "afterHandshakeServer: " <> msg
 
 -- | Stopping the main thread of the server.
 stopQUICServer :: Connection -> IO ()

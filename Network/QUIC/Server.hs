@@ -343,21 +343,27 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                     connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                     void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
-dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return()
+dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
 
 ----------------------------------------------------------------
 
 -- | readerServer dies when the socket is closed.
 readerServer :: Socket -> RecvQ -> Connection -> IO ()
-readerServer s q conn = handleLogUnit logAction $ forever $ do
-    bs <- NSB.recv s maximumUdpPayloadSize
-    let bytes = BS.length bs
-    now <- getTimeMicrosecond
-    addRxBytes conn bytes
-    pkts <- decodeCryptPackets bs
-    mapM (\(p,l) -> writeRecvQ q (mkReceivedPacket p now bytes l)) pkts
+readerServer s q conn = handleLogUnit logAction loop
   where
-    logAction msg = connDebugLog conn ("readerServer: " <> msg)
+    loop = do
+        ito <- readMinIdleTimeout conn
+        mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
+        case mbs of
+          Nothing -> shutdownAndClose s
+          Just bs -> do
+              now <- getTimeMicrosecond
+              let bytes = BS.length bs
+              addRxBytes conn bytes
+              pkts <- decodeCryptPackets bs
+              mapM_ (\(p,l) -> writeRecvQ q (mkReceivedPacket p now bytes l)) pkts
+              loop
+    logAction msg = stdoutLogger ("readerServer: " <> msg)
 
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ
