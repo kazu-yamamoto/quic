@@ -164,13 +164,15 @@ module Network.QUIC.Connection (
   , Crypto(..)
   , Output(..)
   -- In this module
-  , sendCCFrame
+  , sendErrorCCFrame
+  , sendCCFrameAndWait
   , sendCCFrameAndBreak
   , isConnectionOpen
   , sendFrames
   , abortConnection
   ) where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 
 import Network.QUIC.Config
@@ -190,11 +192,20 @@ import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
-sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames Nothing
+sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames $ return ()
 
-sendCCFrame :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
-sendCCFrame conn lvl err desc ftyp = do
-    putOutput conn $ OutControl lvl [frame] $ Just quicexc
+sendCCFrameAndWait :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
+sendCCFrameAndWait conn lvl err desc ftyp = do
+    mvar <- newEmptyMVar
+    putOutput conn $ OutControl lvl [frame] $ putMVar mvar ()
+    _ <- timeout (Microseconds 100000) $ takeMVar mvar
+    setCloseSent conn
+ where
+    frame = ConnectionClose err ftyp desc
+
+sendErrorCCFrame :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> Int -> IO ()
+sendErrorCCFrame conn lvl err desc ftyp = do
+    putOutput conn $ OutControl lvl [frame] $ E.throwIO quicexc
     setCloseSent conn
  where
     frame = ConnectionClose err ftyp desc
@@ -202,7 +213,7 @@ sendCCFrame conn lvl err desc ftyp = do
 
 sendCCFrameAndBreak :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
 sendCCFrameAndBreak conn lvl err desc ftyp = do
-    sendCCFrame conn lvl err desc ftyp
+    sendErrorCCFrame conn lvl err desc ftyp
     E.throwIO BreakForever
 
 -- | Checking if a connection is open.
@@ -216,9 +227,10 @@ isConnectionOpen = isConnOpen
 abortConnection :: Connection -> ApplicationProtocolError -> IO a
 abortConnection conn err = do
     lvl <- getEncryptionLevel conn
-    putOutput conn $ OutControl lvl [frame] $ Just quicexc
+    mvar <- newEmptyMVar
+    putOutput conn $ OutControl lvl [frame] $ putMVar mvar ()
+    _ <- timeout (Microseconds 100000) $ takeMVar mvar
     setCloseSent conn
-    delay $ Microseconds 100000
     E.throwIO quicexc -- fixme
   where
     frame = ConnectionCloseApp err ""

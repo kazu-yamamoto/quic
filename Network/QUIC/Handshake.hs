@@ -68,7 +68,7 @@ recvTLS conn hsr level =
                 n <- recvCompleted hsr
                 -- Sending ACKs for three times rule
                 when ((n `mod` 3) == 1) $
-                    sendCryptoData conn $ OutControl HandshakeLevel [] Nothing
+                    sendCryptoData conn $ OutControl HandshakeLevel [] $ return ()
             return (Right bs)
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
@@ -254,16 +254,16 @@ sendCCTLSError conn se
   | Just E.ThreadKilled <- E.fromException se = return ()
   | Just (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) <- E.fromException se = do
         lvl <- getEncryptionLevel conn
-        sendCCFrame conn lvl TransportParameterError "Transport parametter error" 0
+        sendErrorCCFrame conn lvl TransportParameterError "Transport parametter error" 0
   | Just (e :: TLS.TLSException) <- E.fromException se = do
         lvl <- getEncryptionLevel conn
         let tlserr = getErrorCause e
             err = cryptoError $ errorToAlertDescription tlserr
             msg = shortpack $ errorToAlertMessage tlserr
-        sendCCFrame conn lvl err msg 0
+        sendErrorCCFrame conn lvl err msg 0
   | otherwise = do
         lvl <- getEncryptionLevel conn
-        sendCCFrame conn lvl InternalError "TLS thread error" 0
+        sendErrorCCFrame conn lvl InternalError "TLS thread error" 0
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.HandshakeFailed e) = e

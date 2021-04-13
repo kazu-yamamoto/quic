@@ -230,13 +230,10 @@ discardInitialPacketNumberSpace conn
   | otherwise = return ()
 
 sendOutput :: Connection -> SendBuf -> Buffer -> Output -> IO ()
-sendOutput conn send buf (OutControl lvl frames mquicexc) = do
+sendOutput conn send buf (OutControl lvl frames action) = do
     construct conn lvl frames >>= sendPacket conn send buf
     when (lvl == HandshakeLevel) $ discardInitialPacketNumberSpace conn
-    case mquicexc of
-      Nothing      -> return ()
-      Just (TransportErrorIsSent NoError _) -> return ()
-      Just quicexc -> E.throwIO quicexc
+    action
 
 sendOutput conn send buf (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn

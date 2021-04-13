@@ -74,8 +74,7 @@ runClient conf client ver = do
             cli' = cli `E.finally` do
                 sent <- isCloseSent conn
                 lvl <- getEncryptionLevel conn
-                unless sent $ sendCCFrame conn lvl NoError "" 0
-                delay $ Microseconds 100000
+                unless sent $ sendCCFrameAndWait conn lvl NoError "" 0
             ldcc = connLDCC conn
             runThreads = foldr1 concurrently_ [handshaker
                                               ,sender   conn send
@@ -165,7 +164,7 @@ runServer conf server dispatch mainThreadId acc = handleLogRun debugLog $
                 wait1RTTReady conn
                 afterHandshakeServer conn
                 server conn
-                sendCCFrame conn RTT1Level NoError "" 0
+                sendCCFrameAndWait conn RTT1Level NoError "" 0
             ldcc = connLDCC conn
             runThreads = foldr1 concurrently_ [svr
                                               ,handshaker
