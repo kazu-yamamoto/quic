@@ -56,7 +56,8 @@ readerClient tid myVers s q conn = handleLogUnit logAction loop
                   ver:_ -> do
                       ok <- checkCIDs conn dCID (Left sCID)
                       return $ if ok then Just ver else Nothing
-        killHandshaker conn
+        -- Don't send CC
+        setCloseSent conn
         case mver of
           Nothing  -> E.throwTo tid VersionNegotiationFailed
           Just ver -> E.throwTo tid $ NextVersion ver

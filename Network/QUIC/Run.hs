@@ -48,12 +48,17 @@ connResConnection (ConnRes conn _ _ _ _) = conn
 
 -- | Running a QUIC client.
 runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
-runQUICClient conf client = do
-    -- Don't use handleLogRun here because of a return value.
-    when (null $ confVersions $ ccConfig conf) $ E.throwIO NoVersionIsSpecified
+-- Don't use handleLogRun here because of a return value.
+runQUICClient conf client = case confVersions $ ccConfig conf of
+  []     -> E.throwIO NoVersionIsSpecified
+  ver1:_ -> do
     E.bracket setup teardown $ \_ -> do
-        let firstVersion = head $ confVersions $ ccConfig conf
-        runClient conf client firstVersion
+        ex <- E.try $ runClient conf client ver1
+        case ex of
+          Left se@(E.SomeException e)
+            | Just (NextVersion ver2) <- E.fromException se -> runClient conf client ver2
+            | otherwise               -> E.throwIO e
+          Right v                     -> return v
   where
     setup = forkIO timeouter
     teardown = killThread
