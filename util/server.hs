@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE Strict #-}
@@ -107,7 +108,7 @@ main = do
         addrs = read <$> init ips
         aps = (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
-    Right cred <- credentialLoadX509 optCertFile optKeyFile
+    Right cred@(!_cc,!_priv) <- credentialLoadX509 optCertFile optKeyFile
     let conf = defaultServerConfig {
             scAddresses      = aps
           , scALPN           = Just chooseALPN
