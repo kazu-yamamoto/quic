@@ -9,8 +9,6 @@ module Network.QUIC (
   , Connection
   , isConnectionOpen
   , abortConnection
-  , exitConnection
-  , exitConnectionByStream
   -- * Stream
   , Stream
   , stream

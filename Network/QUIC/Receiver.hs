@@ -39,7 +39,7 @@ receiver conn recv = handleLogT logAction $
         ito <- readMinIdleTimeout conn
         mx <- timeout ito recv -- fixme: taking minimum with peer's one
         case mx of
-          Nothing -> exitConnection conn ConnectionIsTimeout
+          Nothing -> E.throwIO ConnectionIsTimeout
           Just x  -> return x
     loopHandshake buf = do
         rpkt <- recvTimeout
@@ -150,7 +150,7 @@ processReceivedPacket conn buf rpkt = do
               qlogReceived conn StatelessReset tim
               connDebugLog conn "Connection is reset statelessly"
               setCloseReceived conn
-              exitConnection conn ConnectionIsReset
+              E.throwIO ConnectionIsReset
             else do
               qlogDropped conn hdr
               connDebugLog conn $ "Cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)
@@ -317,11 +317,11 @@ processFrame conn _lvl (ConnectionClose err _ftyp reason)
         when (isServer conn) $ E.throwIO ConnectionIsClosed
   | otherwise = do
         let quicexc = TransportErrorIsReceived err reason
-        exitConnection conn quicexc
+        E.throwIO quicexc
 processFrame conn _lvl (ConnectionCloseApp err reason) = do
     setCloseReceived conn
     let quicexc = ApplicationProtocolErrorIsReceived err reason
-    exitConnection conn quicexc
+    E.throwIO quicexc
 processFrame conn lvl HandshakeDone
   | isServer conn || lvl /= RTT1Level =
         sendCCFrameAndBreak conn lvl ProtocolViolation "HANDSHAKE_DONE for server" 0x1e

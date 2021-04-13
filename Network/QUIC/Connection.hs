@@ -164,8 +164,6 @@ module Network.QUIC.Connection (
   , Crypto(..)
   , Output(..)
   -- In this module
-  , exitConnection
-  , exitConnectionByStream
   , sendCCFrame
   , sendCCFrameAndBreak
   , isConnectionOpen
@@ -188,16 +186,8 @@ import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
-import Network.QUIC.Stream
 import Network.QUIC.Timeout
 import Network.QUIC.Types
-
--- | Closing a connection.
-exitConnection :: Connection -> QUICException -> IO a
-exitConnection _ ue = E.throwIO ue
-
-exitConnectionByStream :: Stream -> QUICException -> IO a
-exitConnectionByStream strm ue = exitConnection (streamConnection strm) ue
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
 sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames Nothing
