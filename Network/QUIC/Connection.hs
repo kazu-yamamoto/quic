@@ -228,10 +228,10 @@ abortConnection :: Connection -> ApplicationProtocolError -> IO a
 abortConnection conn err = do
     lvl <- getEncryptionLevel conn
     mvar <- newEmptyMVar
-    putOutput conn $ OutControl lvl [frame] $ putMVar mvar ()
+    putOutput conn $ OutControl lvl [frame] (putMVar mvar () >> E.throwIO quicexc)
     _ <- timeout (Microseconds 100000) $ takeMVar mvar
     setCloseSent conn
-    E.throwIO quicexc -- fixme
+    E.throwIO quicexc
   where
     frame = ConnectionCloseApp err ""
     quicexc = ApplicationProtocolErrorIsSent err ""
