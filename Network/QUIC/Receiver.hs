@@ -338,8 +338,7 @@ processFrame conn lvl HandshakeDone
             clearCryptoStream conn RTT1Level
         setConnectionEstablished conn
         -- to receive NewSessionTicket
-        -- fixme
-        -- fire (Microseconds 1000000) $ killHandshaker conn
+        fire (Microseconds 1000000) $ killHandshaker conn lvl
 processFrame conn lvl _ = sendCCFrameAndBreak conn lvl ProtocolViolation "Frame is not allowed" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.
@@ -364,3 +363,6 @@ putRxCrypto conn lvl rx = handleLogR logAction $ do
     logAction _ = do
         stdoutLogger ("No crypto stearm entry for " <> bhow lvl)
         return False
+
+killHandshaker :: Connection -> EncryptionLevel -> IO ()
+killHandshaker conn lvl = putCrypto conn $ InpHandshake lvl ""

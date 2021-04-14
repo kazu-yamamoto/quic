@@ -61,7 +61,9 @@ recvTLS conn hsr level =
 
     go expected = do
         InpHandshake actual bs <- recvCryptoData conn
-        if actual /= expected then
+        if bs == "" then
+            return $ Left TLS.Error_EOF
+          else if actual /= expected then
             failure $ "encryption level mismatch: expected " ++ show expected ++ " but got " ++ show actual
           else do
             when (isClient conn) $ do
@@ -69,7 +71,7 @@ recvTLS conn hsr level =
                 -- Sending ACKs for three times rule
                 when ((n `mod` 3) == 1) $
                     sendCryptoData conn $ OutControl HandshakeLevel [] $ return ()
-            return (Right bs)
+            return $ Right bs
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()
 sendTLS conn hsr x = do
