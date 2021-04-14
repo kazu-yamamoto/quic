@@ -30,14 +30,20 @@ import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
 readerClient :: ThreadId -> [Version] -> Socket -> RecvQ -> Connection -> IO ()
-readerClient tid myVers s q conn = handleLogUnit logAction $ forever $ do
-    bs <- NSB.recv s maximumUdpPayloadSize
-    now <- getTimeMicrosecond
-    let udpPayloadSize = BS.length bs
-    addRxBytes conn udpPayloadSize
-    pkts <- decodePackets bs
-    mapM_ (putQ now udpPayloadSize) pkts
+readerClient tid myVers s q conn = handleLogUnit logAction loop
   where
+    loop = do
+        ito <- readMinIdleTimeout conn
+        mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
+        case mbs of
+          Nothing -> shutdownAndClose s
+          Just bs -> do
+            now <- getTimeMicrosecond
+            let bytes = BS.length bs
+            addRxBytes conn bytes
+            pkts <- decodePackets bs
+            mapM_ (putQ now bytes) pkts
+            loop
     logAction msg = connDebugLog conn ("readerClient: " <> msg)
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
@@ -50,7 +56,8 @@ readerClient tid myVers s q conn = handleLogUnit logAction $ forever $ do
                   ver:_ -> do
                       ok <- checkCIDs conn dCID (Left sCID)
                       return $ if ok then Just ver else Nothing
-        killHandshaker conn
+        -- Don't send CC
+        setCloseSent conn
         case mver of
           Nothing  -> E.throwTo tid VersionNegotiationFailed
           Just ver -> E.throwTo tid $ NextVersion ver

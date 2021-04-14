@@ -6,9 +6,6 @@ module Network.QUIC.Connection.Misc (
   , getVersion
   , getSockInfo
   , setSockInfo
-  , killHandshaker
-  , setKillHandshaker
-  , clearKillHandshaker
   , getPeerAuthCIDs
   , setPeerAuthCIDs
   , getMyParameters
@@ -55,26 +52,6 @@ setSockInfo Connection{..} si = writeIORef sockInfo si
 
 ----------------------------------------------------------------
 
-killHandshaker :: Connection -> IO ()
-killHandshaker Connection{..} = do
-    join $ readIORef killHandshakerAct
-    writeIORef killHandshakerAct $ return ()
-
-clearKillHandshaker :: Connection -> IO ()
-clearKillHandshaker Connection{..} =
-    writeIORef killHandshakerAct $ return ()
-
-setKillHandshaker :: Connection -> ThreadId -> IO ()
-setKillHandshaker Connection{..} tid = do
-    wtid <- mkWeakThreadId tid
-    writeIORef killHandshakerAct $ do
-        mtid <- deRefWeak wtid
-        case mtid of
-          Nothing  -> return ()
-          Just tid' -> killThread tid'
-
-----------------------------------------------------------------
-
 getPeerAuthCIDs :: Connection -> IO AuthCIDs
 getPeerAuthCIDs Connection{..} = readIORef handshakeCIDs
 
@@ -107,7 +84,7 @@ delayedAck conn@Connection{..} = do
         join $ atomicModifyIORef' delayedAckCancel (new,)
         sendAck
   where
-    sendAck = putOutput conn $ OutControl RTT1Level []
+    sendAck = putOutput conn $ OutControl RTT1Level [] $ return ()
     check 1 = (0,   (1,  True))
     check n = (n+1, (n, False))
 

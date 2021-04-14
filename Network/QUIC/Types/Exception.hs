@@ -23,7 +23,6 @@ data QUICException =
   | NoVersionIsSpecified
   | VersionNegotiationFailed
   | BadThingHappen E.SomeException
-  | InternalException
   deriving (Show)
 
 instance E.Exception QUICException
@@ -32,6 +31,8 @@ instance E.Exception QUICException
 data InternalControl = NextVersion Version
                      | MustNotReached
                      | ExitConnection
+                     | WrongTransportParameter
+                     | BreakForever
                      deriving (Eq, Show)
 
 instance E.Exception InternalControl

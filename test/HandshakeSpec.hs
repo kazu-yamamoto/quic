@@ -57,7 +57,7 @@ spec = do
                 cc2 = testClientConfig
                 sc  = sc0
                 certificateRejected e
-                    | HandshakeFailed TLS.CertificateUnknown <- e = True
+                    | TransportErrorIsSent te@(TransportError _) _ <- e = te == cryptoError TLS.CertificateUnknown
                     | otherwise = False
             testHandshake3 cc1 cc2 sc certificateRejected
         it "fails with no group in common" $ do

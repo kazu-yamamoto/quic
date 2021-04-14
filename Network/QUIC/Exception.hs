@@ -22,23 +22,35 @@ handleLogRun logAction action = E.handle handler action
     handler se
       | Just E.ThreadKilled     <- E.fromException se = return ()
       | Just ConnectionIsClosed <- E.fromException se = return ()
-      | Just InternalException  <- E.fromException se = return ()
-      | otherwise                                     = logAction $ bhow se
+      | otherwise = case E.fromException se of
+          -- threadWait: invalid argument (Bad file descriptor)
+          Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
+          -- recvBuf: does not exist (Connection refused)
+          Just e | E.ioeGetErrorType e == E.NoSuchThing     -> return ()
+          _                                                 -> logAction $ bhow se
 
-handleLogT :: DebugLogger -> IO () -> IO () -> IO ()
-handleLogT logAction postProcess action = do
-    ex <- E.try action
-    case ex of
-      Right () -> return ()
-      Left se
-        | Just E.ThreadKilled <- E.fromException se -> return ()
-        | Just ExitConnection <- E.fromException se -> do
-              -- an exception is already sent to the main thread.
-              -- no postProcess is necessary.
-              return ()
-        | otherwise -> do
-              logAction $ bhow se
-              postProcess
+handleLogUnit :: DebugLogger -> IO () -> IO ()
+handleLogUnit logAction action = E.handle handler action
+  where
+    handler :: E.SomeException -> IO ()
+    handler se
+      | Just E.ThreadKilled     <- E.fromException se     = return ()
+      | otherwise = case E.fromException se of
+          -- threadWait: invalid argument (Bad file descriptor)
+          Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
+          -- recvBuf: does not exist (Connection refused)
+          Just e | E.ioeGetErrorType e == E.NoSuchThing     -> return ()
+          _                                                 -> logAction $ bhow se
+
+handleLogT :: DebugLogger -> IO () -> IO ()
+handleLogT logAction action = E.handle handler action
+  where
+    handler se@(E.SomeException e)
+      | Just E.ThreadKilled     <- E.fromException se = return ()
+      | Just BreakForever       <- E.fromException se = return ()
+      | otherwise                                     = do
+            _ <- E.throwIO e
+            logAction $ bhow se
 
 -- Log and return a value
 handleLogR :: forall a . (Builder -> IO a) -> IO a -> IO a
@@ -47,19 +59,8 @@ handleLogR logAction action = E.handle handler action
     handler :: E.SomeException -> IO a
     handler se = logAction $ bhow se
 
-handleLogUnit :: (Builder -> IO ()) -> IO () -> IO ()
-handleLogUnit logAction action = E.handle handler action
-  where
-    handler :: E.SomeException -> IO ()
-    handler se
-      | Just E.ThreadKilled     <- E.fromException se     = return ()
-      -- threadWait: invalid argument (Bad file descriptor)
-      | otherwise = case E.fromException se of
-          Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
-          _                                                 -> logAction $ bhow se
-
 -- Log and throw an exception
-handleLogE :: (Builder -> IO ()) -> IO a -> IO a
+handleLogE :: DebugLogger -> IO a -> IO a
 handleLogE logAction action = E.handle handler action
   where
     handler :: E.SomeException -> IO a

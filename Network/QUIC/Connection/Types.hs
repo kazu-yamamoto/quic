@@ -173,7 +173,6 @@ data Connection = Connection {
   , quicVersion       :: IORef Version
   -- Manage
   , connThreadId      :: ThreadId
-  , killHandshakerAct :: IORef (IO ())
   , sockInfo          :: IORef (Socket,RecvQ)
   -- Mine
   , myParameters      :: Parameters
@@ -253,7 +252,6 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef ver
         -- Manage
         <*> myThreadId
-        <*> newIORef (return ())
         <*> return sref
         -- Mine
         <*> return myparams
@@ -337,10 +335,9 @@ serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
 newtype Input = InpStream Stream deriving Show
 data   Crypto = InpHandshake EncryptionLevel ByteString deriving Show
 
-data Output = OutControl   EncryptionLevel [Frame]
+data Output = OutControl   EncryptionLevel [Frame] (IO ())
             | OutHandshake [(EncryptionLevel,ByteString)]
             | OutRetrans   PlainPacket
-            deriving Show
 
 type InputQ  = TQueue Input
 type CryptoQ = TQueue Crypto
