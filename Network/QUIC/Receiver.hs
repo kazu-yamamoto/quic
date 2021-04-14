@@ -338,7 +338,8 @@ processFrame conn lvl HandshakeDone
             clearCryptoStream conn RTT1Level
         setConnectionEstablished conn
         -- to receive NewSessionTicket
-        fire (Microseconds 1000000) $ killHandshaker conn
+        -- fixme
+        -- fire (Microseconds 1000000) $ killHandshaker conn
 processFrame conn lvl _ = sendCCFrameAndBreak conn lvl ProtocolViolation "Frame is not allowed" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.

@@ -60,9 +60,6 @@ module Network.QUIC.Connection (
   , getVersion
   , getSockInfo
   , setSockInfo
-  , killHandshaker
-  , setKillHandshaker
-  , clearKillHandshaker
   , getPeerAuthCIDs
   , setPeerAuthCIDs
   , getMyParameters
