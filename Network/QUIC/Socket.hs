@@ -1,8 +1,11 @@
 module Network.QUIC.Socket where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 import Data.IP hiding (addr)
+import qualified GHC.IO.Exception as E
 import Network.Socket
+import qualified System.IO.Error as E
 
 sockAddrFamily :: SockAddr -> Family
 sockAddrFamily SockAddrInet{}  = AF_INET
@@ -30,10 +33,16 @@ udpServerConnectedSocket :: SockAddr -> SockAddr -> IO Socket
 udpServerConnectedSocket mysa peersa = E.bracketOnError open close $ \s -> do
     setSocketOption s ReuseAddr 1
     withFdSocket s setCloseOnExecIfNeeded
+    -- bind and connect is not atomic
+    -- So, bind may results in EADDRINUSE
     bind s anysa      -- (UDP, *:13443, *:*)
+       `E.catch` postphone (bind s anysa)
     connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
     return s
   where
+    postphone action e
+      | E.ioeGetErrorType e == E.ResourceBusy = threadDelay 10000 >> action
+      | otherwise                             = E.throwIO e
     anysa  = anySockAddr mysa
     family = sockAddrFamily mysa
     open   = socket family Datagram defaultProtocol
