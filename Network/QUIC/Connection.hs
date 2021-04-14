@@ -221,14 +221,13 @@ isConnectionOpen = isConnOpen
 --   A specified error code is sent to the peer and
 --   'ApplicationProtocolErrorIsSent' is thrown to the main thread
 --   of this connection.
-abortConnection :: Connection -> ApplicationProtocolError -> IO a
+abortConnection :: Connection -> ApplicationProtocolError -> IO ()
 abortConnection conn err = do
     lvl <- getEncryptionLevel conn
     mvar <- newEmptyMVar
     putOutput conn $ OutControl lvl [frame] (putMVar mvar () >> E.throwIO quicexc)
     _ <- timeout (Microseconds 100000) $ takeMVar mvar
     setCloseSent conn
-    E.throwIO quicexc
   where
     frame = ConnectionCloseApp err ""
     quicexc = ApplicationProtocolErrorIsSent err ""
