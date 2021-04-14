@@ -90,33 +90,32 @@ internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
 
 handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO (IO ())
 handshakeClient conf conn myAuthCIDs = do
-    ver <- getVersion conn
-    hsr <- newHndStateRef
-    let use0RTT = ccUse0RTT conf
-        qc = QUICCallbacks { quicSend = sendTLS conn hsr
-                           , quicRecv = recvTLS conn hsr
-                           , quicInstallKeys = installKeysClient hsr
-                           , quicNotifyExtensions = setPeerParams conn
-                           , quicDone = done
-                           }
-        setter = setResumptionSession conn
-        handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT
-        handshaker' = handshaker `E.catch` sendCCTLSError conn
     qlogParamsSet conn (confParameters (ccConfig conf), "local") -- fixme
-    return $ handshaker'
+    handshakeClient' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
+
+handshakeClient' :: ClientConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
+handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
   where
-    installKeysClient _ _ctx (InstallEarlyKeys Nothing) = return ()
-    installKeysClient _ _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
+    handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT `E.catch` sendCCTLSError conn
+    qc = QUICCallbacks { quicSend = sendTLS conn hsr
+                       , quicRecv = recvTLS conn hsr
+                       , quicInstallKeys = installKeysClient
+                       , quicNotifyExtensions = setPeerParams conn
+                       , quicDone = done
+                       }
+    setter = setResumptionSession conn
+    installKeysClient _ctx (InstallEarlyKeys Nothing) = return ()
+    installKeysClient _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
         setCipher conn RTT0Level cphr
         initializeCoder conn RTT0Level (cts, ServerTrafficSecret "")
         setConnection0RTTReady conn
-    installKeysClient hsr _ctx (InstallHandshakeKeys (HandshakeSecretInfo cphr tss)) = do
+    installKeysClient _ctx (InstallHandshakeKeys (HandshakeSecretInfo cphr tss)) = do
         setCipher conn HandshakeLevel cphr
         setCipher conn RTT1Level cphr
         initializeCoder conn HandshakeLevel tss
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
-    installKeysClient hsr ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
+    installKeysClient ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
         initializeCoder1RTT conn tss
         setEncryptionLevel conn RTT1Level
@@ -128,35 +127,36 @@ handshakeClient conf conn myAuthCIDs = do
     done _ctx = do
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
+    use0RTT = ccUse0RTT conf
 
 ----------------------------------------------------------------
 
 handshakeServer :: ServerConfig -> Connection -> AuthCIDs -> IO (IO ())
-handshakeServer conf conn myAuthCIDs = do
-    ver <- getVersion conn
-    hsr <- newHndStateRef
-    let qc = QUICCallbacks { quicSend = sendTLS conn hsr
-                           , quicRecv = recvTLS conn hsr
-                           , quicInstallKeys = installKeysServer hsr
-                           , quicNotifyExtensions = setPeerParams conn
-                           , quicDone = done
-                           }
-        handshaker = serverHandshaker qc conf ver myAuthCIDs
-        handshaker' = handshaker `E.catch` sendCCTLSError conn
-    return $ handshaker'
+handshakeServer conf conn myAuthCIDs =
+    handshakeServer' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
+
+handshakeServer' :: ServerConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
+handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
   where
-    installKeysServer _ _ctx (InstallEarlyKeys Nothing) = return ()
-    installKeysServer _ _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
+    handshaker = serverHandshaker qc conf ver myAuthCIDs `E.catch` sendCCTLSError conn
+    qc = QUICCallbacks { quicSend = sendTLS conn hsr
+                       , quicRecv = recvTLS conn hsr
+                       , quicInstallKeys = installKeysServer
+                       , quicNotifyExtensions = setPeerParams conn
+                       , quicDone = done
+                       }
+    installKeysServer _ctx (InstallEarlyKeys Nothing) = return ()
+    installKeysServer _ctx (InstallEarlyKeys (Just (EarlySecretInfo cphr cts))) = do
         setCipher conn RTT0Level cphr
         initializeCoder conn RTT0Level (cts, ServerTrafficSecret "")
         setConnection0RTTReady conn
-    installKeysServer hsr _ctx (InstallHandshakeKeys (HandshakeSecretInfo cphr tss)) = do
+    installKeysServer _ctx (InstallHandshakeKeys (HandshakeSecretInfo cphr tss)) = do
         setCipher conn HandshakeLevel cphr
         setCipher conn RTT1Level cphr
         initializeCoder conn HandshakeLevel tss
         setEncryptionLevel conn HandshakeLevel
         rxLevelChanged hsr
-    installKeysServer _ ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
+    installKeysServer ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
         initializeCoder1RTT conn tss
         -- will switch to RTT1Level after client Finished
