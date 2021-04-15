@@ -152,7 +152,6 @@ module Network.QUIC.Connection (
   , setCertificateChain
   , getCertificateChain
   -- Types
-  , connThreadId
   , connHooks
   , Hooks(..)
   , connLDCC

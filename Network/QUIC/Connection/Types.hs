@@ -172,7 +172,6 @@ data Connection = Connection {
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
   -- Manage
-  , connThreadId      :: ThreadId
   , sockInfo          :: IORef (Socket,RecvQ)
   -- Mine
   , myParameters      :: Parameters
@@ -251,7 +250,6 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <$> newIORef initialRoleInfo
         <*> newIORef ver
         -- Manage
-        <*> myThreadId
         <*> return sref
         -- Mine
         <*> return myparams
