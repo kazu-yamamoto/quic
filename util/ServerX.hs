@@ -2,7 +2,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE StrictData #-}
-{-# LANGUAGE TupleSections #-}
 
 module ServerX where
 

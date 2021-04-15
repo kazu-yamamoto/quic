@@ -18,8 +18,8 @@ import Config
 
 spec :: Spec
 spec = do
-    sc0' <- runIO $ makeTestServerConfig
-    smgr <- runIO $ newSessionManager
+    sc0' <- runIO makeTestServerConfig
+    smgr <- runIO newSessionManager
     let sc0 = sc0' { scSessionManager = smgr }
     describe "handshake" $ do
         it "can handshake in the normal case" $ do

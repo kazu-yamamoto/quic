@@ -14,7 +14,7 @@ import Config
 
 spec :: Spec
 spec = do
-    sc <- runIO $ makeTestServerConfigR
+    sc <- runIO makeTestServerConfigR
     let cc = testClientConfigR
     describe "send & recv" $ do
         it "can exchange data on random dropping" $ do
