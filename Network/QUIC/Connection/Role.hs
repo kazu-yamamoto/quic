@@ -17,11 +17,14 @@ module Network.QUIC.Connection.Role (
   , getMainThreadId
   , setCertificateChain
   , getCertificateChain
+  , setSockAddrs
+  , getSockAddrs
   ) where
 
 import Control.Concurrent
 import qualified Crypto.Token as CT
 import Data.X509 (CertificateChain)
+import Network.Socket (SockAddr)
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
@@ -111,3 +114,12 @@ setCertificateChain Connection{..} mcc = atomicModifyIORef'' roleInfo $
 
 getCertificateChain :: Connection -> IO (Maybe CertificateChain)
 getCertificateChain Connection{..} = certChain <$> readIORef roleInfo
+
+----------------------------------------------------------------
+
+setSockAddrs :: Connection -> (SockAddr,SockAddr) -> IO ()
+setSockAddrs Connection{..} sa = atomicModifyIORef'' roleInfo $
+    \si -> si { sockAddrs = sa : sockAddrs si }
+
+getSockAddrs :: Connection -> IO [(SockAddr,SockAddr)]
+getSockAddrs Connection{..} = sockAddrs <$> readIORef roleInfo

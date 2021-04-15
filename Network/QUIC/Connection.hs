@@ -151,6 +151,8 @@ module Network.QUIC.Connection (
   , getMainThreadId
   , setCertificateChain
   , getCertificateChain
+  , setSockAddrs
+  , getSockAddrs
   -- Types
   , connHooks
   , Hooks(..)

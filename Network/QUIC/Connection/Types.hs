@@ -10,7 +10,7 @@ import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.X509 (CertificateChain)
 import Foreign.Ptr
-import Network.Socket (Socket)
+import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
@@ -48,6 +48,7 @@ data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , askRetry        :: Bool
                            , mainThreadId    :: ~ThreadId
                            , certChain       :: Maybe CertificateChain
+                           , sockAddrs       :: [(SockAddr,SockAddr)]
                            }
 
 defaultClientRoleInfo :: RoleInfo
@@ -64,6 +65,7 @@ defaultServerRoleInfo = ServerInfo {
   , askRetry = False
   , mainThreadId = undefined
   , certChain = Nothing
+  , sockAddrs = []
   }
 
 -- fixme: limitation

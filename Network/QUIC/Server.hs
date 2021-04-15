@@ -332,16 +332,19 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
           case mplain of
             Nothing -> connDebugLog conn "dispatch: cannot decrypt"
             Just plain -> do
-                qlogReceived conn (PlainPacket hdr plain) tim
-                let cpkt' = CryptPacket hdr $ setCryptLogged crypt
-                writeMigrationQ conn $ mkReceivedPacket cpkt' tim bytes lvl
-                migrating <- isPathValidating conn
-                unless migrating $ do
-                    setMigrationStarted conn
-                    -- fixme: should not block in this loop
-                    mcidinfo <- timeout (Microseconds 100000) $ choosePeerCID conn
-                    connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
-                    void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
+                addrs <- getSockAddrs conn
+                let shouldIgnore = elem (mysa,peersa) addrs
+                unless shouldIgnore $ do
+                    qlogReceived conn (PlainPacket hdr plain) tim
+                    let cpkt' = CryptPacket hdr $ setCryptLogged crypt
+                    writeMigrationQ conn $ mkReceivedPacket cpkt' tim bytes lvl
+                    migrating <- isPathValidating conn
+                    unless migrating $ do
+                        setMigrationStarted conn
+                        -- fixme: should not block in this loop
+                        mcidinfo <- timeout (Microseconds 100000) $ choosePeerCID conn
+                        connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
+                        void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
 dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
 

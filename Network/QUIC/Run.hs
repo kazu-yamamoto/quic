@@ -203,6 +203,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     let hooks = confHooks scConfig
     debugLog $ "Original CID: " <> bhow ocid
     conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog hooks sref
+    setSockAddrs conn (accMySockAddr,accPeerSockAddr)
     addResource conn cls
     addResource conn qclean
     addResource conn dclean
