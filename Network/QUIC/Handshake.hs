@@ -4,7 +4,6 @@
 module Network.QUIC.Handshake where
 
 import qualified Control.Exception as E
-import Data.ByteString
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
