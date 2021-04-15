@@ -41,7 +41,7 @@ getRandomBytes n = Short.pack <$> replicateM n getRandomOneByte
 
 {-# INLINE totalLen #-}
 totalLen :: [ByteString] -> Int
-totalLen = foldl' (\n bs -> (n + BS.length bs)) 0
+totalLen = foldl' (\n bs -> n + BS.length bs) 0
 
 sum' :: (Functor f, Foldable f) => f Int -> Int
 sum' = foldl' (+) 0

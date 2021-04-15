@@ -84,7 +84,7 @@ fusionSetSample (SP fsupp) p = withForeignPtr fsupp $ \psupp ->
   c_supplement_set_sample psupp p
 
 fusionGetMask :: Supplement -> IO (Ptr Word8)
-fusionGetMask (SP fsupp) = withForeignPtr fsupp $ c_supplement_get_mask
+fusionGetMask (SP fsupp) = withForeignPtr fsupp c_supplement_get_mask
 
 ----------------------------------------------------------------
 

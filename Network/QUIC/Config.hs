@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Network.QUIC.Config where
 
@@ -33,7 +34,7 @@ defaultHooks = Hooks {
   , onPlainCreated  = \_l p -> p
   , onTransportParametersCreated = id
   , onTLSExtensionCreated = id
-  , onTLSHandshakeCreated = \lcs -> (lcs, False)
+  , onTLSHandshakeCreated = (, False)
   , onResetStreamReceived = \_ _ -> return ()
   }
 
