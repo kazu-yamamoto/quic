@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 module Network.QUIC.Recovery.Misc (
     getPktNumPersistent
@@ -43,7 +44,7 @@ getPacketNumberSpaceDiscarded LDCC{..} lvl =
 
 getAndSetPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO Bool
 getAndSetPacketNumberSpaceDiscarded LDCC{..} lvl =
-    atomicModifyIORef' (spaceDiscarded ! lvl) (\b -> (True,b))
+    atomicModifyIORef' (spaceDiscarded ! lvl) (True,)
 
 ----------------------------------------------------------------
 

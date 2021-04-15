@@ -1,5 +1,3 @@
-{-# LANGUAGE TupleSections #-}
-
 module Network.QUIC.Stream.Skew (
     Skew(..)
   , empty
@@ -68,8 +66,8 @@ merge t1@(Node l1 f1 r1) t2@(Node l2 f2 r2)
                         | s1 == e2             = f2 >< f1
                         | s1 <= s2 && e2 <= e1 = f1
                         | s2 <= s1 && e1 <= e2 = f2
-                        | s1 <= s2             = f1 >< (shrink e1 f2)
-                        | otherwise            = f2 >< (shrink e2 f1)
+                        | s1 <= s2             = f1 >< shrink e1 f2
+                        | otherwise            = f2 >< shrink e2 f1
                 in Node (merge l1 l2) f12 (merge r1 r2)
   where
     s1 = currOff f1
