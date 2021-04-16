@@ -67,24 +67,26 @@ testClientConfigR :: ClientConfig
 testClientConfigR = defaultClientConfig {
     ccPortName = "8002"
   , ccDebugLog = True
-  , ccConfig = (ccConfig defaultClientConfig) {
-        confQLog = Just "dist/test"
-      }
+--  , ccConfig = (ccConfig defaultClientConfig) {
+--        confQLog = Just "dist/test"
+--      }
   }
 
 setServerQlog :: ServerConfig -> ServerConfig
-setServerQlog sc = sc {
-    scConfig = (scConfig sc) {
-        confQLog = Just "dist"
-    }
-  }
+setServerQlog sc = sc
+--setServerQlog sc = sc {
+--    scConfig = (scConfig sc) {
+--        confQLog = Just "dist"
+--    }
+--}
 
 setClientQlog :: ClientConfig -> ClientConfig
-setClientQlog cc = cc {
-    ccConfig = (ccConfig cc) {
-        confQLog = Just "dist/test"
-      }
- }
+setClientQlog cc = cc
+--setClientQlog cc = cc {
+--    ccConfig = (ccConfig cc) {
+--        confQLog = Just "dist/test"
+--    }
+--}
 
 data Scenario = Randomly Int
               | DropClientPacket [Int]
