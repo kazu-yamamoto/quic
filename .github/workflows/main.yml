@@ -49,7 +49,7 @@ jobs:
         cabal build --disable-tests --disable-benchmarks all
     - name: Test
       run: |
-        cabal test
+        cabal test spec
     - name: Haddock
       run: |
         cabal haddock
