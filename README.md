@@ -1,3 +1,5 @@
+![GitHub Actions status](https://github.com/kazu-yamamoto/quic/workflows/Haskell%20CI/badge.svg)
+
 ## IETF QUIC implementation in Haskell
 
 This package implements QUIC based on Haskell lightweight threads.
@@ -25,7 +27,3 @@ Blog articles:
 - [Developing QUIC Loss Detection and Congestion Control in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/15/121613) (2020/09/15)
 - [Implementing HTTP/3 in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/06/09/155236) (2020/06/09)
 - [Implementation status of QUIC in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/02/18/145038) (2019/09/20)
-
-### Note
-
-To build this package, some unreleased packages are necessary. So, you are not recommended to try this package at this moment.
