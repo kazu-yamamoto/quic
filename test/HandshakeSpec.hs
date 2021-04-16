@@ -7,8 +7,7 @@ import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
-import Data.IORef
-import Network.TLS (HandshakeMode13(..), SessionManager(..), SessionData, SessionID, Group(..))
+import Network.TLS (HandshakeMode13(..), Group(..))
 import qualified Network.TLS as TLS
 import Test.Hspec
 
@@ -163,23 +162,3 @@ testHandshake3 cc1 cc2 sc selector = void $ concurrently server client
         recvStream s 1024 `shouldReturn` "second"
         sendStream s "bye"
         stopQUICServer conn
-
-newSessionManager :: IO SessionManager
-newSessionManager = sessionManager <$> newIORef Nothing
-
-sessionManager :: IORef (Maybe (SessionID, SessionData)) -> SessionManager
-sessionManager ref = SessionManager {
-    sessionEstablish      = establish
-  , sessionResume         = resume
-  , sessionResumeOnlyOnce = resume
-  , sessionInvalidate     = \_ -> return ()
-  }
-  where
-    establish sid sdata = writeIORef ref $ Just (sid,sdata)
-    resume sid = do
-        mx <- readIORef ref
-        case mx of
-          Nothing -> return Nothing
-          Just (s,d)
-            | s == sid  -> return $ Just d
-            | otherwise -> return Nothing

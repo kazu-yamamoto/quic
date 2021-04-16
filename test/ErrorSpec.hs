@@ -13,7 +13,11 @@ import TransportError
 
 setup :: IO ThreadId
 setup = do
-    sc <- makeTestServerConfig
+    sc' <- makeTestServerConfig
+    smgr <- newSessionManager
+    let sc = sc' { scSessionManager = smgr
+                 , scEarlyDataSize  = 1024
+                 }
     tid <- forkIO $ runQUICServer sc loop
     threadDelay 500000 -- give enough time to the server
     return tid

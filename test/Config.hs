@@ -9,6 +9,7 @@ module Config (
   , setClientQlog
   , withPipe
   , Scenario(..)
+  , newSessionManager
   ) where
 
 import Control.Concurrent
@@ -21,7 +22,7 @@ import Data.IORef
 import qualified Data.List as L
 import Network.Socket
 import Network.Socket.ByteString
-import Network.TLS (Credentials(..), credentialLoadX509)
+import Network.TLS (Credentials(..), credentialLoadX509, SessionManager(..), SessionData, SessionID)
 
 import Network.QUIC
 import Network.QUIC.Internal
@@ -160,3 +161,24 @@ makeProtos ver = (h3X,hqX)
     verbs = C8.pack $ show $ fromVersion ver
     h3X = "h3-" `BS.append` verbs
     hqX = "hq-" `BS.append` verbs
+
+
+newSessionManager :: IO SessionManager
+newSessionManager = sessionManager <$> newIORef Nothing
+
+sessionManager :: IORef (Maybe (SessionID, SessionData)) -> SessionManager
+sessionManager ref = SessionManager {
+    sessionEstablish      = establish
+  , sessionResume         = resume
+  , sessionResumeOnlyOnce = resume
+  , sessionInvalidate     = \_ -> return ()
+  }
+  where
+    establish sid sdata = writeIORef ref $ Just (sid,sdata)
+    resume sid = do
+        mx <- readIORef ref
+        case mx of
+          Nothing -> return Nothing
+          Just (s,d)
+            | s == sid  -> return $ Just d
+            | otherwise -> return Nothing

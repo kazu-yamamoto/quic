@@ -120,9 +120,7 @@ transportErrorSpec cc0 = do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoEndOfEarlyData
             runC cc noOp `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send PROTOCOL_VIOLATION if CRYPTO in 0-RTT is received [TLS 8.3]" $ \_ -> do
-            mres <- runC cc0 $ \conn -> do
-                threadDelay 100000 -- receiving NST
-                getResumptionInfo conn
+            mres <- runC cc0 getResumptionInfo
             case mres of
               Just res
                 | is0RTTPossible res -> do
