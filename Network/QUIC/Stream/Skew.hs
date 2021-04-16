@@ -9,7 +9,7 @@ module Network.QUIC.Stream.Skew (
   ) where
 
 import Data.Maybe
-import Data.Sequence (Seq(..), (><))
+import Data.Sequence (Seq, (><))
 import qualified Data.Sequence as Seq
 import Prelude hiding (minimum)
 
