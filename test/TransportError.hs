@@ -119,6 +119,7 @@ transportErrorSpec cc0 = do
         it "MUST send PROTOCOL_VIOLATION if CRYPTO in 0-RTT is received [TLS 8.3]" $ \_ -> do
             mres <- runC cc0 $ \conn -> do
                 waitEstablished conn
+                threadDelay 100000 -- receiving NST
                 getResumptionInfo conn
             case mres of
               Just res
