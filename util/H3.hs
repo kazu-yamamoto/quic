@@ -1,5 +1,4 @@
 {-# LANGUAGE BinaryLiterals #-}
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Strict #-}
 {-# LANGUAGE StrictData #-}
@@ -25,15 +24,15 @@ name = "HaskellQuic/0.0.0"
 
 qpackServer :: IO ByteString
 qpackServer = do
-    let status = 0b1100_0000 .|. 25 -- :status: 200
-        ct     = 0b1100_0000 .|. 52 -- content-type: text/html; charset=utf8
+    let status = 0b11000000 .|. 25 -- :status: 200
+        ct     = 0b11000000 .|. 52 -- content-type: text/html; charset=utf8
     server <- encStr 92 name
     return $ BS.concat [BS.pack[0,0,status,ct],server]
 
 qpackClient :: String -> String -> IO ByteString
 qpackClient path authority = do
-    let method = 0b1100_0000 .|. 17 -- :method: GET
-        scheme = 0b1100_0000 .|. 22 -- :scheme: http
+    let method = 0b11000000 .|. 17 -- :method: GET
+        scheme = 0b11000000 .|. 22 -- :scheme: http
     path' <- encStr  1 $ C8.pack path
     auth  <- encStr  0 $ C8.pack authority
     ua    <- encStr 95 name
@@ -44,9 +43,9 @@ qpackClient path authority = do
 
 encStr :: Int -> ByteString -> IO ByteString
 encStr idx val = do
-    k <- setQpackTag 0b0101_0000 <$> encodeInteger 4 idx
+    k <- setQpackTag 0b01010000 <$> encodeInteger 4 idx
     v <- encodeHuffman val
-    vlen <- setQpackTag 0b1000_0000 <$> encodeInteger 7 (BS.length v)
+    vlen <- setQpackTag 0b10000000 <$> encodeInteger 7 (BS.length v)
     return $ BS.concat [k,vlen,v]
 
 setQpackTag :: Word8 -> ByteString -> ByteString

@@ -10,13 +10,17 @@ import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
 import Data.Char (chr)
-import Data.Either (fromRight)
 import Data.List (foldl')
 import Data.Word
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, plusPtr)
 import qualified Network.Socket as NS
 import System.Random (randomIO)
+
+-- GHC 8.0 does not provide fromRight.
+fromRight :: b -> Either a b -> b
+fromRight _ (Right b) = b
+fromRight b _         = b
 
 dec16 :: ByteString -> ByteString
 dec16 = fromRight "" . decode
