@@ -164,6 +164,8 @@ test-suite spec
                       , tls
                       , unix-time
   default-extensions:  Strict StrictData
+  build-tool-depends: hspec-discover:hspec-discover
+
 
 test-suite doctests
   type:                 exitcode-stdio-1.0

@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -165,11 +164,6 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction $
             now <- getTimeMicrosecond
             -- macOS overrides the local address of the socket
             -- if in_pktinfo is used.
-    -- #if defined(darwin_HOST_OS)
-    --         let cmsgs' = []
-    -- #else
-    --         let cmsgs' = filterCmsg _cmsgid _cmsgs
-    -- #endif
             (pkt, bs0RTT) <- decodePacket bs0
     --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
             let send bs = void $ NSB.sendTo s bs peersa

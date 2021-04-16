@@ -80,7 +80,7 @@ testSendRecv cc sc times = do
             let bs = BS.replicate 10000 0
             replicateM_ times $ sendStream strm bs
             shutdownStream strm
-            takeMVar mvar
+            takeMVar mvar `shouldReturn` ()
     server mvar = runQUICServer sc $ \conn -> do
         strm <- acceptStream conn
         bs <- recvStream strm 1024
