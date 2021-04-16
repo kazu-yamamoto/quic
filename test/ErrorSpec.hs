@@ -18,9 +18,7 @@ setup = do
     threadDelay 500000 -- give enough time to the server
     return tid
   where
-    loop conn = forever $ do
-        void $ acceptStream conn
-        threadDelay 1000000
+    loop conn = forever $ void $ acceptStream conn
 
 teardown :: ThreadId -> IO ()
 teardown tid = killThread tid
