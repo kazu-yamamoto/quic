@@ -106,7 +106,7 @@ withPipe scenario body = do
                 n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
                 dropPacket <- shouldDrop scenario True n
                 unless dropPacket $ void $ send sockS bs1
-        -- to server
+        -- from server
         tid1 <- forkIO $ forever $ do
             bs <- recv sockS 2048
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
@@ -122,11 +122,11 @@ withPipe scenario body = do
     shouldDrop (Randomly n) _ _ = do
         w <- getRandomOneByte
         return ((w `mod` fromIntegral n) == 0)
-    shouldDrop (DropClientPacket ns) isC pn
-      | isC       = return (pn `elem` ns)
+    shouldDrop (DropClientPacket ns) fromC pn
+      | fromC     = return (pn `elem` ns)
       | otherwise = return False
-    shouldDrop (DropServerPacket ns) isC pn
-      | isC       = return False
+    shouldDrop (DropServerPacket ns) fromC pn
+      | fromC     = return False
       | otherwise = return (pn `elem` ns)
 
 chooseALPN :: Version -> [ByteString] -> IO ByteString
