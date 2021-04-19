@@ -45,15 +45,18 @@ timeout (Microseconds microseconds) action = do
 fire :: Microseconds -> TimeoutCallback -> IO ()
 fire (Microseconds microseconds) action = do
     timmgr <- getSystemTimerManager
-    void $ registerTimeout timmgr microseconds action
+    void $ registerTimeout timmgr microseconds (action `E.catch` ignore)
 
 
 cfire :: Microseconds -> TimeoutCallback -> IO (IO ())
 cfire (Microseconds microseconds) action = do
     timmgr <- getSystemTimerManager
-    key <- registerTimeout timmgr microseconds action
+    key <- registerTimeout timmgr microseconds (action `E.catch` ignore)
     let cancel = unregisterTimeout timmgr key
     return cancel
 
 delay :: Microseconds -> IO ()
 delay (Microseconds microseconds) = threadDelay microseconds
+
+ignore :: SomeException -> IO ()
+ignore _ = return ()
