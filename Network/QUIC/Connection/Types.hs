@@ -227,6 +227,10 @@ instance Connector Connection where
     getMaxPacketSize   = readIORef  . maxPacketSize   . connState
     getConnectionState = readTVarIO . connectionState . connState
     getPacketNumber    = readIORef  . packetNumber    . connState
+    getAlive           = readIORef  . connectionAlive . connState
+
+setDead :: Connection -> IO ()
+setDead conn = writeIORef (connectionAlive $ connState conn) False
 
 makePendingQ :: IO (Array EncryptionLevel (TVar [ReceivedPacket]))
 makePendingQ = do

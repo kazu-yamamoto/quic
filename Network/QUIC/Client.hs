@@ -25,7 +25,6 @@ import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Socket
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
@@ -140,4 +139,4 @@ rebind conn microseconds = do
     v <- getVersion conn
     mytid <- myThreadId
     void $ forkIO $ readerClient mytid [v] s1 q conn -- versions are dummy
-    fire microseconds $ shutdownAndClose s0
+    fire conn microseconds $ shutdownAndClose s0

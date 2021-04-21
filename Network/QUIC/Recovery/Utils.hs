@@ -9,8 +9,10 @@ module Network.QUIC.Recovery.Utils (
   , peerCompletedAddressValidation
   , countAckEli
   , inCongestionRecovery
+  , delay
   ) where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Sequence (Seq, (<|), ViewL(..))
 import qualified Data.Sequence as Seq
@@ -90,3 +92,8 @@ countAckEli sentPacket
 inCongestionRecovery :: TimeMicrosecond -> Maybe TimeMicrosecond -> Bool
 inCongestionRecovery _ Nothing = False
 inCongestionRecovery sentTime (Just crst) = sentTime <= crst
+
+----------------------------------------------------------------
+
+delay :: Microseconds -> IO ()
+delay (Microseconds microseconds) = threadDelay microseconds

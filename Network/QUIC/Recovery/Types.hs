@@ -315,6 +315,7 @@ instance Connector LDCC where
     getMaxPacketSize   = readIORef  . maxPacketSize   . ldccState
     getConnectionState = readTVarIO . connectionState . ldccState
     getPacketNumber    = readIORef  . packetNumber    . ldccState
+    getAlive           = readIORef  . connectionAlive . ldccState
 
 ----------------------------------------------------------------
 

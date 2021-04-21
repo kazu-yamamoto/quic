@@ -21,7 +21,6 @@ import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Stream
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
@@ -132,7 +131,6 @@ processReceivedPacket conn buf rpkt = do
                   nkp = flags `testBit` 2
               when (nkp /= ckp && plainPacketNumber > cpn) $ do
                   setCurrentKeyPhase conn nkp plainPacketNumber
-                  -- fixme: fire
                   updateCoder1RTT conn ckp -- ckp is now next
               mapM_ (processFrame conn lvl) plainFrames
               when ackEli $ do
@@ -253,30 +251,8 @@ processFrame conn lvl (MaxStreams dir n) = do
         setMyMaxStreams conn n
       else
         setMyUniMaxStreams conn n
-processFrame _conn _lvl DataBlocked{} = do return ()
-{-
-    when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn ProtocolViolation "DATA_BLOCKED" 0x14
-    newMax <- getRxMaxData conn
-    sendFrames conn RTT1Level [MaxData newMax]
-    fire (Microseconds 50000) $ do
-        newMax' <- getRxMaxData conn
-        sendFrames conn RTT1Level [MaxData newMax']
--}
-processFrame _conn _lvl (StreamDataBlocked _sid _) = do return ()
-{-
-    when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn ProtocolViolation "STREAM_DATA_BLOCKED" 0x15
-    mstrm <- findStream conn sid
-    case mstrm of
-      Nothing   -> return ()
-      Just strm -> do
-          newMax <- getRxMaxStreamData strm
-          sendFrames conn RTT1Level [MaxStreamData sid newMax]
-          fire (Microseconds 50000) $ do
-              newMax' <- getRxMaxStreamData strm
-              sendFrames conn RTT1Level [MaxStreamData sid newMax']
--}
+processFrame _conn _lvl DataBlocked{} = return ()
+processFrame _conn _lvl (StreamDataBlocked _sid _) = return ()
 processFrame conn lvl (StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         sendCCFrameAndBreak conn lvl ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake" 0
@@ -326,7 +302,7 @@ processFrame conn lvl HandshakeDone
   | isServer conn || lvl /= RTT1Level =
         sendCCFrameAndBreak conn lvl ProtocolViolation "HANDSHAKE_DONE for server" 0x1e
   | otherwise = do
-        fire (Microseconds 100000) $ do
+        fire conn (Microseconds 100000) $ do
             let ldcc = connLDCC conn
             discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
             unless discarded0 $ dropSecrets conn RTT0Level
@@ -338,7 +314,7 @@ processFrame conn lvl HandshakeDone
             clearCryptoStream conn RTT1Level
         setConnectionEstablished conn
         -- to receive NewSessionTicket
-        fire (Microseconds 1000000) $ killHandshaker conn lvl
+        fire conn (Microseconds 1000000) $ killHandshaker conn lvl
 processFrame conn lvl _ = sendCCFrameAndBreak conn lvl ProtocolViolation "Frame is not allowed" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.

@@ -34,7 +34,6 @@ import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Server
 import Network.QUIC.Socket
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -52,16 +51,13 @@ runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
 runQUICClient conf client = case confVersions $ ccConfig conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
-    E.bracket setup teardown $ \_ -> do
-        ex <- E.try $ runClient conf client ver1
-        case ex of
-          Left se@(E.SomeException e)
-            | Just (NextVersion ver2) <- E.fromException se -> runClient conf client ver2
-            | otherwise               -> E.throwIO e
-          Right v                     -> return v
-  where
-    setup = forkIO timeouter
-    teardown = killThread
+      ex <- E.try $ runClient conf client ver1
+      case ex of
+        Right v                     -> return v
+        Left se@(E.SomeException e)
+          | Just (NextVersion ver2) <- E.fromException se
+                                    -> runClient conf client ver2
+          | otherwise               -> E.throwIO e
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
 runClient conf client ver = do
@@ -81,7 +77,8 @@ runClient conf client ver = do
                 lvl <- getEncryptionLevel conn
                 unless sent $ sendCCFrameAndWait conn lvl NoError "" 0
             ldcc = connLDCC conn
-            runThreads = foldr1 concurrently_ [handshaker
+            runThreads = foldr1 concurrently_ [timeouter
+                                              ,handshaker
                                               ,sender   conn send
                                               ,receiver conn recv
                                               ,resender  ldcc
@@ -94,7 +91,10 @@ runClient conf client ver = do
           Right x -> return x
   where
     open = createClientConnection conf ver
-    clse = freeResources . connResConnection
+    clse connRes = do
+        let conn = connResConnection connRes
+        setDead conn
+        freeResources conn
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
@@ -181,7 +181,10 @@ runServer conf server dispatch mainThreadId acc = handleLogRun debugLog $
         runThreads
   where
     open = createServerConnection conf dispatch acc mainThreadId
-    clse = freeResources . connResConnection
+    clse connRes = do
+        let conn = connResConnection connRes
+        setDead conn
+        freeResources conn
     debugLog msg = stdoutLogger ("runServer: " <> msg)
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId

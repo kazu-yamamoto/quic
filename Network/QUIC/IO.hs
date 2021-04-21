@@ -11,7 +11,6 @@ import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Stream
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 -- | Creating a bidirectional stream.
@@ -165,7 +164,7 @@ recvStream s n = do
     when (window <= (initialWindow .>>. 1)) $ do
         newMax <- addRxMaxStreamData s initialWindow
         sendFrames conn RTT1Level [MaxStreamData sid newMax]
-        fire (Microseconds 50000) $ do
+        fire conn (Microseconds 50000) $ do
             newMax' <- getRxMaxStreamData s
             sendFrames conn RTT1Level [MaxStreamData sid newMax']
     cwindow <- getRxDataWindow conn
@@ -173,7 +172,7 @@ recvStream s n = do
     when (cwindow <= (cinitialWindow .>>. 1)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         sendFrames conn RTT1Level [MaxData newMax]
-        fire (Microseconds 50000) $ do
+        fire conn (Microseconds 50000) $ do
             newMax' <- getRxMaxData conn
             sendFrames conn RTT1Level [MaxData newMax']
     return bs

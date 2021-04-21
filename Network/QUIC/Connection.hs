@@ -78,7 +78,6 @@ module Network.QUIC.Connection (
   , setConnection0RTTReady
   , setConnection1RTTReady
   , setConnectionEstablished
-  , setConnectionClosing
   , setCloseSent
   , setCloseReceived
   , isCloseSent
@@ -153,6 +152,12 @@ module Network.QUIC.Connection (
   , getCertificateChain
   , setSockAddrs
   , getSockAddrs
+  -- Timeout
+  , timeouter
+  , timeout
+  , fire
+  , cfire
+  , delay
   -- Types
   , connHooks
   , Hooks(..)
@@ -160,11 +165,11 @@ module Network.QUIC.Connection (
   , Input(..)
   , Crypto(..)
   , Output(..)
+  , setDead
   -- In this module
   , sendErrorCCFrame
   , sendCCFrameAndWait
   , sendCCFrameAndBreak
-  , isConnectionOpen
   , sendFrames
   , abortConnection
   ) where
@@ -182,10 +187,10 @@ import Network.QUIC.Connection.Role
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
+import Network.QUIC.Connection.Timeout
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
@@ -212,10 +217,6 @@ sendCCFrameAndBreak :: Connection -> EncryptionLevel -> TransportError -> ShortB
 sendCCFrameAndBreak conn lvl err desc ftyp = do
     sendErrorCCFrame conn lvl err desc ftyp
     E.throwIO BreakForever
-
--- | Checking if a connection is open.
-isConnectionOpen :: Connection -> IO Bool
-isConnectionOpen = isConnOpen
 
 -- | Closing a connection with an error code.
 --   A specified error code is sent to the peer and

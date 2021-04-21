@@ -41,7 +41,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Socket
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -232,8 +231,7 @@ dispatch Dispatch{..} ServerConfig{..}
               insertRecvQDict srcTable key q
               writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
               let reg = registerConnectionDict dstTable
-                  unreg = \cid -> do
-                      fire (Microseconds 300000) $ unregisterConnectionDict dstTable cid
+                  unreg = unregisterConnectionDict dstTable
                   ent = Accept {
                       accVersion      = ver
                     , accMyAuthCIDs   = myAuthCIDs

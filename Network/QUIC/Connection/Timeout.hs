@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
-module Network.QUIC.Timeout (
+module Network.QUIC.Connection.Timeout (
     timeouter
   , timeout
   , fire
@@ -15,6 +15,8 @@ import Data.Typeable
 import GHC.Event
 import System.IO.Unsafe (unsafePerformIO)
 
+import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -40,18 +42,25 @@ timeout (Microseconds microseconds) action = do
     E.handle (\TimeoutException -> return Nothing) $
         E.bracket setup cleanup $ \_ -> Just <$> action
 
-fire :: Microseconds -> TimeoutCallback -> IO ()
-fire (Microseconds microseconds) action = do
+fire :: Connection -> Microseconds -> TimeoutCallback -> IO ()
+fire conn (Microseconds microseconds) action = do
     timmgr <- getSystemTimerManager
-    void $ registerTimeout timmgr microseconds (action `E.catch` ignore)
+    void $ registerTimeout timmgr microseconds action'
+  where
+    action' = do
+        alive <- getAlive conn
+        when alive action `E.catch` ignore
 
-
-cfire :: Microseconds -> TimeoutCallback -> IO (IO ())
-cfire (Microseconds microseconds) action = do
+cfire :: Connection -> Microseconds -> TimeoutCallback -> IO (IO ())
+cfire conn (Microseconds microseconds) action = do
     timmgr <- getSystemTimerManager
-    key <- registerTimeout timmgr microseconds (action `E.catch` ignore)
+    key <- registerTimeout timmgr microseconds action'
     let cancel = unregisterTimeout timmgr key
     return cancel
+  where
+    action' = do
+        alive <- getAlive conn
+        when alive action `E.catch` ignore
 
 delay :: Microseconds -> IO ()
 delay (Microseconds microseconds) = threadDelay microseconds
