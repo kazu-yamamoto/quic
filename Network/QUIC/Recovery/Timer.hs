@@ -183,8 +183,8 @@ beforeAntiAmp ldcc = cancelLossDetectionTimer ldcc
 -- address validation.
 onLossDetectionTimeout :: LDCC -> IO ()
 onLossDetectionTimeout ldcc@LDCC{..} = do
-    open <- isConnOpen ldcc
-    when open $ do
+    alive <- getAlive ldcc
+    when alive $ do
         mtmi <- readIORef timerInfo
         case mtmi of
           Nothing -> return ()

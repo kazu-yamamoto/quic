@@ -7,7 +7,6 @@ module Network.QUIC (
   , runQUICServer
   , stopQUICServer
   , Connection
-  , isConnectionOpen
   , abortConnection
   -- * Stream
   , Stream

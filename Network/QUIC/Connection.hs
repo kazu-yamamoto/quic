@@ -78,7 +78,6 @@ module Network.QUIC.Connection (
   , setConnection0RTTReady
   , setConnection1RTTReady
   , setConnectionEstablished
-  , setConnectionClosing
   , setCloseSent
   , setCloseReceived
   , isCloseSent
@@ -166,12 +165,11 @@ module Network.QUIC.Connection (
   , Input(..)
   , Crypto(..)
   , Output(..)
-  , connAlive
+  , setDead
   -- In this module
   , sendErrorCCFrame
   , sendCCFrameAndWait
   , sendCCFrameAndBreak
-  , isConnectionOpen
   , sendFrames
   , abortConnection
   ) where
@@ -219,10 +217,6 @@ sendCCFrameAndBreak :: Connection -> EncryptionLevel -> TransportError -> ShortB
 sendCCFrameAndBreak conn lvl err desc ftyp = do
     sendErrorCCFrame conn lvl err desc ftyp
     E.throwIO BreakForever
-
--- | Checking if a connection is open.
-isConnectionOpen :: Connection -> IO Bool
-isConnectionOpen = isConnOpen
 
 -- | Closing a connection with an error code.
 --   A specified error code is sent to the peer and

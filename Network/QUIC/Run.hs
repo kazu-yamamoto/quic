@@ -93,7 +93,7 @@ runClient conf client ver = do
     open = createClientConnection conf ver
     clse connRes = do
         let conn = connResConnection connRes
-        writeIORef (connAlive conn) False
+        setDead conn
         freeResources conn
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
@@ -183,7 +183,7 @@ runServer conf server dispatch mainThreadId acc = handleLogRun debugLog $
     open = createServerConnection conf dispatch acc mainThreadId
     clse connRes = do
         let conn = connResConnection connRes
-        writeIORef (connAlive conn) False
+        setDead conn
         freeResources conn
     debugLog msg = stdoutLogger ("runServer: " <> msg)
 

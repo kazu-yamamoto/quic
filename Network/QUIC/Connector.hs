@@ -10,6 +10,7 @@ class Connector a where
     getMaxPacketSize   :: a -> IO Int
     getConnectionState :: a -> IO ConnectionState
     getPacketNumber    :: a -> IO PacketNumber
+    getAlive           :: a -> IO Bool
 
 ----------------------------------------------------------------
 
@@ -19,6 +20,7 @@ data ConnState = ConnState {
   , packetNumber    :: IORef PacketNumber   -- squeezing three to one
   , encryptionLevel :: TVar EncryptionLevel -- to synchronize
   , maxPacketSize   :: IORef Int
+  , connectionAlive :: IORef Bool
   }
 
 newConnState :: Role -> IO ConnState
@@ -27,6 +29,7 @@ newConnState rl =
                  <*> newIORef 0
                  <*> newTVarIO InitialLevel
                  <*> newIORef defaultQUICPacketSize
+                 <*> newIORef True
 
 ----------------------------------------------------------------
 
@@ -44,7 +47,6 @@ data ConnectionState = Handshaking
                      | ReadyFor0RTT
                      | ReadyFor1RTT
                      | Established
-                     | Closing
                      deriving (Eq, Ord, Show)
 
 isConnectionEstablished :: Connector a => a -> IO Bool
@@ -53,10 +55,3 @@ isConnectionEstablished conn = do
     return $ case st of
       Established -> True
       _           -> False
-
-isConnOpen :: Connector a => a -> IO Bool
-isConnOpen conn = do
-    st <- getConnectionState conn
-    return $ case st of
-      Closing -> False
-      _       -> True

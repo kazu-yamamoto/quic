@@ -6,7 +6,6 @@ module Network.QUIC.Connection.State (
   , setConnection1RTTReady
   , isConnectionEstablished
   , setConnectionEstablished
-  , setConnectionClosing
   , isCloseSent
   , setCloseSent
   , isCloseReceived
@@ -60,9 +59,6 @@ setConnection1RTTReady conn = do
 setConnectionEstablished :: Connection -> IO ()
 setConnectionEstablished conn = setConnectionState conn Established
 
-setConnectionClosing :: Connection -> IO ()
-setConnectionClosing conn = setConnectionState conn Closing
-
 ----------------------------------------------------------------
 
 isConnection1RTTReady :: Connection -> IO Bool
@@ -74,16 +70,12 @@ isConnection1RTTReady Connection{..} = atomically $ do
 
 setCloseSent :: Connection -> IO ()
 setCloseSent Connection{..} = do
-    atomically $ do
-        modifyTVar closeState $ \cs -> cs { closeSent = True }
-        writeTVar (connectionState connState) Closing
+    atomically $ modifyTVar closeState $ \cs -> cs { closeSent = True }
     writeIORef (sharedCloseSent shared) True
 
 setCloseReceived :: Connection -> IO ()
 setCloseReceived Connection{..} = do
-    atomically $ do
-        modifyTVar closeState $ \cs -> cs { closeReceived = True }
-        writeTVar (connectionState connState) Closing
+    atomically $ modifyTVar closeState $ \cs -> cs { closeReceived = True }
     writeIORef (sharedCloseReceived shared) True
 
 isCloseSent :: Connection -> IO Bool

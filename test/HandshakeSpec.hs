@@ -110,11 +110,9 @@ testHandshake cc sc mode = void $ concurrently server client
     client = do
         threadDelay 10000
         runQUICClient cc $ \conn -> do
-            isConnectionOpen conn `shouldReturn` True
             waitEstablished conn
             handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
     server = runQUICServer sc $ \conn -> do
-        isConnectionOpen conn `shouldReturn` True
         waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         stopQUICServer conn
