@@ -42,6 +42,7 @@ library
                        Network.QUIC.Connection.State
                        Network.QUIC.Connection.Stream
                        Network.QUIC.Connection.StreamTable
+                       Network.QUIC.Connection.Timeout
                        Network.QUIC.Connection.Types
                        Network.QUIC.Connector
                        Network.QUIC.Crypto
@@ -91,7 +92,6 @@ library
                        Network.QUIC.Stream.Table
                        Network.QUIC.Stream.Types
                        Network.QUIC.TLS
-                       Network.QUIC.Timeout
                        Network.QUIC.Types
                        Network.QUIC.Types.Ack
                        Network.QUIC.Types.CID

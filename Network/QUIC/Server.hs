@@ -41,7 +41,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Socket
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

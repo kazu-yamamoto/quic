@@ -27,11 +27,11 @@ import Network.Socket
 import System.Mem.Weak
 
 import Network.QUIC.Connection.Queue
+import Network.QUIC.Connection.Timeout
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -77,7 +77,7 @@ delayedAck :: Connection -> IO ()
 delayedAck conn@Connection{..} = do
     (oldcnt,send) <- atomicModifyIORef' delayedAckCount check
     when (oldcnt == 0) $ do
-        new <- cfire (Microseconds 20000) sendAck
+        new <- cfire conn (Microseconds 20000) sendAck
         join $ atomicModifyIORef' delayedAckCancel (new,)
     when send $ do
         let new = return ()

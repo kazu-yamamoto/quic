@@ -21,7 +21,6 @@ import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Stream
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 receiver :: Connection -> Receive -> IO ()
@@ -303,7 +302,7 @@ processFrame conn lvl HandshakeDone
   | isServer conn || lvl /= RTT1Level =
         sendCCFrameAndBreak conn lvl ProtocolViolation "HANDSHAKE_DONE for server" 0x1e
   | otherwise = do
-        fire (Microseconds 100000) $ do
+        fire conn (Microseconds 100000) $ do
             let ldcc = connLDCC conn
             discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
             unless discarded0 $ dropSecrets conn RTT0Level
@@ -315,7 +314,7 @@ processFrame conn lvl HandshakeDone
             clearCryptoStream conn RTT1Level
         setConnectionEstablished conn
         -- to receive NewSessionTicket
-        fire (Microseconds 1000000) $ killHandshaker conn lvl
+        fire conn (Microseconds 1000000) $ killHandshaker conn lvl
 processFrame conn lvl _ = sendCCFrameAndBreak conn lvl ProtocolViolation "Frame is not allowed" 0
 
 -- QUIC version 1 uses only short packets for stateless reset.

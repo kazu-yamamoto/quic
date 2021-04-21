@@ -14,7 +14,7 @@ import System.Timeout
 import Test.Hspec
 
 import Network.QUIC
-import Network.QUIC.Internal
+import Network.QUIC.Internal hiding (timeout)
 
 ----------------------------------------------------------------
 

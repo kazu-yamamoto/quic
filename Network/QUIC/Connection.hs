@@ -153,6 +153,12 @@ module Network.QUIC.Connection (
   , getCertificateChain
   , setSockAddrs
   , getSockAddrs
+  -- Timeout
+  , timeouter
+  , timeout
+  , fire
+  , cfire
+  , delay
   -- Types
   , connHooks
   , Hooks(..)
@@ -182,10 +188,10 @@ import Network.QUIC.Connection.Role
 import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
+import Network.QUIC.Connection.Timeout
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()

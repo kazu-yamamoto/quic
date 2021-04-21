@@ -17,7 +17,6 @@ import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.TLS
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -165,7 +164,7 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
     done ctx = do
         setEncryptionLevel conn RTT1Level
         TLS.getClientCertificateChain ctx >>= setCertificateChain conn
-        fire (Microseconds 100000) $ do
+        fire conn (Microseconds 100000) $ do
             let ldcc = connLDCC conn
             discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
             unless discarded0 $ dropSecrets conn RTT0Level

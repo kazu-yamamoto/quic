@@ -34,7 +34,6 @@ import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Server
 import Network.QUIC.Socket
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 ----------------------------------------------------------------

@@ -18,7 +18,6 @@ import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types
 import Network.QUIC.Recovery.Utils
-import Network.QUIC.Timeout
 import Network.QUIC.Types
 
 checkWindowOpenSTM :: LDCC -> Int -> STM ()
