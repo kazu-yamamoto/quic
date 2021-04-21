@@ -91,7 +91,10 @@ runClient conf client ver = do
           Right x -> return x
   where
     open = createClientConnection conf ver
-    clse = freeResources . connResConnection
+    clse connRes = do
+        let conn = connResConnection connRes
+        writeIORef (connAlive conn) False
+        freeResources conn
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
@@ -178,7 +181,10 @@ runServer conf server dispatch mainThreadId acc = handleLogRun debugLog $
         runThreads
   where
     open = createServerConnection conf dispatch acc mainThreadId
-    clse = freeResources . connResConnection
+    clse connRes = do
+        let conn = connResConnection connRes
+        writeIORef (connAlive conn) False
+        freeResources conn
     debugLog msg = stdoutLogger ("runServer: " <> msg)
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId

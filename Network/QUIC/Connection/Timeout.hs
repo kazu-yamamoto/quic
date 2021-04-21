@@ -16,7 +16,6 @@ import GHC.Event
 import System.IO.Unsafe (unsafePerformIO)
 
 import Network.QUIC.Connection.Types
-import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -48,8 +47,8 @@ fire conn (Microseconds microseconds) action = do
     void $ registerTimeout timmgr microseconds action'
   where
     action' = do
-        open <- isConnOpen conn
-        when open action `E.catch` ignore
+        alive <- readIORef $ connAlive conn
+        when alive action `E.catch` ignore
 
 cfire :: Connection -> Microseconds -> TimeoutCallback -> IO (IO ())
 cfire conn (Microseconds microseconds) action = do
@@ -59,8 +58,8 @@ cfire conn (Microseconds microseconds) action = do
     return cancel
   where
     action' = do
-        open <- isConnOpen conn
-        when open action `E.catch` ignore
+        alive <- readIORef $ connAlive conn
+        when alive action `E.catch` ignore
 
 delay :: Microseconds -> IO ()
 delay (Microseconds microseconds) = threadDelay microseconds

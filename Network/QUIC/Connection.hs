@@ -166,6 +166,7 @@ module Network.QUIC.Connection (
   , Input(..)
   , Crypto(..)
   , Output(..)
+  , connAlive
   -- In this module
   , sendErrorCCFrame
   , sendCCFrameAndWait

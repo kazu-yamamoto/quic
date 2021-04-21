@@ -216,6 +216,7 @@ data Connection = Connection {
   , connResources     :: IORef (IO ())
   -- Recovery
   , connLDCC          :: LDCC
+  , connAlive         :: IORef Bool
   }
 
 instance KeepQlog Connection where
@@ -294,6 +295,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref =
         <*> newIORef (return ())
         -- Recovery
         <*> newLDCC connstate qLog put
+        <*> newIORef True
   where
     isclient = rl == Client
     initialRoleInfo
