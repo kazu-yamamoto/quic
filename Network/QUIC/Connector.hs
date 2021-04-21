@@ -20,6 +20,9 @@ data ConnState = ConnState {
   , packetNumber    :: IORef PacketNumber   -- squeezing three to one
   , encryptionLevel :: TVar EncryptionLevel -- to synchronize
   , maxPacketSize   :: IORef Int
+  -- Explicitly separated from 'ConnectionState'
+  -- It seems that STM triggers a dead-lock if
+  -- it is used in the close function of bracket.
   , connectionAlive :: IORef Bool
   }
 
