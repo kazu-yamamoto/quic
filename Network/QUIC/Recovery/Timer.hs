@@ -96,13 +96,11 @@ cancelLossDetectionTimer :: LDCC -> IO ()
 cancelLossDetectionTimer ldcc@LDCC{..} = do
     atomically $ writeTVar timerInfoQ Empty
     mk <- atomicModifyIORef' timerKey (Nothing,)
-    case mk of
-      Nothing -> return ()
-      Just k -> do
-          mgr <- getSystemTimerManager
-          unregisterTimeout mgr k
-          writeIORef timerInfo Nothing
-          qlogLossTimerCancelled ldcc
+    forM_ mk $ \k -> do
+        mgr <- getSystemTimerManager
+        unregisterTimeout mgr k
+        writeIORef timerInfo Nothing
+        qlogLossTimerCancelled ldcc
 
 updateLossDetectionTimer :: LDCC -> TimerInfo -> IO ()
 updateLossDetectionTimer ldcc@LDCC{..} tmi = do
@@ -142,9 +140,7 @@ updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
         mgr <- getSystemTimerManager
         key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
         mk <- atomicModifyIORef' timerKey (Just key,)
-        case mk of
-          Nothing -> return ()
-          Just k  -> unregisterTimeout mgr k
+        forM_ mk $ unregisterTimeout mgr
         writeIORef timerInfo $ Just tmi
 
 ----------------------------------------------------------------

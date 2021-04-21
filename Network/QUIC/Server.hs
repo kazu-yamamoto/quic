@@ -327,7 +327,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
             Nothing -> connDebugLog conn "dispatch: cannot decrypt"
             Just plain -> do
                 addrs <- getSockAddrs conn
-                let shouldIgnore = elem (mysa,peersa) addrs
+                let shouldIgnore = (mysa,peersa) `elem` addrs
                 unless shouldIgnore $ do
                     qlogReceived conn (PlainPacket hdr plain) tim
                     let cpkt' = CryptPacket hdr $ setCryptLogged crypt

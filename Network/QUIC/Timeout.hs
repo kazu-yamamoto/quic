@@ -27,9 +27,7 @@ globalTimeoutQ = unsafePerformIO newTQueueIO
 {-# NOINLINE globalTimeoutQ #-}
 
 timeouter :: IO ()
-timeouter = forever $ do
-    action <- atomically (readTQueue globalTimeoutQ)
-    action
+timeouter = forever $ join $ atomically (readTQueue globalTimeoutQ)
 
 timeout :: Microseconds -> IO a -> IO (Maybe a)
 timeout (Microseconds microseconds) action = do

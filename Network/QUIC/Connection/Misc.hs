@@ -107,9 +107,8 @@ addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f' >> 
     f' = f `E.catch` (\(E.SomeException _) -> return ())
 
 freeResources :: Connection -> IO ()
-freeResources Connection{..} = do
-    doFree <- atomicModifyIORef' connResources (return (),)
-    doFree
+freeResources Connection{..} =
+    join $ atomicModifyIORef' connResources (return (),)
 
 addThreadIdResource :: Connection -> ThreadId -> IO ()
 addThreadIdResource conn tid = do
@@ -118,11 +117,7 @@ addThreadIdResource conn tid = do
     addResource conn clear
 
 clearThread :: Weak ThreadId -> IO ()
-clearThread wtid = do
-    mtid <- deRefWeak wtid
-    case mtid of
-      Nothing  -> return ()
-      Just tid -> killThread tid
+clearThread wtid = deRefWeak wtid >>= mapM_ killThread
 
 ----------------------------------------------------------------
 

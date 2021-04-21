@@ -229,9 +229,7 @@ setPeerParams conn _ctx ps0 = do
             when (isJust $ statelessResetToken params) sendCCParamError
     setParams params = do
         setPeerParameters conn params
-        case statelessResetToken params of
-          Nothing  -> return ()
-          Just srt -> setPeerStatelessResetToken conn srt
+        mapM_ (setPeerStatelessResetToken conn) $ statelessResetToken params
         setTxMaxData conn $ initialMaxData params
         setMinIdleTimeout conn $ milliToMicro $ maxIdleTimeout params
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
