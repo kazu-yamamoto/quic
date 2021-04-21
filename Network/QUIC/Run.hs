@@ -52,16 +52,13 @@ runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
 runQUICClient conf client = case confVersions $ ccConfig conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
-    E.bracket setup teardown $ \_ -> do
-        ex <- E.try $ runClient conf client ver1
-        case ex of
-          Left se@(E.SomeException e)
-            | Just (NextVersion ver2) <- E.fromException se -> runClient conf client ver2
-            | otherwise               -> E.throwIO e
-          Right v                     -> return v
-  where
-    setup = forkIO timeouter
-    teardown = killThread
+      ex <- E.try $ runClient conf client ver1
+      case ex of
+        Right v                     -> return v
+        Left se@(E.SomeException e)
+          | Just (NextVersion ver2) <- E.fromException se
+                                    -> runClient conf client ver2
+          | otherwise               -> E.throwIO e
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
 runClient conf client ver = do
@@ -81,7 +78,8 @@ runClient conf client ver = do
                 lvl <- getEncryptionLevel conn
                 unless sent $ sendCCFrameAndWait conn lvl NoError "" 0
             ldcc = connLDCC conn
-            runThreads = foldr1 concurrently_ [handshaker
+            runThreads = foldr1 concurrently_ [timeouter
+                                              ,handshaker
                                               ,sender   conn send
                                               ,receiver conn recv
                                               ,resender  ldcc
