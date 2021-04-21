@@ -2,6 +2,7 @@
 
 module Network.QUIC.Utils where
 
+import Control.Exception
 import Control.Monad (replicateM)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base16
@@ -59,3 +60,6 @@ shutdownAndClose s = NS.close s
 
 shortpack :: String -> ShortByteString
 shortpack = Short.toShort . C8.pack
+
+ignore :: SomeException -> IO ()
+ignore _ = return ()

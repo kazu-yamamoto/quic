@@ -55,6 +55,3 @@ cfire (Microseconds microseconds) action = do
 
 delay :: Microseconds -> IO ()
 delay (Microseconds microseconds) = threadDelay microseconds
-
-ignore :: SomeException -> IO ()
-ignore _ = return ()

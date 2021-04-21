@@ -243,9 +243,6 @@ newQlogger base rl ocid fastLogger = do
             let msg = toLogStrTime qmsg base
             fastLogger msg `E.catch` ignore
     return qlogger
-  where
-    ignore :: E.SomeException -> IO ()
-    ignore _ = return ()
 
 ----------------------------------------------------------------
 
