@@ -56,11 +56,11 @@ updateRTT ldcc@LDCC{..} lvl latestRTT0 ackDelay0 = metricsUpdated ldcc $ do
         ackDelay = min ackDelay0 $ getMaxAckDelay (Just lvl) maxAckDelay1RTT
         -- Adjust for ack delay if plausible.
         -- adjusted_rtt = latest_rtt
-        -- if (min_rtt + ack_delay < latest_rtt):
+        -- if (latest_rtt >= min_rtt + ack_delay):
         --   adjusted_rtt = latest_rtt - ack_delay
         adjustedRTT
-          | latestRTT0 > minRTT + ackDelay = latestRTT0 - ackDelay
-          | otherwise                      = latestRTT0
+          | latestRTT0 >= minRTT + ackDelay = latestRTT0 - ackDelay
+          | otherwise                       = latestRTT0
         -- rttvar_sample = abs(smoothed_rtt - adjusted_rtt)
         -- rttvar = 3/4 * rttvar + 1/4 * rttvar_sample
         rttvar' = rttvar - (rttvar .>>. 2)
