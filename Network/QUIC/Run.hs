@@ -161,31 +161,32 @@ runQUICServer conf server = handleLogUnit debugLog $ do
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
-runServer conf server dispatch mainThreadId acc = handleLogRun debugLog $
-    E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
-        void $ forkIO reader -- dies when the socket is closed
-        handshaker <- handshakeServer conf conn myAuthCIDs
-        let svr = do
-                wait1RTTReady conn
-                afterHandshakeServer conn
-                server conn
-                sendCCFrameAndWait conn RTT1Level NoError "" 0
-            ldcc = connLDCC conn
-            runThreads = foldr1 concurrently_ [svr
-                                              ,handshaker
-                                              ,sender   conn send
-                                              ,receiver conn recv
-                                              ,resender  ldcc
-                                              ,ldccTimer ldcc
-                                              ]
-        runThreads
+runServer conf server dispatch mainThreadId acc =
+    E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
+        handleLogRun (debugLog conn) $ do
+            void $ forkIO reader -- dies when the socket is closed
+            handshaker <- handshakeServer conf conn myAuthCIDs
+            let svr = do
+                    wait1RTTReady conn
+                    afterHandshakeServer conn
+                    server conn
+                    sendCCFrameAndWait conn RTT1Level NoError "" 0
+                ldcc = connLDCC conn
+                runThreads = foldr1 concurrently_ [svr
+                                                  ,handshaker
+                                                  ,sender   conn send
+                                                  ,receiver conn recv
+                                                  ,resender  ldcc
+                                                  ,ldccTimer ldcc
+                                                  ]
+            runThreads
   where
     open = createServerConnection conf dispatch acc mainThreadId
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
-    debugLog msg = stdoutLogger ("runServer: " <> msg)
+    debugLog conn msg = connDebugLog conn ("runServer: " <> msg)
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes
