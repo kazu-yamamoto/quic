@@ -21,7 +21,7 @@ handleLogRun logAction action = E.handle handler action
     handler :: E.SomeException -> IO ()
     handler se
       | Just E.ThreadKilled     <- E.fromException se = return ()
-      | Just ConnectionIsClosed <- E.fromException se = return ()
+--      | Just ConnectionIsClosed <- E.fromException se = return ()
       | otherwise = case E.fromException se of
           -- threadWait: invalid argument (Bad file descriptor)
           Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
@@ -49,8 +49,8 @@ handleLogT logAction action = E.handle handler action
       | Just E.ThreadKilled     <- E.fromException se = return ()
       | Just BreakForever       <- E.fromException se = return ()
       | otherwise                                     = do
-            _ <- E.throwIO e
             logAction $ bhow se
+            E.throwIO e
 
 -- Log and return a value
 handleLogR :: forall a . (Builder -> IO a) -> IO a -> IO a
