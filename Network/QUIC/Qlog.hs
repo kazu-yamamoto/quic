@@ -35,14 +35,14 @@ import Network.QUIC.Types
 class Qlog a where
     qlog :: a -> LogStr
 
-newtype Debug = Debug String
+newtype Debug = Debug LogStr
 data LR = Local | Remote
 
 instance Show Debug where
-    show (Debug msg) = msg
+    show (Debug msg) = show msg
 
 instance Qlog Debug where
-    qlog (Debug msg) = "{\"message\":" <> sw msg <> "}"
+    qlog (Debug msg) = "{\"message\":" <> msg <> "}"
 
 instance Qlog LR where
     qlog Local  = "{\"owner\":\"local\"}"

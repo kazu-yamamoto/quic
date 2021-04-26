@@ -10,6 +10,7 @@ module Network.QUIC.Recovery.Interface (
 
 import Control.Concurrent.STM
 import qualified Data.Sequence as Seq
+import System.Log.FastLogger (LogStr)
 
 import Network.QUIC.Imports
 import Network.QUIC.Qlog
@@ -32,7 +33,7 @@ takePingSTM LDCC{..} = do
     writeTVar ptoPing Nothing
     return $ fromJust mx
 
-speedup :: LDCC -> EncryptionLevel -> String -> IO ()
+speedup :: LDCC -> EncryptionLevel -> LogStr -> IO ()
 speedup ldcc@LDCC{..} lvl desc = do
     setSpeedingUp ldcc
     qlogDebug ldcc $ Debug desc

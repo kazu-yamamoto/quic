@@ -15,6 +15,7 @@ import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Data.X509 (CertificateChain)
 import qualified Network.Socket as NS
+import System.Log.FastLogger
 
 import Network.QUIC.Client
 import Network.QUIC.Config
@@ -186,7 +187,9 @@ runServer conf server dispatch mainThreadId acc =
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
-    debugLog conn msg = connDebugLog conn ("runServer: " <> msg)
+    debugLog conn msg = do
+        connDebugLog conn ("runServer: " <> msg)
+        qlogDebug conn $ Debug $ toLogStr msg
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes

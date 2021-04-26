@@ -182,6 +182,6 @@ onPacketNumberSpaceDiscarded ldcc lvl = do
     let (lvl',label) = case lvl of
           InitialLevel -> (HandshakeLevel,"initial")
           _            -> (RTT1Level, "handshake")
-    qlogDebug ldcc $ Debug (label ++ " discarded")
+    qlogDebug ldcc $ Debug (label <> " discarded")
     void $ discard ldcc lvl
     setLossDetectionTimer ldcc lvl'
