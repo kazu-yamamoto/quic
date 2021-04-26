@@ -10,9 +10,7 @@ module Network.QUIC.Packet.Decode (
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 
-import Network.QUIC.Exception
 import Network.QUIC.Imports
-import Network.QUIC.Logger
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Version
 import Network.QUIC.Types
@@ -37,7 +35,7 @@ decodePackets bs0 = loop bs0 id
 
 -- Server uses this.
 decodePacket :: ByteString -> IO (PacketI, ByteString)
-decodePacket bs = handleLogR logAction $ withReadBuffer bs $ \rbuf -> do
+decodePacket bs = withReadBuffer bs $ \rbuf -> do
     save rbuf
     proFlags <- Flags <$> read8 rbuf
     let short = isShort proFlags
@@ -46,9 +44,6 @@ decodePacket bs = handleLogR logAction $ withReadBuffer bs $ \rbuf -> do
     let rest = BS.drop siz bs
     return (pkt, rest)
   where
-    logAction msg = do
-        stdoutLogger ("decodePacket: " <> msg)
-        return (PacketIB BrokenPacket,"")
     decode rbuf _proFlags True = do
         header <- Short . makeCID <$> extractShortByteString rbuf myCIDLength
         cpkt <- CryptPacket header <$> makeShortCrypt bs rbuf

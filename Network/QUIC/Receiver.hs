@@ -123,7 +123,7 @@ processReceivedPacket conn buf rpkt = do
                         && rpReceivedBytes rpkt < defaultQUICPacketSize
                         && (lvl == InitialLevel && ackEli)
           if shouldDrop then do
-              stdoutLogger ("Drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
+              connDebugLog conn ("Drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr
             else do
               (ckp,cpn) <- getCurrentKeyPhase conn
@@ -337,7 +337,7 @@ putRxCrypto conn lvl rx = handleLogR logAction $ do
     tryReassemble strm rx put putFin
   where
     logAction _ = do
-        stdoutLogger ("No crypto stearm entry for " <> bhow lvl)
+        connDebugLog conn ("No crypto stearm entry for " <> bhow lvl)
         return False
 
 killHandshaker :: Connection -> EncryptionLevel -> IO ()

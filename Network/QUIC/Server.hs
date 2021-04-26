@@ -358,7 +358,7 @@ readerServer s q conn = handleLogUnit logAction loop
               pkts <- decodeCryptPackets bs
               mapM_ (\(p,l) -> writeRecvQ q (mkReceivedPacket p now bytes l)) pkts
               loop
-    logAction msg = stdoutLogger ("readerServer: " <> msg)
+    logAction msg = connDebugLog conn ("readerServer: " <> msg)
 
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ

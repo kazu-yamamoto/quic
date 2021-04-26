@@ -34,5 +34,7 @@ dirDebugLogger Nothing _ = do
 dirDebugLogger (Just dir) cid = do
     let file = dir </> (show cid <> ".txt")
     (fastlogger, clean) <- newFastLogger (LogFileNoRotate file 4096)
-    let dLog msg = fastlogger (toLogStr msg <> "\n")
+    let dLog msg = do
+            fastlogger ("debug: " <> toLogStr msg <> "\n")
+            stdoutLogger msg
     return (dLog, clean)

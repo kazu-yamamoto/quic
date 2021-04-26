@@ -13,13 +13,11 @@ module Network.QUIC.Parameters (
   , getCIDsToParameters
   ) where
 
-import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Network.QUIC.Imports
-import Network.QUIC.Logger
 import Network.QUIC.Types
 
 encodeParameters :: Parameters -> ByteString
@@ -248,12 +246,8 @@ encodeParameterList kvs = unsafeDupablePerformIO $
         copyByteString wbuf v
 
 decodeParameterList :: ByteString -> Maybe ParameterList
-decodeParameterList bs =
-    unsafeDupablePerformIO $ E.handle handler $ withReadBuffer bs (`go` id)
+decodeParameterList bs = unsafeDupablePerformIO $ withReadBuffer bs (`go` id)
   where
-    handler BufferOverrun = do
-        stdoutLogger "decodeParameterList: BufferOverrun"
-        return Nothing
     go rbuf build = do
        rest1 <- remainingSize rbuf
        if rest1 == 0 then
