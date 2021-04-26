@@ -322,7 +322,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
           let bufsiz = maximumUdpPayloadSize
           mplain <- decryptCrypt conn buf bufsiz crypt RTT1Level
           case mplain of
-            Nothing -> connDebugLog conn "dispatch: cannot decrypt"
+            Nothing -> connDebugLog conn "debug: dispatch: cannot decrypt"
             Just plain -> do
                 addrs <- getSockAddrs conn
                 let shouldIgnore = (mysa,peersa) `elem` addrs
@@ -335,7 +335,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                         setMigrationStarted conn
                         -- fixme: should not block in this loop
                         mcidinfo <- timeout (Microseconds 100000) $ choosePeerCID conn
-                        connDebugLog conn $ "Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
+                        connDebugLog conn $ "debug: dispatch: Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                         void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
 dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
@@ -358,7 +358,7 @@ readerServer s q conn = handleLogUnit logAction loop
               pkts <- decodeCryptPackets bs
               mapM_ (\(p,l) -> writeRecvQ q (mkReceivedPacket p now bytes l)) pkts
               loop
-    logAction msg = connDebugLog conn ("readerServer: " <> msg)
+    logAction msg = connDebugLog conn ("debug: readerServer: " <> msg)
 
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ
@@ -377,4 +377,4 @@ migrator conn mysa peersa1 dcid mcidinfo = handleLogUnit logAction $ do
     _ <- timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ q)
     shutdownAndClose s0
   where
-    logAction msg = connDebugLog conn ("migrator: " <> msg)
+    logAction msg = connDebugLog conn ("debug: migrator: " <> msg)

@@ -214,7 +214,7 @@ sender conn send = handleLogT logAction $
           SwPing lvl -> sendPingPacket   conn send buf lvl
           SwOut  out -> sendOutput       conn send buf out
           SwStrm tx  -> sendTxStreamData conn send buf tx
-    logAction msg = connDebugLog conn ("sender: " <> msg)
+    logAction msg = connDebugLog conn ("debug: sender: " <> msg)
 
 ----------------------------------------------------------------
 

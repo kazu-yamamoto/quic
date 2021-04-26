@@ -61,7 +61,7 @@ receiver conn recv = handleLogT logAction $
           _ -> do
             qlogDropped conn hdr
             connDebugLog conn $ bhow cid <> " is unknown"
-    logAction msg = connDebugLog conn ("receiver: " <> msg)
+    logAction msg = connDebugLog conn ("debug: receiver: " <> msg)
 
 processReceivedPacketHandshake :: Connection -> Buffer -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn buf rpkt = do
