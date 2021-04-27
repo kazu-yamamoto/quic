@@ -123,7 +123,7 @@ processReceivedPacket conn buf rpkt = do
                         && rpReceivedBytes rpkt < defaultQUICPacketSize
                         && (lvl == InitialLevel && ackEli)
           if shouldDrop then do
-              connDebugLog conn ("Drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
+              connDebugLog conn ("debug: drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr
             else do
               (ckp,cpn) <- getCurrentKeyPhase conn
@@ -146,12 +146,12 @@ processReceivedPacket conn buf rpkt = do
           statelessReset <- isStateessReset conn hdr crypt
           if statelessReset then do
               qlogReceived conn StatelessReset tim
-              connDebugLog conn "Connection is reset statelessly"
+              connDebugLog conn "debug: connection is reset statelessly"
               setCloseReceived conn
               E.throwIO ConnectionIsReset
             else do
               qlogDropped conn hdr
-              connDebugLog conn $ "Cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)
+              connDebugLog conn $ "debug: cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)
               -- fixme: sending statelss reset
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
@@ -337,7 +337,7 @@ putRxCrypto conn lvl rx = handleLogR logAction $ do
     tryReassemble strm rx put putFin
   where
     logAction _ = do
-        connDebugLog conn ("No crypto stearm entry for " <> bhow lvl)
+        connDebugLog conn ("debug: no crypto stearm entry for " <> bhow lvl)
         return False
 
 killHandshaker :: Connection -> EncryptionLevel -> IO ()

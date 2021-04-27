@@ -43,7 +43,7 @@ readerClient tid myVers s q conn = handleLogUnit logAction loop
             pkts <- decodePackets bs
             mapM_ (putQ now bytes) pkts
             loop
-    logAction msg = connDebugLog conn ("readerClient: " <> msg)
+    logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt t

@@ -73,7 +73,7 @@ decryptCrypt conn decBuf bufsiz Crypt{..} lvl = handleLogR logAction $ do
                   return $ Just $ Plain rawFlags pn frames marks'
   where
     logAction msg = do
-        connDebugLog conn ("decryptCrypt: " <> msg)
+        connDebugLog conn ("debug: decryptCrypt: " <> msg)
         return Nothing
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
