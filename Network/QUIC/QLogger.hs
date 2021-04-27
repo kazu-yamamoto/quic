@@ -19,6 +19,6 @@ dirQLogger Nothing _ _ _ = do
     return (qLog, clean)
 dirQLogger (Just dir) tim cid rl = do
     let file = dir </> (show cid <> ".qlog")
-    (fastlogger, clean) <- newFastLogger $ LogFileNoRotate file 4096
+    (fastlogger, clean) <- newFastLogger1 $ LogFileNoRotate file 4096
     qlogger <- newQlogger tim rl cid fastlogger
     return (qlogger, clean)
