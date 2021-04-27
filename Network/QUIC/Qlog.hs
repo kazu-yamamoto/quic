@@ -42,7 +42,7 @@ instance Show Debug where
     show (Debug msg) = show msg
 
 instance Qlog Debug where
-    qlog (Debug msg) = "{\"message\":" <> msg <> "}"
+    qlog (Debug msg) = "{\"message\":\"" <> msg <> "\"}"
 
 instance Qlog LR where
     qlog Local  = "{\"owner\":\"local\"}"
