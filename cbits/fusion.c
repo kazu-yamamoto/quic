@@ -1058,26 +1058,7 @@ int ptls_fusion_is_supported_by_cpu(void)
 }
 #endif
 
-struct fusion_context {
-  // ptls_aead_context_t
-  struct aesgcm_context fusion_aesgcm;
-};
-
-struct supplement_context {
-  ptls_aead_supplementary_encryption_t fusion_supp;
-  // ptls_cipher_context_t
-  struct ctr_context fusion_ctr;
-};
-
-ptls_aead_context_t *aead_context_new() {
-   ptls_aead_context_t *p = malloc(sizeof(struct fusion_context));
-   return p;
-}
-
-void aead_context_free(ptls_aead_context_t *p) {
-  aesgcm_dispose_crypto(p);
-  free(p);
-}
+/* ---------------------------------------------------------------- */
 
 static void clear_memory(void *p, size_t len)
 {
@@ -1087,9 +1068,34 @@ static void clear_memory(void *p, size_t len)
 
 void (*volatile ptls_clear_memory)(void *p, size_t len) = clear_memory;
 
+/* ---------------------------------------------------------------- */
+
+// struct aesgcm_context {
+//    ptls_aead_context_t super;
+//    ptls_fusion_aesgcm_context_t *aesgcm; <- ptls_fusion_aesgcm_free
+
+ptls_aead_context_t *aead_context_new() {
+   ptls_aead_context_t *p = malloc(sizeof(struct aesgcm_context));
+   return p;
+}
+
+void aead_context_free(ptls_aead_context_t *p) {
+  aesgcm_dispose_crypto(p);
+  free(p);
+}
+
+/* ---------------------------------------------------------------- */
+
+struct supplement_context {
+  ptls_aead_supplementary_encryption_t fusion_supp;
+  // ptls_cipher_context_t
+  struct ctr_context fusion_ctr;
+};
+
 ptls_aead_supplementary_encryption_t *supplement_new(uint8_t *key, uint siz) {
   struct supplement_context *suppctx = malloc(sizeof(struct supplement_context));
-  ptls_cipher_context_t *ctrctx = (ptls_cipher_context_t *)(&(suppctx->fusion_ctr));  if (siz == PTLS_AES256_KEY_SIZE) {
+  ptls_cipher_context_t *ctrctx = (ptls_cipher_context_t *)(&(suppctx->fusion_ctr));
+  if (siz == PTLS_AES256_KEY_SIZE) {
     aes256ctr_setup(ctrctx, 1, key);
   } else {
     aes128ctr_setup(ctrctx, 1, key);
