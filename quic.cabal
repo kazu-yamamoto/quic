@@ -115,7 +115,7 @@ library
                      , crypto-token
                      , cryptonite
                      , data-default-class
-                     , fast-logger
+                     , fast-logger >= 3.0.4
                      , filepath
                      , iproute >= 1.7.8
                      , memory
