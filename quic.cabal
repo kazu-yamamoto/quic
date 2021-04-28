@@ -133,7 +133,7 @@ library
   default-extensions:  Strict StrictData
   if arch(x86_64) || arch(aarch64)
     cc-options:        -mavx2 -maes -mpclmul
-    c-sources:         cbits/fusion.c
+    c-sources:         cbits/fusion.c cbits/picotls.c
 
 test-suite spec
   Type:                 exitcode-stdio-1.0
