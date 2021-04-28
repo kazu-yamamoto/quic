@@ -2,7 +2,6 @@
 
 module Network.QUIC.Exception (
     handleLogT
-  , handleLogR
   , handleLogE
   , handleLogRun
   , handleLogUnit
@@ -54,13 +53,6 @@ handleLogT logAction action = E.handle handler action
       | otherwise                                        = do
             logAction $ bhow se
             E.throwIO e
-
--- Log and return a value
-handleLogR :: forall a . (Builder -> IO a) -> IO a -> IO a
-handleLogR logAction action = E.handle handler action
-  where
-    handler :: E.SomeException -> IO a
-    handler se = logAction $ bhow se
 
 -- Log and throw an exception
 handleLogE :: DebugLogger -> IO a -> IO a

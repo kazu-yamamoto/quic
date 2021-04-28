@@ -69,8 +69,7 @@ deleteCryptoStream RTT1Level      = deleteStream rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 
-lookupCryptoStream :: EncryptionLevel -> StreamTable -> Stream
-lookupCryptoStream lvl stbl = strm
+lookupCryptoStream :: EncryptionLevel -> StreamTable -> Maybe Stream
+lookupCryptoStream lvl stbl = lookupStream sid stbl
   where
     sid = toCryptoStreamId lvl
-    Just strm = lookupStream sid stbl

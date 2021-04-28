@@ -84,6 +84,6 @@ clearCryptoStream Connection{..} lvl =
 
 ----------------------------------------------------------------
 
-getCryptoStream :: Connection -> EncryptionLevel -> IO Stream
+getCryptoStream :: Connection -> EncryptionLevel -> IO (Maybe Stream)
 getCryptoStream Connection{..} lvl =
     lookupCryptoStream lvl <$> readIORef streamTable

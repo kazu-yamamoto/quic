@@ -330,15 +330,14 @@ isStateessReset conn header Crypt{..} = do
 
 -- Return value indicates duplication.
 putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO Bool
-putRxCrypto conn lvl rx = handleLogR logAction $ do
-    strm <- getCryptoStream conn lvl
-    let put = putCrypto conn . InpHandshake lvl
-        putFin = return ()
-    tryReassemble strm rx put putFin
-  where
-    logAction _ = do
-        connDebugLog conn ("debug: no crypto stearm entry for " <> bhow lvl)
-        return False
+putRxCrypto conn lvl rx = do
+    mstrm <- getCryptoStream conn lvl
+    case mstrm of
+      Nothing   -> return False
+      Just strm -> do
+          let put = putCrypto conn . InpHandshake lvl
+              putFin = return ()
+          tryReassemble strm rx put putFin
 
 killHandshaker :: Connection -> EncryptionLevel -> IO ()
 killHandshaker conn lvl = putCrypto conn $ InpHandshake lvl ""

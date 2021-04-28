@@ -12,7 +12,6 @@ import Network.ByteOrder
 
 import Network.QUIC.Connection
 import Network.QUIC.Crypto
-import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
@@ -22,7 +21,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 decryptCrypt :: Connection -> Buffer -> BufferSize -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
-decryptCrypt conn decBuf bufsiz Crypt{..} lvl = handleLogR logAction $ do
+decryptCrypt conn decBuf bufsiz Crypt{..} lvl = do
     cipher <- getCipher conn lvl
     protector <- getProtector conn lvl
     let proFlags = Flags (cryptPacket `BS.index` 0)
@@ -71,10 +70,6 @@ decryptCrypt conn decBuf bufsiz Crypt{..} lvl = handleLogR logAction $ do
                   let marks' | null frames = setNoFrames marks
                              | otherwise   = marks
                   return $ Just $ Plain rawFlags pn frames marks'
-  where
-    logAction msg = do
-        connDebugLog conn ("debug: decryptCrypt: " <> msg)
-        return Nothing
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ BS.unpack bs
