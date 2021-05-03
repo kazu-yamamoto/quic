@@ -6,7 +6,6 @@ module Network.QUIC.Exception (
   , handleLogUnit
   ) where
 
-import Control.Concurrent.Async (AsyncCancelled(..))
 import qualified Control.Exception as E
 import qualified GHC.IO.Exception as E
 import qualified System.IO.Error as E
@@ -33,8 +32,6 @@ handleLogT logAction action = E.handle handler action
     handler se@(E.SomeException e)
       | Just E.ThreadKilled        <- E.fromException se = return ()
       | Just BreakForever          <- E.fromException se = return ()
-      | Just AsyncCancelled        <- E.fromException se = return ()
-      | Just (qe :: QUICException) <- E.fromException se = E.throwIO qe
       | otherwise                                        = do
             logAction $ bhow se
             E.throwIO e
