@@ -48,7 +48,7 @@ connResConnection (ConnRes conn _ _ _ _) = conn
 
 -- | Running a QUIC client.
 runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
--- Don't use handleLogRun here because of a return value.
+-- Don't use handleLogUnit here because of a return value.
 runQUICClient conf client = case confVersions $ ccConfig conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
@@ -164,7 +164,7 @@ runQUICServer conf server = handleLogUnit debugLog $ do
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
 runServer conf server dispatch mainThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
-        handleLogRun (debugLog conn) $ do
+        handleLogUnit (debugLog conn) $ do
             void $ forkIO reader -- dies when the socket is closed
             handshaker <- handshakeServer conf conn myAuthCIDs
             let svr = do

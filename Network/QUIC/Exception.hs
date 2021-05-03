@@ -3,7 +3,6 @@
 module Network.QUIC.Exception (
     handleLogT
   , handleLogE
-  , handleLogRun
   , handleLogUnit
   ) where
 
@@ -14,20 +13,6 @@ import qualified System.IO.Error as E
 
 import Network.QUIC.Logger
 import Network.QUIC.Types
-
-handleLogRun :: DebugLogger -> IO () -> IO ()
-handleLogRun logAction action = E.handle handler action
-  where
-    handler :: E.SomeException -> IO ()
-    handler se
-      | Just E.ThreadKilled        <- E.fromException se = return ()
-      | Just (qe :: QUICException) <- E.fromException se = logAction $ bhow qe
-      | otherwise = case E.fromException se of
-          -- threadWait: invalid argument (Bad file descriptor)
-          Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
-          -- recvBuf: does not exist (Connection refused)
-          Just e | E.ioeGetErrorType e == E.NoSuchThing     -> return ()
-          _                                                 -> logAction $ bhow se
 
 handleLogUnit :: DebugLogger -> IO () -> IO ()
 handleLogUnit logAction action = E.handle handler action
