@@ -249,7 +249,6 @@ sendCCParamError = E.throwIO WrongTransportParameter
 
 sendCCTLSError :: Connection -> E.SomeException -> IO ()
 sendCCTLSError conn se
-  | Just E.ThreadKilled <- E.fromException se = return ()
   | Just (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) <- E.fromException se = do
         lvl <- getEncryptionLevel conn
         sendErrorCCFrame conn lvl TransportParameterError "Transport parametter error" 0
@@ -260,8 +259,10 @@ sendCCTLSError conn se
             msg = shortpack $ errorToAlertMessage tlserr
         sendErrorCCFrame conn lvl err msg 0
   | otherwise = do
+        connDebugLog conn ("debug: sendCCTLSError: " <> bhow se)
         lvl <- getEncryptionLevel conn
         sendErrorCCFrame conn lvl InternalError "TLS thread error" 0
+        connDebugLog conn "debug: sendCCTLSError: done"
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.HandshakeFailed e) = e
