@@ -17,20 +17,17 @@ handleLogUnit :: DebugLogger -> IO () -> IO ()
 handleLogUnit logAction action = E.handle handler action
   where
     handler :: E.SomeException -> IO ()
-    handler se
-      | Just E.ThreadKilled     <- E.fromException se     = return ()
-      | otherwise = case E.fromException se of
-          -- threadWait: invalid argument (Bad file descriptor)
-          Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
-          -- recvBuf: does not exist (Connection refused)
-          Just e | E.ioeGetErrorType e == E.NoSuchThing     -> return ()
-          _                                                 -> logAction $ bhow se
+    handler se = case E.fromException se of
+      -- threadWait: invalid argument (Bad file descriptor)
+      Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
+      -- recvBuf: does not exist (Connection refused)
+      Just e | E.ioeGetErrorType e == E.NoSuchThing     -> return ()
+      _                                                 -> logAction $ bhow se
 
 handleLogT :: DebugLogger -> IO () -> IO ()
 handleLogT logAction action = E.handle handler action
   where
     handler se@(E.SomeException e)
-      | Just E.ThreadKilled        <- E.fromException se = return ()
       | Just BreakForever          <- E.fromException se = return ()
       | otherwise                                        = do
             logAction $ bhow se
