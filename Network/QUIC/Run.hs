@@ -244,7 +244,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     return $ ConnRes conn send recv accMyAuthCIDs reader
 
 afterHandshakeServer :: Connection -> IO ()
-afterHandshakeServer conn = handleLogE logAction $ do
+afterHandshakeServer conn = handleLogT logAction $ do
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn
