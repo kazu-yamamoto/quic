@@ -16,15 +16,12 @@ module Network.QUIC.Connection.Misc (
   , setMaxPacketSize
   , addResource
   , freeResources
-  , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
   ) where
 
-import Control.Concurrent
 import qualified Control.Exception as E
 import Network.Socket
-import System.Mem.Weak
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Timeout
@@ -109,15 +106,6 @@ addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f' >> 
 freeResources :: Connection -> IO ()
 freeResources Connection{..} =
     join $ atomicModifyIORef' connResources (return (),)
-
-addThreadIdResource :: Connection -> ThreadId -> IO ()
-addThreadIdResource conn tid = do
-    wtid <- mkWeakThreadId tid
-    let clear = clearThread wtid
-    addResource conn clear
-
-clearThread :: Weak ThreadId -> IO ()
-clearThread wtid = deRefWeak wtid >>= mapM_ killThread
 
 ----------------------------------------------------------------
 

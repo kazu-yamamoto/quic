@@ -69,7 +69,6 @@ module Network.QUIC.Connection (
   , setMaxPacketSize
   , addResource
   , freeResources
-  , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
   -- * State
