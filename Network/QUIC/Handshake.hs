@@ -247,20 +247,16 @@ storeNegotiated conn ctx appSecInf = do
 sendCCParamError :: IO ()
 sendCCParamError = E.throwIO WrongTransportParameter
 
-sendCCTLSError :: Connection -> E.SomeException -> IO ()
-sendCCTLSError conn se@(E.SomeException e)
-  | Just (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) <- E.fromException se = do
-        lvl <- getEncryptionLevel conn
-        sendErrorCCFrame conn lvl TransportParameterError "Transport parametter error" 0
-  | Just (e' :: TLS.TLSException) <- E.fromException se = do
-        lvl <- getEncryptionLevel conn
-        let tlserr = getErrorCause e'
-            err = cryptoError $ errorToAlertDescription tlserr
-            msg = shortpack $ errorToAlertMessage tlserr
-        sendErrorCCFrame conn lvl err msg 0
-  | otherwise = do
-        connDebugLog conn ("debug: sendCCTLSError: " <> bhow e)
-        E.throwIO e
+sendCCTLSError :: Connection -> TLS.TLSException -> IO ()
+sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = do
+    lvl <- getEncryptionLevel conn
+    sendErrorCCFrame conn lvl TransportParameterError "Transport parametter error" 0
+sendCCTLSError conn e = do
+    lvl <- getEncryptionLevel conn
+    let tlserr = getErrorCause e
+        err = cryptoError $ errorToAlertDescription tlserr
+        msg = shortpack $ errorToAlertMessage tlserr
+    sendErrorCCFrame conn lvl err msg 0
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.HandshakeFailed e) = e
