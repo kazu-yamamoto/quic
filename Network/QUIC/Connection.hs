@@ -69,7 +69,6 @@ module Network.QUIC.Connection (
   , setMaxPacketSize
   , addResource
   , freeResources
-  , addThreadIdResource
   , readMinIdleTimeout
   , setMinIdleTimeout
   -- * State
@@ -196,6 +195,8 @@ import Network.QUIC.Types
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
 sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames $ return ()
 
+-- for client
+-- sender is killed by race
 sendCCFrameAndWait :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
 sendCCFrameAndWait conn lvl err desc ftyp = do
     mvar <- newEmptyMVar
@@ -205,6 +206,7 @@ sendCCFrameAndWait conn lvl err desc ftyp = do
  where
     frame = ConnectionClose err ftyp desc
 
+-- for handshaker
 sendErrorCCFrame :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> Int -> IO ()
 sendErrorCCFrame conn lvl err desc ftyp = do
     putOutput conn $ OutControl lvl [frame] $ E.throwIO quicexc
@@ -213,6 +215,7 @@ sendErrorCCFrame conn lvl err desc ftyp = do
     frame = ConnectionClose err ftyp desc
     quicexc = TransportErrorIsSent err desc
 
+-- for receiver. don't receive packets anymore.
 sendCCFrameAndBreak :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> FrameType -> IO ()
 sendCCFrameAndBreak conn lvl err desc ftyp = do
     sendErrorCCFrame conn lvl err desc ftyp

@@ -7,6 +7,7 @@ module Network.QUIC.Packet.Decode (
   , decodeStatelessResetToken
   ) where
 
+import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 
@@ -35,7 +36,7 @@ decodePackets bs0 = loop bs0 id
 
 -- Server uses this.
 decodePacket :: ByteString -> IO (PacketI, ByteString)
-decodePacket bs = withReadBuffer bs $ \rbuf -> do
+decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     save rbuf
     proFlags <- Flags <$> read8 rbuf
     let short = isShort proFlags
@@ -70,6 +71,7 @@ decodePacket bs = withReadBuffer bs $ \rbuf -> do
                 let header = Handshake ver dCID sCID
                 crypt <- CryptPacket header <$> makeLongCrypt bs rbuf
                 return $ PacketIC crypt HandshakeLevel
+    handler BufferOverrun = return (PacketIB BrokenPacket,"")
 
 makeShortCrypt :: ByteString -> ReadBuffer -> IO Crypt
 makeShortCrypt bs rbuf = do

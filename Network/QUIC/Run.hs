@@ -48,7 +48,7 @@ connResConnection (ConnRes conn _ _ _ _) = conn
 
 -- | Running a QUIC client.
 runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
--- Don't use handleLogRun here because of a return value.
+-- Don't use handleLogUnit here because of a return value.
 runQUICClient conf client = case confVersions $ ccConfig conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
@@ -72,11 +72,15 @@ runClient conf client ver = do
                   else
                     wait1RTTReady conn
                 setToken conn $ resumptionToken $ ccResumption conf
-                client conn
-            cli' = cli `E.finally` do
+                r <- client conn
+                -- When client is done, sender is alive.
+                -- So, this thread can wait until sending is completed.
+                -- If sender is dead while client is running,
+                -- never reach here.
                 sent <- isCloseSent conn
                 lvl <- getEncryptionLevel conn
                 unless sent $ sendCCFrameAndWait conn lvl NoError "" 0
+                return r
             ldcc = connLDCC conn
             runThreads = foldr1 concurrently_ [timeouter
                                               ,handshaker
@@ -85,7 +89,7 @@ runClient conf client ver = do
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
                                               ]
-            runThreads' = race runThreads cli'
+            runThreads' = race runThreads cli
         ex <- runThreads'
         case ex of
           Left () -> E.throwIO MustNotReached
@@ -164,14 +168,13 @@ runQUICServer conf server = handleLogUnit debugLog $ do
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
 runServer conf server dispatch mainThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
-        handleLogRun (debugLog conn) $ do
+        handleLogUnit (debugLog conn) $ do
             void $ forkIO reader -- dies when the socket is closed
             handshaker <- handshakeServer conf conn myAuthCIDs
             let svr = do
                     wait1RTTReady conn
                     afterHandshakeServer conn
                     server conn
-                    sendCCFrameAndWait conn RTT1Level NoError "" 0
                 ldcc = connLDCC conn
                 runThreads = foldr1 concurrently_ [svr
                                                   ,handshaker
@@ -244,7 +247,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     return $ ConnRes conn send recv accMyAuthCIDs reader
 
 afterHandshakeServer :: Connection -> IO ()
-afterHandshakeServer conn = handleLogE logAction $ do
+afterHandshakeServer conn = handleLogT logAction $ do
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn
