@@ -142,7 +142,7 @@ accept = readAcceptQ . acceptQ
 
 runDispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ThreadId
 runDispatcher d conf ssa@(s,_) =
-    forkFinally (dispatcher d conf ssa) $ \_ -> shutdownAndClose s
+    forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
 dispatcher d conf (s,mysa) = handleLogUnit logAction $
@@ -350,7 +350,7 @@ readerServer s q conn = handleLogUnit logAction loop
         ito <- readMinIdleTimeout conn
         mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
         case mbs of
-          Nothing -> shutdownAndClose s
+          Nothing -> close s
           Just bs -> do
               now <- getTimeMicrosecond
               let bytes = BS.length bs
@@ -367,7 +367,7 @@ recvServer = readRecvQ
 
 migrator :: Connection -> SockAddr -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
 migrator conn mysa peersa1 dcid mcidinfo = handleLogUnit logAction $
-    E.bracketOnError setup cleanup $ \s1 ->
+    E.bracketOnError setup close $ \s1 ->
         E.bracket (getSockInfo conn) teardown $ \(_,q) -> do
             setSockInfo conn (s1,q)
             void $ forkIO $ readerServer s1 q conn
@@ -377,6 +377,5 @@ migrator conn mysa peersa1 dcid mcidinfo = handleLogUnit logAction $
             void $ timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ q)
   where
     setup = udpServerConnectedSocket mysa peersa1
-    cleanup = shutdownAndClose
-    teardown (s0,_) = shutdownAndClose s0
+    teardown (s0,_) = close s0
     logAction msg = connDebugLog conn ("debug: migrator: " <> msg)

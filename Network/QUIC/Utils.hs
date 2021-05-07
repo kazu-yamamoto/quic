@@ -15,7 +15,6 @@ import Data.List (foldl')
 import Data.Word
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, plusPtr)
-import qualified Network.Socket as NS
 import System.Random (randomIO)
 
 -- GHC 8.0 does not provide fromRight.
@@ -54,9 +53,6 @@ sum' = foldl' (+) 0
 withByteString :: ByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteString (PS fptr off _) f = withForeignPtr fptr $ \ptr ->
   f (ptr `plusPtr` off)
-
-shutdownAndClose :: NS.Socket -> IO ()
-shutdownAndClose s = NS.close s
 
 shortpack :: String -> ShortByteString
 shortpack = Short.toShort . C8.pack

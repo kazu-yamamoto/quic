@@ -108,7 +108,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     sref <- newIORef (s0,q)
     let cls = do
             (s,_) <- readIORef sref
-            shutdownAndClose s
+            NS.close s
         send buf siz = do
             (s,_) <- readIORef sref
             void $ NS.sendBuf s buf siz
@@ -201,7 +201,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     sref <- newIORef (s0, accRecvQ)
     let cls = do
             (s,_) <- readIORef sref
-            shutdownAndClose s
+            NS.close s
         send buf siz = void $ do
             (s,_) <- readIORef sref
             NS.sendBuf s buf siz

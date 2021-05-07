@@ -12,7 +12,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, getPeerName)
+import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Connection
@@ -35,7 +35,7 @@ readerClient tid myVers s q conn = handleLogUnit logAction loop
         ito <- readMinIdleTimeout conn
         mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
         case mbs of
-          Nothing -> shutdownAndClose s
+          Nothing -> close s
           Just bs -> do
             now <- getTimeMicrosecond
             let bytes = BS.length bs
@@ -139,4 +139,4 @@ rebind conn microseconds = do
     v <- getVersion conn
     mytid <- myThreadId
     void $ forkIO $ readerClient mytid [v] s1 q conn -- versions are dummy
-    fire conn microseconds $ shutdownAndClose s0
+    fire conn microseconds $ close s0
