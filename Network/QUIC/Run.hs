@@ -72,11 +72,15 @@ runClient conf client ver = do
                   else
                     wait1RTTReady conn
                 setToken conn $ resumptionToken $ ccResumption conf
-                client conn
-            cli' = cli `E.finally` do
+                r <- client conn
+                -- When client is done, sender is alive.
+                -- So, this thread can wait until sending is completed.
+                -- If sender is dead while client is running,
+                -- never reach here.
                 sent <- isCloseSent conn
                 lvl <- getEncryptionLevel conn
                 unless sent $ sendCCFrameAndWait conn lvl NoError "" 0
+                return r
             ldcc = connLDCC conn
             runThreads = foldr1 concurrently_ [timeouter
                                               ,handshaker
@@ -85,7 +89,7 @@ runClient conf client ver = do
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
                                               ]
-            runThreads' = race runThreads cli'
+            runThreads' = race runThreads cli
         ex <- runThreads'
         case ex of
           Left () -> E.throwIO MustNotReached
@@ -171,7 +175,6 @@ runServer conf server dispatch mainThreadId acc =
                     wait1RTTReady conn
                     afterHandshakeServer conn
                     server conn
-                    sendCCFrameAndWait conn RTT1Level NoError "" 0
                 ldcc = connLDCC conn
                 runThreads = foldr1 concurrently_ [svr
                                                   ,handshaker
