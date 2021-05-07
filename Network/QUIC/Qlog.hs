@@ -241,7 +241,7 @@ newQlogger base rl ocid fastLogger = do
     fastLogger $ "{\"qlog_format\":\"NDJSON\",\"qlog_version\":\"draft-02\",\"title\":\"Haskell quic qlog\",\"trace\":{\"vantage_point\":{\"type\":\"" <> toLogStr rl <> "\"},\"common_fields\":{\"ODCID\":\"" <> ocid' <> "\",\"group_id\":\"" <> ocid' <> "\",\"reference_time\":" <> swtim base timeMicrosecond0 <>  "}}}\n"
     let qlogger qmsg = do
             let msg = toLogStrTime qmsg base
-            fastLogger msg `E.catch` ignore
+            fastLogger msg
     return qlogger
 
 ----------------------------------------------------------------
