@@ -21,7 +21,6 @@ module Network.QUIC.Qlog (
   , sw
   ) where
 
-import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 
 import qualified Data.ByteString.Short as Short
