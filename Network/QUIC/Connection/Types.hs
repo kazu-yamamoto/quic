@@ -350,7 +350,7 @@ type MigrationQ = TQueue ReceivedPacket
 
 ----------------------------------------------------------------
 
-type SendStreamQ = TBQueue TxStreamData
+type SendStreamQ = TQueue TxStreamData
 
 data Shared = Shared {
     sharedCloseSent     :: IORef Bool
@@ -363,4 +363,4 @@ newShared :: IO Shared
 newShared = Shared <$> newIORef False
                    <*> newIORef False
                    <*> newIORef False
-                   <*> newTBQueueIO 10
+                   <*> newTQueueIO

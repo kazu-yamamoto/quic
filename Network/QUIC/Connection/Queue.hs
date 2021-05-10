@@ -30,16 +30,16 @@ putOutput conn out = atomically $ writeTQueue (outputQ conn) out
 ----------------------------------------------------------------
 
 takeSendStreamQ :: Connection -> IO TxStreamData
-takeSendStreamQ conn = atomically $ readTBQueue $ sharedSendStreamQ $ shared conn
+takeSendStreamQ conn = atomically $ readTQueue $ sharedSendStreamQ $ shared conn
 
 takeSendStreamQSTM :: Connection -> STM TxStreamData
-takeSendStreamQSTM conn = readTBQueue $ sharedSendStreamQ $ shared conn
+takeSendStreamQSTM conn = readTQueue $ sharedSendStreamQ $ shared conn
 
 tryPeekSendStreamQ :: Connection -> IO (Maybe TxStreamData)
-tryPeekSendStreamQ conn = atomically $ tryPeekTBQueue $ sharedSendStreamQ $ shared conn
+tryPeekSendStreamQ conn = atomically $ tryPeekTQueue $ sharedSendStreamQ $ shared conn
 
 putSendStreamQ :: Connection -> TxStreamData -> IO ()
-putSendStreamQ conn out = atomically $ writeTBQueue (sharedSendStreamQ $ shared conn) out
+putSendStreamQ conn out = atomically $ writeTQueue (sharedSendStreamQ $ shared conn) out
 
 ----------------------------------------------------------------
 
