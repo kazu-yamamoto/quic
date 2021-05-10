@@ -16,13 +16,13 @@ import Network.QUIC.Types
 -- | Creating a bidirectional stream.
 stream :: Connection -> IO Stream
 stream conn = do
-    sid <- getMyNewStreamId conn
+    sid <- waitMyNewStreamId conn
     addStream conn sid
 
 -- | Creating a unidirectional stream.
 unidirectionalStream :: Connection -> IO Stream
 unidirectionalStream conn = do
-    sid <- getMyNewUniStreamId conn
+    sid <- waitMyNewUniStreamId conn
     addStream conn sid
 
 -- | Sending data in the stream.

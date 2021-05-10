@@ -104,8 +104,8 @@ module Network.QUIC.Connection (
   , waitAntiAmplificationFree
   , checkAntiAmplificationFree
   -- * Stream
-  , getMyNewStreamId
-  , getMyNewUniStreamId
+  , waitMyNewStreamId
+  , waitMyNewUniStreamId
   , setMyMaxStreams
   , setMyUniMaxStreams
   , getPeerMaxStreams

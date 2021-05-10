@@ -2,8 +2,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Stream (
-    getMyNewStreamId
-  , getMyNewUniStreamId
+    waitMyNewStreamId
+  , waitMyNewUniStreamId
   , setMyMaxStreams
   , setMyUniMaxStreams
   , getPeerMaxStreams
@@ -16,11 +16,11 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
-getMyNewStreamId :: Connection -> IO StreamId
-getMyNewStreamId Connection{..} = get myStreamId
+waitMyNewStreamId :: Connection -> IO StreamId
+waitMyNewStreamId Connection{..} = get myStreamId
 
-getMyNewUniStreamId :: Connection -> IO StreamId
-getMyNewUniStreamId Connection{..} = get myUniStreamId
+waitMyNewUniStreamId :: Connection -> IO StreamId
+waitMyNewUniStreamId Connection{..} = get myUniStreamId
 
 get :: TVar Concurrency -> IO Int
 get tvar = atomically $ do
