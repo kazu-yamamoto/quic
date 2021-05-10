@@ -212,6 +212,9 @@ processFrame conn lvl (NewToken token) = do
         sendCCFrameAndBreak conn lvl ProtocolViolation "NEW_TOKEN for server or in 1-RTT" 0x07
     when (isClient conn) $ setNewToken conn token
 processFrame conn lvl@RTT0Level (StreamF sid off (dat:_) fin) = do
+    when ((isClient conn && isClientInitiatedUnidirectional sid)
+        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+        sendCCFrameAndBreak conn lvl StreamStateError "send-only stream" 0
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
           ((isClient conn && isClientInitiated sid) ||
@@ -224,12 +227,18 @@ processFrame conn lvl@RTT0Level (StreamF sid off (dat:_) fin) = do
     lvl0 <- getEncryptionLevel conn
     unless ok $ sendCCFrameAndBreak conn lvl0 FlowControlError "Flow control error in 0-RTT" 0
 processFrame conn lvl@RTT1Level (StreamF sid _ [""] False) = do
+    when ((isClient conn && isClientInitiatedUnidirectional sid)
+        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+        sendCCFrameAndBreak conn lvl StreamStateError "send-only stream" 0
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
           ((isClient conn && isClientInitiated sid) ||
            (isServer conn && isServerInitiated sid))) $
         sendCCFrameAndBreak conn lvl StreamStateError "a locally-initiated stream that has not yet been created" 0
 processFrame conn lvl@RTT1Level (StreamF sid off (dat:_) fin) = do
+    when ((isClient conn && isClientInitiatedUnidirectional sid)
+        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+        sendCCFrameAndBreak conn lvl StreamStateError "send-only stream" 0
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
           ((isClient conn && isClientInitiated sid) ||

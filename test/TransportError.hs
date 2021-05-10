@@ -90,6 +90,9 @@ transportErrorSpec cc0 = do
         it "MUST send STREAM_STATE_ERROR if it receives a STREAM frame for a locally-initiated stream that has not yet been created [Transport 19.8]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated localInitiatedNotCreatedYet
             runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
+        it "MUST send STREAM_STATE_ERROR if it receives a STREAM frame for a send-only stream [Transport 19.8]" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated sendOnlyStream
+            runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.10]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated maxStreamData
             runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
@@ -249,6 +252,11 @@ newToken lvl plain
 localInitiatedNotCreatedYet :: EncryptionLevel -> Plain -> Plain
 localInitiatedNotCreatedYet lvl plain
   | lvl == RTT1Level = plain { plainFrames = StreamF 1 0 [""] False : plainFrames plain }
+  | otherwise = plain
+
+sendOnlyStream :: EncryptionLevel -> Plain -> Plain
+sendOnlyStream lvl plain
+  | lvl == RTT1Level = plain { plainFrames = StreamF 3 0 [""] False : plainFrames plain }
   | otherwise = plain
 
 resetStrm :: EncryptionLevel -> Plain -> Plain
