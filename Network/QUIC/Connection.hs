@@ -46,7 +46,7 @@ module Network.QUIC.Connection (
   , setPeerCIDAndRetireCIDs
   , retireMyCID
   , addPeerCID
-  , choosePeerCID
+  , waitPeerCID
   , choosePeerCIDForPrivacy
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid

@@ -334,7 +334,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                     unless migrating $ do
                         setMigrationStarted conn
                         -- fixme: should not block in this loop
-                        mcidinfo <- timeout (Microseconds 100000) $ choosePeerCID conn
+                        mcidinfo <- timeout (Microseconds 100000) $ waitPeerCID conn
                         connDebugLog conn $ "debug: dispatch: Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
                         void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 

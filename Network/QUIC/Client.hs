@@ -108,7 +108,7 @@ migrate conn typ
 
 migrationClient :: Connection -> Migration -> IO Bool
 migrationClient conn ChangeServerCID = do
-    mn <- timeout (Microseconds 1000000) $ choosePeerCID conn -- fixme
+    mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
     case mn of
       Nothing              -> return False
       Just (CIDInfo n _ _) -> do
@@ -123,7 +123,7 @@ migrationClient conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
 migrationClient conn MigrateTo = do
-    mn <- timeout (Microseconds 1000000) $ choosePeerCID conn -- fixme
+    mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
     case mn of
       Nothing  -> return False
       mcidinfo -> do

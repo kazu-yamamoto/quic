@@ -209,12 +209,12 @@ setPeerParams conn _ctx ps0 = do
         ver <- getVersion conn
         when (ver >= Draft28) $ do
             peerAuthCIDs <- getPeerAuthCIDs conn
-            check (initialSourceConnectionId params) $ initSrcCID peerAuthCIDs
+            ensure (initialSourceConnectionId params) $ initSrcCID peerAuthCIDs
             when (isClient conn) $ do
-                check (originalDestinationConnectionId params) $ origDstCID peerAuthCIDs
-                check (retrySourceConnectionId params) $ retrySrcCID peerAuthCIDs
-    check _ Nothing = return ()
-    check v0 v1
+                ensure (originalDestinationConnectionId params) $ origDstCID peerAuthCIDs
+                ensure (retrySourceConnectionId params) $ retrySrcCID peerAuthCIDs
+    ensure _ Nothing = return ()
+    ensure v0 v1
       | v0 == v1  = return ()
       | otherwise = sendCCParamError
     checkInvalid params = do

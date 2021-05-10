@@ -16,7 +16,7 @@ module Network.QUIC.Connection.Migration (
   , retirePeerCID
   , retireMyCID
   , addPeerCID
-  , choosePeerCID
+  , waitPeerCID
   , choosePeerCIDForPrivacy
   , setPeerStatelessResetToken
   , isStatelessRestTokenValid
@@ -88,8 +88,8 @@ addPeerCID Connection{..} cidInfo = do
       Just _  -> return ()
 
 -- | Using a new CID and sending RetireConnectionID
-choosePeerCID :: Connection -> IO CIDInfo
-choosePeerCID conn@Connection{..} = do
+waitPeerCID :: Connection -> IO CIDInfo
+waitPeerCID conn@Connection{..} = do
     r <- atomically $ do
         let ref = peerCIDDB
         db <- readTVar ref
