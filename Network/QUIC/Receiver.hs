@@ -211,16 +211,31 @@ processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         sendCCFrameAndBreak conn lvl ProtocolViolation "NEW_TOKEN for server or in 1-RTT" 0x07
     when (isClient conn) $ setNewToken conn token
-processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
-    strm <- getStream conn sid
+processFrame conn lvl@RTT0Level (StreamF sid off (dat:_) fin) = do
+    mstrm <- findStream conn sid
+    when (isNothing mstrm &&
+          ((isClient conn && isClientInitiated sid) ||
+           (isServer conn && isServerInitiated sid))) $
+        sendCCFrameAndBreak conn lvl StreamStateError "a locally-initiated stream that has not yet been created" 0
+    strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
     lvl0 <- getEncryptionLevel conn
     unless ok $ sendCCFrameAndBreak conn lvl0 FlowControlError "Flow control error in 0-RTT" 0
-processFrame _    RTT1Level (StreamF _ _ [""] False) = return ()
-processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
-    strm <- getStream conn sid
+processFrame conn lvl@RTT1Level (StreamF sid _ [""] False) = do
+    mstrm <- findStream conn sid
+    when (isNothing mstrm &&
+          ((isClient conn && isClientInitiated sid) ||
+           (isServer conn && isServerInitiated sid))) $
+        sendCCFrameAndBreak conn lvl StreamStateError "a locally-initiated stream that has not yet been created" 0
+processFrame conn lvl@RTT1Level (StreamF sid off (dat:_) fin) = do
+    mstrm <- findStream conn sid
+    when (isNothing mstrm &&
+          ((isClient conn && isClientInitiated sid) ||
+           (isServer conn && isServerInitiated sid))) $
+        sendCCFrameAndBreak conn lvl StreamStateError "a locally-initiated stream that has not yet been created" 0
+    strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx

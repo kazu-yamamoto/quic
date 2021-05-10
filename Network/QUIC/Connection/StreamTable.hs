@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.StreamTable (
-    getStream
+    createStream
   , findStream
   , addStream
   , delStream
@@ -20,16 +20,11 @@ import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-getStream :: Connection -> StreamId -> IO Stream
-getStream conn sid = do
-    mstrm <- findStream conn sid
-    case mstrm of
-      Just strm -> do
-          return strm
-      Nothing -> do
-          strm <- addStream conn sid
-          putInput conn $ InpStream strm
-          return strm
+createStream :: Connection -> StreamId -> IO Stream
+createStream conn sid = do
+      strm <- addStream conn sid
+      putInput conn $ InpStream strm
+      return strm
 
 findStream :: Connection -> StreamId -> IO (Maybe Stream)
 findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable

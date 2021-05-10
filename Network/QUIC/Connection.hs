@@ -110,7 +110,7 @@ module Network.QUIC.Connection (
   , setMyUniMaxStreams
   , getPeerMaxStreams
   -- * StreamTable
-  , getStream
+  , createStream
   , findStream
   , addStream
   , delStream
