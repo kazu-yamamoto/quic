@@ -368,8 +368,7 @@ recvServer = readRecvQ
 migrator :: Connection -> SockAddr -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
 migrator conn mysa peersa1 dcid mcidinfo = handleLogUnit logAction $
     E.bracketOnError setup close $ \s1 ->
-        E.bracket (getSockInfo conn) teardown $ \(_,q) -> do
-            setSockInfo conn (s1,q)
+        E.bracket (modifySockInfo conn s1) (close . fst) $ \(_,q) -> do
             void $ forkIO $ readerServer s1 q conn
             -- fixme: if cannot set
             setMyCID conn dcid
@@ -377,5 +376,4 @@ migrator conn mysa peersa1 dcid mcidinfo = handleLogUnit logAction $
             void $ timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ q)
   where
     setup = udpServerConnectedSocket mysa peersa1
-    teardown (s0,_) = close s0
     logAction msg = connDebugLog conn ("debug: migrator: " <> msg)

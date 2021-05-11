@@ -6,6 +6,7 @@ module Network.QUIC.Connection.Misc (
   , getVersion
   , getSockInfo
   , setSockInfo
+  , modifySockInfo
   , getPeerAuthCIDs
   , setPeerAuthCIDs
   , getMyParameters
@@ -46,6 +47,10 @@ getSockInfo Connection{..} = readIORef sockInfo
 
 setSockInfo :: Connection -> (Socket, RecvQ) -> IO ()
 setSockInfo Connection{..} si = writeIORef sockInfo si
+
+modifySockInfo :: Connection -> Socket -> IO (Socket, RecvQ)
+modifySockInfo Connection{..} s1 =
+    atomicModifyIORef' sockInfo $ \(s0,q) -> ((s1,q),(s0,q))
 
 ----------------------------------------------------------------
 

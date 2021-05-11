@@ -59,6 +59,7 @@ module Network.QUIC.Connection (
   , getVersion
   , getSockInfo
   , setSockInfo
+  , modifySockInfo
   , getPeerAuthCIDs
   , setPeerAuthCIDs
   , getMyParameters
