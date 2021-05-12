@@ -61,35 +61,27 @@ runQUICClient conf client = case confVersions $ ccConfig conf of
           | otherwise               -> E.throwIO e
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
-runClient conf client ver = do
+runClient conf client0 ver = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
         forkIO reader >>= addReader conn
         handshaker <- handshakeClient conf conn myAuthCIDs
-        let cli = do
-                let use0RTT = ccUse0RTT conf
-                if use0RTT then
+        let client = do
+                if ccUse0RTT conf then
                     wait0RTTReady conn
                   else
                     wait1RTTReady conn
                 setToken conn $ resumptionToken $ ccResumption conf
-                r <- client conn
-                -- When client is done, sender is alive.
-                -- So, this thread can wait until sending is completed.
-                -- If sender is dead while client is running,
-                -- never reach here.
-                lvl <- getEncryptionLevel conn
-                sendCCFrameAndWait conn lvl NoError "" 0
-                return r
+                client0 conn
             ldcc = connLDCC conn
-            runThreads = foldr1 concurrently_ [timeouter
-                                              ,handshaker
+            supporters = foldr1 concurrently_ [handshaker
                                               ,sender   conn send
                                               ,receiver conn recv
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
+                                              ,timeouter
                                               ]
-            runThreads' = race runThreads cli
-        ex <- runThreads'
+            runThreads = race supporters client
+        ex <- runThreads
         case ex of
           Left () -> E.throwIO MustNotReached
           Right x -> return x
@@ -164,24 +156,27 @@ runQUICServer conf server = handleLogUnit debugLog $ do
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
-runServer conf server dispatch mainThreadId acc =
+runServer conf server0 dispatch mainThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
         handleLogUnit (debugLog conn) $ do
             forkIO reader >>= addReader conn
             handshaker <- handshakeServer conf conn myAuthCIDs
-            let svr = do
+            let server = do
                     wait1RTTReady conn
                     afterHandshakeServer conn
-                    server conn
+                    server0 conn
                 ldcc = connLDCC conn
-                runThreads = foldr1 concurrently_ [svr
-                                                  ,handshaker
+                supporters = foldr1 concurrently_ [handshaker
                                                   ,sender   conn send
                                                   ,receiver conn recv
                                                   ,resender  ldcc
                                                   ,ldccTimer ldcc
                                                   ]
-            runThreads
+                runThreads = race supporters server
+            ex <- runThreads
+            case ex of
+              Left () -> E.throwIO MustNotReached
+              Right x -> return x
   where
     open = createServerConnection conf dispatch acc mainThreadId
     clse connRes = do

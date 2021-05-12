@@ -96,7 +96,7 @@ handshakeClient conf conn myAuthCIDs = do
 handshakeClient' :: ClientConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
 handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
   where
-    handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT `E.catch` sendCCTLSError conn
+    handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT `E.catch` sendCCTLSError
     qc = QUICCallbacks { quicSend = sendTLS conn hsr
                        , quicRecv = recvTLS conn hsr
                        , quicInstallKeys = installKeysClient
@@ -138,7 +138,7 @@ handshakeServer conf conn myAuthCIDs =
 handshakeServer' :: ServerConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
 handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
   where
-    handshaker = serverHandshaker qc conf ver myAuthCIDs `E.catch` sendCCTLSError conn
+    handshaker = serverHandshaker qc conf ver myAuthCIDs `E.catch` sendCCTLSError
     qc = QUICCallbacks { quicSend = sendTLS conn hsr
                        , quicRecv = recvTLS conn hsr
                        , quicInstallKeys = installKeysServer
@@ -247,16 +247,13 @@ storeNegotiated conn ctx appSecInf = do
 sendCCParamError :: IO ()
 sendCCParamError = E.throwIO WrongTransportParameter
 
-sendCCTLSError :: Connection -> TLS.TLSException -> IO ()
-sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = do
-    lvl <- getEncryptionLevel conn
-    sendErrorCCFrame conn lvl TransportParameterError "Transport parametter error" 0
-sendCCTLSError conn e = do
-    lvl <- getEncryptionLevel conn
-    let tlserr = getErrorCause e
-        err = cryptoError $ errorToAlertDescription tlserr
-        msg = shortpack $ errorToAlertMessage tlserr
-    sendErrorCCFrame conn lvl err msg 0
+sendCCTLSError :: TLS.TLSException -> IO ()
+sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection TransportParameterError "Transport parametter error"
+sendCCTLSError e = closeConnection err msg
+  where
+    tlserr = getErrorCause e
+    err = cryptoError $ errorToAlertDescription tlserr
+    msg = shortpack $ errorToAlertMessage tlserr
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.HandshakeFailed e) = e
