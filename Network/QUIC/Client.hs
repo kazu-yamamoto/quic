@@ -136,5 +136,6 @@ rebind conn microseconds = do
     s1 <- getPeerName s0 >>= udpNATRebindingSocket
     _ <- addSocket conn s1
     v <- getVersion conn
-    void $ forkIO $ readerClient [v] s1 conn -- versions are dummy
+    let reader = readerClient [v] s1 conn
+    forkIO reader >>= addReader conn -- versions are dummy
     fire conn microseconds $ close s0
