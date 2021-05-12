@@ -170,11 +170,13 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
+  --
+  , connRecvQ         :: RecvQ
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
   -- Manage
-  , sockInfo          :: IORef (Socket,RecvQ)
+  , sockets           :: IORef [Socket]
   -- Mine
   , myParameters      :: Parameters
   , myCIDDB           :: IORef CIDDB
@@ -245,13 +247,14 @@ newConnection :: Role
               -> Parameters
               -> Version -> AuthCIDs -> AuthCIDs
               -> DebugLogger -> QLogger -> Hooks
-              -> IORef (Socket,RecvQ)
+              -> IORef [Socket]
+              -> RecvQ
               -> IO Connection
-newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref = do
+newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ = do
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate debugLog qLog hooks
+    Connection connstate debugLog qLog hooks recvQ
         -- Info
         <$> newIORef initialRoleInfo
         <*> newIORef ver
@@ -317,7 +320,8 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 clientConnection :: ClientConfig
                  -> Version -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
-                 -> IORef (Socket,RecvQ)
+                 -> IORef [Socket]
+                 -> RecvQ
                  -> IO Connection
 clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
     newConnection Client params ver myAuthCIDs peerAuthCIDs
@@ -327,7 +331,8 @@ clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
 serverConnection :: ServerConfig
                  -> Version -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
-                 -> IORef (Socket,RecvQ)
+                 -> IORef [Socket]
+                 -> RecvQ
                  -> IO Connection
 serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
     newConnection Server params ver myAuthCIDs peerAuthCIDs

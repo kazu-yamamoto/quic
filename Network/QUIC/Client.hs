@@ -28,8 +28,8 @@ import Network.QUIC.Socket
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
-readerClient :: ThreadId -> [Version] -> Socket -> RecvQ -> Connection -> IO ()
-readerClient tid myVers s q conn = handleLogUnit logAction loop
+readerClient :: ThreadId -> [Version] -> Socket -> Connection -> IO ()
+readerClient tid myVers s conn = handleLogUnit logAction loop
   where
     loop = do
         ito <- readMinIdleTimeout conn
@@ -60,7 +60,7 @@ readerClient tid myVers s q conn = handleLogUnit logAction loop
         case mver of
           Nothing  -> E.throwTo tid VersionNegotiationFailed
           Just ver -> E.throwTo tid $ NextVersion ver
-    putQ t z (PacketIC pkt lvl) = writeRecvQ q $ mkReceivedPacket pkt t z lvl
+    putQ t z (PacketIC pkt lvl) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t z lvl
     putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
         ok <- checkCIDs conn dCID ex
@@ -133,10 +133,10 @@ migrationClient conn MigrateTo = do
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
-    (s0,q) <- getSockInfo conn
+    s0:_ <- getSockets conn
     s1 <- getPeerName s0 >>= udpNATRebindingSocket
-    setSockInfo conn (s1,q)
+    _ <- addSocket conn s1
     v <- getVersion conn
     mytid <- myThreadId
-    void $ forkIO $ readerClient mytid [v] s1 q conn -- versions are dummy
+    void $ forkIO $ readerClient mytid [v] s1 conn -- versions are dummy
     fire conn microseconds $ close s0

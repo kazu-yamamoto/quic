@@ -105,12 +105,12 @@ createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
     (s0,sa0) <- udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
-    sref <- newIORef (s0,q)
+    sref <- newIORef [s0]
     let cls = do
-            (s,_) <- readIORef sref
+            s:_ <- readIORef sref
             NS.close s
         send buf siz = do
-            (s,_) <- readIORef sref
+            s:_ <- readIORef sref
             void $ NS.sendBuf s buf siz
         recv = recvClient q
     myCID   <- newCID
@@ -123,7 +123,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
         hooks = confHooks ccConfig
-    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref
+    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref q
     addResource conn cls
     addResource conn qclean
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
@@ -136,7 +136,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     --
     mytid <- myThreadId
     --
-    let reader = readerClient mytid (confVersions ccConfig) s0 q conn -- dies when s0 is closed.
+    let reader = readerClient mytid (confVersions ccConfig) s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
 
 ----------------------------------------------------------------
@@ -198,12 +198,12 @@ createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = do
     s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
-    sref <- newIORef (s0, accRecvQ)
+    sref <- newIORef [s0]
     let cls = do
-            (s,_) <- readIORef sref
+            s:_ <- readIORef sref
             NS.close s
         send buf siz = void $ do
-            (s,_) <- readIORef sref
+            s:_ <- readIORef sref
             NS.sendBuf s buf siz
         recv = recvServer accRecvQ
     let Just myCID = initSrcCID accMyAuthCIDs
@@ -212,7 +212,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     let hooks = confHooks scConfig
     debugLog $ "Original CID: " <> bhow ocid
-    conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog hooks sref
+    conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog hooks sref accRecvQ
     setSockAddrs conn (accMySockAddr,accPeerSockAddr)
     addResource conn cls
     addResource conn qclean
@@ -243,7 +243,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
         myCIDs <- getMyCIDs conn
         mapM_ accUnregister myCIDs
     --
-    let reader = readerServer s0 accRecvQ conn -- dies when s0 is closed.
+    let reader = readerServer s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv accMyAuthCIDs reader
 
 afterHandshakeServer :: Connection -> IO ()

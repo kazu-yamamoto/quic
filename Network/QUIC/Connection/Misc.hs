@@ -4,9 +4,8 @@
 module Network.QUIC.Connection.Misc (
     setVersion
   , getVersion
-  , getSockInfo
-  , setSockInfo
-  , modifySockInfo
+  , getSockets
+  , addSocket
   , getPeerAuthCIDs
   , setPeerAuthCIDs
   , getMyParameters
@@ -42,15 +41,12 @@ getVersion Connection{..} = readIORef quicVersion
 
 ----------------------------------------------------------------
 
-getSockInfo :: Connection -> IO (Socket, RecvQ)
-getSockInfo Connection{..} = readIORef sockInfo
+getSockets :: Connection -> IO [Socket]
+getSockets Connection{..} = readIORef sockets
 
-setSockInfo :: Connection -> (Socket, RecvQ) -> IO ()
-setSockInfo Connection{..} si = writeIORef sockInfo si
-
-modifySockInfo :: Connection -> Socket -> IO (Socket, RecvQ)
-modifySockInfo Connection{..} s1 =
-    atomicModifyIORef' sockInfo $ \(s0,q) -> ((s1,q),(s0,q))
+addSocket :: Connection -> Socket -> IO Socket
+addSocket Connection{..} s1 = atomicModifyIORef' sockets $
+    \ss@(s0:_) -> (s1:ss,s0)
 
 ----------------------------------------------------------------
 

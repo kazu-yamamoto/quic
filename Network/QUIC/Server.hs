@@ -343,8 +343,8 @@ dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
 ----------------------------------------------------------------
 
 -- | readerServer dies when the socket is closed.
-readerServer :: Socket -> RecvQ -> Connection -> IO ()
-readerServer s q conn = handleLogUnit logAction loop
+readerServer :: Socket -> Connection -> IO ()
+readerServer s conn = handleLogUnit logAction loop
   where
     loop = do
         ito <- readMinIdleTimeout conn
@@ -356,7 +356,7 @@ readerServer s q conn = handleLogUnit logAction loop
               let bytes = BS.length bs
               addRxBytes conn bytes
               pkts <- decodeCryptPackets bs
-              mapM_ (\(p,l) -> writeRecvQ q (mkReceivedPacket p now bytes l)) pkts
+              mapM_ (\(p,l) -> writeRecvQ (connRecvQ conn) (mkReceivedPacket p now bytes l)) pkts
               loop
     logAction msg = connDebugLog conn ("debug: readerServer: " <> msg)
 
@@ -368,12 +368,12 @@ recvServer = readRecvQ
 migrator :: Connection -> SockAddr -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
 migrator conn mysa peersa1 dcid mcidinfo = handleLogUnit logAction $
     E.bracketOnError setup close $ \s1 ->
-        E.bracket (modifySockInfo conn s1) (close . fst) $ \(_,q) -> do
-            void $ forkIO $ readerServer s1 q conn
+        E.bracket (addSocket conn s1) close $ \_ -> do
+            void $ forkIO $ readerServer s1 conn
             -- fixme: if cannot set
             setMyCID conn dcid
             validatePath conn mcidinfo
-            void $ timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ q)
+            void $ timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ (connRecvQ conn))
   where
     setup = udpServerConnectedSocket mysa peersa1
     logAction msg = connDebugLog conn ("debug: migrator: " <> msg)

@@ -26,7 +26,6 @@ module Network.QUIC.Connection.Crypto (
 import Control.Concurrent.STM
 import Network.TLS.QUIC
 
-import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
@@ -37,8 +36,8 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 setEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
-setEncryptionLevel conn@Connection{..} lvl = do
-    (_, q) <- getSockInfo conn
+setEncryptionLevel Connection{..} lvl = do
+    let q = connRecvQ
     atomically $ do
         writeTVar (encryptionLevel connState) lvl
         case lvl of

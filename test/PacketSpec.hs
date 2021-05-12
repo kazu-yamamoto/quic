@@ -32,10 +32,10 @@ spec = do
                 ver = Version1
             s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
             q <- newRecvQ
-            sref <- newIORef (s,q)
-            clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref
+            sref <- newIORef [s]
+            clientConn <- clientConnection clientConf ver clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref q
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
-            serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref
+            serverConn <- serverConnection serverConf ver serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q
             initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
             (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
             let dlen = 2048
