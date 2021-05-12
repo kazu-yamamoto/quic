@@ -106,10 +106,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     (s0,sa0) <- udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
     sref <- newIORef [s0]
-    let cls = do
-            s:_ <- readIORef sref
-            NS.close s
-        send buf siz = do
+    let send buf siz = do
             s:_ <- readIORef sref
             void $ NS.sendBuf s buf siz
         recv = recvClient q
@@ -124,7 +121,9 @@ createClientConnection conf@ClientConfig{..} ver = do
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
         hooks = confHooks ccConfig
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref q
-    addResource conn cls
+    addResource conn $ do
+        socks <- getSockets conn
+        mapM_ NS.close socks
     addResource conn qclean
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
@@ -199,10 +198,7 @@ createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = do
     s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
     sref <- newIORef [s0]
-    let cls = do
-            s:_ <- readIORef sref
-            NS.close s
-        send buf siz = void $ do
+    let send buf siz = void $ do
             s:_ <- readIORef sref
             NS.sendBuf s buf siz
         recv = recvServer accRecvQ
@@ -214,7 +210,9 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     debugLog $ "Original CID: " <> bhow ocid
     conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog hooks sref accRecvQ
     setSockAddrs conn (accMySockAddr,accPeerSockAddr)
-    addResource conn cls
+    addResource conn $ do
+        socks <- getSockets conn
+        mapM_ NS.close socks
     addResource conn qclean
     addResource conn dclean
     let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
