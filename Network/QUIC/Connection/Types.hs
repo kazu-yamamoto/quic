@@ -170,13 +170,13 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
-  --
+  -- Manage
   , connRecvQ         :: RecvQ
+  , sockets           :: IORef [Socket]
+  , readers           :: IORef (IO ())
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
-  -- Manage
-  , sockets           :: IORef [Socket]
   -- Mine
   , myParameters      :: Parameters
   , myCIDDB           :: IORef CIDDB
@@ -254,12 +254,11 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref r
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate debugLog qLog hooks recvQ
+    Connection connstate debugLog qLog hooks recvQ sref
+        <$> newIORef (return ())
         -- Info
-        <$> newIORef initialRoleInfo
+        <*> newIORef initialRoleInfo
         <*> newIORef ver
-        -- Manage
-        <*> return sref
         -- Mine
         <*> return myparams
         <*> newIORef (newCIDDB myCID)

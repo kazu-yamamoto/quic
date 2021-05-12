@@ -63,7 +63,7 @@ runQUICClient conf client = case confVersions $ ccConfig conf of
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
 runClient conf client ver = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
-        void $ forkIO reader -- dies when the socket is closed
+        forkIO reader >>= addReader conn
         handshaker <- handshakeClient conf conn myAuthCIDs
         let cli = do
                 let use0RTT = ccUse0RTT conf
@@ -100,6 +100,7 @@ runClient conf client ver = do
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
+        killReaders conn
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
@@ -168,7 +169,7 @@ runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Ac
 runServer conf server dispatch mainThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
         handleLogUnit (debugLog conn) $ do
-            void $ forkIO reader -- dies when the socket is closed
+            forkIO reader >>= addReader conn
             handshaker <- handshakeServer conf conn myAuthCIDs
             let svr = do
                     wait1RTTReady conn
@@ -189,6 +190,7 @@ runServer conf server dispatch mainThreadId acc =
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
+        killReaders conn
     debugLog conn msg = do
         connDebugLog conn ("runServer: " <> msg)
         qlogDebug conn $ Debug $ toLogStr msg

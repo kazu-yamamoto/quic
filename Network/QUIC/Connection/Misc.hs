@@ -14,14 +14,18 @@ module Network.QUIC.Connection.Misc (
   , delayedAck
   , resetDealyedAck
   , setMaxPacketSize
+  , addReader
+  , killReaders
   , addResource
   , freeResources
   , readMinIdleTimeout
   , setMinIdleTimeout
   ) where
 
+import Control.Concurrent
 import qualified Control.Exception as E
 import Network.Socket
+import System.Mem.Weak
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Timeout
@@ -107,6 +111,18 @@ addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f' >> 
 freeResources :: Connection -> IO ()
 freeResources Connection{..} =
     join $ atomicModifyIORef' connResources (return (),)
+
+----------------------------------------------------------------
+
+addReader :: Connection -> ThreadId -> IO ()
+addReader Connection{..} tid = do
+    wtid <- mkWeakThreadId tid
+    atomicModifyIORef'' readers $ \m -> do
+        m
+        deRefWeak wtid >>= mapM_ killThread
+
+killReaders :: Connection -> IO ()
+killReaders Connection{..} = join $ readIORef readers
 
 ----------------------------------------------------------------
 
