@@ -147,7 +147,6 @@ processReceivedPacket conn buf rpkt = do
           if statelessReset then do
               qlogReceived conn StatelessReset tim
               connDebugLog conn "debug: connection is reset statelessly"
-              setCloseReceived conn
               E.throwIO ConnectionIsReset
             else do
               qlogDropped conn hdr
@@ -312,14 +311,12 @@ processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn _lvl (ConnectionClose err _ftyp reason)
   | err == NoError = do
-        setCloseReceived conn
         onCloseReceived $ connHooks conn
         when (isServer conn) $ E.throwIO ConnectionIsClosed
   | otherwise = do
         let quicexc = TransportErrorIsReceived err reason
         E.throwIO quicexc
 processFrame conn _lvl (ConnectionCloseApp err reason) = do
-    setCloseReceived conn
     let quicexc = ApplicationProtocolErrorIsReceived err reason
     E.throwIO quicexc
 processFrame conn lvl HandshakeDone

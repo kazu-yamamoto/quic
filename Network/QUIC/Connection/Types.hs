@@ -27,13 +27,6 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data CloseState = CloseState {
-    closeSent     :: Bool
-  , closeReceived :: Bool
-  } deriving (Eq, Show)
-
-----------------------------------------------------------------
-
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
@@ -192,7 +185,6 @@ data Connection = Connection {
   , delayedAckCount   :: IORef Int
   , delayedAckCancel  :: IORef (IO ())
   -- State
-  , closeState        :: TVar CloseState
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , streamTable       :: IORef StreamTable
   , myStreamId        :: TVar Concurrency
@@ -274,7 +266,6 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref r
         <*> newIORef 0
         <*> newIORef (return ())
         -- State
-        <*> newTVarIO CloseState { closeSent = False, closeReceived = False }
         <*> newIORef 0
         <*> newIORef emptyStreamTable
         <*> newTVarIO (newConcurrency rl Bidirectional  0)

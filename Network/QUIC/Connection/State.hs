@@ -6,15 +6,9 @@ module Network.QUIC.Connection.State (
   , setConnection1RTTReady
   , isConnectionEstablished
   , setConnectionEstablished
-  , isCloseSent
-  , setCloseSent
-  , isCloseReceived
-  , setCloseReceived
-  , isClosed
   , wait0RTTReady
   , wait1RTTReady
   , waitEstablished
-  , waitClosed
   , readConnectionFlowTx
   , addTxData
   , getTxData
@@ -68,30 +62,6 @@ isConnection1RTTReady Connection{..} = atomically $ do
 
 ----------------------------------------------------------------
 
-setCloseSent :: Connection -> IO ()
-setCloseSent Connection{..} = do
-    atomically $ modifyTVar closeState $ \cs -> cs { closeSent = True }
-    writeIORef (sharedCloseSent shared) True
-
-setCloseReceived :: Connection -> IO ()
-setCloseReceived Connection{..} = do
-    atomically $ modifyTVar closeState $ \cs -> cs { closeReceived = True }
-    writeIORef (sharedCloseReceived shared) True
-
-isCloseSent :: Connection -> IO Bool
-isCloseSent Connection{..} =
-    atomically (closeSent <$> readTVar closeState)
-
-isCloseReceived :: Connection -> IO Bool
-isCloseReceived Connection{..} =
-    atomically (closeReceived <$> readTVar closeState)
-
-isClosed :: Connection -> IO Bool
-isClosed Connection{..} = do
-    tx <- readIORef $ sharedCloseSent shared
-    rx <- readIORef $ sharedCloseReceived shared
-    return (tx || rx)
-
 -- | Waiting until 0-RTT data can be sent.
 wait0RTTReady :: Connection -> IO ()
 wait0RTTReady Connection{..} = atomically $ do
@@ -110,11 +80,6 @@ waitEstablished :: Connection -> IO ()
 waitEstablished Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
     check (cs >= Established)
-
-waitClosed :: Connection -> IO ()
-waitClosed Connection{..} = atomically $ do
-    cs <- readTVar closeState
-    check (cs == CloseState True True)
 
 ----------------------------------------------------------------
 

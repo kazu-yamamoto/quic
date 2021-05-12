@@ -77,9 +77,8 @@ runClient conf client ver = do
                 -- So, this thread can wait until sending is completed.
                 -- If sender is dead while client is running,
                 -- never reach here.
-                sent <- isCloseSent conn
                 lvl <- getEncryptionLevel conn
-                unless sent $ sendCCFrameAndWait conn lvl NoError "" 0
+                sendCCFrameAndWait conn lvl NoError "" 0
                 return r
             ldcc = connLDCC conn
             runThreads = foldr1 concurrently_ [timeouter

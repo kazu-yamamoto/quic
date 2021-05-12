@@ -48,7 +48,7 @@ sendCCFrameAndWait conn lvl err desc ftyp = do
     mvar <- newEmptyMVar
     putOutput conn $ OutControl lvl [frame] $ putMVar mvar ()
     _ <- timeout (Microseconds 100000) $ takeMVar mvar
-    setCloseSent conn
+    return ()
  where
     frame = ConnectionClose err ftyp desc
 
@@ -56,7 +56,6 @@ sendCCFrameAndWait conn lvl err desc ftyp = do
 sendErrorCCFrame :: Connection -> EncryptionLevel -> TransportError -> ShortByteString -> Int -> IO ()
 sendErrorCCFrame conn lvl err desc ftyp = do
     putOutput conn $ OutControl lvl [frame] $ E.throwIO quicexc
-    setCloseSent conn
  where
     frame = ConnectionClose err ftyp desc
     quicexc = TransportErrorIsSent err desc
@@ -77,7 +76,7 @@ abortConnection conn err = do
     mvar <- newEmptyMVar
     putOutput conn $ OutControl lvl [frame] (putMVar mvar () >> E.throwIO quicexc)
     _ <- timeout (Microseconds 100000) $ takeMVar mvar
-    setCloseSent conn
+    return ()
   where
     frame = ConnectionCloseApp err ""
     quicexc = ApplicationProtocolErrorIsSent err ""
