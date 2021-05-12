@@ -31,6 +31,7 @@ library
                        Network.QUIC.Internal
   other-modules:
                        Network.QUIC.Client
+                       Network.QUIC.Closer
                        Network.QUIC.Config
                        Network.QUIC.Connection
                        Network.QUIC.Connection.Crypto

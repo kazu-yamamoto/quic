@@ -2,6 +2,7 @@
 
 module Network.QUIC.Sender (
     sender
+  , mkHeader
   ) where
 
 import Control.Concurrent

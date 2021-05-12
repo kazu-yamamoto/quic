@@ -14,10 +14,13 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Data.X509 (CertificateChain)
+import Foreign.Marshal.Alloc
+import Foreign.Ptr
 import qualified Network.Socket as NS
 import System.Log.FastLogger
 
 import Network.QUIC.Client
+import Network.QUIC.Closer
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -81,10 +84,7 @@ runClient conf client0 ver = do
                                               ,timeouter
                                               ]
             runThreads = race supporters client
-        ex <- runThreads
-        case ex of
-          Left () -> E.throwIO MustNotReached
-          Right x -> return x
+        E.try runThreads >>= closure conn
   where
     open = createClientConnection conf ver
     clse connRes = do
@@ -170,10 +170,7 @@ runServer conf server0 dispatch baseThreadId acc =
                                                   ,ldccTimer ldcc
                                                   ]
                 runThreads = race supporters server
-            ex <- runThreads
-            case ex of
-              Left () -> E.throwIO MustNotReached
-              Right x -> return x
+            E.try runThreads >>= closure conn
   where
     open = createServerConnection conf dispatch acc baseThreadId
     clse connRes = do
@@ -253,6 +250,43 @@ afterHandshakeServer conn = handleLogT logAction $ do
 -- | Stopping the base thread of the server.
 stopQUICServer :: Connection -> IO ()
 stopQUICServer conn = getBaseThreadId conn >>= killThread
+
+----------------------------------------------------------------
+
+closure :: Connection -> Either QUICException (Either () a) -> IO a
+closure _    (Right (Left ())) = E.throwIO MustNotReached
+closure conn (Right (Right x)) = do
+    closure' conn $ ConnectionClose NoError 0 ""
+    return x
+closure conn (Left e@(TransportErrorIsSent err desc)) = do
+    closure' conn $ ConnectionClose err 0 desc
+    E.throwIO e
+closure conn (Left e@(ApplicationProtocolErrorIsSent err desc)) = do
+    closure' conn $ ConnectionCloseApp err desc
+    E.throwIO e
+closure _ (Left e) = E.throwIO e
+
+closure' :: Connection -> Frame -> IO ()
+closure' conn frame = do
+    killReaders conn
+    socks@(s:_) <- clearSockets conn
+    let bufsiz = maximumUdpPayloadSize
+    sendBuf <- mallocBytes (bufsiz * 3)
+    lvl0 <- getEncryptionLevel conn
+    let lvl | lvl0 == RTT0Level = InitialLevel
+            | otherwise         = lvl0
+    header <- mkHeader conn lvl
+    mypn <- nextPacketNumber conn
+    let plain = Plain (Flags 0) mypn [frame] 0
+        ppkt = PlainPacket header plain
+    (siz,_) <- encodePlainPacket conn sendBuf bufsiz ppkt Nothing
+    let recvBuf = sendBuf `plusPtr` (bufsiz * 2)
+        recv = NS.recvBuf s recvBuf bufsiz
+        send = NS.sendBuf s sendBuf siz
+    -- fixme
+    void $ forkFinally (closer (Microseconds 100000) send recv) $ \_ -> do
+        free sendBuf
+        mapM_ NS.close socks
 
 ----------------------------------------------------------------
 
