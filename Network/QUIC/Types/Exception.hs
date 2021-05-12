@@ -10,16 +10,16 @@ import Network.QUIC.Types.Packet
 
 -- | User level exceptions for QUIC.
 data QUICException =
-    VersionIsUnknown Word32
-  | TransportErrorIsSent     TransportError ReasonPhrase
+    ConnectionIsClosed -- NoError
   | TransportErrorIsReceived TransportError ReasonPhrase
-  | ApplicationProtocolErrorIsSent     ApplicationProtocolError ReasonPhrase
+  | TransportErrorIsSent     TransportError ReasonPhrase
   | ApplicationProtocolErrorIsReceived ApplicationProtocolError ReasonPhrase
-  | ConnectionIsClosed
+  | ApplicationProtocolErrorIsSent     ApplicationProtocolError ReasonPhrase
   | ConnectionIsTimeout
   | ConnectionIsReset
   | StreamIsClosed
   | HandshakeFailed TLS.AlertDescription -- failed in my side
+  | VersionIsUnknown Word32
   | NoVersionIsSpecified
   | VersionNegotiationFailed
   | BadThingHappen E.SomeException
