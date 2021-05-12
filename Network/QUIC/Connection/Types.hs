@@ -167,6 +167,7 @@ data Connection = Connection {
   , connRecvQ         :: RecvQ
   , sockets           :: IORef [Socket]
   , readers           :: IORef (IO ())
+  , mainThreadId      :: ThreadId
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
@@ -248,6 +249,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref r
     connstate <- newConnState rl
     Connection connstate debugLog qLog hooks recvQ sref
         <$> newIORef (return ())
+        <*> myThreadId
         -- Info
         <*> newIORef initialRoleInfo
         <*> newIORef ver

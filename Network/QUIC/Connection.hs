@@ -42,7 +42,7 @@ closeConnection err desc = E.throwIO quicexc
   where
     quicexc = TransportErrorIsSent err desc
 
-abortConnection :: ApplicationProtocolError -> ShortByteString -> IO ()
-abortConnection err desc = E.throwIO quicexc
+abortConnection :: Connection -> ApplicationProtocolError -> ShortByteString -> IO ()
+abortConnection conn err desc = E.throwTo (mainThreadId conn) quicexc
   where
     quicexc = ApplicationProtocolErrorIsSent err desc

@@ -123,10 +123,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
-    --
-    mytid <- myThreadId
-    --
-    let reader = readerClient mytid (confVersions ccConfig) s0 conn -- dies when s0 is closed.
+    let reader = readerClient (confVersions ccConfig) s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
 
 ----------------------------------------------------------------
