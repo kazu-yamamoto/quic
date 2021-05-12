@@ -39,7 +39,7 @@ data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , registerCID     :: CID -> Connection -> IO ()
                            , unregisterCID   :: CID -> IO ()
                            , askRetry        :: Bool
-                           , mainThreadId    :: ~ThreadId
+                           , baseThreadId    :: ~ThreadId
                            , certChain       :: Maybe CertificateChain
                            , sockAddrs       :: [(SockAddr,SockAddr)]
                            }
@@ -56,7 +56,7 @@ defaultServerRoleInfo = ServerInfo {
   , registerCID = \_ _ -> return ()
   , unregisterCID = \_ -> return ()
   , askRetry = False
-  , mainThreadId = undefined
+  , baseThreadId = undefined
   , certChain = Nothing
   , sockAddrs = []
   }

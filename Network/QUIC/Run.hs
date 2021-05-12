@@ -136,10 +136,10 @@ createClientConnection conf@ClientConfig{..} ver = do
 --   in a new lightweight thread.
 runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
 runQUICServer conf server = handleLogUnit debugLog $ do
-    mainThreadId <- myThreadId
+    baseThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
-        void $ forkIO (runServer conf server dispatch mainThreadId acc)
+        void $ forkIO (runServer conf server dispatch baseThreadId acc)
   where
     debugLog msg = stdoutLogger ("runQUICServer: " <> msg)
     setup = do
@@ -156,7 +156,7 @@ runQUICServer conf server = handleLogUnit debugLog $ do
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
-runServer conf server0 dispatch mainThreadId acc =
+runServer conf server0 dispatch baseThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
         handleLogUnit (debugLog conn) $ do
             forkIO reader >>= addReader conn
@@ -178,7 +178,7 @@ runServer conf server0 dispatch mainThreadId acc =
               Left () -> E.throwIO MustNotReached
               Right x -> return x
   where
-    open = createServerConnection conf dispatch acc mainThreadId
+    open = createServerConnection conf dispatch acc baseThreadId
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
@@ -192,7 +192,7 @@ runServer conf server0 dispatch mainThreadId acc =
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes
-createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = do
+createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
     s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
     sref <- newIORef [s0]
     let send buf siz = void $ do
@@ -227,7 +227,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     let mgr = tokenMgr dispatch
     setTokenManager conn mgr
     --
-    setMainThreadId conn mainThreadId
+    setBaseThreadId conn baseThreadId
     --
     setRegister conn accRegister accUnregister
     accRegister myCID conn
@@ -253,9 +253,9 @@ afterHandshakeServer conn = handleLogT logAction $ do
   where
     logAction msg = connDebugLog conn $ "afterHandshakeServer: " <> msg
 
--- | Stopping the main thread of the server.
+-- | Stopping the base thread of the server.
 stopQUICServer :: Connection -> IO ()
-stopQUICServer conn = getMainThreadId conn >>= killThread
+stopQUICServer conn = getBaseThreadId conn >>= killThread
 
 ----------------------------------------------------------------
 

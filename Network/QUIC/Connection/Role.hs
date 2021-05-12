@@ -13,8 +13,8 @@ module Network.QUIC.Connection.Role (
   , getUnregister
   , setTokenManager
   , getTokenManager
-  , setMainThreadId
-  , getMainThreadId
+  , setBaseThreadId
+  , getBaseThreadId
   , setCertificateChain
   , getCertificateChain
   , setSockAddrs
@@ -99,12 +99,12 @@ getTokenManager Connection{..} = tokenManager <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 
-setMainThreadId :: Connection -> ThreadId -> IO ()
-setMainThreadId Connection{..} tid = atomicModifyIORef'' roleInfo $
-    \si -> si { mainThreadId = tid }
+setBaseThreadId :: Connection -> ThreadId -> IO ()
+setBaseThreadId Connection{..} tid = atomicModifyIORef'' roleInfo $
+    \si -> si { baseThreadId = tid }
 
-getMainThreadId :: Connection -> IO ThreadId
-getMainThreadId Connection{..} = mainThreadId <$> readIORef roleInfo
+getBaseThreadId :: Connection -> IO ThreadId
+getBaseThreadId Connection{..} = baseThreadId <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 
