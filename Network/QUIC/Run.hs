@@ -101,6 +101,8 @@ runClient conf client ver = do
         setDead conn
         freeResources conn
         killReaders conn
+        socks <- getSockets conn
+        mapM_ NS.close socks
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
@@ -122,9 +124,6 @@ createClientConnection conf@ClientConfig{..} ver = do
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
         hooks = confHooks ccConfig
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref q
-    addResource conn $ do
-        socks <- getSockets conn
-        mapM_ NS.close socks
     addResource conn qclean
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
@@ -191,6 +190,8 @@ runServer conf server dispatch mainThreadId acc =
         setDead conn
         freeResources conn
         killReaders conn
+        socks <- getSockets conn
+        mapM_ NS.close socks
     debugLog conn msg = do
         connDebugLog conn ("runServer: " <> msg)
         qlogDebug conn $ Debug $ toLogStr msg
@@ -212,9 +213,6 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     debugLog $ "Original CID: " <> bhow ocid
     conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog hooks sref accRecvQ
     setSockAddrs conn (accMySockAddr,accPeerSockAddr)
-    addResource conn $ do
-        socks <- getSockets conn
-        mapM_ NS.close socks
     addResource conn qclean
     addResource conn dclean
     let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
