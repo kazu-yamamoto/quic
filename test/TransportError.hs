@@ -100,7 +100,7 @@ transportErrorSpec cc0 = do
             let cc = addHook cc0 $ setOnPlainCreated maxStreamData2
             runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send FRAME_ENCODING_ERROR if invalid MAX_STREAMS is received [Transport 19.11]" $ \_ -> do
-            let cc = addHook cc0 $ setOnPlainCreated maxStreams
+            let cc = addHook cc0 $ setOnPlainCreated maxStreams'
             runCnoOp cc `shouldThrow` transportErrorsIn [FrameEncodingError]
         it "MUST send STREAM_LIMIT_ERROR or FRAME_ENCODING_ERROR if invalid STREAMS_BLOCKED is received [Transport 19.14]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated streamsBlocked
@@ -279,8 +279,8 @@ maxStreamData2 lvl plain
   | lvl == RTT1Level = plain { plainFrames = MaxStreamData 2 1000000 : plainFrames plain }
   | otherwise = plain
 
-maxStreams :: EncryptionLevel -> Plain -> Plain
-maxStreams lvl plain
+maxStreams' :: EncryptionLevel -> Plain -> Plain
+maxStreams' lvl plain
   | lvl == RTT1Level = plain { plainFrames = MaxStreams Bidirectional (2^(60 :: Int) + 1) : plainFrames plain }
   | otherwise = plain
 

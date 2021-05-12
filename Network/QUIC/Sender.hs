@@ -11,6 +11,7 @@ import qualified Data.ByteString as BS
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (plusPtr)
 
+import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Exception

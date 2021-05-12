@@ -134,14 +134,14 @@ initialProtector = Protector {
 ----------------------------------------------------------------
 
 data Negotiated = Negotiated {
-      handshakeMode :: HandshakeMode13
+      tlsHandshakeMode :: HandshakeMode13
     , applicationProtocol :: Maybe NegotiatedProtocol
     , applicationSecretInfo :: ApplicationSecretInfo
     }
 
 initialNegotiated :: Negotiated
 initialNegotiated = Negotiated {
-      handshakeMode = FullHandshake
+      tlsHandshakeMode = FullHandshake
     , applicationProtocol = Nothing
     , applicationSecretInfo = ApplicationSecretInfo defaultTrafficSecrets
     }

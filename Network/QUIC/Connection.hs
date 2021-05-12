@@ -1,171 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Connection (
-    Connection
-  , clientConnection
-  , serverConnection
-  -- * IO
-  , connDebugLog
-  , connQLog
-  -- * Packet numbers
-  , nextPacketNumber
-  , setPeerPacketNumber
-  , getPeerPacketNumber
-  -- * Crypto
-  , setEncryptionLevel
-  , waitEncryptionLevel
-  , putOffCrypto
-  , getCipher
-  , setCipher
-  , getApplicationProtocol
-  , getTLSMode
-  , setNegotiated
-  , dropSecrets
-  , Coder(..)
-  , initializeCoder
-  , initializeCoder1RTT
-  , updateCoder1RTT
-  , getCoder
-  , Protector(..)
-  , getProtector
-  , getCurrentKeyPhase
-  , setCurrentKeyPhase
-  -- * Migration
-  , getMyCID
-  , getMyCIDs
-  , getMyCIDSeqNum
-  , getPeerCID
-  , isMyCID
-  , myCIDsInclude
-  , shouldUpdateMyCID
-  , shouldUpdatePeerCID
-  , resetPeerCID
-  , getNewMyCID
-  , setMyCID
-  , retirePeerCID
-  , setPeerCIDAndRetireCIDs
-  , retireMyCID
-  , addPeerCID
-  , waitPeerCID
-  , choosePeerCIDForPrivacy
-  , setPeerStatelessResetToken
-  , isStatelessRestTokenValid
-  , setMigrationStarted
-  , isPathValidating
-  , checkResponse
-  , validatePath
-  -- * Misc
-  , setVersion
-  , getVersion
-  , getSockInfo
-  , setSockInfo
-  , modifySockInfo
-  , getPeerAuthCIDs
-  , setPeerAuthCIDs
-  , getMyParameters
-  , getPeerParameters
-  , setPeerParameters
-  , delayedAck
-  , resetDealyedAck
-  , setMaxPacketSize
-  , addResource
-  , freeResources
-  , readMinIdleTimeout
-  , setMinIdleTimeout
-  -- * State
-  , isConnectionEstablished
-  , isConnection1RTTReady
-  , setConnection0RTTReady
-  , setConnection1RTTReady
-  , setConnectionEstablished
-  , setCloseSent
-  , setCloseReceived
-  , isCloseSent
-  , isCloseReceived
-  , isClosed
-  , wait0RTTReady
-  , wait1RTTReady
-  , waitEstablished
-  , waitClosed
-  , readConnectionFlowTx
-  , addTxData
-  , getTxData
-  , setTxMaxData
-  , getTxMaxData
-  , addRxData
-  , getRxData
-  , addRxMaxData
-  , getRxMaxData
-  , getRxDataWindow
-  , addTxBytes
-  , getTxBytes
-  , addRxBytes
-  , getRxBytes
-  , setAddressValidated
-  , waitAntiAmplificationFree
-  , checkAntiAmplificationFree
-  -- * Stream
-  , waitMyNewStreamId
-  , waitMyNewUniStreamId
-  , setMyMaxStreams
-  , setMyUniMaxStreams
-  , getPeerMaxStreams
-  -- * StreamTable
-  , createStream
-  , findStream
-  , addStream
-  , delStream
-  , initialRxMaxStreamData
-  , setupCryptoStreams
-  , clearCryptoStream
-  , getCryptoStream
-  -- * Queue
-  , takeInput
-  , putInput
-  , takeCrypto
-  , putCrypto
-  , takeOutputSTM
-  , tryPeekOutput
-  , putOutput
-  , takeSendStreamQ
-  , takeSendStreamQSTM
-  , tryPeekSendStreamQ
-  , putSendStreamQ
-  , readMigrationQ
-  , writeMigrationQ
-  -- * Role
-  , setToken
-  , getToken
-  , getResumptionInfo
-  , setRetried
-  , getRetried
-  , setResumptionSession
-  , setNewToken
-  , setRegister
-  , getRegister
-  , getUnregister
-  , setTokenManager
-  , getTokenManager
-  , setMainThreadId
-  , getMainThreadId
-  , setCertificateChain
-  , getCertificateChain
-  , setSockAddrs
-  , getSockAddrs
-  -- Timeout
-  , timeouter
-  , timeout
-  , fire
-  , cfire
-  , delay
-  -- Types
-  , connHooks
-  , Hooks(..)
-  , connLDCC
-  , Input(..)
-  , Crypto(..)
-  , Output(..)
-  , setDead
+    module Network.QUIC.Connection.PacketNumber
+  , module Network.QUIC.Connection.Crypto
+  , module Network.QUIC.Connection.Migration
+  , module Network.QUIC.Connection.Misc
+  , module Network.QUIC.Connection.State
+  , module Network.QUIC.Connection.Stream
+  , module Network.QUIC.Connection.StreamTable
+  , module Network.QUIC.Connection.Queue
+  , module Network.QUIC.Connection.Role
+  , module Network.QUIC.Connection.Timeout
+  , module Network.QUIC.Connection.Types
   -- In this module
   , sendErrorCCFrame
   , sendCCFrameAndWait
@@ -177,7 +23,6 @@ module Network.QUIC.Connection (
 import Control.Concurrent
 import qualified Control.Exception as E
 
-import Network.QUIC.Config
 import Network.QUIC.Connection.Crypto
 import Network.QUIC.Connection.Migration
 import Network.QUIC.Connection.Misc

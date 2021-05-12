@@ -69,7 +69,7 @@ setCipher Connection{..} lvl cipher = writeArray ciphers lvl cipher
 ----------------------------------------------------------------
 
 getTLSMode :: Connection -> IO HandshakeMode13
-getTLSMode Connection{..} = handshakeMode <$> readIORef negotiated
+getTLSMode Connection{..} = tlsHandshakeMode <$> readIORef negotiated
 
 getApplicationProtocol :: Connection -> IO (Maybe NegotiatedProtocol)
 getApplicationProtocol Connection{..} = applicationProtocol <$> readIORef negotiated
@@ -77,7 +77,7 @@ getApplicationProtocol Connection{..} = applicationProtocol <$> readIORef negoti
 setNegotiated :: Connection -> HandshakeMode13 -> Maybe NegotiatedProtocol -> ApplicationSecretInfo -> IO ()
 setNegotiated Connection{..} mode mproto appSecInf =
     writeIORef negotiated Negotiated {
-        handshakeMode = mode
+        tlsHandshakeMode = mode
       , applicationProtocol = mproto
       , applicationSecretInfo = appSecInf
       }
