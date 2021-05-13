@@ -169,9 +169,12 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> return ()
-      Just strm -> onResetStreamReceived (connHooks conn) strm aerr
-    connDebugLog conn "ResetStream" -- fixme
-processFrame conn lvl (StopSending sid _err) = do
+      Just strm -> do
+          onResetStreamReceived (connHooks conn) strm aerr
+          setTxStreamClosed strm
+          setRxStreamClosed strm
+          delStream conn strm
+processFrame conn lvl (StopSending sid err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "STOP_SENDING"
     when ((isClient conn && isServerInitiatedUnidirectional sid)
@@ -183,7 +186,7 @@ processFrame conn lvl (StopSending sid _err) = do
           when ((isClient conn && isClientInitiated sid)
               ||(isServer conn && isServerInitiated sid)) $
               closeConnection StreamStateError "No such stream for STOP_SENDING"
-      Just _strm -> connDebugLog conn "StopSending" -- fixme
+      Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $

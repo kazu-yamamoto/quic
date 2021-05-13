@@ -120,7 +120,8 @@ checkBlocked s len wait = atomically $ do
 
 ----------------------------------------------------------------
 
--- | Sending FIN in the stream.
+-- | Sending FIN in a stream.
+--   'closeStream' should be called later.
 shutdownStream :: Stream -> IO ()
 shutdownStream s = do
     sclosed <- isTxStreamClosed s
@@ -128,16 +129,18 @@ shutdownStream s = do
     setTxStreamClosed s
     putSendStreamQ (streamConnection s) $ TxStreamData s [] 0 True
 
--- | Closing a stream. FIN is sent if necessary.
+-- | Closing a stream without an error.
+--   This sends FIN if necessary.
 closeStream :: Stream -> IO ()
 closeStream s = do
+    let conn = streamConnection s
+    let sid = streamId s
     sclosed <- isTxStreamClosed s
     unless sclosed $ do
         setTxStreamClosed s
-        putSendStreamQ (streamConnection s) $ TxStreamData s [] 0 True
-    let conn = streamConnection s
+        setRxStreamClosed s
+        putSendStreamQ conn $ TxStreamData s [] 0 True
     delStream conn s
-    let sid = streamId s
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
         n <- getPeerMaxStreams conn
@@ -178,11 +181,32 @@ recvStream s n = do
     return bs
 
 -- | Closing a stream with an error code.
+--   This sends RESET_STREAM to the peer.
+--   This is an alternative of 'closeStream'.
 resetStream :: Stream -> ApplicationProtocolError -> IO ()
 resetStream s aerr = do
     let conn = streamConnection s
-    lvl <- getEncryptionLevel conn
-    putOutput conn $ OutControl lvl [frame] $ return ()
-    -- fixme: some operations are necessary here.
-  where
-    frame = ResetStream (streamId s) aerr 0
+    let sid = streamId s
+    sclosed <- isTxStreamClosed s
+    unless sclosed $ do
+        setTxStreamClosed s
+        setRxStreamClosed s
+        lvl <- getEncryptionLevel conn
+        let frame = ResetStream sid aerr 0
+        putOutput conn $ OutControl lvl [frame] $ return ()
+    delStream conn s
+
+-- | Asking the peer to stop sending.
+--   This sends STOP_SENDING to the peer
+--   and it will send RESET_STREAM back.
+--   'closeStream' should be called later.
+stopStream :: Stream -> ApplicationProtocolError -> IO ()
+stopStream s aerr = do
+    let conn = streamConnection s
+    let sid = streamId s
+    sclosed <- isRxStreamClosed s
+    unless sclosed $ do
+        setRxStreamClosed s
+        lvl <- getEncryptionLevel conn
+        let frame = StopSending sid aerr
+        putOutput conn $ OutControl lvl [frame] $ return ()
