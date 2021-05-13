@@ -160,11 +160,14 @@ setMinIdleTimeout Connection{..} us
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
 sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames $ return ()
 
+-- | Closing a connection with/without a transport error.
+--   Internal threads should use this.
 closeConnection :: TransportError -> ReasonPhrase -> IO ()
 closeConnection err desc = E.throwIO quicexc
   where
     quicexc = TransportErrorIsSent err desc
 
+-- | Closing a connection with an application protocol error.
 abortConnection :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
 abortConnection conn err desc = E.throwTo (mainThreadId conn) quicexc
   where
