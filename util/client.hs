@@ -9,7 +9,6 @@ import Control.Concurrent
 import Control.Monad
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
-import Data.IORef
 import Data.UnixTime
 import Data.Word
 import Foreign.C.Types
@@ -147,7 +146,7 @@ main = do
     let ipslen = length ips
     when (ipslen /= 2 && ipslen /= 3) $
         showUsageAndExit "cannot recognize <addr> and <port>\n"
-    cref <- newIORef False
+    cmvar <- newEmptyMVar
     let path | ipslen == 3 = ips !! 2
              | otherwise   = "/"
         addr:port:_ = ips
@@ -178,7 +177,7 @@ main = do
               , confGroups     = getGroups optGroups
               , confQLog       = optQLogDir
               , confHooks      = defaultHooks {
-                    onCloseReceived = writeIORef cref True
+                    onCloseCompleted = putMVar cmvar ()
                   }
               }
           }
@@ -191,7 +190,11 @@ main = do
           , auxAuthority = addr
           , auxDebug = debug
           , auxShow = showContent
-          , auxCheckClose = readIORef cref
+          , auxCheckClose = do
+                mx <- timeout 1000000 $ takeMVar cmvar
+                case mx of
+                  Nothing -> return False
+                  _       -> return True
           }
     runClient conf opts aux
 
@@ -290,8 +293,8 @@ runClient conf opts@Options{..} aux@Aux{..} = do
              Nothing -> do
                  putStrLn "Result: (H) handshake ... OK"
                  putStrLn "Result: (D) stream data ... OK"
-                 closeReceived <- auxCheckClose
-                 when closeReceived $ putStrLn "Result: (C) close received ... OK"
+                 closeCompleted <- auxCheckClose
+                 when closeCompleted $ putStrLn "Result: (C) close completed ... OK"
                  case alpn info1 of
                    Nothing   -> return ()
                    Just alpn -> when ("h3" `BS.isPrefixOf` alpn) $
