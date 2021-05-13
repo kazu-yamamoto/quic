@@ -66,7 +66,8 @@ runQUICClient conf client = case confVersions $ ccConfig conf of
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
 runClient conf client0 ver = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
-        forkIO reader >>= addReader conn
+        forkIO reader    >>= addReader conn
+        forkIO timeouter >>= addTimeouter conn
         handshaker <- handshakeClient conf conn myAuthCIDs
         let client = do
                 if ccUse0RTT conf then
@@ -81,7 +82,6 @@ runClient conf client0 ver = do
                                               ,receiver conn recv
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
-                                              ,timeouter
                                               ]
             runThreads = race supporters client
         E.try runThreads >>= closure conn ldcc
@@ -94,6 +94,7 @@ runClient conf client0 ver = do
         killReaders conn
         socks <- getSockets conn
         mapM_ NS.close socks
+        join $ replaceKillTimeouter conn
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
@@ -269,6 +270,7 @@ closure _    _    (Left e) = E.throwIO e
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
     killReaders conn
+    killTimeouter <- replaceKillTimeouter conn
     socks@(s:_) <- clearSockets conn
     let bufsiz = maximumUdpPayloadSize
     sendBuf <- mallocBytes (bufsiz * 3)
@@ -283,10 +285,14 @@ closure' conn ldcc frame = do
     let recvBuf = sendBuf `plusPtr` (bufsiz * 2)
         recv = NS.recvBuf s recvBuf bufsiz
         send = NS.sendBuf s sendBuf siz
+        hook = onCloseCompleted $ connHooks conn
+    now <- getTimeMicrosecond
+    qlogSent conn ppkt now
     pto <- getPTO ldcc
-    void $ forkFinally (closer pto send recv) $ \_ -> do
+    void $ forkFinally (closer pto send recv hook) $ \_ -> do
         free sendBuf
         mapM_ NS.close socks
+        killTimeouter
 
 ----------------------------------------------------------------
 

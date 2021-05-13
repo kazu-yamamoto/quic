@@ -17,8 +17,7 @@ import Network.QUIC.Types
 
 -- | Hooks.
 data Hooks = Hooks {
-    onCloseSent     :: IO ()
-  , onCloseReceived :: IO ()
+    onCloseCompleted :: IO ()
   , onPlainCreated  :: EncryptionLevel -> Plain -> Plain
   , onTransportParametersCreated :: Parameters -> Parameters
   , onTLSExtensionCreated :: [ExtensionRaw] -> [ExtensionRaw]
@@ -29,8 +28,7 @@ data Hooks = Hooks {
 -- | Default hooks.
 defaultHooks :: Hooks
 defaultHooks = Hooks {
-    onCloseSent     = return ()
-  , onCloseReceived = return ()
+    onCloseCompleted = return ()
   , onPlainCreated  = \_l p -> p
   , onTransportParametersCreated = id
   , onTLSExtensionCreated = id

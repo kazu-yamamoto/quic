@@ -306,14 +306,12 @@ processFrame conn RTT1Level (PathChallenge dat) =
 processFrame conn RTT1Level (PathResponse dat) =
     -- RTT0Level falls intentionally
     checkResponse conn dat
-processFrame conn _lvl (ConnectionClose err _ftyp reason)
-  | err == NoError = do
-        onCloseReceived $ connHooks conn
-        when (isServer conn) $ E.throwIO ConnectionIsClosed
-  | otherwise = do
-        let quicexc = TransportErrorIsReceived err reason
-        E.throwIO quicexc
-processFrame _ _lvl (ConnectionCloseApp err reason) = do
+processFrame conn _lvl (ConnectionClose NoError _ftyp _reason) =
+    when (isServer conn) $ E.throwIO ConnectionIsClosed
+processFrame _conn _lvl (ConnectionClose err _ftyp reason) = do
+    let quicexc = TransportErrorIsReceived err reason
+    E.throwIO quicexc
+processFrame _conn _lvl (ConnectionCloseApp err reason) = do
     let quicexc = ApplicationProtocolErrorIsReceived err reason
     E.throwIO quicexc
 processFrame conn lvl HandshakeDone

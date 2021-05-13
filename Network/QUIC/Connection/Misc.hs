@@ -17,6 +17,8 @@ module Network.QUIC.Connection.Misc (
   , setMaxPacketSize
   , addReader
   , killReaders
+  , addTimeouter
+  , replaceKillTimeouter
   , addResource
   , freeResources
   , readMinIdleTimeout
@@ -127,6 +129,16 @@ addReader Connection{..} tid = do
 
 killReaders :: Connection -> IO ()
 killReaders Connection{..} = join $ readIORef readers
+
+----------------------------------------------------------------
+
+addTimeouter :: Connection -> ThreadId -> IO ()
+addTimeouter Connection{..} tid = do
+    wtid <- mkWeakThreadId tid
+    writeIORef tmouter (deRefWeak wtid >>= mapM_ killThread)
+
+replaceKillTimeouter :: Connection -> IO (IO ())
+replaceKillTimeouter Connection{..} = atomicModifyIORef' tmouter $ \m -> (return (), m)
 
 ----------------------------------------------------------------
 

@@ -364,7 +364,7 @@ packetNumberSpace RTT1Level      = "application_data"
 delta :: Microseconds -> LogStr
 delta (Microseconds n) = sw n
 
-qlogSent :: KeepQlog q => q -> SentPacket -> TimeMicrosecond -> IO ()
+qlogSent :: (KeepQlog q, Qlog pkt) => q -> pkt -> TimeMicrosecond -> IO ()
 qlogSent q pkt tim = keepQlog q $ QSent (qlog pkt) tim
 
 qlogMetricsUpdated :: KeepQlog q => q -> MetricsDiff -> IO ()
