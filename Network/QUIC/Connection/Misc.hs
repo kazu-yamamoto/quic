@@ -23,6 +23,9 @@ module Network.QUIC.Connection.Misc (
   , freeResources
   , readMinIdleTimeout
   , setMinIdleTimeout
+  , sendFrames
+  , closeConnection
+  , abortConnection
   ) where
 
 import Control.Concurrent
@@ -151,3 +154,18 @@ setMinIdleTimeout Connection{..} us
   | otherwise            = atomicModifyIORef'' minIdleTimeout modify
   where
     modify us0 = min us us0
+
+----------------------------------------------------------------
+
+sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
+sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames $ return ()
+
+closeConnection :: TransportError -> ReasonPhrase -> IO ()
+closeConnection err desc = E.throwIO quicexc
+  where
+    quicexc = TransportErrorIsSent err desc
+
+abortConnection :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
+abortConnection conn err desc = E.throwTo (mainThreadId conn) quicexc
+  where
+    quicexc = ApplicationProtocolErrorIsSent err desc
