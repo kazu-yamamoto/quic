@@ -24,6 +24,7 @@ module Network.QUIC.Recovery (
   , nullPeerPacketNumbers
   -- Persistent
   , findDuration
+  , getPTO
   -- Release
   , releaseByRetry
   , releaseOldest

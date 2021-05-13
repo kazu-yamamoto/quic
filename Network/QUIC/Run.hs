@@ -14,10 +14,13 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Data.X509 (CertificateChain)
+import Foreign.Marshal.Alloc
+import Foreign.Ptr
 import qualified Network.Socket as NS
 import System.Log.FastLogger
 
 import Network.QUIC.Client
+import Network.QUIC.Closer
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -61,39 +64,27 @@ runQUICClient conf client = case confVersions $ ccConfig conf of
           | otherwise               -> E.throwIO e
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
-runClient conf client ver = do
+runClient conf client0 ver = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
         forkIO reader >>= addReader conn
         handshaker <- handshakeClient conf conn myAuthCIDs
-        let cli = do
-                let use0RTT = ccUse0RTT conf
-                if use0RTT then
+        let client = do
+                if ccUse0RTT conf then
                     wait0RTTReady conn
                   else
                     wait1RTTReady conn
                 setToken conn $ resumptionToken $ ccResumption conf
-                r <- client conn
-                -- When client is done, sender is alive.
-                -- So, this thread can wait until sending is completed.
-                -- If sender is dead while client is running,
-                -- never reach here.
-                sent <- isCloseSent conn
-                lvl <- getEncryptionLevel conn
-                unless sent $ sendCCFrameAndWait conn lvl NoError "" 0
-                return r
+                client0 conn
             ldcc = connLDCC conn
-            runThreads = foldr1 concurrently_ [timeouter
-                                              ,handshaker
+            supporters = foldr1 concurrently_ [handshaker
                                               ,sender   conn send
                                               ,receiver conn recv
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
+                                              ,timeouter
                                               ]
-            runThreads' = race runThreads cli
-        ex <- runThreads'
-        case ex of
-          Left () -> E.throwIO MustNotReached
-          Right x -> return x
+            runThreads = race supporters client
+        E.try runThreads >>= closure conn ldcc
   where
     open = createClientConnection conf ver
     clse connRes = do
@@ -132,10 +123,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
-    --
-    mytid <- myThreadId
-    --
-    let reader = readerClient mytid (confVersions ccConfig) s0 conn -- dies when s0 is closed.
+    let reader = readerClient (confVersions ccConfig) s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
 
 ----------------------------------------------------------------
@@ -145,10 +133,10 @@ createClientConnection conf@ClientConfig{..} ver = do
 --   in a new lightweight thread.
 runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
 runQUICServer conf server = handleLogUnit debugLog $ do
-    mainThreadId <- myThreadId
+    baseThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
-        void $ forkIO (runServer conf server dispatch mainThreadId acc)
+        void $ forkIO (runServer conf server dispatch baseThreadId acc)
   where
     debugLog msg = stdoutLogger ("runQUICServer: " <> msg)
     setup = do
@@ -165,26 +153,26 @@ runQUICServer conf server = handleLogUnit debugLog $ do
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
-runServer conf server dispatch mainThreadId acc =
+runServer conf server0 dispatch baseThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
         handleLogUnit (debugLog conn) $ do
             forkIO reader >>= addReader conn
             handshaker <- handshakeServer conf conn myAuthCIDs
-            let svr = do
+            let server = do
                     wait1RTTReady conn
                     afterHandshakeServer conn
-                    server conn
+                    server0 conn
                 ldcc = connLDCC conn
-                runThreads = foldr1 concurrently_ [svr
-                                                  ,handshaker
+                supporters = foldr1 concurrently_ [handshaker
                                                   ,sender   conn send
                                                   ,receiver conn recv
                                                   ,resender  ldcc
                                                   ,ldccTimer ldcc
                                                   ]
-            runThreads
+                runThreads = race supporters server
+            E.try runThreads >>= closure conn ldcc
   where
-    open = createServerConnection conf dispatch acc mainThreadId
+    open = createServerConnection conf dispatch acc baseThreadId
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
@@ -198,7 +186,7 @@ runServer conf server dispatch mainThreadId acc =
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes
-createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = do
+createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
     s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
     sref <- newIORef [s0]
     let send buf siz = void $ do
@@ -233,7 +221,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} mainThreadId = 
     let mgr = tokenMgr dispatch
     setTokenManager conn mgr
     --
-    setMainThreadId conn mainThreadId
+    setBaseThreadId conn baseThreadId
     --
     setRegister conn accRegister accUnregister
     accRegister myCID conn
@@ -259,9 +247,46 @@ afterHandshakeServer conn = handleLogT logAction $ do
   where
     logAction msg = connDebugLog conn $ "afterHandshakeServer: " <> msg
 
--- | Stopping the main thread of the server.
+-- | Stopping the base thread of the server.
 stopQUICServer :: Connection -> IO ()
-stopQUICServer conn = getMainThreadId conn >>= killThread
+stopQUICServer conn = getBaseThreadId conn >>= killThread
+
+----------------------------------------------------------------
+
+closure :: Connection -> LDCC -> Either QUICException (Either () a) -> IO a
+closure _    _    (Right (Left ())) = E.throwIO MustNotReached
+closure conn ldcc (Right (Right x)) = do
+    closure' conn ldcc $ ConnectionClose NoError 0 ""
+    return x
+closure conn ldcc (Left e@(TransportErrorIsSent err desc)) = do
+    closure' conn ldcc $ ConnectionClose err 0 desc
+    E.throwIO e
+closure conn ldcc (Left e@(ApplicationProtocolErrorIsSent err desc)) = do
+    closure' conn ldcc $ ConnectionCloseApp err desc
+    E.throwIO e
+closure _    _    (Left e) = E.throwIO e
+
+closure' :: Connection -> LDCC -> Frame -> IO ()
+closure' conn ldcc frame = do
+    killReaders conn
+    socks@(s:_) <- clearSockets conn
+    let bufsiz = maximumUdpPayloadSize
+    sendBuf <- mallocBytes (bufsiz * 3)
+    lvl0 <- getEncryptionLevel conn
+    let lvl | lvl0 == RTT0Level = InitialLevel
+            | otherwise         = lvl0
+    header <- mkHeader conn lvl
+    mypn <- nextPacketNumber conn
+    let plain = Plain (Flags 0) mypn [frame] 0
+        ppkt = PlainPacket header plain
+    (siz,_) <- encodePlainPacket conn sendBuf bufsiz ppkt Nothing
+    let recvBuf = sendBuf `plusPtr` (bufsiz * 2)
+        recv = NS.recvBuf s recvBuf bufsiz
+        send = NS.sendBuf s sendBuf siz
+    pto <- getPTO ldcc
+    void $ forkFinally (closer pto send recv) $ \_ -> do
+        free sendBuf
+        mapM_ NS.close socks
 
 ----------------------------------------------------------------
 

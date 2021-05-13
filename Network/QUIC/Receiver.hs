@@ -107,11 +107,10 @@ processReceivedPacket conn buf rpkt = do
     mplain <- decryptCrypt conn buf bufsiz crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
-          lvl0 <- getEncryptionLevel conn
           when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
-              sendCCFrameAndBreak conn lvl0 ProtocolViolation "Non 0 RR bits or no frames" 0
+              closeConnection ProtocolViolation "Non 0 RR bits or no frames"
           when (isUnknownFrame plainMarks) $
-              sendCCFrameAndBreak conn lvl0 FrameEncodingError "Unknown frame" 0
+              closeConnection FrameEncodingError "Unknown frame"
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl plainPacketNumber
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
@@ -147,7 +146,6 @@ processReceivedPacket conn buf rpkt = do
           if statelessReset then do
               qlogReceived conn StatelessReset tim
               connDebugLog conn "debug: connection is reset statelessly"
-              setCloseReceived conn
               E.throwIO ConnectionIsReset
             else do
               qlogDropped conn hdr
@@ -160,15 +158,14 @@ processFrame conn lvl Ping = do
     -- see ackEli above
     when (lvl /= RTT1Level) $ sendFrames conn lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) = do
-    when (lvl == RTT0Level) $ do
-        sendCCFrameAndBreak conn lvl ProtocolViolation "ACK" 0x02 -- fixme
+    when (lvl == RTT0Level) $ closeConnection ProtocolViolation "ACK"
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
 processFrame conn lvl (ResetStream sid aerr _finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "RESET_STREAM" 0x04
+        closeConnection ProtocolViolation "RESET_STREAM"
     when ((isClient conn && isClientInitiatedUnidirectional sid)
         ||(isServer conn && isServerInitiatedUnidirectional sid)) $
-        sendCCFrameAndBreak conn lvl StreamStateError "Received in a send-only stream" 0x04
+        closeConnection StreamStateError "Received in a send-only stream"
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> return ()
@@ -176,21 +173,21 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
     connDebugLog conn "ResetStream" -- fixme
 processFrame conn lvl (StopSending sid _err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "STOP_SENDING" 0x05
+        closeConnection ProtocolViolation "STOP_SENDING"
     when ((isClient conn && isServerInitiatedUnidirectional sid)
         ||(isServer conn && isClientInitiatedUnidirectional sid)) $
-        sendCCFrameAndBreak conn lvl StreamStateError "Receive-only stream" 0x05
+        closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
           when ((isClient conn && isClientInitiated sid)
               ||(isServer conn && isServerInitiated sid)) $
-              sendCCFrameAndBreak conn lvl StreamStateError "No such stream for STOP_SENDING" 0x05
+              closeConnection StreamStateError "No such stream for STOP_SENDING"
       Just _strm -> connDebugLog conn "StopSending" -- fixme
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
-    when (lvl == RTT0Level) $ do
-        sendCCFrameAndBreak conn InitialLevel ProtocolViolation "CRYPTO in 0-RTT" 0x06
+    when (lvl == RTT0Level) $
+        closeConnection ProtocolViolation "CRYPTO in 0-RTT"
     let len = BS.length cdat
         rx = RxStreamData cdat off len False
     case lvl of
@@ -206,89 +203,88 @@ processFrame conn lvl (CryptoF off cdat) = do
         | isClient conn ->
               void $ putRxCrypto conn lvl rx
         | otherwise ->
-              sendCCFrameAndBreak conn lvl (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT" 0x06
+              closeConnection (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT"
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "NEW_TOKEN for server or in 1-RTT" 0x07
+        closeConnection ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
     when (isClient conn) $ setNewToken conn token
-processFrame conn lvl@RTT0Level (StreamF sid off (dat:_) fin) = do
+processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     when ((isClient conn && isClientInitiatedUnidirectional sid)
         ||(isServer conn && isServerInitiatedUnidirectional sid)) $
-        sendCCFrameAndBreak conn lvl StreamStateError "send-only stream" 0
+        closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
           ((isClient conn && isClientInitiated sid) ||
            (isServer conn && isServerInitiated sid))) $
-        sendCCFrameAndBreak conn lvl StreamStateError "a locally-initiated stream that has not yet been created" 0
+        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
-    lvl0 <- getEncryptionLevel conn
-    unless ok $ sendCCFrameAndBreak conn lvl0 FlowControlError "Flow control error in 0-RTT" 0
-processFrame conn lvl@RTT1Level (StreamF sid _ [""] False) = do
+    unless ok $ closeConnection FlowControlError "Flow control error in 0-RTT"
+processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     when ((isClient conn && isClientInitiatedUnidirectional sid)
         ||(isServer conn && isServerInitiatedUnidirectional sid)) $
-        sendCCFrameAndBreak conn lvl StreamStateError "send-only stream" 0
+        closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
           ((isClient conn && isClientInitiated sid) ||
            (isServer conn && isServerInitiated sid))) $
-        sendCCFrameAndBreak conn lvl StreamStateError "a locally-initiated stream that has not yet been created" 0
-processFrame conn lvl@RTT1Level (StreamF sid off (dat:_) fin) = do
+        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when ((isClient conn && isClientInitiatedUnidirectional sid)
         ||(isServer conn && isServerInitiatedUnidirectional sid)) $
-        sendCCFrameAndBreak conn lvl StreamStateError "send-only stream" 0
+        closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
           ((isClient conn && isClientInitiated sid) ||
            (isServer conn && isServerInitiated sid))) $
-        sendCCFrameAndBreak conn lvl StreamStateError "a locally-initiated stream that has not yet been created" 0
+        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
-    unless ok $ sendCCFrameAndBreak conn RTT1Level FlowControlError "Flow control error in 1-RTT" 0
+    unless ok $ closeConnection FlowControlError "Flow control error in 1-RTT"
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "MAX_DATA in Initial or Handshake" 0x010
+        closeConnection ProtocolViolation "MAX_DATA in Initial or Handshake"
     setTxMaxData conn n
 processFrame conn lvl (MaxStreamData sid n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "MAX_STREAM_DATA in Initial or Handshake" 0x011
+        closeConnection ProtocolViolation "MAX_STREAM_DATA in Initial or Handshake"
     when ((isClient conn && isServerInitiatedUnidirectional sid)
         ||(isServer conn && isClientInitiatedUnidirectional sid)) $
-        sendCCFrameAndBreak conn lvl StreamStateError "Receive-only stream" 0x11
+        closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
           when ((isClient conn && isClientInitiated sid)
               ||(isServer conn && isServerInitiated sid)) $
-              sendCCFrameAndBreak conn lvl StreamStateError "No such stream for MAX_STREAM_DATA" 0x11
+              closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
       Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "MAX_STREAMS in Initial or Handshake" 0
+        closeConnection ProtocolViolation "MAX_STREAMS in Initial or Handshake"
     when (n > 2^(60 :: Int)) $
-        sendCCFrameAndBreak conn lvl FrameEncodingError "Too large MAX_STREAMS" 0
+        closeConnection FrameEncodingError "Too large MAX_STREAMS"
     if dir == Bidirectional then
         setMyMaxStreams conn n
       else
         setMyUniMaxStreams conn n
 processFrame _conn _lvl DataBlocked{} = return ()
 processFrame _conn _lvl (StreamDataBlocked _sid _) = return ()
-processFrame conn lvl (StreamsBlocked _dir n) = do
+processFrame _conn lvl (StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake" 0
+        closeConnection ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake"
     when (n > 2^(60 :: Int)) $
-        sendCCFrameAndBreak conn lvl FrameEncodingError "Too large STREAMS_BLOCKED" 0
+        closeConnection FrameEncodingError "Too large STREAMS_BLOCKED"
 processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        sendCCFrameAndBreak conn lvl ProtocolViolation "NEW_CONNECTION_ID in Initial or Handshake" 0x18
+        closeConnection ProtocolViolation "NEW_CONNECTION_ID in Initial or Handshake"
     addPeerCID conn cidInfo
     let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
     when (cidlen < 1 || 20 < cidlen || rpt > cidInfoSeq cidInfo) $
-        sendCCFrameAndBreak conn lvl FrameEncodingError "NEW_CONNECTION_ID parameter error" 0x18
+        closeConnection FrameEncodingError "NEW_CONNECTION_ID parameter error"
     when (rpt >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         sendFrames conn RTT1Level $ map RetireConnectionID seqNums
@@ -312,19 +308,17 @@ processFrame conn RTT1Level (PathResponse dat) =
     checkResponse conn dat
 processFrame conn _lvl (ConnectionClose err _ftyp reason)
   | err == NoError = do
-        setCloseReceived conn
         onCloseReceived $ connHooks conn
         when (isServer conn) $ E.throwIO ConnectionIsClosed
   | otherwise = do
         let quicexc = TransportErrorIsReceived err reason
         E.throwIO quicexc
-processFrame conn _lvl (ConnectionCloseApp err reason) = do
-    setCloseReceived conn
+processFrame _ _lvl (ConnectionCloseApp err reason) = do
     let quicexc = ApplicationProtocolErrorIsReceived err reason
     E.throwIO quicexc
 processFrame conn lvl HandshakeDone
   | isServer conn || lvl /= RTT1Level =
-        sendCCFrameAndBreak conn lvl ProtocolViolation "HANDSHAKE_DONE for server" 0x1e
+        closeConnection ProtocolViolation "HANDSHAKE_DONE for server"
   | otherwise = do
         fire conn (Microseconds 100000) $ do
             let ldcc = connLDCC conn
@@ -339,7 +333,7 @@ processFrame conn lvl HandshakeDone
         setConnectionEstablished conn
         -- to receive NewSessionTicket
         fire conn (Microseconds 1000000) $ killHandshaker conn lvl
-processFrame conn lvl _ = sendCCFrameAndBreak conn lvl ProtocolViolation "Frame is not allowed" 0
+processFrame _ _ _ = closeConnection ProtocolViolation "Frame is not allowed"
 
 -- QUIC version 1 uses only short packets for stateless reset.
 -- But we should check other packets, too.

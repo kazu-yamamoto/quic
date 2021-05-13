@@ -28,8 +28,8 @@ import Network.QUIC.Socket
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
-readerClient :: ThreadId -> [Version] -> Socket -> Connection -> IO ()
-readerClient tid myVers s conn = handleLogUnit logAction loop
+readerClient :: [Version] -> Socket -> Connection -> IO ()
+readerClient myVers s conn = handleLogUnit logAction loop
   where
     loop = do
         ito <- readMinIdleTimeout conn
@@ -55,8 +55,7 @@ readerClient tid myVers s conn = handleLogUnit logAction loop
                   ver:_ -> do
                       ok <- checkCIDs conn dCID (Left sCID)
                       return $ if ok then Just ver else Nothing
-        -- Don't send CC
-        setCloseSent conn
+        let tid = mainThreadId conn
         case mver of
           Nothing  -> E.throwTo tid VersionNegotiationFailed
           Just ver -> E.throwTo tid $ NextVersion ver
@@ -137,6 +136,6 @@ rebind conn microseconds = do
     s1 <- getPeerName s0 >>= udpNATRebindingSocket
     _ <- addSocket conn s1
     v <- getVersion conn
-    mytid <- myThreadId
-    void $ forkIO $ readerClient mytid [v] s1 conn -- versions are dummy
+    let reader = readerClient [v] s1 conn
+    forkIO reader >>= addReader conn -- versions are dummy
     fire conn microseconds $ close s0

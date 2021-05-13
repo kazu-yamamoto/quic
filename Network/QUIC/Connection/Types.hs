@@ -27,13 +27,6 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data CloseState = CloseState {
-    closeSent     :: Bool
-  , closeReceived :: Bool
-  } deriving (Eq, Show)
-
-----------------------------------------------------------------
-
 dummySecrets :: TrafficSecrets a
 dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
@@ -46,7 +39,7 @@ data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , registerCID     :: CID -> Connection -> IO ()
                            , unregisterCID   :: CID -> IO ()
                            , askRetry        :: Bool
-                           , mainThreadId    :: ~ThreadId
+                           , baseThreadId    :: ~ThreadId
                            , certChain       :: Maybe CertificateChain
                            , sockAddrs       :: [(SockAddr,SockAddr)]
                            }
@@ -63,7 +56,7 @@ defaultServerRoleInfo = ServerInfo {
   , registerCID = \_ _ -> return ()
   , unregisterCID = \_ -> return ()
   , askRetry = False
-  , mainThreadId = undefined
+  , baseThreadId = undefined
   , certChain = Nothing
   , sockAddrs = []
   }
@@ -174,6 +167,7 @@ data Connection = Connection {
   , connRecvQ         :: RecvQ
   , sockets           :: IORef [Socket]
   , readers           :: IORef (IO ())
+  , mainThreadId      :: ThreadId
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersion       :: IORef Version
@@ -192,7 +186,6 @@ data Connection = Connection {
   , delayedAckCount   :: IORef Int
   , delayedAckCancel  :: IORef (IO ())
   -- State
-  , closeState        :: TVar CloseState
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , streamTable       :: IORef StreamTable
   , myStreamId        :: TVar Concurrency
@@ -256,6 +249,7 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref r
     connstate <- newConnState rl
     Connection connstate debugLog qLog hooks recvQ sref
         <$> newIORef (return ())
+        <*> myThreadId
         -- Info
         <*> newIORef initialRoleInfo
         <*> newIORef ver
@@ -274,7 +268,6 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref r
         <*> newIORef 0
         <*> newIORef (return ())
         -- State
-        <*> newTVarIO CloseState { closeSent = False, closeReceived = False }
         <*> newIORef 0
         <*> newIORef emptyStreamTable
         <*> newTVarIO (newConcurrency rl Bidirectional  0)
