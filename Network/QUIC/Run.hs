@@ -84,7 +84,7 @@ runClient conf client0 ver = do
                                               ,timeouter
                                               ]
             runThreads = race supporters client
-        E.try runThreads >>= closure conn
+        E.try runThreads >>= closure conn ldcc
   where
     open = createClientConnection conf ver
     clse connRes = do
@@ -170,7 +170,7 @@ runServer conf server0 dispatch baseThreadId acc =
                                                   ,ldccTimer ldcc
                                                   ]
                 runThreads = race supporters server
-            E.try runThreads >>= closure conn
+            E.try runThreads >>= closure conn ldcc
   where
     open = createServerConnection conf dispatch acc baseThreadId
     clse connRes = do
@@ -253,21 +253,21 @@ stopQUICServer conn = getBaseThreadId conn >>= killThread
 
 ----------------------------------------------------------------
 
-closure :: Connection -> Either QUICException (Either () a) -> IO a
-closure _    (Right (Left ())) = E.throwIO MustNotReached
-closure conn (Right (Right x)) = do
-    closure' conn $ ConnectionClose NoError 0 ""
+closure :: Connection -> LDCC -> Either QUICException (Either () a) -> IO a
+closure _    _    (Right (Left ())) = E.throwIO MustNotReached
+closure conn ldcc (Right (Right x)) = do
+    closure' conn ldcc $ ConnectionClose NoError 0 ""
     return x
-closure conn (Left e@(TransportErrorIsSent err desc)) = do
-    closure' conn $ ConnectionClose err 0 desc
+closure conn ldcc (Left e@(TransportErrorIsSent err desc)) = do
+    closure' conn ldcc $ ConnectionClose err 0 desc
     E.throwIO e
-closure conn (Left e@(ApplicationProtocolErrorIsSent err desc)) = do
-    closure' conn $ ConnectionCloseApp err desc
+closure conn ldcc (Left e@(ApplicationProtocolErrorIsSent err desc)) = do
+    closure' conn ldcc $ ConnectionCloseApp err desc
     E.throwIO e
-closure _ (Left e) = E.throwIO e
+closure _    _    (Left e) = E.throwIO e
 
-closure' :: Connection -> Frame -> IO ()
-closure' conn frame = do
+closure' :: Connection -> LDCC -> Frame -> IO ()
+closure' conn ldcc frame = do
     killReaders conn
     socks@(s:_) <- clearSockets conn
     let bufsiz = maximumUdpPayloadSize
@@ -283,8 +283,8 @@ closure' conn frame = do
     let recvBuf = sendBuf `plusPtr` (bufsiz * 2)
         recv = NS.recvBuf s recvBuf bufsiz
         send = NS.sendBuf s sendBuf siz
-    -- fixme
-    void $ forkFinally (closer (Microseconds 100000) send recv) $ \_ -> do
+    pto <- getPTO ldcc
+    void $ forkFinally (closer pto send recv) $ \_ -> do
         free sendBuf
         mapM_ NS.close socks
 

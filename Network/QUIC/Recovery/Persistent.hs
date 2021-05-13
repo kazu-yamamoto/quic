@@ -7,6 +7,7 @@ module Network.QUIC.Recovery.Persistent (
   , backOff
   , inPersistentCongestion
   , findDuration -- for testing
+  , getPTO
   ) where
 
 import Data.Sequence (Seq, ViewL(..))
@@ -84,3 +85,7 @@ findDuration pkts0 pn = leftEdge pkts0 Nothing
                   rightEdge (n + 1) pkts' mr0
           | otherwise -> (mr0, pkts)
 
+getPTO :: LDCC -> IO Microseconds
+getPTO LDCC{..} = do
+    rtt <- readIORef recoveryRTT
+    return $ calcPTO rtt Nothing
