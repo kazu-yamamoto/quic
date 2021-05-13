@@ -31,18 +31,17 @@ import Network.QUIC.Connection.Stream
 import Network.QUIC.Connection.StreamTable
 import Network.QUIC.Connection.Timeout
 import Network.QUIC.Connection.Types
-import Network.QUIC.Imports
 import Network.QUIC.Types
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
 sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames $ return ()
 
-closeConnection :: TransportError -> ShortByteString -> IO ()
+closeConnection :: TransportError -> ReasonPhrase -> IO ()
 closeConnection err desc = E.throwIO quicexc
   where
     quicexc = TransportErrorIsSent err desc
 
-abortConnection :: Connection -> ApplicationProtocolError -> ShortByteString -> IO ()
+abortConnection :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
 abortConnection conn err desc = E.throwTo (mainThreadId conn) quicexc
   where
     quicexc = ApplicationProtocolErrorIsSent err desc

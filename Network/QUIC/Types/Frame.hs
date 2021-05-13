@@ -15,7 +15,7 @@ type FrameType = Int
 
 data Direction = Unidirectional | Bidirectional deriving (Eq, Show)
 
-type ReasonPhrase = Bytes
+type ReasonPhrase = ShortByteString
 type SeqNum = Int
 
 data Frame = Padding Int
