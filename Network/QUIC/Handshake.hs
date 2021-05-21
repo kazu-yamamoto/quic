@@ -90,7 +90,7 @@ internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
 
 handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO (IO ())
 handshakeClient conf conn myAuthCIDs = do
-    qlogParamsSet conn (confParameters (ccConfig conf), "local") -- fixme
+    qlogParamsSet conn (ccParameters conf, "local") -- fixme
     handshakeClient' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
 
 handshakeClient' :: ClientConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()

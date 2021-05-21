@@ -152,11 +152,7 @@ transportErrorSpec cc0 ms = do
 addHook :: ClientConfig -> (Hooks -> Hooks) -> ClientConfig
 addHook cc modify = cc'
   where
-    conf = ccConfig cc
-    hooks = confHooks conf
-    hooks' = modify hooks
-    conf' = conf { confHooks = hooks' }
-    cc' = cc { ccConfig = conf' }
+    cc' = cc { ccHooks = modify $ ccHooks cc }
 
 setOnPlainCreated :: (EncryptionLevel -> Plain -> Plain) -> Hooks -> Hooks
 setOnPlainCreated f hooks = hooks { onPlainCreated = f }

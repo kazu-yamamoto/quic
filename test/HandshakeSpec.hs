@@ -27,17 +27,11 @@ spec = do
             testHandshake cc sc FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
             let cc = testClientConfig
-                sc = sc0 {
-                       scConfig = (scConfig sc0) {
-                                    confGroups = [P256]
-                                  }
-                     }
+                sc = sc0 { scGroups = [P256] }
             testHandshake cc sc HelloRetryRequest
         it "can handshake in the case of QUIC retry" $ do
             let cc = testClientConfig
-                sc = sc0 {
-                       scRequireRetry = True
-                     }
+                sc = sc0 { scRequireRetry = True }
             testHandshake cc sc FullHandshake
         it "can handshake in the case of resumption" $ do
             let cc = testClientConfig
@@ -45,9 +39,7 @@ spec = do
             testHandshake2 cc sc (FullHandshake, PreSharedKey) False
         it "can handshake in the case of 0-RTT" $ do
             let cc = testClientConfig
-                sc = sc0 {
-                       scEarlyDataSize  = 1024
-                     }
+                sc = sc0 { scEarlyDataSize  = 1024 }
             testHandshake2 cc sc (FullHandshake, RTT0) True
         it "fails with unknown server certificate" $ do
             let cc1 = testClientConfig {
@@ -60,45 +52,27 @@ spec = do
                     | otherwise = False
             testHandshake3 cc1 cc2 sc certificateRejected
         it "fails with no group in common" $ do
-            let cc1 = testClientConfig {
-                        ccConfig = (ccConfig testClientConfig) { confGroups = [X25519] }
-                      }
-                cc2 = testClientConfig {
-                        ccConfig = (ccConfig testClientConfig) { confGroups = [P256] }
-                      }
-                sc  = sc0 {
-                        scConfig = (scConfig sc0) {
-                              confGroups = [P256]
-                            }
-                      }
+            let cc1 = testClientConfig { ccGroups = [X25519] }
+                cc2 = testClientConfig { ccGroups = [P256] }
+                sc  = sc0 { scGroups = [P256] }
                 handshakeFailure e
                     | TransportErrorIsReceived te@(TransportError _) _ <- e = te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
             testHandshake3 cc1 cc2 sc handshakeFailure
         it "can handshake with large EE from a client" $ do
             let cc0 = testClientConfig
-                cconf0 = ccConfig cc0
-                params = (confParameters cconf0) {
+                params = (ccParameters cc0) {
                       greaseParameter = Just (BS.pack (replicate 2400 0))
                     }
-                cc = cc0 {
-                      ccConfig = cconf0 {
-                            confParameters = params
-                          }
-                    }
+                cc = cc0 { ccParameters = params }
                 sc = sc0
             testHandshake cc sc FullHandshake
         it "can handshake with large EE from a server (3-times rule)" $ do
             let cc = testClientConfig
-                sconf0 = scConfig sc0
-                params = (confParameters sconf0) {
+                params = (scParameters sc0) {
                       greaseParameter = Just (BS.pack (replicate 3800 0))
                     }
-                sc = sc0 {
-                      scConfig = sconf0 {
-                            confParameters = params
-                          }
-                    }
+                sc = sc0 { scParameters = params }
             testHandshake cc sc FullHandshake
 
 onE :: IO b -> IO a -> IO a

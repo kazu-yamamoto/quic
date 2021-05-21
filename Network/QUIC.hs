@@ -32,8 +32,6 @@ module Network.QUIC (
   , defaultClientConfig
   , ServerConfig(..)
   , defaultServerConfig
-  , Config(..)
-  , defaultConfig
   , Hooks(..)
   , defaultHooks
   -- * Types

@@ -32,9 +32,7 @@ makeTestServerConfig = do
     cred <- either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
     let credentials = Credentials [cred]
     return testServerConfig {
-        scConfig = (scConfig testServerConfig) {
-              confCredentials = credentials
-            }
+        scCredentials = credentials
       , scALPN = Just chooseALPN
       }
 
@@ -48,9 +46,7 @@ makeTestServerConfigR = do
     cred <- either error id <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
     let credentials = Credentials [cred]
     return testServerConfigR {
-        scConfig = (scConfig testServerConfigR) {
-              confCredentials = credentials
-            }
+        scCredentials = credentials
       , scALPN = Just chooseALPN
       }
 

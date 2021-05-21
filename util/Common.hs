@@ -29,7 +29,7 @@ namedGroups =
     ]
 
 getGroups :: Maybe String -> [Group]
-getGroups Nothing   = confGroups defaultConfig
+getGroups Nothing   = scGroups defaultServerConfig -- fixme
 getGroups (Just gs) = mapMaybe (`lookup` namedGroups) $ split ',' gs
 
 split :: Char -> String -> [String]

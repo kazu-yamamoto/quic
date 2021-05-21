@@ -116,12 +116,10 @@ main = do
           , scSessionManager = smgr
           , scEarlyDataSize  = 1024
           , scDebugLog       = optDebugLogDir
-          , scConfig         = defaultConfig {
-                confKeyLog      = getLogger optKeyLogFile
-              , confGroups      = getGroups optGroups
-              , confQLog        = optQLogDir
-              , confCredentials = Credentials [cred]
-              }
+          , scKeyLog         = getLogger optKeyLogFile
+          , scGroups         = getGroups optGroups
+          , scQLog           = optQLogDir
+          , scCredentials    = Credentials [cred]
           }
     runQUICServer conf $ \conn -> do
         info <- getConnectionInfo conn

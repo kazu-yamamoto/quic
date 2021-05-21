@@ -318,9 +318,7 @@ clientConnection :: ClientConfig
                  -> RecvQ
                  -> IO Connection
 clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
-    newConnection Client params ver myAuthCIDs peerAuthCIDs
-  where
-    params = confParameters ccConfig
+    newConnection Client ccParameters ver myAuthCIDs peerAuthCIDs
 
 serverConnection :: ServerConfig
                  -> Version -> AuthCIDs -> AuthCIDs
@@ -329,9 +327,7 @@ serverConnection :: ServerConfig
                  -> RecvQ
                  -> IO Connection
 serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
-    newConnection Server params ver myAuthCIDs peerAuthCIDs
-  where
-    params = confParameters scConfig
+    newConnection Server scParameters ver myAuthCIDs peerAuthCIDs
 
 ----------------------------------------------------------------
 

@@ -40,9 +40,9 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
       , clientWantSessionResume = resumptionSession ccResumption
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
-    convTP = onTransportParametersCreated $ confHooks ccConfig
-    convExt = onTLSExtensionCreated $ confHooks ccConfig
-    qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters ccConfig
+    convTP = onTransportParametersCreated ccHooks
+    convExt = onTLSExtensionCreated ccHooks
+    qparams = convTP $ setCIDsToParameters myAuthCIDs ccParameters
     eQparams = encodeParameters qparams
     tpId | ver == Version1 = extensionID_QuicTransportParameters
          | otherwise       = 0xffa5
@@ -58,11 +58,11 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
         onSuggestALPN = ccALPN ver
       }
     supported = defaultSupported {
-        supportedCiphers  = confCiphers ccConfig
-      , supportedGroups   = confGroups  ccConfig
+        supportedCiphers  = ccCiphers
+      , supportedGroups   = ccGroups
       }
     debug = def {
-        debugKeyLogger = confKeyLog ccConfig
+        debugKeyLogger = ccKeyLog
       }
 
 serverHandshaker :: QUICCallbacks
@@ -80,14 +80,14 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
       , serverDebug     = debug
       , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
       }
-    convTP = onTransportParametersCreated $ confHooks scConfig
-    convExt = onTLSExtensionCreated $ confHooks scConfig
-    qparams = convTP $ setCIDsToParameters myAuthCIDs $ confParameters scConfig
+    convTP = onTransportParametersCreated scHooks
+    convExt = onTLSExtensionCreated scHooks
+    qparams = convTP $ setCIDsToParameters myAuthCIDs scParameters
     eQparams = encodeParameters qparams
     tpId | ver == Version1 = extensionID_QuicTransportParameters
          | otherwise       = 0xffa5
     sshared = def {
-            sharedCredentials     = confCredentials scConfig
+            sharedCredentials     = scCredentials
           , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]
           , sharedSessionManager  = scSessionManager
           }
@@ -98,9 +98,9 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
       }
     supported = def {
         supportedVersions = [TLS13]
-      , supportedCiphers  = confCiphers scConfig
-      , supportedGroups   = confGroups  scConfig
+      , supportedCiphers  = scCiphers
+      , supportedGroups   = scGroups
       }
     debug = def {
-        debugKeyLogger = confKeyLog scConfig
+        debugKeyLogger = scKeyLog
       }

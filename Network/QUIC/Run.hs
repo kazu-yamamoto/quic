@@ -52,7 +52,7 @@ connResConnection (ConnRes conn _ _ _ _) = conn
 -- | Running a QUIC client.
 runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
-runQUICClient conf client = case confVersions $ ccConfig conf of
+runQUICClient conf client = case ccVersions conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
       ex <- E.try $ runClient conf client ver1
@@ -108,14 +108,13 @@ createClientConnection conf@ClientConfig{..} ver = do
     myCID   <- newCID
     peerCID <- newCID
     now <- getTimeMicrosecond
-    (qLog, qclean) <- dirQLogger (confQLog ccConfig) now peerCID "client"
+    (qLog, qclean) <- dirQLogger ccQLog now peerCID "client"
     let debugLog msg | ccDebugLog = stdoutLogger msg
                      | otherwise  = return ()
     debugLog $ "Original CID: " <> bhow peerCID
     let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
-        hooks = confHooks ccConfig
-    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref q
+    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog ccHooks sref q
     addResource conn qclean
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
@@ -124,7 +123,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
-    let reader = readerClient (confVersions ccConfig) s0 conn -- dies when s0 is closed.
+    let reader = readerClient ccVersions s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
 
 ----------------------------------------------------------------
@@ -196,11 +195,10 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
         recv = recvServer accRecvQ
     let Just myCID = initSrcCID accMyAuthCIDs
         Just ocid  = origDstCID accMyAuthCIDs
-    (qLog, qclean)     <- dirQLogger (confQLog scConfig) accTime ocid "server"
+    (qLog, qclean)     <- dirQLogger scQLog accTime ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
-    let hooks = confHooks scConfig
     debugLog $ "Original CID: " <> bhow ocid
-    conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog hooks sref accRecvQ
+    conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog scHooks sref accRecvQ
     setSockAddrs conn (accMySockAddr,accPeerSockAddr)
     addResource conn qclean
     addResource conn dclean

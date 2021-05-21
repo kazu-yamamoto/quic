@@ -170,15 +170,13 @@ main = do
           , ccValidate   = optValidate
           , ccPacketSize = optPacketSize
           , ccDebugLog   = optDebugLog
-          , ccConfig     = defaultConfig {
-                confVersions   = confver $ confVersions defaultConfig
-              , confParameters = confparams $ confParameters defaultConfig
-              , confKeyLog     = getLogger optKeyLogFile
-              , confGroups     = getGroups optGroups
-              , confQLog       = optQLogDir
-              , confHooks      = defaultHooks {
-                    onCloseCompleted = putMVar cmvar ()
-                  }
+          , ccVersions   = confver $ ccVersions defaultClientConfig
+          , ccParameters = confparams $ ccParameters defaultClientConfig
+          , ccKeyLog     = getLogger optKeyLogFile
+          , ccGroups     = getGroups optGroups
+          , ccQLog       = optQLogDir
+          , ccHooks      = defaultHooks {
+                onCloseCompleted = putMVar cmvar ()
               }
           }
         debug | optDebugLog = putStrLn
