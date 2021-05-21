@@ -78,7 +78,7 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
       , serverHooks     = hook
       , serverSupported = supported
       , serverDebug     = debug
-      , serverEarlyDataSize = if scEarlyDataSize > 0 then quicMaxEarlyDataSize else 0
+      , serverEarlyDataSize = if scUse0RTT then quicMaxEarlyDataSize else 0
       }
     convTP = onTransportParametersCreated scHooks
     convExt = onTLSExtensionCreated scHooks

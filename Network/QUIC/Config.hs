@@ -48,13 +48,13 @@ data ClientConfig = ClientConfig {
   , ccQLog        :: Maybe FilePath
   , ccCredentials :: Credentials
   , ccHooks       :: Hooks
+  , ccUse0RTT    :: Bool
   -- client original
   , ccServerName :: HostName
   , ccPortName   :: ServiceName
   , ccALPN       :: Version -> IO (Maybe [ByteString])
   , ccValidate   :: Bool
   , ccResumption :: ResumptionInfo
-  , ccUse0RTT    :: Bool
   , ccPacketSize :: Maybe Int -- ^ QUIC packet size (UDP payload size)
   , ccDebugLog   :: Bool
   }
@@ -71,12 +71,13 @@ defaultClientConfig = ClientConfig {
   , ccQLog        = Nothing
   , ccCredentials = mempty
   , ccHooks       = defaultHooks
+  , ccUse0RTT     = False
+  -- client original
   , ccServerName  = "127.0.0.1"
   , ccPortName    = "4433"
   , ccALPN        = \_ -> return Nothing
   , ccValidate    = False
   , ccResumption  = defaultResumptionInfo
-  , ccUse0RTT     = False
   , ccPacketSize  = Nothing
   , ccDebugLog    = False
   }
@@ -93,11 +94,12 @@ data ServerConfig = ServerConfig {
   , scQLog           :: Maybe FilePath
   , scCredentials    :: Credentials
   , scHooks          :: Hooks
+  , scUse0RTT        :: Bool
+  -- server original
   , scAddresses      :: [(IP,PortNumber)]
   , scALPN           :: Maybe (Version -> [ByteString] -> IO ByteString)
   , scRequireRetry   :: Bool
   , scSessionManager :: SessionManager
-  , scEarlyDataSize  :: Int
   , scDebugLog       :: Maybe FilePath
   }
 
@@ -113,11 +115,11 @@ defaultServerConfig = ServerConfig {
   , scQLog           = Nothing
   , scCredentials    = mempty
   , scHooks          = defaultHooks
+  , scUse0RTT        = False
   -- server original
   , scAddresses      = [("127.0.0.1",4433)]
   , scALPN           = Nothing
   , scRequireRetry   = False
   , scSessionManager = noSessionManager
-  , scEarlyDataSize  = 0
   , scDebugLog       = Nothing
   }

@@ -16,7 +16,7 @@ setup = do
     sc' <- makeTestServerConfig
     smgr <- newSessionManager
     let sc = sc' { scSessionManager = smgr
-                 , scEarlyDataSize  = 1024
+                 , scUse0RTT        = True
                  }
     tid <- forkIO $ runQUICServer sc loop
     threadDelay 500000 -- give enough time to the server

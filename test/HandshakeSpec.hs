@@ -39,7 +39,7 @@ spec = do
             testHandshake2 cc sc (FullHandshake, PreSharedKey) False
         it "can handshake in the case of 0-RTT" $ do
             let cc = testClientConfig
-                sc = sc0 { scEarlyDataSize  = 1024 }
+                sc = sc0 { scUse0RTT = True }
             testHandshake2 cc sc (FullHandshake, RTT0) True
         it "fails with unknown server certificate" $ do
             let cc1 = testClientConfig {
