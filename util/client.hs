@@ -163,17 +163,18 @@ main = do
           | optQuantum = let bs = BS.replicate 1200 0
                          in params { greaseParameter = Just bs }
           | otherwise  = params
-        conf = defaultClientConfig {
+        cc0 = defaultClientConfig
+        cc = cc0 {
             ccServerName = addr
           , ccPortName   = port
           , ccALPN       = ccalpn
           , ccValidate   = optValidate
           , ccPacketSize = optPacketSize
           , ccDebugLog   = optDebugLog
-          , ccVersions   = confver $ ccVersions defaultClientConfig
-          , ccParameters = confparams $ ccParameters defaultClientConfig
+          , ccVersions   = confver $ ccVersions cc0
+          , ccParameters = confparams $ ccParameters cc0
           , ccKeyLog     = getLogger optKeyLogFile
-          , ccGroups     = getGroups optGroups
+          , ccGroups     = getGroups (ccGroups cc0) optGroups
           , ccQLog       = optQLogDir
           , ccHooks      = defaultHooks {
                 onCloseCompleted = putMVar cmvar ()
@@ -194,12 +195,12 @@ main = do
                   Nothing -> return False
                   _       -> return True
           }
-    runClient conf opts aux
+    runClient cc opts aux
 
 runClient :: ClientConfig -> Options -> Aux -> IO ()
-runClient conf opts@Options{..} aux@Aux{..} = do
+runClient cc opts@Options{..} aux@Aux{..} = do
     auxDebug "------------------------"
-    (info1,info2,res,mig,client') <- runQUICClient conf $ \conn -> do
+    (info1,info2,res,mig,client') <- runQUICClient cc $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ
@@ -231,7 +232,7 @@ runClient conf opts@Options{..} aux@Aux{..} = do
         exitSuccess
       else if optResumption then do
         if isResumptionPossible res then do
-            info3 <- runClient2 conf opts aux res client'
+            info3 <- runClient2 cc opts aux res client'
             if handshakeMode info3 == PreSharedKey then do
                 putStrLn "Result: (R) TLS resumption ... OK"
                 exitSuccess
@@ -243,7 +244,7 @@ runClient conf opts@Options{..} aux@Aux{..} = do
             exitFailure
       else if opt0RTT then do
         if is0RTTPossible res then do
-            info3 <- runClient2 conf opts aux res client'
+            info3 <- runClient2 cc opts aux res client'
             if handshakeMode info3 == RTT0 then do
                 putStrLn "Result: (Z) 0-RTT ... OK"
                 exitSuccess
@@ -301,15 +302,15 @@ runClient conf opts@Options{..} aux@Aux{..} = do
 
 runClient2 :: ClientConfig -> Options -> Aux -> ResumptionInfo -> Cli
            -> IO ConnectionInfo
-runClient2 conf Options{..} aux@Aux{..} res client = do
+runClient2 cc Options{..} aux@Aux{..} res client = do
     threadDelay 100000
     auxDebug "<<<< next connection >>>>"
     auxDebug "------------------------"
-    runQUICClient conf' $ \conn -> do
+    runQUICClient cc' $ \conn -> do
         void $ client aux conn
         getConnectionInfo conn
   where
-    conf' = conf {
+    cc' = cc {
         ccResumption = res
       , ccUse0RTT    = opt0RTT && is0RTTPossible res
       }

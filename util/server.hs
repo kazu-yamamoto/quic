@@ -109,7 +109,8 @@ main = do
         aps = (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
     Right cred@(!_cc,!_priv) <- credentialLoadX509 optCertFile optKeyFile
-    let conf = defaultServerConfig {
+    let sc0 = defaultServerConfig
+        sc = sc0 {
             scAddresses      = aps
           , scALPN           = Just chooseALPN
           , scRequireRetry   = optRetry
@@ -117,11 +118,11 @@ main = do
           , scEarlyDataSize  = 1024
           , scDebugLog       = optDebugLogDir
           , scKeyLog         = getLogger optKeyLogFile
-          , scGroups         = getGroups optGroups
+          , scGroups         = getGroups (scGroups sc0) optGroups
           , scQLog           = optQLogDir
           , scCredentials    = Credentials [cred]
           }
-    runQUICServer conf $ \conn -> do
+    runQUICServer sc $ \conn -> do
         info <- getConnectionInfo conn
         let server = case alpn info of
               Just proto | "perf" == proto            -> serverPF
