@@ -28,4 +28,4 @@ teardown :: ThreadId -> IO ()
 teardown tid = killThread tid
 
 spec :: Spec
-spec = beforeAll setup $ afterAll teardown $ transportErrorSpec testClientConfig
+spec = beforeAll setup $ afterAll teardown $ transportErrorSpec testClientConfig 2000 -- 2 seconds

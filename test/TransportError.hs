@@ -18,119 +18,123 @@ import Network.QUIC.Internal hiding (timeout)
 
 ----------------------------------------------------------------
 
-runC :: ClientConfig -> (Connection -> IO a) -> IO (Maybe a)
-runC cc body = timeout 2000000 $ runQUICClient cc body'
+type Millisecond = Int
+
+runC :: ClientConfig -> Millisecond -> (Connection -> IO a) -> IO (Maybe a)
+runC cc ms body = timeout us $ runQUICClient cc body'
   where
+    us = ms * 1000
     body' conn = do
         waitEstablished conn
         threadDelay 100000
         body conn
 
-runCnoOp :: ClientConfig -> IO (Maybe ())
-runCnoOp cc = timeout 2000000 $ runQUICClient cc body'
+runCnoOp :: ClientConfig -> Millisecond -> IO (Maybe ())
+runCnoOp cc ms = timeout us $ runQUICClient cc body'
   where
+    us = ms * 1000
     body' conn = do
         waitEstablished conn
-        threadDelay 1000000
+        threadDelay us
 
-transportErrorSpec :: ClientConfig -> SpecWith a
-transportErrorSpec cc0 = do
+transportErrorSpec :: ClientConfig -> Millisecond -> SpecWith a
+transportErrorSpec cc0 ms = do
     describe "QUIC servers" $ do
         it "MUST send FLOW_CONTROL_ERROR if a STREAM frame with a large offset is received [Transport 4.1]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated largeOffset
-            runCnoOp cc `shouldThrow` transportErrorsIn [FlowControlError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [FlowControlError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated dropInitialSourceConnectionId
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if original_destination_connection_id is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setOriginalDestinationConnectionId
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if preferred_address, is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setPreferredAddress
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if retry_source_connection_id is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setRetrySourceConnectionId
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if stateless_reset_token is received [Transport 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setStatelessResetToken
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size < 1200 [Transport 7.4 and 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if ack_delay_exponen > 20 [Transport 7.4 and 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setAckDelayExponent
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if max_ack_delay >= 2^14 [Transport 7.4 and 18.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated setMaxAckDelay
-            runCnoOp cc `shouldThrow` transportErrorsIn [TransportParameterError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated unknownFrame
-            runCnoOp cc `shouldThrow` transportErrorsIn [FrameEncodingError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError]
         it "MUST send PROTOCOL_VIOLATION on no frames [Transport 12.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated noFrames
-            runCnoOp cc `shouldThrow` transportError
+            runCnoOp cc ms `shouldThrow` transportError
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Handshake are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits HandshakeLevel
-            runCnoOp cc `shouldThrow` transportError
+            runCnoOp cc ms `shouldThrow` transportError
         it "MUST send PROTOCOL_VIOLATION if PATH_CHALLENGE in Handshake is received [Transport 17.2.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakePathChallenge
-            runCnoOp cc `shouldThrow` transportError
+            runCnoOp cc ms `shouldThrow` transportError
         it "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
-            runCnoOp cc `shouldThrow` transportError
+            runCnoOp cc ms `shouldThrow` transportError
         it "MUST send STREAM_STATE_ERROR if RESET_STREAM is received for a send-only stream [Transport 19.4]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated resetStrm
-            runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send STREAM_STATE_ERROR if STOP_SENDING is received for a non-existing stream [Transport 19.5]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated stopSending
-            runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send PROTOCOL_VIOLATION if NEW_TOKEN is received [Transport 19.7]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated newToken
-            runCnoOp cc `shouldThrow` transportError
+            runCnoOp cc ms `shouldThrow` transportError
         it "MUST send STREAM_STATE_ERROR if it receives a STREAM frame for a locally-initiated stream that has not yet been created [Transport 19.8]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated localInitiatedNotCreatedYet
-            runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send STREAM_STATE_ERROR if it receives a STREAM frame for a send-only stream [Transport 19.8]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated sendOnlyStream
-            runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.10]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated maxStreamData
-            runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a receive-only stream [Transport 19.10]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated maxStreamData2
-            runCnoOp cc `shouldThrow` transportErrorsIn [StreamStateError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it "MUST send FRAME_ENCODING_ERROR if invalid MAX_STREAMS is received [Transport 19.11]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated maxStreams'
-            runCnoOp cc `shouldThrow` transportErrorsIn [FrameEncodingError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError]
         it "MUST send STREAM_LIMIT_ERROR or FRAME_ENCODING_ERROR if invalid STREAMS_BLOCKED is received [Transport 19.14]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated streamsBlocked
-            runCnoOp cc `shouldThrow` transportErrorsIn [FrameEncodingError,StreamLimitError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError,StreamLimitError]
         it "MUST send FRAME_ENCODING_ERROR if NEW_CONNECTION_ID with invalid Retire_Prior_To is received [Transport 19.15]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ newConnectionID ncidLargeRPT
-            runCnoOp cc `shouldThrow` transportErrorsIn [FrameEncodingError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError]
         it "MUST send FRAME_ENCODING_ERROR if NEW_CONNECTION_ID with 0-byte CID is received [Transport 19.15]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated $ newConnectionID ncidZeroCID
-            runCnoOp cc `shouldThrow` transportErrorsIn [FrameEncodingError]
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError]
         it "MUST send PROTOCOL_VIOLATION if HANDSHAKE_DONE is received [Transport 19.20]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated handshakeDone
-            runCnoOp cc `shouldThrow` transportError
+            runCnoOp cc ms `shouldThrow` transportError
         it "MUST send unexpected_message TLS alert if KeyUpdate in Handshake is received [TLS 6]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate
-            runCnoOp cc `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
+            runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send unexpected_message TLS alert if KeyUpdate in 1-RTT is received [TLS 6]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoKeyUpdate2
-            runC cc (\_ -> threadDelay 1000000) `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
+            runC cc ms (\_ -> threadDelay 1000000) `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send no_application_protocol TLS alert if no application protocols are supported [TLS 8.1]" $ \_ -> do
             let cc = cc0 { ccALPN = \_ -> return $ Just ["dummy"] }
-            runCnoOp cc `shouldThrow` cryptoErrorsIn [TLS.NoApplicationProtocol]
+            runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.NoApplicationProtocol]
         it "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
-            runCnoOp cc `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
+            runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
         it "MUST send unexpected_message TLS alert if EndOfEarlyData is received [TLS 8.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoEndOfEarlyData
-            runCnoOp cc `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
+            runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.UnexpectedMessage]
         it "MUST send PROTOCOL_VIOLATION if CRYPTO in 0-RTT is received [TLS 8.3]" $ \_ -> do
-            mres <- runC cc0 getResumptionInfo
+            mres <- runC cc0 ms getResumptionInfo
             case mres of
               Just res
                 | is0RTTPossible res -> do
@@ -138,7 +142,7 @@ transportErrorSpec cc0 = do
                         cc = cc1 { ccResumption = res
                                  , ccUse0RTT = True
                                  }
-                    runCnoOp cc `shouldThrow` transportError
+                    runCnoOp cc ms `shouldThrow` transportError
               _ -> do
                     putStrLn "Warning: 0-RTT is not possible. Skipping this test. Use \"h3spec -s 0-RTT\" next time."
                     when (ccDebugLog cc0) $ print mres
