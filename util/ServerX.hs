@@ -6,11 +6,11 @@
 module ServerX where
 
 import Control.Concurrent
-import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
 import Data.ByteString.Builder
 import Network.ByteOrder
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC
 import H3

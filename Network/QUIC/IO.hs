@@ -3,8 +3,8 @@
 module Network.QUIC.IO where
 
 import Control.Concurrent.STM
-import qualified Control.Exception as E
 import qualified Data.ByteString as BS
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector

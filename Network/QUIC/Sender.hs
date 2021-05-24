@@ -7,10 +7,10 @@ module Network.QUIC.Sender (
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (plusPtr)
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection

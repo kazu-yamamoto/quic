@@ -18,7 +18,6 @@ module Network.QUIC.Server (
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
@@ -31,6 +30,7 @@ import Network.ByteOrder
 import Network.Socket hiding (accept)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -170,16 +170,14 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction $
     logAction msg = stdoutLogger ("dispatcher: " <> msg)
     recv = do
 --        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
-        ex <- E.try $ NSB.recvFrom s maximumUdpPayloadSize
+        ex <- E.tryAny $ NSB.recvFrom s maximumUdpPayloadSize
         case ex of
            Right x -> return x
-           Left se
-             | Just E.ThreadKilled <- E.fromException se -> E.throwIO se
-             | otherwise -> case E.fromException se of
-                  Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
-                  _ -> do
-                      stdoutLogger $ "recv again: " <> bhow se
-                      recv
+           Left se -> case E.fromException se of
+              Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
+              _ -> do
+                  stdoutLogger $ "recv again: " <> bhow se
+                  recv
 
 ----------------------------------------------------------------
 

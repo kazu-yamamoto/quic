@@ -3,9 +3,9 @@
 
 module Network.QUIC.Handshake where
 
-import qualified Control.Exception as E
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection

@@ -42,7 +42,6 @@ module Network.QUIC.Crypto (
   , calculateIntegrityTag
   ) where
 
-import qualified Control.Exception as E
 import Crypto.Cipher.AES
 import qualified Crypto.Cipher.ChaCha as ChaCha
 import qualified Crypto.Cipher.ChaChaPoly1305 as ChaChaPoly
@@ -60,6 +59,7 @@ import Foreign.Storable (peek, poke)
 import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -125,8 +125,8 @@ initialSalt Draft32 = "\xaf\xbf\xec\x28\x99\x93\xd2\x4c\x9e\x97\x86\xf1\x9c\x61\
 initialSalt Version1 = "\x38\x76\x2c\xf7\xf5\x59\x34\xb3\x4d\x17\x9a\xe6\xa4\xc8\x0c\xad\xcc\xbb\x7f\x0a"
 initialSalt GreasingVersion    = "greasing version!!!!"
 initialSalt GreasingVersion2   = "greasing version!!!!"
-initialSalt (UnknownVersion v) = E.throw $ VersionIsUnknown v
-initialSalt Negotiation        = E.throw $ VersionIsUnknown 0
+initialSalt (UnknownVersion v) = E.impureThrow $ VersionIsUnknown v
+initialSalt Negotiation        = E.impureThrow $ VersionIsUnknown 0
 
 data InitialSecret
 

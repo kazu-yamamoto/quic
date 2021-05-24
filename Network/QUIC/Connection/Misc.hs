@@ -28,10 +28,10 @@ module Network.QUIC.Connection.Misc (
   , abortConnection
   ) where
 
-import Control.Concurrent
-import qualified Control.Exception as E
 import Network.Socket
 import System.Mem.Weak
+import UnliftIO.Concurrent
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Timeout

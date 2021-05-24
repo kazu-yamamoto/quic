@@ -13,7 +13,6 @@ module Config (
   ) where
 
 import Control.Concurrent
-import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -23,6 +22,7 @@ import qualified Data.List as L
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS (Credentials(..), credentialLoadX509, SessionManager(..), SessionData, SessionID)
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC
 import Network.QUIC.Internal

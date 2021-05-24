@@ -1,6 +1,6 @@
 module Network.QUIC.Types.Exception where
 
-import qualified Control.Exception as E
+import qualified UnliftIO.Exception as E
 import qualified Network.TLS as TLS
 
 import Network.QUIC.Imports

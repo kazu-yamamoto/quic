@@ -3,13 +3,13 @@
 module HandshakeSpec where
 
 import Control.Concurrent
-import Control.Concurrent.Async
-import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
 import Network.TLS (HandshakeMode13(..), Group(..))
 import qualified Network.TLS as TLS
 import Test.Hspec
+import UnliftIO.Async
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC
 
@@ -79,7 +79,7 @@ onE :: IO b -> IO a -> IO a
 onE h b = E.onException b h
 
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
-testHandshake cc sc mode = void $ concurrently server client
+testHandshake cc sc mode = concurrently_ server client
   where
     client = do
         threadDelay 10000
@@ -100,7 +100,7 @@ query content conn = do
     void $ recvStream s 1024
 
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
-testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently server client
+testHandshake2 cc1 sc (mode1, mode2) use0RTT = concurrently_ server client
   where
     runClient cc mode action = runQUICClient cc $ \conn -> do
         void $ action conn
@@ -123,7 +123,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = void $ concurrently server client
             when (bs == "second") $ stopQUICServer conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
-testHandshake3 cc1 cc2 sc selector = void $ concurrently server client
+testHandshake3 cc1 cc2 sc selector = concurrently_ server client
   where
     client = do
         threadDelay 10000

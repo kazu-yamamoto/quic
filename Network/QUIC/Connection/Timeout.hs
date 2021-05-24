@@ -10,7 +10,8 @@ module Network.QUIC.Connection.Timeout (
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Exception as E
+import qualified Control.Exception as OldE
+import qualified Control.Monad.IO.Unlift as E
 import Data.Typeable
 import GHC.Event
 import System.IO.Unsafe (unsafePerformIO)
@@ -22,7 +23,7 @@ import Network.QUIC.Types
 
 data TimeoutException = TimeoutException deriving (Show, Typeable)
 
-instance Exception TimeoutException
+instance OldE.Exception TimeoutException
 
 globalTimeoutQ :: TQueue (IO ())
 globalTimeoutQ = unsafePerformIO newTQueueIO
@@ -32,15 +33,18 @@ timeouter :: IO ()
 timeouter = forever $ join $ atomically (readTQueue globalTimeoutQ)
 
 timeout :: Microseconds -> IO a -> IO (Maybe a)
-timeout (Microseconds microseconds) action = do
+timeout ms action = E.withRunInIO $ \run -> timeout' ms $ run action
+
+timeout' :: Microseconds -> IO a -> IO (Maybe a)
+timeout' (Microseconds microseconds) action = do
     tid <- myThreadId
     timmgr <- getSystemTimerManager
-    let killMe = E.throwTo tid TimeoutException
+    let killMe = OldE.throwTo tid TimeoutException
         onTimeout = atomically $ writeTQueue globalTimeoutQ killMe
         setup = registerTimeout timmgr microseconds onTimeout
         cleanup key = unregisterTimeout timmgr key
-    E.handle (\TimeoutException -> return Nothing) $
-        E.bracket setup cleanup $ \_ -> Just <$> action
+    OldE.handle (\TimeoutException -> return Nothing) $
+        OldE.bracket setup cleanup $ \_ -> Just <$> action
 
 fire :: Connection -> Microseconds -> TimeoutCallback -> IO ()
 fire conn (Microseconds microseconds) action = do
@@ -49,7 +53,7 @@ fire conn (Microseconds microseconds) action = do
   where
     action' = do
         alive <- getAlive conn
-        when alive action `E.catch` ignore
+        when alive action `OldE.catch` ignore
 
 cfire :: Connection -> Microseconds -> TimeoutCallback -> IO (IO ())
 cfire conn (Microseconds microseconds) action = do
@@ -60,7 +64,7 @@ cfire conn (Microseconds microseconds) action = do
   where
     action' = do
         alive <- getAlive conn
-        when alive action `E.catch` ignore
+        when alive action `OldE.catch` ignore
 
 delay :: Microseconds -> IO ()
 delay (Microseconds microseconds) = threadDelay microseconds

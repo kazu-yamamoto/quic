@@ -10,14 +10,14 @@ module Network.QUIC.Run (
   , clientCertificateChain
   ) where
 
-import Control.Concurrent
-import Control.Concurrent.Async
-import qualified Control.Exception as E
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import qualified Network.Socket as NS
 import System.Log.FastLogger
+import UnliftIO.Async
+import UnliftIO.Concurrent
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Client
 import Network.QUIC.Closer

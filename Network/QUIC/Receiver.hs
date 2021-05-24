@@ -5,10 +5,10 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Foreign.Marshal.Alloc
 import Network.TLS (AlertDescription(..))
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection

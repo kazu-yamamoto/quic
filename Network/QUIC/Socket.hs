@@ -1,7 +1,7 @@
 module Network.QUIC.Socket where
 
 import Control.Concurrent
-import qualified Control.Exception as E
+import qualified UnliftIO.Exception as E
 import Data.IP hiding (addr)
 import qualified GHC.IO.Exception as E
 import Network.Socket
