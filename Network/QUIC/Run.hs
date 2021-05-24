@@ -10,6 +10,7 @@ module Network.QUIC.Run (
   , clientCertificateChain
   ) where
 
+import qualified Control.Exception as OldE
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
@@ -55,11 +56,11 @@ runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
 runQUICClient conf client = case ccVersions conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
-      ex <- E.try $ runClient conf client ver1
+      ex <- OldE.try $ runClient conf client ver1
       case ex of
         Right v                     -> return v
-        Left se@(E.SomeException e)
-          | Just (NextVersion ver2) <- E.fromException se
+        Left se@(OldE.SomeException e)
+          | Just (NextVersion ver2) <- OldE.fromException se
                                     -> runClient conf client ver2
           | otherwise               -> E.throwIO e
 
@@ -84,7 +85,7 @@ runClient conf client0 ver = do
                                               ,ldccTimer ldcc
                                               ]
             runThreads = race supporters client
-        E.try runThreads >>= closure conn ldcc
+        OldE.try runThreads >>= closure conn ldcc
   where
     open = createClientConnection conf ver
     clse connRes = do
@@ -170,7 +171,7 @@ runServer conf server0 dispatch baseThreadId acc =
                                                   ,ldccTimer ldcc
                                                   ]
                 runThreads = race supporters server
-            E.try runThreads >>= closure conn ldcc
+            OldE.try runThreads >>= closure conn ldcc
   where
     open = createServerConnection conf dispatch acc baseThreadId
     clse connRes = do

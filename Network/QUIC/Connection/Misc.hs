@@ -28,6 +28,7 @@ module Network.QUIC.Connection.Misc (
   , abortConnection
   ) where
 
+import qualified Control.Exception as OldE
 import Network.Socket
 import System.Mem.Weak
 import UnliftIO.Concurrent
@@ -169,6 +170,6 @@ closeConnection err desc = E.throwIO quicexc
 
 -- | Closing a connection with an application protocol error.
 abortConnection :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
-abortConnection conn err desc = E.throwTo (mainThreadId conn) quicexc
+abortConnection conn err desc = OldE.throwTo (mainThreadId conn) quicexc
   where
     quicexc = ApplicationProtocolErrorIsSent err desc
