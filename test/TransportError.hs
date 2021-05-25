@@ -10,8 +10,8 @@ import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC (ExtensionRaw)
-import System.Timeout
 import Test.Hspec
+import UnliftIO.Timeout
 
 import Network.QUIC
 import Network.QUIC.Internal hiding (timeout)
