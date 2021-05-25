@@ -14,7 +14,6 @@ import qualified Data.ByteString as BS
 import Data.List (intersect)
 import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
