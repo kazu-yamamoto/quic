@@ -110,13 +110,14 @@ sendPingPacket conn send buf lvl = do
                 ping = spPlainPacket spkt
                 bufsiz = maximumUdpPayloadSize
             (bytes,padlen) <- encodePlainPacket conn buf bufsiz ping (Just maxSiz)
-            now <- getTimeMicrosecond
-            send buf bytes
-            addTxBytes conn bytes
-            let sentPacket0 = fixSentPacket spkt bytes padlen
-                sentPacket = sentPacket0 { spTimeSent = now }
-            qlogSent conn sentPacket now
-            onPacketSent ldcc sentPacket
+            when (bytes >= 0) $ do
+                now <- getTimeMicrosecond
+                send buf bytes
+                addTxBytes conn bytes
+                let sentPacket0 = fixSentPacket spkt bytes padlen
+                    sentPacket = sentPacket0 { spTimeSent = now }
+                qlogSent conn sentPacket now
+                onPacketSent ldcc sentPacket
 
 ----------------------------------------------------------------
 
