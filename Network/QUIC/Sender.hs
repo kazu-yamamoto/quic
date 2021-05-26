@@ -223,8 +223,8 @@ sender conn send = handleLogT logAction $
 
 ----------------------------------------------------------------
 
-discardInitialPacketNumberSpace :: Connection -> IO ()
-discardInitialPacketNumberSpace conn
+discardClientInitialPacketNumberSpace :: Connection -> IO ()
+discardClientInitialPacketNumberSpace conn
   | isClient conn = do
         let ldcc = connLDCC conn
         discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
@@ -237,7 +237,7 @@ discardInitialPacketNumberSpace conn
 sendOutput :: Connection -> SendBuf -> Buffer -> Output -> IO ()
 sendOutput conn send buf (OutControl lvl frames action) = do
     construct conn lvl frames >>= sendPacket conn send buf
-    when (lvl == HandshakeLevel) $ discardInitialPacketNumberSpace conn
+    when (lvl == HandshakeLevel) $ discardClientInitialPacketNumberSpace conn
     action
 
 sendOutput conn send buf (OutHandshake lcs0) = do
@@ -246,6 +246,8 @@ sendOutput conn send buf (OutHandshake lcs0) = do
     -- only for h3spec
     when wait $ wait0RTTReady conn
     sendCryptoFragments conn send buf lcs
+    when (any (\(l,_) -> l == HandshakeLevel) lcs) $
+        discardClientInitialPacketNumberSpace conn
 sendOutput conn send buf (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0
     let lvl = levelFromHeader hdr0
@@ -290,8 +292,6 @@ sendCryptoFragments :: Connection -> SendBuf -> Buffer -> [(EncryptionLevel, Cry
 sendCryptoFragments _ _ _ [] = return ()
 sendCryptoFragments conn send buf lcs = do
     loop limitationC id lcs
-    when (any (\(l,_) -> l == HandshakeLevel) lcs) $
-        discardInitialPacketNumberSpace conn
   where
     loop :: Int -> ([SentPacket] -> [SentPacket]) -> [(EncryptionLevel, CryptoData)] -> IO ()
     loop _ build0 [] = do
