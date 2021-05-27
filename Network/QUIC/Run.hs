@@ -273,25 +273,43 @@ closure' conn ldcc frame = do
     socks@(s:_) <- clearSockets conn
     let bufsiz = maximumUdpPayloadSize
     sendBuf <- mallocBytes (bufsiz * 3)
-    lvl0 <- getEncryptionLevel conn
-    let lvl | lvl0 == RTT0Level = InitialLevel
-            | otherwise         = lvl0
-    header <- mkHeader conn lvl
-    mypn <- nextPacketNumber conn
-    let plain = Plain (Flags 0) mypn [frame] 0
-        ppkt = PlainPacket header plain
-    (siz,_) <- encodePlainPacket conn sendBuf bufsiz ppkt Nothing
+    siz <- encodeCC conn frame sendBuf bufsiz
     let recvBuf = sendBuf `plusPtr` (bufsiz * 2)
         recv = NS.recvBuf s recvBuf bufsiz
         send = NS.sendBuf s sendBuf siz
         hook = onCloseCompleted $ connHooks conn
-    now <- getTimeMicrosecond
-    qlogSent conn ppkt now
     pto <- getPTO ldcc
     void $ forkFinally (closer pto send recv hook) $ \_ -> do
         free sendBuf
         mapM_ NS.close socks
         killTimeouter
+
+encodeCC :: Connection -> Frame -> Buffer -> BufferSize -> IO Int
+encodeCC conn frame sendBuf0 bufsiz0 = do
+    lvl0 <- getEncryptionLevel conn
+    let lvl | lvl0 == RTT0Level = InitialLevel
+            | otherwise         = lvl0
+    if lvl == HandshakeLevel then do
+        siz0 <- encCC sendBuf0 bufsiz0 InitialLevel
+        let sendBuf1 = sendBuf0 `plusPtr` siz0
+            bufsiz1 = bufsiz0 - siz0
+        siz1 <- encCC sendBuf1 bufsiz1 HandshakeLevel
+        return (siz0 + siz1)
+      else
+        encCC sendBuf0 bufsiz0 lvl
+  where
+    encCC sendBuf bufsiz lvl = do
+        header <- mkHeader conn lvl
+        mypn <- nextPacketNumber conn
+        let plain = Plain (Flags 0) mypn [frame] 0
+            ppkt = PlainPacket header plain
+        siz <- fst <$> encodePlainPacket conn sendBuf bufsiz ppkt Nothing
+        if siz >= 0 then do
+            now <- getTimeMicrosecond
+            qlogSent conn ppkt now
+            return siz
+          else
+            return 0
 
 ----------------------------------------------------------------
 
