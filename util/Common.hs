@@ -13,7 +13,7 @@ import qualified Data.ByteString.Char8 as C8
 import Data.Maybe
 import Network.TLS hiding (Version)
 
-import Network.QUIC.Client
+import Network.QUIC
 
 namedGroups :: [(String, Group)]
 namedGroups =

@@ -27,7 +27,8 @@ Flag devel
 ----------------------------------------------------------------
 
 library
-  exposed-modules:     Network.QUIC.Client
+  exposed-modules:     Network.QUIC
+                       Network.QUIC.Client
                        Network.QUIC.Internal
                        Network.QUIC.Server
   other-modules:

@@ -9,6 +9,7 @@ import Test.Hspec
 import UnliftIO.Async
 
 import qualified Network.QUIC.Client as C
+import Network.QUIC
 import Network.QUIC.Server
 
 import Config

@@ -11,9 +11,9 @@ import Test.Hspec
 import UnliftIO.Async
 import qualified UnliftIO.Exception as E
 
-import qualified Network.QUIC.Client as C
-import Network.QUIC.Client hiding (run)
-import Network.QUIC.Server
+import Network.QUIC
+import Network.QUIC.Client as C
+import Network.QUIC.Server as S
 
 import Config
 
@@ -88,7 +88,7 @@ testHandshake cc sc mode = concurrently_ server client
         C.run cc $ \conn -> do
             waitEstablished conn
             handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-    server = run sc $ \conn -> do
+    server = S.run sc $ \conn -> do
         waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         stop conn
@@ -116,7 +116,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = concurrently_ server client
                       , ccUse0RTT    = use0RTT
                       }
         void $ runClient cc2 mode2 $ query "second"
-    server = run sc serv
+    server = S.run sc serv
       where
         serv conn = do
             s <- acceptStream conn
@@ -131,7 +131,7 @@ testHandshake3 cc1 cc2 sc selector = concurrently_ server client
         threadDelay 10000
         C.run cc1 (query "first")  `shouldThrow` selector
         C.run cc2 (query "second") `shouldReturn` ()
-    server = run sc $ \conn -> do
+    server = S.run sc $ \conn -> do
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
         sendStream s "bye"

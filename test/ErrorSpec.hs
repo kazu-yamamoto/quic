@@ -5,6 +5,7 @@ module ErrorSpec where
 import Control.Concurrent
 import Control.Monad (forever, void)
 import Data.ByteString ()
+import Network.QUIC
 import Network.QUIC.Server
 import Test.Hspec
 

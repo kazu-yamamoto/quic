@@ -12,7 +12,8 @@ import Data.ByteString.Builder
 import Network.ByteOrder
 import qualified UnliftIO.Exception as E
 
-import Network.QUIC.Server
+import Network.QUIC
+import Network.QUIC.Internal
 import H3
 
 serverHQ :: Connection -> IO ()
