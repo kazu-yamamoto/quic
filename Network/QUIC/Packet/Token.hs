@@ -15,7 +15,6 @@ import Foreign.Storable
 import Network.ByteOrder
 
 import Network.QUIC.Imports
-import Network.QUIC.Packet.Version
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -60,7 +59,7 @@ instance Storable CryptoToken where
     alignment ~_ = 4
     peek ptr = do
         rbuf <- newReadBuffer (castPtr ptr) cryptoTokenSize
-        ver  <- decodeVersion <$> read32 rbuf
+        ver  <- Version <$> read32 rbuf
         s <- CTime . fromIntegral <$> read64 rbuf
         let tim = UnixTime s 0
         typ <- read8 rbuf
@@ -78,9 +77,9 @@ instance Storable CryptoToken where
             x <- makeCID <$> extractShortByteString rbuf xlen
             ff rbuf (20 - xlen)
             return x
-    poke ptr (CryptoToken ver tim mcids) = do
+    poke ptr (CryptoToken (Version ver) tim mcids) = do
         wbuf <- newWriteBuffer (castPtr ptr) cryptoTokenSize
-        write32 wbuf $ encodeVersion ver
+        write32 wbuf ver
         let CTime s = utSeconds tim
         write64 wbuf $ fromIntegral s
         case mcids of

@@ -13,7 +13,6 @@ import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Header
-import Network.QUIC.Packet.Version
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -92,7 +91,7 @@ makeLongCrypt bs rbuf = do
 
 decodeLongHeader :: ReadBuffer -> IO (Version, CID, CID)
 decodeLongHeader rbuf  = do
-    ver     <- decodeVersion <$> read32 rbuf
+    ver     <- Version <$> read32 rbuf
     dcidlen <- fromIntegral <$> read8 rbuf
     dCID    <- makeCID <$> extractShortByteString rbuf dcidlen
     scidlen <- fromIntegral <$> read8 rbuf
@@ -107,7 +106,7 @@ decodeVersionNegotiationPacket rbuf dCID sCID = do
   where
     decodeVersions siz vers
       | siz >= 4  = do
-            ver <- decodeVersion <$> read32 rbuf
+            ver <- Version <$> read32 rbuf
             decodeVersions (siz - 4) ((ver :) . vers)
       | otherwise = return $ vers []
 

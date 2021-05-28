@@ -35,8 +35,7 @@ module Network.QUIC.Client (
   , isClientInitiatedUnidirectional
   , isServerInitiatedUnidirectional
   -- ** Version
-  , Version(..)
-  , fromVersion
+  , Version(.., Version1)
   -- ** Connection ID
   , CID
   , fromCID
@@ -75,7 +74,6 @@ import Network.QUIC.Connection
 import Network.QUIC.IO
 import Network.QUIC.Info
 import Network.QUIC.Logger
-import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types

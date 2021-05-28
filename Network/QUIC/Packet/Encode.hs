@@ -15,7 +15,6 @@ import Network.QUIC.Imports
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Number
-import Network.QUIC.Packet.Version
 import Network.QUIC.Parameters
 import Network.QUIC.Types
 
@@ -38,7 +37,7 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
     -- ver .. sCID
     encodeLongHeader wbuf Negotiation dCID sCID
     -- vers
-    mapM_ (write32 wbuf . encodeVersion) vers
+    mapM_ (\(Version ver) -> write32 wbuf ver) vers
     -- no header protection
 
 ----------------------------------------------------------------
@@ -112,8 +111,8 @@ encodePlainPacket' conn wbuf encodeBuf (PlainPacket (Short dCID) (Plain flags pn
 encodeLongHeader :: WriteBuffer
                  -> Version -> CID -> CID
                  -> IO ()
-encodeLongHeader wbuf ver dCID sCID = do
-    write32 wbuf $ encodeVersion ver
+encodeLongHeader wbuf (Version ver) dCID sCID = do
+    write32 wbuf ver
     let (dcid, dcidlen) = unpackCID dCID
     write8 wbuf dcidlen
     copyShortByteString wbuf dcid

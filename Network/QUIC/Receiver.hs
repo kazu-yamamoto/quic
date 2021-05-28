@@ -116,11 +116,9 @@ processReceivedPacket conn buf rpkt = do
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
           unless (isCryptLogged crypt) $
               qlogReceived conn (PlainPacket hdr plain) tim
-          ver <- getVersion conn
           let ackEli   = any ackEliciting   plainFrames
-              shouldDrop = ver >= Draft32
-                        && rpReceivedBytes rpkt < defaultQUICPacketSize
-                        && (lvl == InitialLevel && ackEli)
+              shouldDrop = rpReceivedBytes rpkt < defaultQUICPacketSize
+                        && lvl == InitialLevel && ackEli
           if shouldDrop then do
               connDebugLog conn ("debug: drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr

@@ -206,13 +206,11 @@ setPeerParams conn _ctx ps0 = do
               qlogParamsSet conn (params,"remote")
 
     checkAuthCIDs params = do
-        ver <- getVersion conn
-        when (ver >= Draft28) $ do
-            peerAuthCIDs <- getPeerAuthCIDs conn
-            ensure (initialSourceConnectionId params) $ initSrcCID peerAuthCIDs
-            when (isClient conn) $ do
-                ensure (originalDestinationConnectionId params) $ origDstCID peerAuthCIDs
-                ensure (retrySourceConnectionId params) $ retrySrcCID peerAuthCIDs
+        peerAuthCIDs <- getPeerAuthCIDs conn
+        ensure (initialSourceConnectionId params) $ initSrcCID peerAuthCIDs
+        when (isClient conn) $ do
+            ensure (originalDestinationConnectionId params) $ origDstCID peerAuthCIDs
+            ensure (retrySourceConnectionId params) $ retrySrcCID peerAuthCIDs
     ensure _ Nothing = return ()
     ensure v0 v1
       | v0 == v1  = return ()

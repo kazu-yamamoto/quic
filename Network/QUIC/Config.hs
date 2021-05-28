@@ -62,7 +62,7 @@ data ClientConfig = ClientConfig {
 -- | The default value for client configuration.
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
-    ccVersions    = [Version1,Draft32,Draft29]
+    ccVersions    = [Version1,Draft29]
                          -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
   , ccCiphers     = supportedCiphers defaultSupported
   , ccGroups      = supportedGroups defaultSupported
@@ -106,7 +106,7 @@ data ServerConfig = ServerConfig {
 -- | The default value for server configuration.
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scVersions       = [Version1,Draft32,Draft29]
+    scVersions       = [Version1,Draft29]
                          -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
   , scCiphers        = supportedCiphers defaultSupported
   , scGroups         = supportedGroups defaultSupported

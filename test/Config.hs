@@ -15,8 +15,6 @@ module Config (
 import Control.Concurrent
 import Control.Monad
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import qualified Data.List as L
 import Network.Socket
@@ -127,25 +125,16 @@ withPipe scenario body = do
       | otherwise = return (pn `elem` ns)
 
 chooseALPN :: Version -> [ByteString] -> IO ByteString
-chooseALPN ver protos = return $ case mh3idx of
+chooseALPN _ver protos = return $ case mh3idx of
     Nothing    -> case mhqidx of
       Nothing    -> ""
-      Just _     -> hqX
+      Just _     -> "hq"
     Just h3idx ->  case mhqidx of
-      Nothing    -> h3X
-      Just hqidx -> if h3idx < hqidx then h3X else hqX
+      Nothing    -> "h3"
+      Just hqidx -> if h3idx < hqidx then "h3" else "hq"
   where
-    (h3X, hqX) = makeProtos ver
-    mh3idx = h3X `L.elemIndex` protos
-    mhqidx = hqX `L.elemIndex` protos
-
-makeProtos :: Version -> (ByteString, ByteString)
-makeProtos ver = (h3X,hqX)
-  where
-    verbs = C8.pack $ show $ fromVersion ver
-    h3X = "h3-" `BS.append` verbs
-    hqX = "hq-" `BS.append` verbs
-
+    mh3idx = "h3" `L.elemIndex` protos
+    mhqidx = "hq" `L.elemIndex` protos
 
 newSessionManager :: IO SessionManager
 newSessionManager = sessionManager <$> newIORef Nothing

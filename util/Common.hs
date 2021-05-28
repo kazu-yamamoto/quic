@@ -6,6 +6,7 @@ module Common (
   , makeProtos
   ) where
 
+import Data.Bits
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
@@ -50,3 +51,6 @@ makeProtos ver = (h3X,hqX)
     verbs = C8.pack $ show $ fromVersion ver
     h3X = "h3-" `BS.append` verbs
     hqX = "hq-" `BS.append` verbs
+
+fromVersion :: Version -> Int
+fromVersion (Version ver) = fromIntegral (0x000000ff .&. ver)

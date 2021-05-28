@@ -65,7 +65,6 @@ library
                        Network.QUIC.Packet.Header
                        Network.QUIC.Packet.Number
                        Network.QUIC.Packet.Token
-                       Network.QUIC.Packet.Version
                        Network.QUIC.Parameters
                        Network.QUIC.QLogger
                        Network.QUIC.Qlog

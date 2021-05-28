@@ -31,8 +31,6 @@ module Network.QUIC.Packet (
   , generateToken
   , generateRetryToken
   , encryptToken
-  -- * Version
-  , fromVersion
   , decryptToken
   ) where
 
@@ -42,4 +40,3 @@ import Network.QUIC.Packet.Encode
 import Network.QUIC.Packet.Frame
 import Network.QUIC.Packet.Header
 import Network.QUIC.Packet.Token
-import Network.QUIC.Packet.Version

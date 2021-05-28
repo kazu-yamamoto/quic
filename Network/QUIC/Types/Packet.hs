@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Network.QUIC.Types.Packet where
 
@@ -13,27 +14,18 @@ import Network.QUIC.Types.Time
 ----------------------------------------------------------------
 
 -- | QUIC version.
-data Version = Negotiation
-             | UnknownVersion Word32
-             | Draft18
-             | Draft19
-             | Draft20
-             | Draft21
-             | Draft22
-             | Draft23
-             | Draft24
-             | Draft25
-             | Draft26
-             | Draft27
-             | Draft28
-             | Draft29
-             | Draft30
-             | Draft31
-             | Draft32
-             | Version1
-             | GreasingVersion
-             | GreasingVersion2
-             deriving (Eq, Ord, Show)
+newtype Version = Version Word32 deriving (Eq, Ord, Show)
+
+pattern Negotiation      :: Version
+pattern Negotiation       = Version 0
+pattern Version1         :: Version
+pattern Version1          = Version 1
+pattern Draft29          :: Version
+pattern Draft29           = Version 0xff00001d
+pattern GreasingVersion  :: Version
+pattern GreasingVersion   = Version 0x0a0a0a0a
+pattern GreasingVersion2 :: Version
+pattern GreasingVersion2  = Version 0x1a2a3a4a
 
 ----------------------------------------------------------------
 
