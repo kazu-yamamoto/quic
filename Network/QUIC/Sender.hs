@@ -224,9 +224,21 @@ sender conn send = handleLogT logAction $
 
 ----------------------------------------------------------------
 
+discardClientInitialPacketNumberSpace :: Connection -> IO ()
+discardClientInitialPacketNumberSpace conn
+  | isClient conn = do
+        let ldcc = connLDCC conn
+        discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
+        unless discarded $ do
+            dropSecrets conn InitialLevel
+            clearCryptoStream conn InitialLevel
+            onPacketNumberSpaceDiscarded ldcc InitialLevel
+  | otherwise = return ()
+
 sendOutput :: Connection -> SendBuf -> Buffer -> Output -> IO ()
 sendOutput conn send buf (OutControl lvl frames action) = do
     construct conn lvl frames >>= sendPacket conn send buf
+    when (lvl == HandshakeLevel) $ discardClientInitialPacketNumberSpace conn
     action
 
 sendOutput conn send buf (OutHandshake lcs0) = do
@@ -235,14 +247,8 @@ sendOutput conn send buf (OutHandshake lcs0) = do
     -- only for h3spec
     when wait $ wait0RTTReady conn
     sendCryptoFragments conn send buf lcs
-    when (isClient conn && any (\(l,_) -> l == HandshakeLevel) lcs) $ do
-        let ldcc = connLDCC conn
-        discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
-        unless discarded $ do
-            dropSecrets conn InitialLevel
-            clearCryptoStream conn InitialLevel
-            onPacketNumberSpaceDiscarded ldcc InitialLevel
-
+    when (any (\(l,_) -> l == HandshakeLevel) lcs) $
+        discardClientInitialPacketNumberSpace conn
 sendOutput conn send buf (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0
     let lvl = levelFromHeader hdr0
