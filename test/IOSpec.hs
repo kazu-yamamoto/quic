@@ -8,7 +8,7 @@ import qualified Data.ByteString as BS
 import Test.Hspec
 import UnliftIO.Async
 
-import Network.QUIC.Client
+import qualified Network.QUIC.Client as C
 import Network.QUIC.Server
 
 import Config
@@ -69,27 +69,27 @@ spec = do
         it "can exchange data on client 11" $ do
             withPipe (DropClientPacket [11]) $ testSendRecv cc sc 20
 
-testSendRecv :: ClientConfig -> ServerConfig -> Int -> IO ()
+testSendRecv :: C.ClientConfig -> ServerConfig -> Int -> IO ()
 testSendRecv cc sc times = do
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
   where
     client mvar = do
         threadDelay 10000
-        runQUICClient cc $ \conn -> do
+        C.run cc $ \conn -> do
             strm <- stream conn
             let bs = BS.replicate 10000 0
             replicateM_ times $ sendStream strm bs
             shutdownStream strm
             takeMVar mvar `shouldReturn` ()
-    server mvar = runQUICServer sc $ \conn -> do
+    server mvar = run sc $ \conn -> do
         strm <- acceptStream conn
         bs <- recvStream strm 1024
         let len = BS.length bs
         n <- loop strm bs len
         n `shouldBe` (10000 * times)
         putMVar mvar ()
-        stopQUICServer conn
+        stop conn
       where
         loop _    "" n = return n
         loop strm _  n = do

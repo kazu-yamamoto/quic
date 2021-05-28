@@ -12,7 +12,6 @@ import Test.Hspec
 
 import Network.QUIC.Client
 import Network.QUIC.Internal
-import Network.QUIC.Server
 
 import Config
 

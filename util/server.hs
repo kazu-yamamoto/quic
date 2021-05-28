@@ -122,7 +122,7 @@ main = do
           , scQLog           = optQLogDir
           , scCredentials    = Credentials [cred]
           }
-    runQUICServer sc $ \conn -> do
+    run sc $ \conn -> do
         info <- getConnectionInfo conn
         let server = case alpn info of
               Just proto | "perf" == proto            -> serverPF

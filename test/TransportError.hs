@@ -21,7 +21,7 @@ import Network.QUIC.Internal hiding (timeout)
 type Millisecond = Int
 
 runC :: ClientConfig -> Millisecond -> (Connection -> IO a) -> IO (Maybe a)
-runC cc ms body = timeout us $ runQUICClient cc body'
+runC cc ms body = timeout us $ run cc body'
   where
     us = ms * 1000
     body' conn = do
@@ -30,7 +30,7 @@ runC cc ms body = timeout us $ runQUICClient cc body'
         body conn
 
 runCnoOp :: ClientConfig -> Millisecond -> IO (Maybe ())
-runCnoOp cc ms = timeout us $ runQUICClient cc body'
+runCnoOp cc ms = timeout us $ run cc body'
   where
     us = ms * 1000
     body' conn = do

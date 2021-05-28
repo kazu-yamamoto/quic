@@ -11,7 +11,8 @@ import Test.Hspec
 import UnliftIO.Async
 import qualified UnliftIO.Exception as E
 
-import Network.QUIC.Client
+import qualified Network.QUIC.Client as C
+import Network.QUIC.Client hiding (run)
 import Network.QUIC.Server
 
 import Config
@@ -84,13 +85,13 @@ testHandshake cc sc mode = concurrently_ server client
   where
     client = do
         threadDelay 10000
-        runQUICClient cc $ \conn -> do
+        C.run cc $ \conn -> do
             waitEstablished conn
             handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-    server = runQUICServer sc $ \conn -> do
+    server = run sc $ \conn -> do
         waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-        stopQUICServer conn
+        stop conn
 
 query :: BS.ByteString -> Connection -> IO ()
 query content conn = do
@@ -103,7 +104,7 @@ query content conn = do
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
 testHandshake2 cc1 sc (mode1, mode2) use0RTT = concurrently_ server client
   where
-    runClient cc mode action = runQUICClient cc $ \conn -> do
+    runClient cc mode action = C.run cc $ \conn -> do
         void $ action conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         getResumptionInfo conn
@@ -115,23 +116,23 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = concurrently_ server client
                       , ccUse0RTT    = use0RTT
                       }
         void $ runClient cc2 mode2 $ query "second"
-    server = runQUICServer sc serv
+    server = run sc serv
       where
         serv conn = do
             s <- acceptStream conn
             bs <- recvStream s 1024
             sendStream s "bye"
-            when (bs == "second") $ stopQUICServer conn
+            when (bs == "second") $ stop conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc selector = concurrently_ server client
   where
     client = do
         threadDelay 10000
-        runQUICClient cc1 (query "first")  `shouldThrow` selector
-        runQUICClient cc2 (query "second") `shouldReturn` ()
-    server = runQUICServer sc $ \conn -> do
+        C.run cc1 (query "first")  `shouldThrow` selector
+        C.run cc2 (query "second") `shouldReturn` ()
+    server = run sc $ \conn -> do
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
         sendStream s "bye"
-        stopQUICServer conn
+        stop conn

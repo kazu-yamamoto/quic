@@ -4,8 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Server.Run (
-    runQUICServer
-  , stopQUICServer
+    run
+  , stop
   ) where
 
 import qualified Control.Exception as OldE
@@ -40,14 +40,14 @@ import Network.QUIC.Types
 -- | Running a QUIC server.
 --   The action is executed with a new connection
 --   in a new lightweight thread.
-runQUICServer :: ServerConfig -> (Connection -> IO ()) -> IO ()
-runQUICServer conf server = handleLogUnit debugLog $ do
+run :: ServerConfig -> (Connection -> IO ()) -> IO ()
+run conf server = handleLogUnit debugLog $ do
     baseThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
         void $ forkIO (runServer conf server dispatch baseThreadId acc)
   where
-    debugLog msg = stdoutLogger ("runQUICServer: " <> msg)
+    debugLog msg = stdoutLogger ("run: " <> msg)
     setup = do
         dispatch <- newDispatch
         -- fixme: the case where sockets cannot be created.
@@ -156,5 +156,5 @@ afterHandshakeServer conn = handleLogT logAction $ do
     logAction msg = connDebugLog conn $ "afterHandshakeServer: " <> msg
 
 -- | Stopping the base thread of the server.
-stopQUICServer :: Connection -> IO ()
-stopQUICServer conn = getBaseThreadId conn >>= killThread
+stop :: Connection -> IO ()
+stop conn = getBaseThreadId conn >>= killThread

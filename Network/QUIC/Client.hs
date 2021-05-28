@@ -1,9 +1,12 @@
 {-# LANGUAGE PatternSynonyms #-}
 
--- | This main module provides APIs for QUIC.
+-- | This main module provides APIs for QUIC clients.
 module Network.QUIC.Client (
   -- * Running a QUIC client
-    runQUICClient
+    run
+  , ClientConfig(..)
+  , defaultClientConfig
+  -- * Connection
   , Connection
   , abortConnection
   -- * Stream
@@ -23,25 +26,26 @@ module Network.QUIC.Client (
   -- * Migration
   , migrate
   , Migration(..)
-  -- * Configrations
-  , ClientConfig(..)
-  , defaultClientConfig
-  , Hooks(..)
-  , defaultHooks
   -- * Types
   , connDebugLog
   , DebugLogger
+  -- ** Stream type
   , isClientInitiatedBidirectional
   , isServerInitiatedBidirectional
   , isClientInitiatedUnidirectional
   , isServerInitiatedUnidirectional
+  -- ** Version
   , Version(..)
   , fromVersion
+  -- ** Connection ID
   , CID
   , fromCID
   -- ** Parameters
   , Parameters(..)
   , defaultParameters
+  -- ** Hook
+  , Hooks(..)
+  , defaultHooks
   -- * Information
   , ConnectionInfo(..)
   , getConnectionInfo

@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Client.Run (
-    runQUICClient
+    run
   , clientCertificateChain
   ) where
 
@@ -36,9 +36,9 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 -- | Running a QUIC client.
-runQUICClient :: ClientConfig -> (Connection -> IO a) -> IO a
+run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
-runQUICClient conf client = case ccVersions conf of
+run conf client = case ccVersions conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
       ex <- OldE.try $ runClient conf client ver1

@@ -18,7 +18,7 @@ setup = do
     let sc = sc' { scSessionManager = smgr
                  , scUse0RTT        = True
                  }
-    tid <- forkIO $ runQUICServer sc loop
+    tid <- forkIO $ run sc loop
     threadDelay 500000 -- give enough time to the server
     return tid
   where

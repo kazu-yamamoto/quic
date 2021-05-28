@@ -200,7 +200,7 @@ main = do
 runClient :: ClientConfig -> Options -> Aux -> IO ()
 runClient cc opts@Options{..} aux@Aux{..} = do
     auxDebug "------------------------"
-    (info1,info2,res,mig,client') <- runQUICClient cc $ \conn -> do
+    (info1,info2,res,mig,client') <- run cc $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
               Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ
@@ -306,7 +306,7 @@ runClient2 cc Options{..} aux@Aux{..} res client = do
     threadDelay 100000
     auxDebug "<<<< next connection >>>>"
     auxDebug "------------------------"
-    runQUICClient cc' $ \conn -> do
+    run cc' $ \conn -> do
         void $ client aux conn
         getConnectionInfo conn
   where
