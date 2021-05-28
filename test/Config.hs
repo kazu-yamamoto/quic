@@ -24,8 +24,9 @@ import Network.Socket.ByteString
 import Network.TLS (Credentials(..), credentialLoadX509, SessionManager(..), SessionData, SessionID)
 import qualified UnliftIO.Exception as E
 
-import Network.QUIC
+import Network.QUIC.Client
 import Network.QUIC.Internal
+import Network.QUIC.Server
 
 makeTestServerConfig :: IO ServerConfig
 makeTestServerConfig = do

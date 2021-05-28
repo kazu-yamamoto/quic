@@ -13,7 +13,7 @@ import Network.TLS.QUIC (ExtensionRaw)
 import Test.Hspec
 import UnliftIO.Timeout
 
-import Network.QUIC
+import Network.QUIC.Client
 import Network.QUIC.Internal hiding (timeout)
 
 ----------------------------------------------------------------

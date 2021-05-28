@@ -19,7 +19,7 @@ import System.Exit
 import System.IO
 
 import Common
-import Network.QUIC
+import Network.QUIC.Server
 import ServerX
 
 data Options = Options {

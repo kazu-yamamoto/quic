@@ -11,7 +11,8 @@ import Test.Hspec
 import UnliftIO.Async
 import qualified UnliftIO.Exception as E
 
-import Network.QUIC
+import Network.QUIC.Client
+import Network.QUIC.Server
 
 import Config
 

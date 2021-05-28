@@ -8,7 +8,8 @@ import qualified Data.ByteString as BS
 import Test.Hspec
 import UnliftIO.Async
 
-import Network.QUIC
+import Network.QUIC.Client
+import Network.QUIC.Server
 
 import Config
 

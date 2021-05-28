@@ -10,7 +10,7 @@ import qualified Data.ByteString.Char8 as C8
 import Network.ByteOrder
 
 import H3
-import Network.QUIC
+import Network.QUIC.Client
 
 data Aux = Aux {
     auxPath       :: String

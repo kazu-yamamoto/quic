@@ -10,8 +10,9 @@ import Foreign.Marshal.Alloc
 import qualified Network.Socket as NS
 import Test.Hspec
 
-import Network.QUIC
+import Network.QUIC.Client
 import Network.QUIC.Internal
+import Network.QUIC.Server
 
 import Config
 

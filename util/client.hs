@@ -21,7 +21,7 @@ import Text.Printf
 
 import ClientX
 import Common
-import Network.QUIC
+import Network.QUIC.Client
 import Network.QUIC.Internal hiding (RTT0)
 
 data Options = Options {

@@ -27,11 +27,14 @@ Flag devel
 ----------------------------------------------------------------
 
 library
-  exposed-modules:     Network.QUIC
+  exposed-modules:     Network.QUIC.Client
                        Network.QUIC.Internal
+                       Network.QUIC.Server
   other-modules:
-                       Network.QUIC.Client
+                       Network.QUIC.Client.Reader
+                       Network.QUIC.Client.Run
                        Network.QUIC.Closer
+                       Network.QUIC.Common
                        Network.QUIC.Config
                        Network.QUIC.Connection
                        Network.QUIC.Connection.Crypto
@@ -80,9 +83,9 @@ library
                        Network.QUIC.Recovery.Timer
                        Network.QUIC.Recovery.Types
                        Network.QUIC.Recovery.Utils
-                       Network.QUIC.Run
                        Network.QUIC.Sender
-                       Network.QUIC.Server
+                       Network.QUIC.Server.Reader
+                       Network.QUIC.Server.Run
                        Network.QUIC.Socket
                        Network.QUIC.Stream
                        Network.QUIC.Stream.Frag
