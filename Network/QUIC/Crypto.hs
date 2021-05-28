@@ -120,6 +120,8 @@ serverInitialSecret :: Version -> CID -> ServerTrafficSecret InitialSecret
 serverInitialSecret v c = ServerTrafficSecret $ initialSecret (Label "server in") v c
 
 initialSecret :: Label -> Version -> CID -> ByteString
+initialSecret _ GreasingVersion  _  = "greasing !!!!"
+initialSecret _ GreasingVersion2 _  = "greasing !!!!"
 initialSecret (Label label) ver cid = secret
   where
     cipher    = defaultCipher
