@@ -6,13 +6,13 @@ This package implements QUIC based on Haskell lightweight threads.
 
 - APIs are found in the [`Network.QUIC`](https://github.com/kazu-yamamoto/quic/blob/master/Network/QUIC.hs) module.
 - Example client and server are found in the [`util/`](https://github.com/kazu-yamamoto/quic/tree/master/util) directory.
-- Implementation plan and status are found in [#2](https://github.com/kazu-yamamoto/quic/issues/2).
 
 This package covers:
 
-- [draft-ietf-quic-transport](https://tools.ietf.org/html/draft-ietf-quic-transport)
-- [draft-ietf-quic-tls](https://tools.ietf.org/html/draft-ietf-quic-tls)
-- [draft-ietf-quic-recovery](https://tools.ietf.org/html/draft-ietf-quic-recovery)
+- [Version negotiation](https://tools.ietf.org/html/rfc8999)
+- [Transport](https://tools.ietf.org/html/html/rfc9000)
+- [TLS](https://tools.ietf.org/html/html/rfc9001)
+- [Recovery](https://tools.ietf.org/html/html/rfc9002)
 
 The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/http3):
 
