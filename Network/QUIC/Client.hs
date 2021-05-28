@@ -32,7 +32,6 @@ module Network.QUIC.Client (
   , ackDelayExponent
   , maxAckDelay
   , disableActiveMigration
-  , preferredAddress
   , activeConnectionIdLimit
   -- * Types
   , Milliseconds(..)
