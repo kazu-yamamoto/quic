@@ -24,7 +24,6 @@ import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Client
 import Network.QUIC.Internal
-import Network.QUIC.Server
 
 makeTestServerConfig :: IO ServerConfig
 makeTestServerConfig = do

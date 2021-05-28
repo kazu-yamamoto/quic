@@ -1,5 +1,6 @@
 module Network.QUIC.Internal (
-    module Network.QUIC.Connection
+    module Network.QUIC.Config
+  , module Network.QUIC.Connection
   , module Network.QUIC.Connector
   , module Network.QUIC.Crypto
   , module Network.QUIC.CryptoFusion
@@ -14,6 +15,7 @@ module Network.QUIC.Internal (
   , module Network.QUIC.Recovery
   ) where
 
+import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Crypto

@@ -5,11 +5,9 @@
 
 module Network.QUIC.Client.Run (
     run
-  , clientCertificateChain
   ) where
 
 import qualified Control.Exception as OldE
-import Data.X509 (CertificateChain)
 import qualified Network.Socket as NS
 import UnliftIO.Async
 import UnliftIO.Concurrent
@@ -20,7 +18,6 @@ import Network.QUIC.Closer
 import Network.QUIC.Common
 import Network.QUIC.Config
 import Network.QUIC.Connection
-import Network.QUIC.Connector
 import Network.QUIC.Crypto
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
@@ -111,11 +108,3 @@ createClientConnection conf@ClientConfig{..} ver = do
     setAddressValidated conn
     let reader = readerClient ccVersions s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
-
-----------------------------------------------------------------
-
--- | Getting a certificate chain.
-clientCertificateChain :: Connection -> IO (Maybe CertificateChain)
-clientCertificateChain conn
-  | isClient conn = return Nothing
-  | otherwise     = getCertificateChain conn

@@ -13,6 +13,7 @@ import qualified UnliftIO.Exception as E
 
 import Network.QUIC
 import Network.QUIC.Client as C
+import Network.QUIC.Internal hiding (RTT0)
 import Network.QUIC.Server as S
 
 import Config

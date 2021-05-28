@@ -20,6 +20,7 @@ import System.IO
 
 import Common
 import Network.QUIC
+import Network.QUIC.Internal
 import Network.QUIC.Server
 import ServerX
 
