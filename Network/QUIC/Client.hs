@@ -14,27 +14,8 @@ module Network.QUIC.Client (
   , ccResumption
   , ccCiphers
   , ccGroups
-  , ccParameters
   , ccCredentials
   , ccValidate -- fixme: should be True
-  -- * Parameters
-  , Parameters
-  , defaultParameters
-  -- ** Accessors
-  , maxIdleTimeout
-  , maxUdpPayloadSize
-  , initialMaxData
-  , initialMaxStreamDataBidiLocal
-  , initialMaxStreamDataBidiRemote
-  , initialMaxStreamDataUni
-  , initialMaxStreamsBidi
-  , initialMaxStreamsUni
-  , ackDelayExponent
-  , maxAckDelay
-  , disableActiveMigration
-  , activeConnectionIdLimit
-  -- * Types
-  , Milliseconds(..)
   -- * Resumption
   , ResumptionInfo
   , getResumptionInfo
@@ -45,5 +26,4 @@ module Network.QUIC.Client (
 import Network.QUIC.Client.Run
 import Network.QUIC.Config
 import Network.QUIC.Connection
-import Network.QUIC.Parameters
 import Network.QUIC.Types

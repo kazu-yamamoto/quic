@@ -17,25 +17,6 @@ module Network.QUIC.Server (
   , scParameters
   , scCredentials
   , scSessionManager
-  -- * Parameters
-  , Parameters
-  , defaultParameters
-  -- ** Accessors
-  , maxIdleTimeout
-  , maxUdpPayloadSize
-  , initialMaxData
-  , initialMaxStreamDataBidiLocal
-  , initialMaxStreamDataBidiRemote
-  , initialMaxStreamDataUni
-  , initialMaxStreamsBidi
-  , initialMaxStreamsUni
-  , ackDelayExponent
-  , maxAckDelay
-  , disableActiveMigration
-  , preferredAddress
-  , activeConnectionIdLimit
-  -- * Types
-  , Milliseconds(..)
   -- * Certificate
   , clientCertificateChain
   ) where
@@ -45,9 +26,7 @@ import Data.X509 (CertificateChain)
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
-import Network.QUIC.Parameters
 import Network.QUIC.Server.Run
-import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
