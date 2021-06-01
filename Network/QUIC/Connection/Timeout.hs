@@ -8,7 +8,6 @@ module Network.QUIC.Connection.Timeout (
   , delay
   ) where
 
-import Control.Exception (asyncExceptionFromException, asyncExceptionToException)
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Typeable
@@ -24,8 +23,8 @@ import Network.QUIC.Types
 data TimeoutException = TimeoutException deriving (Show, Typeable)
 
 instance E.Exception TimeoutException where
-  fromException = asyncExceptionFromException
-  toException = asyncExceptionToException
+  fromException = E.asyncExceptionFromException
+  toException = E.asyncExceptionToException
 
 globalTimeoutQ :: TQueue (IO ())
 globalTimeoutQ = unsafePerformIO newTQueueIO

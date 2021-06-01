@@ -1,6 +1,5 @@
 module Network.QUIC.Types.Exception where
 
-import Control.Exception (asyncExceptionFromException, asyncExceptionToException)
 import qualified Network.TLS as TLS
 import qualified UnliftIO.Exception as E
 
@@ -39,5 +38,5 @@ instance E.Exception InternalControl
 newtype NextVersion = NextVersion Version deriving (Show)
 
 instance E.Exception NextVersion where
-  fromException = asyncExceptionFromException
-  toException = asyncExceptionToException
+  fromException = E.asyncExceptionFromException
+  toException = E.asyncExceptionToException
