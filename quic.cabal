@@ -129,7 +129,7 @@ library
                      , stm
                      , tls
                      , unix-time
-                     , unliftio
+                     , unliftio >= 0.2.17
                      , unliftio-core
                      , x509
   -- hs-source-dirs:

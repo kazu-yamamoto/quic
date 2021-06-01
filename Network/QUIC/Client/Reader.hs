@@ -57,8 +57,8 @@ readerClient myVers s conn = handleLogUnit logAction loop
                       return $ if ok then Just ver else Nothing
         let tid = mainThreadId conn
         case mver of
-          Nothing  -> throwTo tid VersionNegotiationFailed
-          Just ver -> throwTo tid $ NextVersion ver
+          Nothing  -> E.throwTo tid $ NextVersion Negotiation
+          Just ver -> E.throwTo tid $ NextVersion ver
     putQ t z (PacketIC pkt lvl) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t z lvl
     putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t

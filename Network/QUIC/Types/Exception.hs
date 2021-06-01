@@ -1,7 +1,8 @@
 module Network.QUIC.Types.Exception where
 
-import qualified UnliftIO.Exception as E
+import Control.Exception (asyncExceptionFromException, asyncExceptionToException)
 import qualified Network.TLS as TLS
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Imports
 import Network.QUIC.Types.Error
@@ -27,12 +28,16 @@ data QUICException =
 
 instance E.Exception QUICException
 
-
-data InternalControl = NextVersion Version
-                     | MustNotReached
+data InternalControl = MustNotReached
                      | ExitConnection
                      | WrongTransportParameter
                      | BreakForever
                      deriving (Eq, Show)
 
 instance E.Exception InternalControl
+
+newtype NextVersion = NextVersion Version deriving (Show)
+
+instance E.Exception NextVersion where
+  fromException = asyncExceptionFromException
+  toException = asyncExceptionToException
