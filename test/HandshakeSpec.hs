@@ -65,7 +65,7 @@ spec = do
         it "can handshake with large EE from a client" $ do
             let cc0 = testClientConfig
                 params = (ccParameters cc0) {
-                      greaseParameter = Just (BS.pack (replicate 2400 0))
+                      grease = Just (BS.pack (replicate 2400 0))
                     }
                 cc = cc0 { ccParameters = params }
                 sc = sc0
@@ -73,7 +73,7 @@ spec = do
         it "can handshake with large EE from a server (3-times rule)" $ do
             let cc = testClientConfig
                 params = (scParameters sc0) {
-                      greaseParameter = Just (BS.pack (replicate 3800 0))
+                      grease = Just (BS.pack (replicate 3800 0))
                     }
                 sc = sc0 { scParameters = params }
             testHandshake cc sc FullHandshake

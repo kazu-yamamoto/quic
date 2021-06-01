@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Network.QUIC.Parameters (
     Parameters(..)
@@ -26,74 +27,70 @@ encodeParameters = encodeParameterList . toParameterList
 decodeParameters :: ByteString -> Maybe Parameters
 decodeParameters bs = fromParameterList <$> decodeParameterList bs
 
-type ParameterList = [(ParameterKeyId,ParameterValue)]
+newtype Key = Key Word16 deriving (Eq, Show)
+type Value = ByteString
 
-type ParameterValue = ByteString
+type ParameterList = [(Key,Value)]
 
-data ParameterKeyId =
-    ParameterOriginalDestinationConnectionId
-  | ParameterMaxIdleTimeout
-  | ParameterStateLessResetToken
-  | ParameterMaxUdpPayloadSize
-  | ParameterInitialMaxData
-  | ParameterInitialMaxStreamDataBidiLocal
-  | ParameterInitialMaxStreamDataBidiRemote
-  | ParameterInitialMaxStreamDataUni
-  | ParameterInitialMaxStreamsBidi
-  | ParameterInitialMaxStreamsUni
-  | ParameterAckDelayExponent
-  | ParameterMaxAckDelay
-  | ParameterDisableActiveMigration
-  | ParameterPreferredAddress
-  | ParameterActiveConnectionIdLimit
-  | ParameterInitialSourceConnectionId
-  | ParameterRetrySourceConnectionId
-  | ParameterGrease
-  | ParameterGreaseQuicBit
-  deriving (Eq,Show)
+pattern OriginalDestinationConnectionId :: Key
+pattern OriginalDestinationConnectionId  = Key 0x00
+pattern MaxIdleTimeout                  :: Key
+pattern MaxIdleTimeout                   = Key 0x01
+pattern StateLessResetToken             :: Key
+pattern StateLessResetToken              = Key 0x02
+pattern MaxUdpPayloadSize               :: Key
+pattern MaxUdpPayloadSize                = Key 0x03
+pattern InitialMaxData                  :: Key
+pattern InitialMaxData                   = Key 0x04
+pattern InitialMaxStreamDataBidiLocal   :: Key
+pattern InitialMaxStreamDataBidiLocal    = Key 0x05
+pattern InitialMaxStreamDataBidiRemote  :: Key
+pattern InitialMaxStreamDataBidiRemote   = Key 0x06
+pattern InitialMaxStreamDataUni         :: Key
+pattern InitialMaxStreamDataUni          = Key 0x07
+pattern InitialMaxStreamsBidi           :: Key
+pattern InitialMaxStreamsBidi            = Key 0x08
+pattern InitialMaxStreamsUni            :: Key
+pattern InitialMaxStreamsUni             = Key 0x09
+pattern AckDelayExponent                :: Key
+pattern AckDelayExponent                 = Key 0x0a
+pattern MaxAckDelay                     :: Key
+pattern MaxAckDelay                      = Key 0x0b
+pattern DisableActiveMigration          :: Key
+pattern DisableActiveMigration           = Key 0x0c
+pattern PreferredAddress                :: Key
+pattern PreferredAddress                 = Key 0x0d
+pattern ActiveConnectionIdLimit         :: Key
+pattern ActiveConnectionIdLimit          = Key 0x0e
+pattern InitialSourceConnectionId       :: Key
+pattern InitialSourceConnectionId        = Key 0x0f
+pattern RetrySourceConnectionId         :: Key
+pattern RetrySourceConnectionId          = Key 0x10
+pattern Grease                          :: Key
+pattern Grease                           = Key 0xff
+pattern GreaseQuicBit                   :: Key
+pattern GreaseQuicBit                    = Key 0x2ab2
 
-fromParameterKeyId :: ParameterKeyId -> Word16
-fromParameterKeyId ParameterOriginalDestinationConnectionId = 0x00
-fromParameterKeyId ParameterMaxIdleTimeout                  = 0x01
-fromParameterKeyId ParameterStateLessResetToken             = 0x02
-fromParameterKeyId ParameterMaxUdpPayloadSize               = 0x03
-fromParameterKeyId ParameterInitialMaxData                  = 0x04
-fromParameterKeyId ParameterInitialMaxStreamDataBidiLocal   = 0x05
-fromParameterKeyId ParameterInitialMaxStreamDataBidiRemote  = 0x06
-fromParameterKeyId ParameterInitialMaxStreamDataUni         = 0x07
-fromParameterKeyId ParameterInitialMaxStreamsBidi           = 0x08
-fromParameterKeyId ParameterInitialMaxStreamsUni            = 0x09
-fromParameterKeyId ParameterAckDelayExponent                = 0x0a
-fromParameterKeyId ParameterMaxAckDelay                     = 0x0b
-fromParameterKeyId ParameterDisableActiveMigration          = 0x0c
-fromParameterKeyId ParameterPreferredAddress                = 0x0d
-fromParameterKeyId ParameterActiveConnectionIdLimit         = 0x0e
-fromParameterKeyId ParameterInitialSourceConnectionId       = 0x0f
-fromParameterKeyId ParameterRetrySourceConnectionId         = 0x10
-fromParameterKeyId ParameterGrease                          = 0xff
-fromParameterKeyId ParameterGreaseQuicBit                   = 0x2ab2
-
-toParameterKeyId :: Word16 -> Maybe ParameterKeyId
-toParameterKeyId 0x00 = Just ParameterOriginalDestinationConnectionId
-toParameterKeyId 0x01 = Just ParameterMaxIdleTimeout
-toParameterKeyId 0x02 = Just ParameterStateLessResetToken
-toParameterKeyId 0x03 = Just ParameterMaxUdpPayloadSize
-toParameterKeyId 0x04 = Just ParameterInitialMaxData
-toParameterKeyId 0x05 = Just ParameterInitialMaxStreamDataBidiLocal
-toParameterKeyId 0x06 = Just ParameterInitialMaxStreamDataBidiRemote
-toParameterKeyId 0x07 = Just ParameterInitialMaxStreamDataUni
-toParameterKeyId 0x08 = Just ParameterInitialMaxStreamsBidi
-toParameterKeyId 0x09 = Just ParameterInitialMaxStreamsUni
-toParameterKeyId 0x0a = Just ParameterAckDelayExponent
-toParameterKeyId 0x0b = Just ParameterMaxAckDelay
-toParameterKeyId 0x0c = Just ParameterDisableActiveMigration
-toParameterKeyId 0x0d = Just ParameterPreferredAddress
-toParameterKeyId 0x0e = Just ParameterActiveConnectionIdLimit
-toParameterKeyId 0x0f = Just ParameterInitialSourceConnectionId
-toParameterKeyId 0x10 = Just ParameterRetrySourceConnectionId
-toParameterKeyId 0xff = Just ParameterGrease
-toParameterKeyId 0x2ab2 = Just ParameterGreaseQuicBit
-toParameterKeyId _    = Nothing
+{-# COMPLETE OriginalDestinationConnectionId
+           , MaxIdleTimeout
+           , StateLessResetToken
+           , MaxUdpPayloadSize
+           , InitialMaxData
+           , InitialMaxStreamDataBidiLocal
+           , InitialMaxStreamDataBidiRemote
+           , InitialMaxStreamDataUni
+           , InitialMaxStreamsBidi
+           , InitialMaxStreamsUni
+           , AckDelayExponent
+           , MaxAckDelay
+           , DisableActiveMigration
+           , PreferredAddress
+           , ActiveConnectionIdLimit
+           , InitialSourceConnectionId
+           , RetrySourceConnectionId
+           , Grease
+           , GreaseQuicBit
+           #-}
 
 -- | QUIC transport parameters.
 data Parameters = Parameters {
@@ -114,7 +111,7 @@ data Parameters = Parameters {
   , activeConnectionIdLimit         :: Int
   , initialSourceConnectionId       :: Maybe CID
   , retrySourceConnectionId         :: Maybe CID
-  , greaseParameter                 :: Maybe ByteString
+  , grease                          :: Maybe ByteString
   , greaseQuicBit                   :: Bool
   } deriving (Eq,Show)
 
@@ -138,7 +135,7 @@ baseParameters = Parameters {
   , activeConnectionIdLimit            = 2
   , initialSourceConnectionId          = Nothing
   , retrySourceConnectionId            = Nothing
-  , greaseParameter                    = Nothing
+  , grease                             = Nothing
   , greaseQuicBit                      = False
   }
 
@@ -158,46 +155,46 @@ fromParameterList :: ParameterList -> Parameters
 fromParameterList kvs = foldl' update params kvs
   where
     params = baseParameters
-    update x (ParameterOriginalDestinationConnectionId,v)
+    update x (OriginalDestinationConnectionId,v)
         = x { originalDestinationConnectionId = Just (toCID v) }
-    update x (ParameterMaxIdleTimeout,v)
+    update x (MaxIdleTimeout,v)
         = x { maxIdleTimeout = decMilliseconds v }
-    update x (ParameterStateLessResetToken,v)
+    update x (StateLessResetToken,v)
         = x { statelessResetToken = Just (StatelessResetToken $ Short.toShort v) }
-    update x (ParameterMaxUdpPayloadSize,v)
+    update x (MaxUdpPayloadSize,v)
         = x { maxUdpPayloadSize = decInt v }
-    update x (ParameterInitialMaxData,v)
+    update x (InitialMaxData,v)
         = x { initialMaxData = decInt v }
-    update x (ParameterInitialMaxStreamDataBidiLocal,v)
+    update x (InitialMaxStreamDataBidiLocal,v)
         = x { initialMaxStreamDataBidiLocal = decInt v }
-    update x (ParameterInitialMaxStreamDataBidiRemote,v)
+    update x (InitialMaxStreamDataBidiRemote,v)
         = x { initialMaxStreamDataBidiRemote = decInt v }
-    update x (ParameterInitialMaxStreamDataUni,v)
+    update x (InitialMaxStreamDataUni,v)
         = x { initialMaxStreamDataUni = decInt v }
-    update x (ParameterInitialMaxStreamsBidi,v)
+    update x (InitialMaxStreamsBidi,v)
         = x { initialMaxStreamsBidi = decInt v }
-    update x (ParameterInitialMaxStreamsUni,v)
+    update x (InitialMaxStreamsUni,v)
         = x { initialMaxStreamsUni = decInt v }
-    update x (ParameterAckDelayExponent,v)
+    update x (AckDelayExponent,v)
         = x { ackDelayExponent = decInt v }
-    update x (ParameterMaxAckDelay,v)
+    update x (MaxAckDelay,v)
         = x { maxAckDelay = decMilliseconds v }
-    update x (ParameterDisableActiveMigration,_)
+    update x (DisableActiveMigration,_)
         = x { disableActiveMigration = True }
-    update x (ParameterPreferredAddress,v)
+    update x (PreferredAddress,v)
         = x { preferredAddress = Just v }
-    update x (ParameterActiveConnectionIdLimit,v)
+    update x (ActiveConnectionIdLimit,v)
         = x { activeConnectionIdLimit = decInt v }
-    update x (ParameterInitialSourceConnectionId,v)
+    update x (InitialSourceConnectionId,v)
         = x { initialSourceConnectionId = Just (toCID v) }
-    update x (ParameterRetrySourceConnectionId,v)
+    update x (RetrySourceConnectionId,v)
         = x { retrySourceConnectionId = Just (toCID v) }
-    update x (ParameterGrease,v)
-        = x { greaseParameter = Just v }
-    update x (ParameterGreaseQuicBit,_)
+    update x (Grease,v)
+        = x { grease = Just v }
+    update x (GreaseQuicBit,_)
         = x { greaseQuicBit = True }
 
-diff :: Eq a => Parameters -> (Parameters -> a) -> ParameterKeyId -> (a -> ParameterValue) -> Maybe (ParameterKeyId,ParameterValue)
+diff :: Eq a => Parameters -> (Parameters -> a) -> Key -> (a -> Value) -> Maybe (Key,Value)
 diff params label key enc
   | val == val0 = Nothing
   | otherwise   = Just (key, enc val)
@@ -208,27 +205,27 @@ diff params label key enc
 toParameterList :: Parameters -> ParameterList
 toParameterList p = catMaybes [
     diff p originalDestinationConnectionId
-         ParameterOriginalDestinationConnectionId    (fromCID . fromJust)
-  , diff p maxIdleTimeout          ParameterMaxIdleTimeout          encMilliseconds
-  , diff p statelessResetToken     ParameterStateLessResetToken     encSRT
-  , diff p maxUdpPayloadSize       ParameterMaxUdpPayloadSize       encInt
-  , diff p initialMaxData          ParameterInitialMaxData          encInt
-  , diff p initialMaxStreamDataBidiLocal  ParameterInitialMaxStreamDataBidiLocal  encInt
-  , diff p initialMaxStreamDataBidiRemote ParameterInitialMaxStreamDataBidiRemote encInt
-  , diff p initialMaxStreamDataUni ParameterInitialMaxStreamDataUni encInt
-  , diff p initialMaxStreamsBidi   ParameterInitialMaxStreamsBidi   encInt
-  , diff p initialMaxStreamsUni    ParameterInitialMaxStreamsUni    encInt
-  , diff p ackDelayExponent        ParameterAckDelayExponent        encInt
-  , diff p maxAckDelay             ParameterMaxAckDelay             encMilliseconds
-  , diff p disableActiveMigration  ParameterDisableActiveMigration  (const "")
-  , diff p preferredAddress        ParameterPreferredAddress        fromJust
-  , diff p activeConnectionIdLimit ParameterActiveConnectionIdLimit encInt
+         OriginalDestinationConnectionId    (fromCID . fromJust)
+  , diff p maxIdleTimeout          MaxIdleTimeout          encMilliseconds
+  , diff p statelessResetToken     StateLessResetToken     encSRT
+  , diff p maxUdpPayloadSize       MaxUdpPayloadSize       encInt
+  , diff p initialMaxData          InitialMaxData          encInt
+  , diff p initialMaxStreamDataBidiLocal  InitialMaxStreamDataBidiLocal  encInt
+  , diff p initialMaxStreamDataBidiRemote InitialMaxStreamDataBidiRemote encInt
+  , diff p initialMaxStreamDataUni InitialMaxStreamDataUni encInt
+  , diff p initialMaxStreamsBidi   InitialMaxStreamsBidi   encInt
+  , diff p initialMaxStreamsUni    InitialMaxStreamsUni    encInt
+  , diff p ackDelayExponent        AckDelayExponent        encInt
+  , diff p maxAckDelay             MaxAckDelay             encMilliseconds
+  , diff p disableActiveMigration  DisableActiveMigration  (const "")
+  , diff p preferredAddress        PreferredAddress        fromJust
+  , diff p activeConnectionIdLimit ActiveConnectionIdLimit encInt
   , diff p initialSourceConnectionId
-         ParameterInitialSourceConnectionId    (fromCID . fromJust)
+         InitialSourceConnectionId    (fromCID . fromJust)
   , diff p retrySourceConnectionId
-         ParameterRetrySourceConnectionId      (fromCID . fromJust)
-  , diff p greaseQuicBit           ParameterGreaseQuicBit           (const "")
-  , diff p greaseParameter         ParameterGrease                  fromJust
+         RetrySourceConnectionId      (fromCID . fromJust)
+  , diff p greaseQuicBit           GreaseQuicBit           (const "")
+  , diff p grease                  Grease                  fromJust
   ]
 
 encSRT :: Maybe StatelessResetToken -> ByteString
@@ -240,8 +237,8 @@ encodeParameterList kvs = unsafeDupablePerformIO $
     withWriteBuffer 4096 $ \wbuf -> do -- for grease
         mapM_ (put wbuf) kvs
   where
-    put wbuf (k,v) = do
-        encodeInt' wbuf $ fromIntegral $ fromParameterKeyId k
+    put wbuf (Key k,v) = do
+        encodeInt' wbuf $ fromIntegral k
         encodeInt' wbuf $ fromIntegral $ BS.length v
         copyByteString wbuf v
 
@@ -255,13 +252,8 @@ decodeParameterList bs = unsafeDupablePerformIO $ withReadBuffer bs (`go` id)
        else do
           key <- fromIntegral <$> decodeInt' rbuf
           len <- fromIntegral <$> decodeInt' rbuf
-          case toParameterKeyId key of
-             Nothing -> do
-               ff rbuf len
-               go rbuf build
-             Just keyid -> do
-               val <- extractByteString rbuf len
-               go rbuf (build . ((keyid,val):))
+          val <- extractByteString rbuf len
+          go rbuf (build . ((Key key,val):))
 
 -- | An example parameters obsoleted in the near future.
 defaultParameters :: Parameters

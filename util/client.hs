@@ -162,7 +162,7 @@ main = do
           | otherwise  = vers
         confparams params
           | optQuantum = let bs = BS.replicate 1200 0
-                         in params { greaseParameter = Just bs }
+                         in params { grease = Just bs }
           | otherwise  = params
         cc0 = defaultClientConfig
         cc = cc0 {
