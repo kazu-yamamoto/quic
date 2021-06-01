@@ -7,7 +7,6 @@ module Network.QUIC.Client.Run (
     run
   ) where
 
-import qualified Control.Exception as OldE
 import qualified Network.Socket as NS
 import UnliftIO.Async
 import UnliftIO.Concurrent
@@ -38,13 +37,11 @@ run :: ClientConfig -> (Connection -> IO a) -> IO a
 run conf client = case ccVersions conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
-      ex <- OldE.try $ runClient conf client ver1
+      ex <- E.trySyncOrAsync $ runClient conf client ver1
       case ex of
-        Right v                     -> return v
-        Left se@(OldE.SomeException e)
-          | Just (NextVersion ver2) <- OldE.fromException se
-                                    -> runClient conf client ver2
-          | otherwise               -> E.throwIO e
+        Right v                 -> return v
+        Left (NextVersion ver2) -> runClient conf client ver2
+        Left e                  -> E.throwIO e
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
 runClient conf client0 ver = do
@@ -67,7 +64,7 @@ runClient conf client0 ver = do
                                               ,ldccTimer ldcc
                                               ]
             runThreads = race supporters client
-        OldE.try runThreads >>= closure conn ldcc
+        E.trySyncOrAsync runThreads >>= closure conn ldcc
   where
     open = createClientConnection conf ver
     clse connRes = do

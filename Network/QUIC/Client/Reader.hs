@@ -9,11 +9,11 @@ module Network.QUIC.Client.Reader (
   ) where
 
 import Control.Concurrent
-import qualified Control.Exception as OldE
 import qualified Data.ByteString as BS
 import Data.List (intersect)
 import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -57,8 +57,8 @@ readerClient myVers s conn = handleLogUnit logAction loop
                       return $ if ok then Just ver else Nothing
         let tid = mainThreadId conn
         case mver of
-          Nothing  -> OldE.throwTo tid VersionNegotiationFailed
-          Just ver -> OldE.throwTo tid $ NextVersion ver
+          Nothing  -> throwTo tid VersionNegotiationFailed
+          Just ver -> throwTo tid $ NextVersion ver
     putQ t z (PacketIC pkt lvl) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t z lvl
     putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t

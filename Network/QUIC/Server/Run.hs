@@ -8,7 +8,6 @@ module Network.QUIC.Server.Run (
   , stop
   ) where
 
-import qualified Control.Exception as OldE
 import qualified Network.Socket as NS
 import System.Log.FastLogger
 import UnliftIO.Async
@@ -79,7 +78,7 @@ runServer conf server0 dispatch baseThreadId acc =
                                                   ,ldccTimer ldcc
                                                   ]
                 runThreads = race supporters server
-            OldE.try runThreads >>= closure conn ldcc
+            E.trySyncOrAsync runThreads >>= closure conn ldcc
   where
     open = createServerConnection conf dispatch acc baseThreadId
     clse connRes = do
