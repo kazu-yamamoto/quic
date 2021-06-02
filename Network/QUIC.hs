@@ -37,9 +37,6 @@ module Network.QUIC (
   , wait0RTTReady
   , wait1RTTReady
   , waitEstablished
-  -- * Migration
-  , migrate
-  , Migration(..)
   -- * Exceptions and Errors
   , QUICException(..)
   , TransportError(.., NoError, InternalError, ConnectionRefused, FlowControlError, StreamLimitError, StreamStateError, FinalSizeError, FrameEncodingError, TransportParameterError, ConnectionIdLimitError, ProtocolViolation, InvalidToken, ApplicationError, CryptoBufferExceeded, KeyUpdateError, AeadLimitReached, NoViablePath)
@@ -47,7 +44,6 @@ module Network.QUIC (
   , ApplicationProtocolError(..)
   ) where
 
-import Network.QUIC.Client.Reader
 import Network.QUIC.Connection
 import Network.QUIC.IO
 import Network.QUIC.Info
