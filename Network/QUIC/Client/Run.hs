@@ -32,6 +32,8 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 -- | Running a QUIC client.
+-- | A connected UDP socket is created according to
+-- | 'ccServerName' and 'ccPortName'.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = case ccVersions conf of

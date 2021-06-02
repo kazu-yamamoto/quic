@@ -48,15 +48,15 @@ data ClientConfig = ClientConfig {
   , ccQLog        :: Maybe FilePath
   , ccCredentials :: Credentials
   , ccHooks       :: Hooks
-  , ccUse0RTT    :: Bool
+  , ccUse0RTT     :: Bool
   -- client original
-  , ccServerName :: HostName
-  , ccPortName   :: ServiceName
-  , ccALPN       :: Version -> IO (Maybe [ByteString])
-  , ccValidate   :: Bool
-  , ccResumption :: ResumptionInfo
-  , ccPacketSize :: Maybe Int -- ^ QUIC packet size (UDP payload size)
-  , ccDebugLog   :: Bool
+  , ccServerName  :: HostName -- ^ Used to create a socket and SNI for TLS.
+  , ccPortName    :: ServiceName -- ^ Used to create a socket.
+  , ccALPN        :: Version -> IO (Maybe [ByteString])
+  , ccValidate    :: Bool
+  , ccResumption  :: ResumptionInfo
+  , ccPacketSize  :: Maybe Int -- ^ QUIC packet size (UDP payload size)
+  , ccDebugLog    :: Bool
   }
 
 -- | The default value for client configuration.
