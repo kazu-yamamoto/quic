@@ -84,12 +84,12 @@ runClient conf client0 ver = do
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
-    (s0,sa0) <- udpClientConnectedSocket ccServerName ccPortName
+    (s0,sa0) <- udpClientSocket ccServerName ccPortName
     q <- newRecvQ
     sref <- newIORef [s0]
     let send buf siz = do
             s:_ <- readIORef sref
-            void $ NS.sendBuf s buf siz
+            void $ NS.sendBufTo s buf siz sa0
         recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
@@ -109,5 +109,5 @@ createClientConnection conf@ClientConfig{..} ver = do
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
-    let reader = readerClient ccVersions s0 conn -- dies when s0 is closed.
+    let reader = readerClient ccVersions s0 sa0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader

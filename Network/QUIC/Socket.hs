@@ -47,12 +47,11 @@ udpServerConnectedSocket mysa peersa = E.bracketOnError open close $ \s -> do
     family = sockAddrFamily mysa
     open   = socket family Datagram defaultProtocol
 
-udpClientConnectedSocket :: HostName -> ServiceName -> IO (Socket,SockAddr)
-udpClientConnectedSocket host port = do
+udpClientSocket :: HostName -> ServiceName -> IO (Socket,SockAddr)
+udpClientSocket host port = do
     addr <- head <$> getAddrInfo (Just hints) (Just host) (Just port)
     E.bracketOnError (openSocket addr) close $ \s -> do
         let sa = addrAddress addr
-        connect s sa
         return (s,sa)
  where
     hints = defaultHints { addrSocketType = Datagram }
