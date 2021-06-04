@@ -57,8 +57,7 @@ udpClientSocket host port = do
     hints = defaultHints { addrSocketType = Datagram }
 
 udpNATRebindingSocket :: SockAddr -> IO Socket
-udpNATRebindingSocket peersa = E.bracketOnError open close $ \s -> do
-    connect s peersa
+udpNATRebindingSocket peersa = E.bracketOnError open close $ \s ->
     return s
   where
     family = sockAddrFamily peersa

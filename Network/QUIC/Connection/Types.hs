@@ -10,7 +10,7 @@ import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.X509 (CertificateChain)
 import Foreign.Ptr
-import Network.Socket (Socket, SockAddr)
+import Network.Socket (Socket, SockAddr(..))
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
@@ -34,6 +34,7 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
+                           , serverAddr         :: SockAddr
                            }
               | ServerInfo { tokenManager    :: ~CT.TokenManager
                            , registerCID     :: CID -> Connection -> IO ()
@@ -48,6 +49,7 @@ defaultClientRoleInfo :: RoleInfo
 defaultClientRoleInfo = ClientInfo {
     clientInitialToken = emptyToken
   , resumptionInfo = defaultResumptionInfo
+  , serverAddr     = SockAddrInet 0 0
   }
 
 defaultServerRoleInfo :: RoleInfo
