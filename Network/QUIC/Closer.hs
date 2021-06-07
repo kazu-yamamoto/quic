@@ -17,17 +17,21 @@ import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Types
 
-closure :: Connection -> LDCC -> Either QUICException a -> IO a
+closure :: Connection -> LDCC -> Either E.SomeException a -> IO a
 closure conn ldcc (Right x) = do
     closure' conn ldcc $ ConnectionClose NoError 0 ""
     return x
-closure conn ldcc (Left e@(TransportErrorIsSent err desc)) = do
-    closure' conn ldcc $ ConnectionClose err 0 desc
-    E.throwIO e
-closure conn ldcc (Left e@(ApplicationProtocolErrorIsSent err desc)) = do
-    closure' conn ldcc $ ConnectionCloseApp err desc
-    E.throwIO e
-closure _    _    (Left e) = E.throwIO e
+closure conn ldcc (Left se)
+  | Just e@(TransportErrorIsSent err desc) <- E.fromException se = do
+        closure' conn ldcc $ ConnectionClose err 0 desc
+        E.throwIO e
+  | Just e@(ApplicationProtocolErrorIsSent err desc) <- E.fromException se = do
+        closure' conn ldcc $ ConnectionCloseApp err desc
+        E.throwIO e
+  | Just (Abort err desc) <- E.fromException se = do
+        closure' conn ldcc $ ConnectionCloseApp err desc
+        E.throwIO $ ApplicationProtocolErrorIsSent err desc
+  | otherwise = E.throwIO se
 
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do

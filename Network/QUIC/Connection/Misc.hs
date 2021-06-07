@@ -169,6 +169,4 @@ closeConnection err desc = E.throwIO quicexc
 
 -- | Closing a connection with an application protocol error.
 abortConnection :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
-abortConnection conn err desc = E.throwTo (mainThreadId conn) quicexc
-  where
-    quicexc = ApplicationProtocolErrorIsSent err desc
+abortConnection conn err desc = E.throwTo (mainThreadId conn) $ Abort err desc

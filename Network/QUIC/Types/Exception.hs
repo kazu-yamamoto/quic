@@ -40,3 +40,9 @@ newtype NextVersion = NextVersion Version deriving (Show)
 instance E.Exception NextVersion where
   fromException = E.asyncExceptionFromException
   toException = E.asyncExceptionToException
+
+data Abort = Abort ApplicationProtocolError ReasonPhrase deriving (Show)
+
+instance E.Exception Abort where
+  fromException = E.asyncExceptionFromException
+  toException = E.asyncExceptionToException
