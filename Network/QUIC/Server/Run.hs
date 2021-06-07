@@ -77,7 +77,11 @@ runServer conf server0 dispatch baseThreadId acc =
                                                   ,resender  ldcc
                                                   ,ldccTimer ldcc
                                                   ]
-                runThreads = race supporters server
+                runThreads = do
+                    er <- race supporters server
+                    case er of
+                      Left () -> E.throwIO MustNotReached
+                      Right r -> return r
             E.trySyncOrAsync runThreads >>= closure conn ldcc
   where
     open = createServerConnection conf dispatch acc baseThreadId

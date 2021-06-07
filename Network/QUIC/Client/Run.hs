@@ -63,7 +63,11 @@ runClient conf client0 ver = do
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
                                               ]
-            runThreads = race supporters client
+            runThreads = do
+                er <- race supporters client
+                case er of
+                  Left () -> E.throwIO MustNotReached
+                  Right r -> return r
         E.trySyncOrAsync runThreads >>= closure conn ldcc
   where
     open = createClientConnection conf ver

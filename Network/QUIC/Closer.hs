@@ -17,9 +17,8 @@ import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Types
 
-closure :: Connection -> LDCC -> Either QUICException (Either () a) -> IO a
-closure _    _    (Right (Left ())) = E.throwIO MustNotReached
-closure conn ldcc (Right (Right x)) = do
+closure :: Connection -> LDCC -> Either QUICException a -> IO a
+closure conn ldcc (Right x) = do
     closure' conn ldcc $ ConnectionClose NoError 0 ""
     return x
 closure conn ldcc (Left e@(TransportErrorIsSent err desc)) = do
