@@ -11,7 +11,7 @@ module Network.QUIC.Client.Reader (
 import Control.Concurrent
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, getPeerName, close)
+import Network.Socket (Socket, close)
 import qualified Network.Socket.ByteString as NSB
 import qualified UnliftIO.Exception as E
 
@@ -29,20 +29,23 @@ import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
 readerClient :: [Version] -> Socket -> Connection -> IO ()
-readerClient myVers s conn = handleLogUnit logAction loop
+readerClient myVers s0 conn = handleLogUnit logAction $ do
+    getServerAddr conn >>= loop
   where
-    loop = do
+    loop sa0 = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
-        case mbs of
-          Nothing -> close s
-          Just bs -> do
-            now <- getTimeMicrosecond
-            let bytes = BS.length bs
-            addRxBytes conn bytes
-            pkts <- decodePackets bs
-            mapM_ (putQ now bytes) pkts
-            loop
+        mbssa <- timeout ito $ NSB.recvFrom s0 maximumUdpPayloadSize
+        case mbssa of
+          Nothing       -> close s0
+          Just (bs, sa)
+            | sa == sa0 -> do
+                now <- getTimeMicrosecond
+                let bytes = BS.length bs
+                addRxBytes conn bytes
+                pkts <- decodePackets bs
+                mapM_ (putQ now bytes) pkts
+                loop sa0
+            | otherwise -> loop sa0
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
@@ -133,9 +136,10 @@ migrationClient conn MigrateTo = do
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
     s0:_ <- getSockets conn
-    s1 <- getPeerName s0 >>= udpNATRebindingSocket
+    sa0 <- getServerAddr conn
+    s1 <- udpNATRebindingSocket sa0
     _ <- addSocket conn s1
     v <- getVersion conn
-    let reader = readerClient [v] s1 conn
-    forkIO reader >>= addReader conn -- versions are dummy
+    let reader = readerClient [v] s1 conn -- versions are dummy
+    forkIO reader >>= addReader conn
     fire conn microseconds $ close s0

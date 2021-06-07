@@ -19,6 +19,8 @@ module Network.QUIC.Connection.Role (
   , getCertificateChain
   , setSockAddrs
   , getSockAddrs
+  , setServerAddr
+  , getServerAddr
   ) where
 
 import Control.Concurrent
@@ -123,3 +125,12 @@ setSockAddrs Connection{..} sa = atomicModifyIORef'' roleInfo $
 
 getSockAddrs :: Connection -> IO [(SockAddr,SockAddr)]
 getSockAddrs Connection{..} = sockAddrs <$> readIORef roleInfo
+
+----------------------------------------------------------------
+
+setServerAddr :: Connection -> SockAddr -> IO ()
+setServerAddr Connection{..} sa = atomicModifyIORef'' roleInfo $
+    \si -> si { serverAddr = sa }
+
+getServerAddr :: Connection -> IO SockAddr
+getServerAddr Connection{..} = serverAddr <$> readIORef roleInfo
