@@ -27,9 +27,10 @@ import qualified Data.OrdPSQ as PSQ
 import Foreign.Marshal.Alloc
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
-import Network.Socket hiding (accept)
+import Network.Socket hiding (accept, Debug)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
+import System.Log.FastLogger
 import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
@@ -325,6 +326,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                 addrs <- getSockAddrs conn
                 let shouldIgnore = (mysa,peersa) `elem` addrs
                 unless shouldIgnore $ do
+                    qlogDebug conn $ Debug $ toLogStr $ show peersa
                     qlogReceived conn (PlainPacket hdr plain) tim
                     let cpkt' = CryptPacket hdr $ setCryptLogged crypt
                     writeMigrationQ conn $ mkReceivedPacket cpkt' tim bytes lvl
