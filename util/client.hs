@@ -121,7 +121,7 @@ options = [
     (NoArg (\o -> o { optMigration = Just NATRebinding }))
     "use a new local port"
   , Option ['A'] ["address-mobility"]
-    (NoArg (\o -> o { optMigration = Just MigrateTo }))
+    (NoArg (\o -> o { optMigration = Just ActiveRebinding }))
     "use a new address and a new server CID"
   , Option ['t'] ["performance"]
     (ReqArg (\n o -> o { optPerformance = read n }) "<size>")
@@ -282,7 +282,7 @@ runClient cc opts@Options{..} aux@Aux{..} = do
              Just NATRebinding -> do
                  putStrLn "Result: (B) NAT rebinding ... OK"
                  exitSuccess
-             Just MigrateTo -> do
+             Just ActiveRebinding -> do
                  let changed = remoteCID info1 /= remoteCID info2
                  if mig && changed then do
                      putStrLn "Result: (A) address mobility ... OK"
@@ -326,7 +326,7 @@ printThroughput t1 t2 ConnectionStats{..} =
     bytesPerSeconds :: Double
     bytesPerSeconds = fromIntegral rxBytes * (1000 :: Double) * 8 / fromIntegral millisecs / 1024 / 1024
 
-console :: Aux -> (Aux -> Connection -> IO a) -> Connection -> IO ()
+console :: Aux -> (Aux -> Connection -> IO ()) -> Connection -> IO ()
 console aux client conn = do
     waitEstablished conn
     putStrLn "g -- get"
@@ -343,12 +343,12 @@ console aux client conn = do
          l <- getLine
          case l of
            "q" -> putStrLn "bye"
-           "m" -> do
-               migrate conn MigrateTo >>= print
+           "n" -> do
+               migrate conn NATRebinding >>= print
                loop
            "g" -> do
                putStrLn $ "GET " ++ auxPath aux
-               _ <- client aux conn
+               _ <- forkIO $ client aux conn
                loop
            "p" -> do
                putStrLn "Ping"

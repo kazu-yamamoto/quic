@@ -97,7 +97,7 @@ recvClient = readRecvQ
 data Migration = ChangeServerCID
                | ChangeClientCID
                | NATRebinding
-               | MigrateTo -- SockAddr
+               | ActiveRebinding
                deriving (Eq, Show)
 
 -- | Migrating.
@@ -124,7 +124,7 @@ migrationClient conn ChangeClientCID = do
 migrationClient conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
-migrationClient conn MigrateTo = do
+migrationClient conn ActiveRebinding = do
     mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
     case mn of
       Nothing  -> return False
