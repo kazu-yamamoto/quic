@@ -53,7 +53,13 @@ receiver conn recv = handleLogT logAction $
         case included of
           Just nseq -> do
             shouldUpdate <- shouldUpdateMyCID conn nseq
-            when shouldUpdate $ setMyCID conn cid
+            when shouldUpdate $ do
+                setMyCID conn cid
+                cidInfo <- getNewMyCID conn
+                when (isServer conn) $ do
+                    register <- getRegister conn
+                    register (cidInfoCID cidInfo) conn
+                sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
             processReceivedPacket conn buf rpkt
             shouldUpdatePeer <- if shouldUpdate then shouldUpdatePeerCID conn
                                                 else return False
@@ -303,11 +309,6 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
           when (isServer conn) $ do
               unregister <- getUnregister conn
               unregister cid
-          cidInfo <- getNewMyCID conn
-          when (isServer conn) $ do
-              register <- getRegister conn
-              register (cidInfoCID cidInfo) conn
-          sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
 processFrame conn RTT1Level (PathChallenge dat) =
     sendFrames conn RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =

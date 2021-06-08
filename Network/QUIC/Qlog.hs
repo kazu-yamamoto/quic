@@ -35,7 +35,7 @@ class Qlog a where
     qlog :: a -> LogStr
 
 newtype Debug = Debug LogStr
-data LR = Local | Remote
+data LR = Local CID | Remote CID
 
 instance Show Debug where
     show (Debug msg) = show msg
@@ -44,8 +44,8 @@ instance Qlog Debug where
     qlog (Debug msg) = "{\"message\":\"" <> msg <> "\"}"
 
 instance Qlog LR where
-    qlog Local  = "{\"owner\":\"local\"}"
-    qlog Remote = "{\"owner\":\"remote\"}"
+    qlog (Local  cid) = "{\"owner\":\"local\",\"new\":\"" <> sw cid <> "\"}"
+    qlog (Remote cid) = "{\"owner\":\"remote\",\"new\":\"" <> sw cid <> "\"}"
 
 instance Qlog RetryPacket where
     qlog RetryPacket{} = "{\"header\":{\"packet_type\":\"retry\",\"packet_number\":\"\"}}"

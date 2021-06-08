@@ -93,14 +93,17 @@ shouldUpdatePeerCID Connection{..} = not . triggeredByMe <$> readTVarIO peerCIDD
 -- | Automatic CID update
 choosePeerCIDForPrivacy :: Connection -> IO ()
 choosePeerCIDForPrivacy conn = do
-    r <- atomically $ do
+    mr <- atomically $ do
         mncid <- pickPeerCID conn
         case mncid of
-          Nothing   -> return False
+          Nothing   -> return ()
           Just ncid -> do
               setPeerCID conn ncid False
-              return True
-    when r $ qlogCIDUpdate conn Remote
+              return ()
+        return mncid
+    case mr of
+      Nothing   -> return ()
+      Just ncid -> qlogCIDUpdate conn $ Remote $ cidInfoCID ncid
 
 -- | Only for the internal "migration" API
 waitPeerCID :: Connection -> IO CIDInfo
@@ -113,15 +116,15 @@ waitPeerCID conn@Connection{..} = do
         let u = usedCIDInfo db
         setPeerCID conn (fromJust mncid) True
         return u
-    qlogCIDUpdate conn Remote
+    qlogCIDUpdate conn $ Remote $ cidInfoCID r
     return r
 
 pickPeerCID :: Connection -> STM (Maybe CIDInfo)
 pickPeerCID Connection{..} = do
     db <- readTVar peerCIDDB
     case filter (/= usedCIDInfo db) (cidInfos db) of
-      []        -> return Nothing
-      cidInfo:_ -> return $ Just cidInfo
+      [] -> return Nothing
+      xs -> return $ Just $ last xs -- fixme
 
 setPeerCID :: Connection -> CIDInfo -> Bool -> STM ()
 setPeerCID Connection{..} cidInfo pri =
@@ -159,12 +162,12 @@ arrange n db = (db', map cidInfoSeq toDrops)
 -- | Peer starts using a new CID.
 setMyCID :: Connection -> CID -> IO ()
 setMyCID conn@Connection{..} ncid = do
-    atomicModifyIORef'' myCIDDB findSet
-    qlogCIDUpdate conn Local
+    r <- atomicModifyIORef' myCIDDB findSet
+    when r $ qlogCIDUpdate conn $ Local ncid
   where
     findSet db = case findByCID ncid (cidInfos db) of
-      Nothing      -> db
-      Just cidInfo -> set cidInfo False db
+      Nothing      -> (db, False)
+      Just cidInfo -> (set cidInfo False db, True)
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
