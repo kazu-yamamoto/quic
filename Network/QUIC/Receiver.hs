@@ -316,23 +316,22 @@ processFrame _conn _lvl (ConnectionClose err _ftyp reason) = do
 processFrame _conn _lvl (ConnectionCloseApp err reason) = do
     let quicexc = ApplicationProtocolErrorIsReceived err reason
     E.throwIO quicexc
-processFrame conn lvl HandshakeDone
-  | isServer conn || lvl /= RTT1Level =
+processFrame conn lvl HandshakeDone = do
+    when (isServer conn || lvl /= RTT1Level) $
         closeConnection ProtocolViolation "HANDSHAKE_DONE for server"
-  | otherwise = do
-        fire conn (Microseconds 100000) $ do
-            let ldcc = connLDCC conn
-            discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
-            unless discarded0 $ dropSecrets conn RTT0Level
-            discarded1 <- getAndSetPacketNumberSpaceDiscarded ldcc HandshakeLevel
-            unless discarded1 $ do
-                dropSecrets conn HandshakeLevel
-                onPacketNumberSpaceDiscarded ldcc HandshakeLevel
-            clearCryptoStream conn HandshakeLevel
-            clearCryptoStream conn RTT1Level
-        setConnectionEstablished conn
-        -- to receive NewSessionTicket
-        fire conn (Microseconds 1000000) $ killHandshaker conn lvl
+    fire conn (Microseconds 100000) $ do
+        let ldcc = connLDCC conn
+        discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
+        unless discarded0 $ dropSecrets conn RTT0Level
+        discarded1 <- getAndSetPacketNumberSpaceDiscarded ldcc HandshakeLevel
+        unless discarded1 $ do
+            dropSecrets conn HandshakeLevel
+            onPacketNumberSpaceDiscarded ldcc HandshakeLevel
+        clearCryptoStream conn HandshakeLevel
+        clearCryptoStream conn RTT1Level
+    setConnectionEstablished conn
+    -- to receive NewSessionTicket
+    fire conn (Microseconds 1000000) $ killHandshaker conn lvl
 processFrame _ _ _ = closeConnection ProtocolViolation "Frame is not allowed"
 
 -- QUIC version 1 uses only short packets for stateless reset.
