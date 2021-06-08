@@ -17,8 +17,6 @@ module Network.QUIC.Connection.Role (
   , getBaseThreadId
   , setCertificateChain
   , getCertificateChain
-  , setSockAddrs
-  , getSockAddrs
   , setServerAddr
   , getServerAddr
   ) where
@@ -116,15 +114,6 @@ setCertificateChain Connection{..} mcc = atomicModifyIORef'' roleInfo $
 
 getCertificateChain :: Connection -> IO (Maybe CertificateChain)
 getCertificateChain Connection{..} = certChain <$> readIORef roleInfo
-
-----------------------------------------------------------------
-
-setSockAddrs :: Connection -> (SockAddr,SockAddr) -> IO ()
-setSockAddrs Connection{..} sa = atomicModifyIORef'' roleInfo $
-    \si -> si { sockAddrs = sa : sockAddrs si }
-
-getSockAddrs :: Connection -> IO [(SockAddr,SockAddr)]
-getSockAddrs Connection{..} = sockAddrs <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 

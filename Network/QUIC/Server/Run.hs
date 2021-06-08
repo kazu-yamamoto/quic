@@ -111,7 +111,6 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     debugLog $ "Original CID: " <> bhow ocid
     conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog scHooks sref accRecvQ
-    setSockAddrs conn (accMySockAddr,accPeerSockAddr)
     addResource conn qclean
     addResource conn dclean
     let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs

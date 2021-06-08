@@ -150,6 +150,29 @@ processReceivedPacket conn buf rpkt = do
               connDebugLog conn $ "debug: cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)
               -- fixme: sending statelss reset
 
+isSendOnly :: Connection -> StreamId -> Bool
+isSendOnly conn sid
+  | isClient conn = isClientInitiatedUnidirectional sid
+  | otherwise     = isServerInitiatedUnidirectional sid
+
+isReceiveOnly :: Connection -> StreamId -> Bool
+isReceiveOnly conn sid
+  | isClient conn = isServerInitiatedUnidirectional sid
+  | otherwise     = isClientInitiatedUnidirectional sid
+
+isInitiated :: Connection -> StreamId -> Bool
+isInitiated conn sid
+  | isClient conn = isClientInitiated sid
+  | otherwise     = isServerInitiated sid
+
+guardStream :: Connection -> StreamId -> Maybe Stream -> IO ()
+guardStream conn sid Nothing
+  | isInitiated conn sid = do
+        curSid <- getMyStreamId conn
+        when (sid > curSid) $
+            closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+guardStream _ _ _ = return ()
+
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
@@ -161,8 +184,7 @@ processFrame conn lvl (Ack ackInfo ackDelay) = do
 processFrame conn lvl (ResetStream sid aerr _finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "RESET_STREAM"
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "Received in a send-only stream"
     mstrm <- findStream conn sid
     case mstrm of
@@ -175,14 +197,12 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
 processFrame conn lvl (StopSending sid err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "STOP_SENDING"
-    when ((isClient conn && isServerInitiatedUnidirectional sid)
-        ||(isServer conn && isClientInitiatedUnidirectional sid)) $
+    when (isReceiveOnly conn sid) $
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
-          when ((isClient conn && isClientInitiated sid)
-              ||(isServer conn && isServerInitiated sid)) $
+          when (isInitiated conn sid) $
               closeConnection StreamStateError "No such stream for STOP_SENDING"
       Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
 processFrame _ _ (CryptoF _ "") = return ()
@@ -210,37 +230,25 @@ processFrame conn lvl (NewToken token) = do
         closeConnection ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm &&
-          ((isClient conn && isClientInitiated sid) ||
-           (isServer conn && isServerInitiated sid))) $
-        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+    guardStream conn sid mstrm
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
     ok <- putRxStreamData strm rx
     unless ok $ closeConnection FlowControlError "Flow control error in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm &&
-          ((isClient conn && isClientInitiated sid) ||
-           (isServer conn && isServerInitiated sid))) $
-        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+    guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm &&
-          ((isClient conn && isClientInitiated sid) ||
-           (isServer conn && isServerInitiated sid))) $
-        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+    guardStream conn sid mstrm
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
@@ -253,14 +261,12 @@ processFrame conn lvl (MaxData n) = do
 processFrame conn lvl (MaxStreamData sid n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "MAX_STREAM_DATA in Initial or Handshake"
-    when ((isClient conn && isServerInitiatedUnidirectional sid)
-        ||(isServer conn && isClientInitiatedUnidirectional sid)) $
+    when (isReceiveOnly conn sid) $
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
-          when ((isClient conn && isClientInitiated sid)
-              ||(isServer conn && isServerInitiated sid)) $
+          when (isInitiated conn sid) $
               closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
       Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
@@ -315,23 +321,22 @@ processFrame _conn _lvl (ConnectionClose err _ftyp reason) = do
 processFrame _conn _lvl (ConnectionCloseApp err reason) = do
     let quicexc = ApplicationProtocolErrorIsReceived err reason
     E.throwIO quicexc
-processFrame conn lvl HandshakeDone
-  | isServer conn || lvl /= RTT1Level =
+processFrame conn lvl HandshakeDone = do
+    when (isServer conn || lvl /= RTT1Level) $
         closeConnection ProtocolViolation "HANDSHAKE_DONE for server"
-  | otherwise = do
-        fire conn (Microseconds 100000) $ do
-            let ldcc = connLDCC conn
-            discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
-            unless discarded0 $ dropSecrets conn RTT0Level
-            discarded1 <- getAndSetPacketNumberSpaceDiscarded ldcc HandshakeLevel
-            unless discarded1 $ do
-                dropSecrets conn HandshakeLevel
-                onPacketNumberSpaceDiscarded ldcc HandshakeLevel
-            clearCryptoStream conn HandshakeLevel
-            clearCryptoStream conn RTT1Level
-        setConnectionEstablished conn
-        -- to receive NewSessionTicket
-        fire conn (Microseconds 1000000) $ killHandshaker conn lvl
+    fire conn (Microseconds 100000) $ do
+        let ldcc = connLDCC conn
+        discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
+        unless discarded0 $ dropSecrets conn RTT0Level
+        discarded1 <- getAndSetPacketNumberSpaceDiscarded ldcc HandshakeLevel
+        unless discarded1 $ do
+            dropSecrets conn HandshakeLevel
+            onPacketNumberSpaceDiscarded ldcc HandshakeLevel
+        clearCryptoStream conn HandshakeLevel
+        clearCryptoStream conn RTT1Level
+    setConnectionEstablished conn
+    -- to receive NewSessionTicket
+    fire conn (Microseconds 1000000) $ killHandshaker conn lvl
 processFrame _ _ _ = closeConnection ProtocolViolation "Frame is not allowed"
 
 -- QUIC version 1 uses only short packets for stateless reset.

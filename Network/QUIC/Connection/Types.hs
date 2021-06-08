@@ -42,7 +42,6 @@ data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , askRetry        :: Bool
                            , baseThreadId    :: ~ThreadId
                            , certChain       :: Maybe CertificateChain
-                           , sockAddrs       :: [(SockAddr,SockAddr)]
                            }
 
 defaultClientRoleInfo :: RoleInfo
@@ -60,7 +59,6 @@ defaultServerRoleInfo = ServerInfo {
   , askRetry = False
   , baseThreadId = undefined
   , certChain = Nothing
-  , sockAddrs = []
   }
 
 -- fixme: limitation
