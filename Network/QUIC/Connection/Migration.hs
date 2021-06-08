@@ -87,7 +87,22 @@ addPeerCID Connection{..} cidInfo = do
       Nothing -> atomically $ modifyTVar' peerCIDDB $ add cidInfo
       Just _  -> return ()
 
--- | Using a new CID and sending RetireConnectionID
+shouldUpdatePeerCID :: Connection -> IO Bool
+shouldUpdatePeerCID Connection{..} = not . triggeredByMe <$> readTVarIO peerCIDDB
+
+-- | Automatic CID update
+choosePeerCIDForPrivacy :: Connection -> IO ()
+choosePeerCIDForPrivacy conn = do
+    r <- atomically $ do
+        mncid <- pickPeerCID conn
+        case mncid of
+          Nothing   -> return False
+          Just ncid -> do
+              setPeerCID conn ncid False
+              return True
+    when r $ qlogCIDUpdate conn Remote
+
+-- | Only for the internal "migration" API
 waitPeerCID :: Connection -> IO CIDInfo
 waitPeerCID conn@Connection{..} = do
     r <- atomically $ do
@@ -100,20 +115,6 @@ waitPeerCID conn@Connection{..} = do
         return u
     qlogCIDUpdate conn Remote
     return r
-
-shouldUpdatePeerCID :: Connection -> IO Bool
-shouldUpdatePeerCID Connection{..} = not . triggeredByMe <$> readTVarIO peerCIDDB
-
-choosePeerCIDForPrivacy :: Connection -> IO ()
-choosePeerCIDForPrivacy conn = do
-    r <- atomically $ do
-        mncid <- pickPeerCID conn
-        case mncid of
-          Nothing   -> return False
-          Just ncid -> do
-              setPeerCID conn ncid False
-              return True
-    when r $ qlogCIDUpdate conn Remote
 
 pickPeerCID :: Connection -> STM (Maybe CIDInfo)
 pickPeerCID Connection{..} = do
