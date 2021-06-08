@@ -150,6 +150,16 @@ processReceivedPacket conn buf rpkt = do
               connDebugLog conn $ "debug: cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)
               -- fixme: sending statelss reset
 
+isSendOnly :: Connection -> StreamId -> Bool
+isSendOnly conn sid
+  | isClient conn = isClientInitiatedUnidirectional sid
+  | otherwise     = isServerInitiatedUnidirectional sid
+
+isReceiveOnly :: Connection -> StreamId -> Bool
+isReceiveOnly conn sid
+  | isClient conn = isServerInitiatedUnidirectional sid
+  | otherwise     = isClientInitiatedUnidirectional sid
+
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
@@ -161,8 +171,7 @@ processFrame conn lvl (Ack ackInfo ackDelay) = do
 processFrame conn lvl (ResetStream sid aerr _finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "RESET_STREAM"
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "Received in a send-only stream"
     mstrm <- findStream conn sid
     case mstrm of
@@ -175,8 +184,7 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
 processFrame conn lvl (StopSending sid err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "STOP_SENDING"
-    when ((isClient conn && isServerInitiatedUnidirectional sid)
-        ||(isServer conn && isClientInitiatedUnidirectional sid)) $
+    when (isReceiveOnly conn sid) $
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
@@ -210,8 +218,7 @@ processFrame conn lvl (NewToken token) = do
         closeConnection ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
@@ -224,8 +231,7 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     ok <- putRxStreamData strm rx
     unless ok $ closeConnection FlowControlError "Flow control error in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
@@ -233,8 +239,7 @@ processFrame conn RTT1Level (StreamF sid _ [""] False) = do
            (isServer conn && isServerInitiated sid))) $
         closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
-    when ((isClient conn && isClientInitiatedUnidirectional sid)
-        ||(isServer conn && isServerInitiatedUnidirectional sid)) $
+    when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     when (isNothing mstrm &&
@@ -253,8 +258,7 @@ processFrame conn lvl (MaxData n) = do
 processFrame conn lvl (MaxStreamData sid n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "MAX_STREAM_DATA in Initial or Handshake"
-    when ((isClient conn && isServerInitiatedUnidirectional sid)
-        ||(isServer conn && isClientInitiatedUnidirectional sid)) $
+    when (isReceiveOnly conn sid) $
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
