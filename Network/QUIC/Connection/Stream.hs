@@ -2,7 +2,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Stream (
-    waitMyNewStreamId
+    getMyStreamId
+  , waitMyNewStreamId
   , waitMyNewUniStreamId
   , setMyMaxStreams
   , setMyUniMaxStreams
@@ -15,6 +16,11 @@ import Control.Concurrent.STM
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
+
+getMyStreamId :: Connection -> IO Int
+getMyStreamId Connection{..} = do
+    next <- currentStream <$> readTVarIO myStreamId
+    return $ next - 4
 
 waitMyNewStreamId :: Connection -> IO StreamId
 waitMyNewStreamId Connection{..} = get myStreamId

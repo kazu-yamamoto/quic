@@ -165,6 +165,14 @@ isInitiated conn sid
   | isClient conn = isClientInitiated sid
   | otherwise     = isServerInitiated sid
 
+guardStream :: Connection -> StreamId -> Maybe Stream -> IO ()
+guardStream conn sid Nothing
+  | isInitiated conn sid = do
+        curSid <- getMyStreamId conn
+        when (sid > curSid) $
+            closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+guardStream _ _ _ = return ()
+
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
@@ -225,8 +233,7 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm && isInitiated conn sid) $
-        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+    guardStream conn sid mstrm
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
@@ -236,14 +243,12 @@ processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm && isInitiated conn sid) $
-        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+    guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm && isInitiated conn sid) $
-        closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+    guardStream conn sid mstrm
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
