@@ -160,6 +160,11 @@ isReceiveOnly conn sid
   | isClient conn = isServerInitiatedUnidirectional sid
   | otherwise     = isClientInitiatedUnidirectional sid
 
+isInitiated :: Connection -> StreamId -> Bool
+isInitiated conn sid
+  | isClient conn = isClientInitiated sid
+  | otherwise     = isServerInitiated sid
+
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
@@ -189,8 +194,7 @@ processFrame conn lvl (StopSending sid err) = do
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
-          when ((isClient conn && isClientInitiated sid)
-              ||(isServer conn && isServerInitiated sid)) $
+          when (isInitiated conn sid) $
               closeConnection StreamStateError "No such stream for STOP_SENDING"
       Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
 processFrame _ _ (CryptoF _ "") = return ()
@@ -221,9 +225,7 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm &&
-          ((isClient conn && isClientInitiated sid) ||
-           (isServer conn && isServerInitiated sid))) $
+    when (isNothing mstrm && isInitiated conn sid) $
         closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
@@ -234,17 +236,13 @@ processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm &&
-          ((isClient conn && isClientInitiated sid) ||
-           (isServer conn && isServerInitiated sid))) $
+    when (isNothing mstrm && isInitiated conn sid) $
         closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
-    when (isNothing mstrm &&
-          ((isClient conn && isClientInitiated sid) ||
-           (isServer conn && isServerInitiated sid))) $
+    when (isNothing mstrm && isInitiated conn sid) $
         closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
@@ -263,8 +261,7 @@ processFrame conn lvl (MaxStreamData sid n) = do
     mstrm <- findStream conn sid
     case mstrm of
       Nothing   -> do
-          when ((isClient conn && isClientInitiated sid)
-              ||(isServer conn && isServerInitiated sid)) $
+          when (isInitiated conn sid) $
               closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
       Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
