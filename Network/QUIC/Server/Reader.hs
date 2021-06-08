@@ -326,7 +326,6 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
             Just plain -> do
                 alive <- getAlive conn
                 when alive $ do
-                    qlogDebug conn $ Debug $ toLogStr $ show peersa
                     qlogReceived conn (PlainPacket hdr plain) tim
                     let cpkt' = CryptPacket hdr $ setCryptLogged crypt
                     writeMigrationQ conn $ mkReceivedPacket cpkt' tim bytes lvl
@@ -335,7 +334,9 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                         setMigrationStarted conn
                         -- fixme: should not block in this loop
                         mcidinfo <- timeout (Microseconds 100000) $ waitPeerCID conn
-                        connDebugLog conn $ "debug: dispatch: Migrating to " <> bhow peersa <> " (" <> bhow dCID <> ")"
+                        let msg = "Migration: " <> bhow peersa <> " (" <> bhow dCID <> ")"
+                        qlogDebug conn $ Debug $ toLogStr msg
+                        connDebugLog conn $ "debug: dispatch: " <> msg
                         void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
 dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
