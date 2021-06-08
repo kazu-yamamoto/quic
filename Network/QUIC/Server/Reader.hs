@@ -35,6 +35,7 @@ import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Logger
@@ -323,9 +324,8 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
           case mplain of
             Nothing -> connDebugLog conn "debug: dispatch: cannot decrypt"
             Just plain -> do
-                addrs <- getSockAddrs conn
-                let shouldIgnore = (mysa,peersa) `elem` addrs
-                unless shouldIgnore $ do
+                alive <- getAlive conn
+                when alive $ do
                     qlogDebug conn $ Debug $ toLogStr $ show peersa
                     qlogReceived conn (PlainPacket hdr plain) tim
                     let cpkt' = CryptPacket hdr $ setCryptLogged crypt
