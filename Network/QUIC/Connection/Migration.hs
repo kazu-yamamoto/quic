@@ -27,7 +27,8 @@ module Network.QUIC.Connection.Migration (
   ) where
 
 import Control.Concurrent.STM
-import Data.List (delete, insert)
+import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Map.Strict as Map
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
@@ -41,7 +42,7 @@ getMyCID :: Connection -> IO CID
 getMyCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
 
 getMyCIDs :: Connection -> IO [CID]
-getMyCIDs Connection{..} = map cidInfoCID . cidInfos <$> readIORef myCIDDB
+getMyCIDs Connection{..} = Map.keys . revInfos <$> readIORef myCIDDB
 
 getMyCIDSeqNum :: Connection -> IO Int
 getMyCIDSeqNum Connection{..} = cidInfoSeq . usedCIDInfo <$> readIORef myCIDDB
@@ -60,7 +61,7 @@ shouldUpdateMyCID Connection{..} nseq = do
 
 myCIDsInclude :: Connection -> CID -> IO (Maybe Int)
 myCIDsInclude Connection{..} cid =
-    (cidInfoSeq <$>) . findByCID cid . cidInfos <$> readIORef myCIDDB
+    Map.lookup cid . revInfos <$> readIORef myCIDDB
 
 ----------------------------------------------------------------
 
@@ -81,14 +82,15 @@ getNewMyCID Connection{..} = do
 
 -- | Receiving NewConnectionID
 addPeerCID :: Connection -> CIDInfo -> IO ()
-addPeerCID Connection{..} cidInfo = do
-    db <- readTVarIO peerCIDDB
-    case findBySeq (cidInfoSeq cidInfo) (cidInfos db) of
-      Nothing -> atomically $ modifyTVar' peerCIDDB $ add cidInfo
+addPeerCID Connection{..} cidInfo = atomically $ do
+    db <- readTVar peerCIDDB
+    case Map.lookup (cidInfoCID cidInfo) (revInfos db) of
+      Nothing -> modifyTVar' peerCIDDB $ add cidInfo
       Just _  -> return ()
 
 shouldUpdatePeerCID :: Connection -> IO Bool
-shouldUpdatePeerCID Connection{..} = not . triggeredByMe <$> readTVarIO peerCIDDB
+shouldUpdatePeerCID Connection{..} =
+    not . triggeredByMe <$> readTVarIO peerCIDDB
 
 -- | Automatic CID update
 choosePeerCIDForPrivacy :: Connection -> IO ()
@@ -122,13 +124,13 @@ waitPeerCID conn@Connection{..} = do
 pickPeerCID :: Connection -> STM (Maybe CIDInfo)
 pickPeerCID Connection{..} = do
     db <- readTVar peerCIDDB
-    case filter (/= usedCIDInfo db) (cidInfos db) of
-      [] -> return Nothing
-      xs -> return $ Just $ last xs -- fixme
+    let n = cidInfoSeq $ usedCIDInfo db
+        mcidinfo = IntMap.lookup (n + 1) $ cidInfos db
+    return mcidinfo
 
 setPeerCID :: Connection -> CIDInfo -> Bool -> STM ()
 setPeerCID Connection{..} cidInfo pri =
-    modifyTVar' peerCIDDB $ set cidInfo pri
+    modifyTVar' peerCIDDB $ set (Just cidInfo) pri
 
 -- | After sending RetireConnectionID
 retirePeerCID :: Connection -> Int -> IO ()
@@ -146,15 +148,20 @@ setPeerCIDAndRetireCIDs Connection{..} n = atomically $ do
     return ns
 
 arrange :: Int -> CIDDB -> (CIDDB, [Int])
-arrange n db = (db', map cidInfoSeq toDrops)
+arrange n db@CIDDB{..} = (db', dropSeqnums)
   where
-    (toDrops, cidInfos') = break (\cidInfo -> cidInfoSeq cidInfo >= n) $ cidInfos db
-    used = usedCIDInfo db
-    used' | cidInfoSeq used >= n = used
-          | otherwise            = head cidInfos' -- fixme
+    (toDrops, cidInfos') = IntMap.partitionWithKey (\k _ -> k < n) cidInfos
+    dropSeqnums = IntMap.foldrWithKey (\k _ ks -> k:ks) [] toDrops
+    dropCIDs = IntMap.foldr (\c r -> cidInfoCID c : r) [] toDrops
+    -- IntMap.findMin is a partial function.
+    -- But receiver guarantees that there is at least one cidinfo.
+    usedCIDInfo' | cidInfoSeq usedCIDInfo >= n = usedCIDInfo
+                 | otherwise            = snd $ IntMap.findMin cidInfos'
+    revInfos' = foldr (\k m -> Map.delete k m) revInfos dropCIDs
     db' = db {
-        usedCIDInfo = used'
+        usedCIDInfo = usedCIDInfo'
       , cidInfos    = cidInfos'
+      , revInfos    = revInfos'
       }
 
 ----------------------------------------------------------------
@@ -165,9 +172,9 @@ setMyCID conn@Connection{..} ncid = do
     r <- atomicModifyIORef' myCIDDB findSet
     when r $ qlogCIDUpdate conn $ Local ncid
   where
-    findSet db = case findByCID ncid (cidInfos db) of
-      Nothing      -> (db, False)
-      Just cidInfo -> (set cidInfo False db, True)
+    findSet db = case Map.lookup ncid (revInfos db) of
+      Nothing -> (db, False)
+      Just n  -> (set (IntMap.lookup n $ cidInfos db) False db, True)
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
@@ -175,17 +182,9 @@ retireMyCID Connection{..} n = atomicModifyIORef' myCIDDB $ del' n
 
 ----------------------------------------------------------------
 
-findByCID :: CID -> [CIDInfo] -> Maybe CIDInfo
-findByCID cid = find (\x -> cidInfoCID x == cid)
-
-findBySeq :: Int -> [CIDInfo] -> Maybe CIDInfo
-findBySeq num = find (\x -> cidInfoSeq x == num)
-
-findBySRT :: StatelessResetToken -> [CIDInfo] -> Maybe CIDInfo
-findBySRT srt = find (\x -> cidInfoSRT x == srt)
-
-set :: CIDInfo -> Bool -> CIDDB -> CIDDB
-set cidInfo pri db = db'
+set :: Maybe CIDInfo -> Bool -> CIDDB -> CIDDB
+set Nothing        _   db = db
+set (Just cidInfo) pri db = db'
   where
     db' = db {
         usedCIDInfo = cidInfo
@@ -193,39 +192,42 @@ set cidInfo pri db = db'
       }
 
 add :: CIDInfo -> CIDDB -> CIDDB
-add cidInfo db = db'
+add cidInfo@CIDInfo{..} db@CIDDB{..} = db'
   where
     db' = db {
-        cidInfos = insert cidInfo (cidInfos db)
+        cidInfos = IntMap.insert cidInfoSeq cidInfo cidInfos
+      , revInfos = Map.insert cidInfoCID cidInfoSeq revInfos
       }
 
 new :: CID -> StatelessResetToken -> CIDDB -> (CIDDB, CIDInfo)
-new cid srt db = (db', cidInfo)
+new cid srt db@CIDDB{..} = (db', cidInfo)
   where
-   n = nextSeqNum db
-   cidInfo = CIDInfo n cid srt
+   cidInfo = CIDInfo nextSeqNum cid srt
    db' = db {
-       nextSeqNum = nextSeqNum db + 1
-     , cidInfos = insert cidInfo $ cidInfos db
+       nextSeqNum = nextSeqNum + 1
+     , cidInfos = IntMap.insert nextSeqNum cidInfo cidInfos
+     , revInfos = Map.insert cid nextSeqNum revInfos
      }
 
 del :: Int -> CIDDB -> CIDDB
-del num db = db'
+del n db@CIDDB{..} = db'
   where
-    db' = case findBySeq num (cidInfos db) of
+    db' = case IntMap.lookup n cidInfos of
       Nothing -> db
       Just cidInfo -> db {
-          cidInfos = delete cidInfo $ cidInfos db
+          cidInfos = IntMap.delete n cidInfos
+        , revInfos = Map.delete (cidInfoCID cidInfo) revInfos
         }
 
 del' :: Int -> CIDDB -> (CIDDB, Maybe CIDInfo)
-del' num db = (db', mcidInfo)
+del' n db@CIDDB{..} = (db', mcidInfo)
   where
-    mcidInfo = findBySeq num (cidInfos db)
+    mcidInfo = IntMap.lookup n cidInfos
     db' = case mcidInfo of
       Nothing -> db
       Just cidInfo -> db {
-          cidInfos = delete cidInfo $ cidInfos db
+          cidInfos = IntMap.delete n cidInfos
+        , revInfos = Map.delete (cidInfoCID cidInfo) revInfos
         }
 
 ----------------------------------------------------------------
@@ -234,21 +236,25 @@ setPeerStatelessResetToken :: Connection -> StatelessResetToken -> IO ()
 setPeerStatelessResetToken Connection{..} srt =
     atomically $ modifyTVar' peerCIDDB adjust
   where
-    adjust db = db'
+    adjust db@CIDDB{..} = db'
       where
-        db' = case cidInfos db of
-          CIDInfo 0 cid _:xs -> adj xs $ CIDInfo 0 cid srt
-          _ -> db
-        adj xs cidInfo = case usedCIDInfo db of
-                        CIDInfo 0 _ _ -> db { usedCIDInfo = cidInfo
-                                            , cidInfos = cidInfo:xs
-                                            }
-                        _             -> db { cidInfos = cidInfo:xs}
+        db' = case IntMap.lookup 0 cidInfos of
+          Nothing      -> db
+          Just cidinfo -> let cidinfo' = cidinfo { cidInfoSRT = srt }
+                          in db {
+                               cidInfos = IntMap.insert 0 cidinfo'
+                                        $ IntMap.delete 0 cidInfos
+                             , usedCIDInfo = cidinfo'
+                             }
 
-
-isStatelessRestTokenValid :: Connection -> StatelessResetToken -> IO Bool
-isStatelessRestTokenValid Connection{..} srt =
-    isJust . findBySRT srt . cidInfos <$> readTVarIO peerCIDDB
+isStatelessRestTokenValid :: Connection -> CID -> StatelessResetToken -> IO Bool
+isStatelessRestTokenValid Connection{..} cid srt = srtCheck <$> readTVarIO peerCIDDB
+  where
+    srtCheck CIDDB{..} = case Map.lookup cid revInfos of
+      Nothing -> False
+      Just n  -> case IntMap.lookup n cidInfos of
+        Nothing -> False
+        Just (CIDInfo _ _ srt0) -> srt == srt0
 
 ----------------------------------------------------------------
 
