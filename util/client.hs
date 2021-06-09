@@ -42,6 +42,7 @@ data Options = Options {
   , optMigration   :: Maybe Migration
   , optPacketSize  :: Maybe Int
   , optPerformance :: Word64
+  , optNumOfReqs   :: Int
   } deriving Show
 
 defaultOptions :: Options
@@ -62,6 +63,7 @@ defaultOptions = Options {
   , optMigration   = Nothing
   , optPacketSize  = Nothing
   , optPerformance = 0
+  , optNumOfReqs   = 1
   }
 
 usage :: String
@@ -126,6 +128,9 @@ options = [
   , Option ['t'] ["performance"]
     (ReqArg (\n o -> o { optPerformance = read n }) "<size>")
     "measure performance"
+  , Option ['n'] ["number-of-requests"]
+    (ReqArg (\n o -> o { optNumOfReqs = read n }) "<n>")
+    "number of requests"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -204,8 +209,8 @@ runClient cc opts@Options{..} aux@Aux{..} = do
     (info1,info2,res,mig,client') <- run cc $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
-              Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ
-                         | "h3" `BS.isPrefixOf` proto -> clientH3
+              Just proto | "hq" `BS.isPrefixOf` proto -> clientHQ optNumOfReqs
+                         | "h3" `BS.isPrefixOf` proto -> clientH3 optNumOfReqs
               _                                       -> clientPF optPerformance
         m <- case optMigration of
           Nothing   -> return False
