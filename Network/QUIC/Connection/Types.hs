@@ -8,6 +8,10 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Ptr
 import Network.Socket (Socket, SockAddr(..))
@@ -64,16 +68,18 @@ defaultServerRoleInfo = ServerInfo {
 -- fixme: limitation
 data CIDDB = CIDDB {
     usedCIDInfo   :: CIDInfo
-  , cidInfos      :: [CIDInfo]
-  , nextSeqNum    :: Int  -- only for mine
+  , cidInfos      :: IntMap CIDInfo
+  , revInfos      :: Map CID Int
+  , nextSeqNum    :: Int  -- only for mine (new)
   , triggeredByMe :: Bool -- only for peer's
   } deriving (Show)
 
 newCIDDB :: CID -> CIDDB
 newCIDDB cid = CIDDB {
-    usedCIDInfo = cidInfo
-  , cidInfos    = [cidInfo]
-  , nextSeqNum  = 1
+    usedCIDInfo   = cidInfo
+  , cidInfos      = IntMap.singleton 0 cidInfo
+  , revInfos      = Map.singleton cid 0
+  , nextSeqNum    = 1
   , triggeredByMe = False
   }
   where
