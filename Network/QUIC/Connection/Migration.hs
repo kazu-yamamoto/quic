@@ -130,7 +130,7 @@ pickPeerCID Connection{..} = do
 
 setPeerCID :: Connection -> CIDInfo -> Bool -> STM ()
 setPeerCID Connection{..} cidInfo pri =
-    modifyTVar' peerCIDDB $ set (Just cidInfo) pri
+    modifyTVar' peerCIDDB $ set cidInfo pri
 
 -- | After sending RetireConnectionID
 retirePeerCID :: Connection -> Int -> IO ()
@@ -172,9 +172,13 @@ setMyCID conn@Connection{..} ncid = do
     r <- atomicModifyIORef' myCIDDB findSet
     when r $ qlogCIDUpdate conn $ Local ncid
   where
-    findSet db = case Map.lookup ncid (revInfos db) of
-      Nothing -> (db, False)
-      Just n  -> (set (IntMap.lookup n $ cidInfos db) False db, True)
+    findSet db@CIDDB{..}
+      | cidInfoCID usedCIDInfo == ncid = (db, False)
+      | otherwise = case Map.lookup ncid revInfos of
+          Nothing -> (db, False)
+          Just n -> case IntMap.lookup n cidInfos of
+            Nothing -> (db, False)
+            Just ncidinfo -> (set ncidinfo False db, True)
 
 -- | Receiving RetireConnectionID
 retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
@@ -182,9 +186,8 @@ retireMyCID Connection{..} n = atomicModifyIORef' myCIDDB $ del' n
 
 ----------------------------------------------------------------
 
-set :: Maybe CIDInfo -> Bool -> CIDDB -> CIDDB
-set Nothing        _   db = db
-set (Just cidInfo) pri db = db'
+set :: CIDInfo -> Bool -> CIDDB -> CIDDB
+set cidInfo pri db = db'
   where
     db' = db {
         usedCIDInfo = cidInfo
