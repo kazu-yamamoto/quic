@@ -17,13 +17,15 @@ import Network.QUIC.Internal
 import H3
 
 serverHQ :: Connection -> IO ()
-serverHQ conn = connDebugLog conn "Connection terminated" `onE` do
-    s <- acceptStream conn
-    consume conn s
-    let sid = streamId s
-    when (isClientInitiatedBidirectional sid) $ do
-        sendStream s html
-        closeStream s
+serverHQ conn = connDebugLog conn "Connection terminated" `onE` body
+  where
+    body = forever $ do
+        s <- acceptStream conn
+        consume conn s
+        let sid = streamId s
+        when (isClientInitiatedBidirectional sid) $ do
+            sendStream s html
+            closeStream s
 
 serverH3 :: Connection -> IO ()
 serverH3 conn = connDebugLog conn "Connection terminated" `onE` do
