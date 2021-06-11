@@ -39,11 +39,11 @@ run :: ClientConfig -> (Connection -> IO a) -> IO a
 run conf client = case ccVersions conf of
   []     -> E.throwIO NoVersionIsSpecified
   ver1:_ -> do
-      ex <- E.trySyncOrAsync $ runClient conf client ver1
+      ex <- E.try $ runClient conf client ver1
       case ex of
         Right v                        -> return v
-        Left (NextVersion Negotiation) -> E.throwIO VersionNegotiationFailed
-        Left (NextVersion ver2)        -> runClient conf client ver2
+        Left (NextVersion Nothing)     -> E.throwIO VersionNegotiationFailed
+        Left (NextVersion (Just ver2)) -> runClient conf client ver2
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
 runClient conf client0 ver = do

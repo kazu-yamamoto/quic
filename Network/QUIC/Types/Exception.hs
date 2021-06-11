@@ -35,13 +35,13 @@ data InternalControl = MustNotReached
 
 instance E.Exception InternalControl
 
-newtype NextVersion = NextVersion Version deriving (Show)
+newtype NextVersion = NextVersion (Maybe Version) deriving (Show)
 
-instance E.Exception NextVersion where
-  fromException = E.asyncExceptionFromException
-  toException = E.asyncExceptionToException
+instance E.Exception NextVersion
 
-data Abort = Abort ApplicationProtocolError ReasonPhrase deriving (Show)
+data Abort = Abort ApplicationProtocolError ReasonPhrase
+           | VerNego (Maybe Version)
+           deriving (Show)
 
 instance E.Exception Abort where
   fromException = E.asyncExceptionFromException
