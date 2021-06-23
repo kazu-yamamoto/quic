@@ -9,10 +9,10 @@ This package implements QUIC based on Haskell lightweight threads.
 
 This package covers:
 
-- [Version negotiation](https://tools.ietf.org/html/rfc8999)
-- [Transport](https://tools.ietf.org/html/html/rfc9000)
-- [TLS](https://tools.ietf.org/html/html/rfc9001)
-- [Recovery](https://tools.ietf.org/html/html/rfc9002)
+- [Version-Independent Properties of QUIC](https://tools.ietf.org/html/rfc8999)
+- [QUIC: A UDP-Based Multiplexed and Secure Transport](https://tools.ietf.org/html/rfc9000)
+- [Using TLS to Secure QUIC](https://tools.ietf.org/html/rfc9001)
+- [QUIC Loss Detection and Congestion Control](https://tools.ietf.org/html/rfc9002)
 
 The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/http3):
 
