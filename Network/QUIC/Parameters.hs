@@ -71,27 +71,6 @@ pattern Grease                           = Key 0xff
 pattern GreaseQuicBit                   :: Key
 pattern GreaseQuicBit                    = Key 0x2ab2
 
-{-# COMPLETE OriginalDestinationConnectionId
-           , MaxIdleTimeout
-           , StateLessResetToken
-           , MaxUdpPayloadSize
-           , InitialMaxData
-           , InitialMaxStreamDataBidiLocal
-           , InitialMaxStreamDataBidiRemote
-           , InitialMaxStreamDataUni
-           , InitialMaxStreamsBidi
-           , InitialMaxStreamsUni
-           , AckDelayExponent
-           , MaxAckDelay
-           , DisableActiveMigration
-           , PreferredAddress
-           , ActiveConnectionIdLimit
-           , InitialSourceConnectionId
-           , RetrySourceConnectionId
-           , Grease
-           , GreaseQuicBit
-           #-}
-
 -- | QUIC transport parameters.
 data Parameters = Parameters {
     originalDestinationConnectionId :: Maybe CID
@@ -193,6 +172,7 @@ fromParameterList kvs = foldl' update params kvs
         = x { grease = Just v }
     update x (GreaseQuicBit,_)
         = x { greaseQuicBit = True }
+    update x _ = x
 
 diff :: Eq a => Parameters -> (Parameters -> a) -> Key -> (a -> Value) -> Maybe (Key,Value)
 diff params label key enc
