@@ -340,11 +340,10 @@ printThroughput t1 t2 ConnectionStats{..} =
 console :: Aux -> (Aux -> Connection -> IO ()) -> Connection -> IO ()
 console aux client conn = do
     waitEstablished conn
-    putStrLn "g -- get"
-    putStrLn "k -- update key"
-    putStrLn "m -- migrate"
-    putStrLn "p -- ping"
     putStrLn "q -- quit"
+    putStrLn "g -- get"
+    putStrLn "p -- ping"
+    putStrLn "n -- NAT rebinding"
     loop
    where
      loop = do
@@ -354,9 +353,6 @@ console aux client conn = do
          l <- getLine
          case l of
            "q" -> putStrLn "bye"
-           "n" -> do
-               migrate conn NATRebinding >>= print
-               loop
            "g" -> do
                putStrLn $ "GET " ++ auxPath aux
                _ <- forkIO $ client aux conn
@@ -364,6 +360,9 @@ console aux client conn = do
            "p" -> do
                putStrLn "Ping"
                sendFrames conn RTT1Level [Ping]
+               loop
+           "n" -> do
+               migrate conn NATRebinding >>= print
                loop
            _   -> do
                putStrLn "No such command"
