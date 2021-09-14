@@ -14,7 +14,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Ptr
-import Network.Socket (Socket, SockAddr(..))
+import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
@@ -38,7 +38,7 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
-                           , serverAddr         :: SockAddr
+                           , serverAddr         :: Maybe SockAddr
                            }
               | ServerInfo { tokenManager    :: ~CT.TokenManager
                            , registerCID     :: CID -> Connection -> IO ()
@@ -52,7 +52,7 @@ defaultClientRoleInfo :: RoleInfo
 defaultClientRoleInfo = ClientInfo {
     clientInitialToken = emptyToken
   , resumptionInfo = defaultResumptionInfo
-  , serverAddr     = SockAddrInet 0 0
+  , serverAddr     = Nothing
   }
 
 defaultServerRoleInfo :: RoleInfo

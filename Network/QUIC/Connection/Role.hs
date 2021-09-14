@@ -119,7 +119,7 @@ getCertificateChain Connection{..} = certChain <$> readIORef roleInfo
 
 setServerAddr :: Connection -> SockAddr -> IO ()
 setServerAddr Connection{..} sa = atomicModifyIORef'' roleInfo $
-    \si -> si { serverAddr = sa }
+    \si -> si { serverAddr = Just sa }
 
-getServerAddr :: Connection -> IO SockAddr
+getServerAddr :: Connection -> IO (Maybe SockAddr)
 getServerAddr Connection{..} = serverAddr <$> readIORef roleInfo
