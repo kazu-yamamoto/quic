@@ -29,20 +29,27 @@ import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
 readerClient :: [Version] -> Socket -> Connection -> IO ()
-readerClient myVers s conn = handleLogUnit logAction loop
+readerClient myVers s0 conn = handleLogUnit logAction $ do
+    getServerAddr conn >>= loop
   where
-    loop = do
+    loop msa0 = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
+        mbs <- timeout ito $ do
+            case msa0 of
+              Nothing  ->     NSB.recv     s0 maximumUdpPayloadSize
+              Just sa0 -> do
+                  (bs, sa) <- NSB.recvFrom s0 maximumUdpPayloadSize
+                  return $ if sa == sa0 then bs else ""
         case mbs of
-          Nothing -> close s
+          Nothing -> close s0
+          Just "" -> loop msa0
           Just bs -> do
             now <- getTimeMicrosecond
             let bytes = BS.length bs
             addRxBytes conn bytes
             pkts <- decodePackets bs
             mapM_ (putQ now bytes) pkts
-            loop
+            loop msa0
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
@@ -130,7 +137,10 @@ migrationClient conn ActiveRebinding = do
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
     s0:_ <- getSockets conn
-    s1 <- getPeerName s0 >>= udpNATRebindingConnectedSocket
+    msa0 <- getServerAddr conn
+    s1 <- case msa0 of
+      Nothing  -> getPeerName s0 >>= udpNATRebindingConnectedSocket
+      Just sa0 -> udpNATRebindingSocket sa0
     _ <- addSocket conn s1
     v <- getVersion conn
     let reader = readerClient [v] s1 conn -- versions are dummy

@@ -57,7 +57,7 @@ data ClientConfig = ClientConfig {
   , ccResumption    :: ResumptionInfo
   , ccPacketSize    :: Maybe Int -- ^ QUIC packet size (UDP payload size)
   , ccDebugLog      :: Bool
-  , ccAutoMigration :: Bool
+  , ccAutoMigration :: Bool -- ^ If 'Ture', use a unconnected socket for auto migration.
   }
 
 -- | The default value for client configuration.
