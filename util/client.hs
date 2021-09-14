@@ -39,10 +39,11 @@ data Options = Options {
   , optRetry       :: Bool
   , optQuantum     :: Bool
   , optInteractive :: Bool
-  , optMigration   :: Maybe Migration
+  , optMigration   :: Maybe ConnectionControl
   , optPacketSize  :: Maybe Int
   , optPerformance :: Word64
   , optNumOfReqs   :: Int
+  , optManaulMig   :: Bool
   } deriving Show
 
 defaultOptions :: Options
@@ -64,6 +65,7 @@ defaultOptions = Options {
   , optPacketSize  = Nothing
   , optPerformance = 0
   , optNumOfReqs   = 1
+  , optManaulMig   = False
   }
 
 usage :: String
@@ -123,7 +125,7 @@ options = [
     (NoArg (\o -> o { optMigration = Just NATRebinding }))
     "use a new local port"
   , Option ['A'] ["address-mobility"]
-    (NoArg (\o -> o { optMigration = Just ActiveRebinding }))
+    (NoArg (\o -> o { optMigration = Just ActiveMigration }))
     "use a new address and a new server CID"
   , Option ['t'] ["performance"]
     (ReqArg (\n o -> o { optPerformance = read n }) "<size>")
@@ -131,6 +133,9 @@ options = [
   , Option ['n'] ["number-of-requests"]
     (ReqArg (\n o -> o { optNumOfReqs = read n }) "<n>")
     "number of requests"
+  , Option ['m'] ["manual-migration"]
+    (NoArg (\o -> o { optManaulMig = True }))
+    "manual migration instead of automatic"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -185,6 +190,7 @@ main = do
           , ccHooks      = defaultHooks {
                 onCloseCompleted = putMVar cmvar ()
               }
+          , ccAutoMigration = not optManaulMig
           }
         debug | optDebugLog = putStrLn
               | otherwise   = \_ -> return ()
@@ -215,7 +221,7 @@ runClient cc opts@Options{..} aux@Aux{..} = do
         m <- case optMigration of
           Nothing   -> return False
           Just mtyp -> do
-              x <- migrate conn mtyp
+              x <- controlConnection conn mtyp
               auxDebug $ "Migration by " ++ show mtyp
               return x
         t1 <- getUnixTime
@@ -287,7 +293,7 @@ runClient cc opts@Options{..} aux@Aux{..} = do
              Just NATRebinding -> do
                  putStrLn "Result: (B) NAT rebinding ... OK"
                  exitSuccess
-             Just ActiveRebinding -> do
+             Just ActiveMigration -> do
                  let changed = remoteCID info1 /= remoteCID info2
                  if mig && changed then do
                      putStrLn "Result: (A) address mobility ... OK"
@@ -334,11 +340,10 @@ printThroughput t1 t2 ConnectionStats{..} =
 console :: Aux -> (Aux -> Connection -> IO ()) -> Connection -> IO ()
 console aux client conn = do
     waitEstablished conn
-    putStrLn "g -- get"
-    putStrLn "k -- update key"
-    putStrLn "m -- migrate"
-    putStrLn "p -- ping"
     putStrLn "q -- quit"
+    putStrLn "g -- get"
+    putStrLn "p -- ping"
+    putStrLn "n -- NAT rebinding"
     loop
    where
      loop = do
@@ -348,9 +353,6 @@ console aux client conn = do
          l <- getLine
          case l of
            "q" -> putStrLn "bye"
-           "n" -> do
-               migrate conn NATRebinding >>= print
-               loop
            "g" -> do
                putStrLn $ "GET " ++ auxPath aux
                _ <- forkIO $ client aux conn
@@ -358,6 +360,9 @@ console aux client conn = do
            "p" -> do
                putStrLn "Ping"
                sendFrames conn RTT1Level [Ping]
+               loop
+           "n" -> do
+               controlConnection conn NATRebinding >>= print
                loop
            _   -> do
                putStrLn "No such command"

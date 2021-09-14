@@ -18,13 +18,17 @@ module Network.QUIC.Client (
   , ccGroups
   , ccCredentials
   , ccValidate -- fixme: should be True
+  , ccAutoMigration
   -- * Resumption
   , ResumptionInfo
   , getResumptionInfo
   , isResumptionPossible
   , is0RTTPossible
+  -- * Migration
+  , migrate
   ) where
 
+import Network.QUIC.Client.Reader
 import Network.QUIC.Client.Run
 import Network.QUIC.Config
 import Network.QUIC.Connection

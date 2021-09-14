@@ -47,8 +47,10 @@ closure' conn ldcc frame = do
         recv = NS.recvBuf s recvBuf bufsiz
         hook = onCloseCompleted $ connHooks conn
     send <- if isClient conn then do
-               sa <- getServerAddr conn
-               return $ NS.sendBufTo s sendBuf siz sa
+               msa <- getServerAddr conn
+               return $ case msa of
+                 Nothing -> NS.sendBuf   s sendBuf siz
+                 Just sa -> NS.sendBufTo s sendBuf siz sa
             else
               return $ NS.sendBuf s sendBuf siz
     pto <- getPTO ldcc

@@ -32,7 +32,13 @@ getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
     s:_    <- getSockets conn
     mysa   <- NS.getSocketName s
-    peersa <- if isClient conn then getServerAddr conn else NS.getPeerName s
+    peersa <- if isClient conn then do
+                  msa <- getServerAddr conn
+                  case msa of
+                    Nothing -> NS.getPeerName s
+                    Just sa -> return sa
+                else
+                  NS.getPeerName s
     mycid   <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level

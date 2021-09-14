@@ -16,7 +16,7 @@ module Network.QUIC.Internal (
   , module Network.QUIC.Client.Reader
   ) where
 
-import Network.QUIC.Client.Reader (migrate,Migration(..))
+import Network.QUIC.Client.Reader (controlConnection,ConnectionControl(..))
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector

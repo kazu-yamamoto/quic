@@ -32,8 +32,11 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 -- | Running a QUIC client.
---   A unconnected UDP socket is created according to
---   'ccServerName' and 'ccPortName'.
+--   A UDP socket is created according to 'ccServerName' and 'ccPortName'.
+--
+--   If 'ccAutoMigration' is 'True', a unconnected socket is made.
+--   Otherwise, a connected socket is made.
+--   Use the 'migration' API for the connected socket.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = case ccVersions conf of
@@ -84,12 +87,18 @@ runClient conf client0 ver = do
 
 createClientConnection :: ClientConfig -> Version -> IO ConnRes
 createClientConnection conf@ClientConfig{..} ver = do
-    (s0,sa0) <- udpClientSocket ccServerName ccPortName
+    (s0,sa0) <- if ccAutoMigration then
+                  udpClientSocket ccServerName ccPortName
+                else
+                  udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
     sref <- newIORef [s0]
     let send buf siz = do
             s:_ <- readIORef sref
-            void $ NS.sendBufTo s buf siz sa0
+            if ccAutoMigration then
+                void $ NS.sendBufTo s buf siz sa0
+              else
+                void $ NS.sendBuf s buf siz
         recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
@@ -109,6 +118,6 @@ createClientConnection conf@ClientConfig{..} ver = do
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
-    setServerAddr conn sa0
+    when ccAutoMigration $ setServerAddr conn sa0
     let reader = readerClient ccVersions s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader

@@ -4,14 +4,15 @@
 module Network.QUIC.Client.Reader (
     readerClient
   , recvClient
-  , Migration(..)
+  , ConnectionControl(..)
+  , controlConnection
   , migrate
   ) where
 
 import Control.Concurrent
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, close)
+import Network.Socket (Socket, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
 import qualified UnliftIO.Exception as E
 
@@ -32,20 +33,24 @@ readerClient :: [Version] -> Socket -> Connection -> IO ()
 readerClient myVers s0 conn = handleLogUnit logAction $ do
     getServerAddr conn >>= loop
   where
-    loop sa0 = do
+    loop msa0 = do
         ito <- readMinIdleTimeout conn
-        mbssa <- timeout ito $ NSB.recvFrom s0 maximumUdpPayloadSize
-        case mbssa of
-          Nothing       -> close s0
-          Just (bs, sa)
-            | sa == sa0 -> do
-                now <- getTimeMicrosecond
-                let bytes = BS.length bs
-                addRxBytes conn bytes
-                pkts <- decodePackets bs
-                mapM_ (putQ now bytes) pkts
-                loop sa0
-            | otherwise -> loop sa0
+        mbs <- timeout ito $ do
+            case msa0 of
+              Nothing  ->     NSB.recv     s0 maximumUdpPayloadSize
+              Just sa0 -> do
+                  (bs, sa) <- NSB.recvFrom s0 maximumUdpPayloadSize
+                  return $ if sa == sa0 then bs else ""
+        case mbs of
+          Nothing -> close s0
+          Just "" -> loop msa0
+          Just bs -> do
+            now <- getTimeMicrosecond
+            let bytes = BS.length bs
+            addRxBytes conn bytes
+            pkts <- decodePackets bs
+            mapM_ (putQ now bytes) pkts
+            loop msa0
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
@@ -90,38 +95,42 @@ recvClient = readRecvQ
 
 ----------------------------------------------------------------
 
--- | How to migrate a connection.
-data Migration = ChangeServerCID
-               | ChangeClientCID
-               | NATRebinding
-               | ActiveRebinding
-               deriving (Eq, Show)
+-- | How to control a connection.
+data ConnectionControl = ChangeServerCID
+                       | ChangeClientCID
+                       | NATRebinding
+                       | ActiveMigration
+                       deriving (Eq, Show)
 
--- | Migrating.
-migrate :: Connection -> Migration -> IO Bool
-migrate conn typ
+-- | When 'ccAutoMigration' is 'False', a new connected socket
+--   is created and a path validation is carried out.
+migrate :: Connection -> IO Bool
+migrate conn = controlConnection conn ActiveMigration
+
+controlConnection :: Connection -> ConnectionControl -> IO Bool
+controlConnection conn typ
   | isClient conn = do
         waitEstablished conn
-        migrationClient conn typ
+        controlConnection' conn typ
   | otherwise     = return False
 
-migrationClient :: Connection -> Migration -> IO Bool
-migrationClient conn ChangeServerCID = do
+controlConnection' :: Connection -> ConnectionControl -> IO Bool
+controlConnection' conn ChangeServerCID = do
     mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
     case mn of
       Nothing              -> return False
       Just (CIDInfo n _ _) -> do
           sendFrames conn RTT1Level [RetireConnectionID n]
           return True
-migrationClient conn ChangeClientCID = do
+controlConnection' conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
     x <- (+1) <$> getMyCIDSeqNum conn
     sendFrames conn RTT1Level [NewConnectionID cidInfo x]
     return True
-migrationClient conn NATRebinding = do
+controlConnection' conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
-migrationClient conn ActiveRebinding = do
+controlConnection' conn ActiveMigration = do
     mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
     case mn of
       Nothing  -> return False
@@ -133,8 +142,10 @@ migrationClient conn ActiveRebinding = do
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
     s0:_ <- getSockets conn
-    sa0 <- getServerAddr conn
-    s1 <- udpNATRebindingSocket sa0
+    msa0 <- getServerAddr conn
+    s1 <- case msa0 of
+      Nothing  -> getPeerName s0 >>= udpNATRebindingConnectedSocket
+      Just sa0 -> udpNATRebindingSocket sa0
     _ <- addSocket conn s1
     v <- getVersion conn
     let reader = readerClient [v] s1 conn -- versions are dummy
