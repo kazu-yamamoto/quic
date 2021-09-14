@@ -56,8 +56,26 @@ udpClientSocket host port = do
  where
     hints = defaultHints { addrSocketType = Datagram }
 
+udpClientConnectedSocket :: HostName -> ServiceName -> IO (Socket,SockAddr)
+udpClientConnectedSocket host port = do
+    addr <- head <$> getAddrInfo (Just hints) (Just host) (Just port)
+    E.bracketOnError (openSocket addr) close $ \s -> do
+        let sa = addrAddress addr
+        connect s sa
+        return (s,sa)
+ where
+    hints = defaultHints { addrSocketType = Datagram }
+
 udpNATRebindingSocket :: SockAddr -> IO Socket
 udpNATRebindingSocket peersa = E.bracketOnError open close $ \s ->
+    return s
+  where
+    family = sockAddrFamily peersa
+    open = socket family Datagram defaultProtocol
+
+udpNATRebindingConnectedSocket :: SockAddr -> IO Socket
+udpNATRebindingConnectedSocket peersa = E.bracketOnError open close $ \s -> do
+    connect s peersa
     return s
   where
     family = sockAddrFamily peersa

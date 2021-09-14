@@ -45,12 +45,8 @@ closure' conn ldcc frame = do
     siz <- encodeCC conn frame sendBuf bufsiz
     let recvBuf = sendBuf `plusPtr` (bufsiz * 2)
         recv = NS.recvBuf s recvBuf bufsiz
+        send = NS.sendBuf s sendBuf siz
         hook = onCloseCompleted $ connHooks conn
-    send <- if isClient conn then do
-               sa <- getServerAddr conn
-               return $ NS.sendBufTo s sendBuf siz sa
-            else
-              return $ NS.sendBuf s sendBuf siz
     pto <- getPTO ldcc
     void $ forkFinally (closer pto send recv hook) $ \_ -> do
         free sendBuf

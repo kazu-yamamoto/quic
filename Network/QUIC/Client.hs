@@ -23,8 +23,12 @@ module Network.QUIC.Client (
   , getResumptionInfo
   , isResumptionPossible
   , is0RTTPossible
+  -- * Migration
+  , migrate
+  , Migration(..)
   ) where
 
+import Network.QUIC.Client.Reader
 import Network.QUIC.Client.Run
 import Network.QUIC.Config
 import Network.QUIC.Connection

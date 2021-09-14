@@ -8,7 +8,6 @@ import qualified Network.Socket as NS
 import Network.TLS hiding (Version, HandshakeFailed)
 
 import Network.QUIC.Connection
-import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -32,7 +31,7 @@ getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
     s:_    <- getSockets conn
     mysa   <- NS.getSocketName s
-    peersa <- if isClient conn then getServerAddr conn else NS.getPeerName s
+    peersa <- NS.getPeerName s
     mycid   <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
