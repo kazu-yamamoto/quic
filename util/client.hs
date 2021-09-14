@@ -43,6 +43,7 @@ data Options = Options {
   , optPacketSize  :: Maybe Int
   , optPerformance :: Word64
   , optNumOfReqs   :: Int
+  , optManaulMig   :: Bool
   } deriving Show
 
 defaultOptions :: Options
@@ -64,6 +65,7 @@ defaultOptions = Options {
   , optPacketSize  = Nothing
   , optPerformance = 0
   , optNumOfReqs   = 1
+  , optManaulMig   = False
   }
 
 usage :: String
@@ -131,6 +133,9 @@ options = [
   , Option ['n'] ["number-of-requests"]
     (ReqArg (\n o -> o { optNumOfReqs = read n }) "<n>")
     "number of requests"
+  , Option ['m'] ["manual-migration"]
+    (NoArg (\o -> o { optManaulMig = True }))
+    "manual migration instead of automatic"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -185,6 +190,7 @@ main = do
           , ccHooks      = defaultHooks {
                 onCloseCompleted = putMVar cmvar ()
               }
+          , ccAutoMigration = not optManaulMig
           }
         debug | optDebugLog = putStrLn
               | otherwise   = \_ -> return ()
