@@ -40,23 +40,24 @@ defaultHooks = Hooks {
 
 -- | Client configuration.
 data ClientConfig = ClientConfig {
-    ccVersions    :: [Version] -- ^ Versions in the preferred order.
-  , ccCiphers     :: [Cipher]
-  , ccGroups      :: [Group]
-  , ccParameters  :: Parameters
-  , ccKeyLog      :: String -> IO ()
-  , ccQLog        :: Maybe FilePath
-  , ccCredentials :: Credentials
-  , ccHooks       :: Hooks
-  , ccUse0RTT     :: Bool
+    ccVersions      :: [Version] -- ^ Versions in the preferred order.
+  , ccCiphers       :: [Cipher]
+  , ccGroups        :: [Group]
+  , ccParameters    :: Parameters
+  , ccKeyLog        :: String -> IO ()
+  , ccQLog          :: Maybe FilePath
+  , ccCredentials   :: Credentials
+  , ccHooks         :: Hooks
+  , ccUse0RTT       :: Bool
   -- client original
-  , ccServerName  :: HostName -- ^ Used to create a socket and SNI for TLS.
-  , ccPortName    :: ServiceName -- ^ Used to create a socket.
-  , ccALPN        :: Version -> IO (Maybe [ByteString])
-  , ccValidate    :: Bool
-  , ccResumption  :: ResumptionInfo
-  , ccPacketSize  :: Maybe Int -- ^ QUIC packet size (UDP payload size)
-  , ccDebugLog    :: Bool
+  , ccServerName    :: HostName -- ^ Used to create a socket and SNI for TLS.
+  , ccPortName      :: ServiceName -- ^ Used to create a socket.
+  , ccALPN          :: Version -> IO (Maybe [ByteString])
+  , ccValidate      :: Bool
+  , ccResumption    :: ResumptionInfo
+  , ccPacketSize    :: Maybe Int -- ^ QUIC packet size (UDP payload size)
+  , ccDebugLog      :: Bool
+  , ccAutoMigration :: Bool
   }
 
 -- | The default value for client configuration.
@@ -64,22 +65,23 @@ defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
     ccVersions    = [Version1,Draft29]
                          -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
-  , ccCiphers     = supportedCiphers defaultSupported
-  , ccGroups      = supportedGroups defaultSupported
-  , ccParameters  = defaultParameters
-  , ccKeyLog      = \_ -> return ()
-  , ccQLog        = Nothing
-  , ccCredentials = mempty
-  , ccHooks       = defaultHooks
-  , ccUse0RTT     = False
+  , ccCiphers       = supportedCiphers defaultSupported
+  , ccGroups        = supportedGroups defaultSupported
+  , ccParameters    = defaultParameters
+  , ccKeyLog        = \_ -> return ()
+  , ccQLog          = Nothing
+  , ccCredentials   = mempty
+  , ccHooks         = defaultHooks
+  , ccUse0RTT       = False
   -- client original
-  , ccServerName  = "127.0.0.1"
-  , ccPortName    = "4433"
-  , ccALPN        = \_ -> return Nothing
-  , ccValidate    = False
-  , ccResumption  = defaultResumptionInfo
-  , ccPacketSize  = Nothing
-  , ccDebugLog    = False
+  , ccServerName    = "127.0.0.1"
+  , ccPortName      = "4433"
+  , ccALPN          = \_ -> return Nothing
+  , ccValidate      = False
+  , ccResumption    = defaultResumptionInfo
+  , ccPacketSize    = Nothing
+  , ccDebugLog      = False
+  , ccAutoMigration = True
   }
 
 ----------------------------------------------------------------
