@@ -39,7 +39,7 @@ data Options = Options {
   , optRetry       :: Bool
   , optQuantum     :: Bool
   , optInteractive :: Bool
-  , optMigration   :: Maybe Migration
+  , optMigration   :: Maybe ConnectionControl
   , optPacketSize  :: Maybe Int
   , optPerformance :: Word64
   , optNumOfReqs   :: Int
@@ -125,7 +125,7 @@ options = [
     (NoArg (\o -> o { optMigration = Just NATRebinding }))
     "use a new local port"
   , Option ['A'] ["address-mobility"]
-    (NoArg (\o -> o { optMigration = Just ActiveRebinding }))
+    (NoArg (\o -> o { optMigration = Just ActiveMigration }))
     "use a new address and a new server CID"
   , Option ['t'] ["performance"]
     (ReqArg (\n o -> o { optPerformance = read n }) "<size>")
@@ -221,7 +221,7 @@ runClient cc opts@Options{..} aux@Aux{..} = do
         m <- case optMigration of
           Nothing   -> return False
           Just mtyp -> do
-              x <- migrate conn mtyp
+              x <- controlConnection conn mtyp
               auxDebug $ "Migration by " ++ show mtyp
               return x
         t1 <- getUnixTime
@@ -293,7 +293,7 @@ runClient cc opts@Options{..} aux@Aux{..} = do
              Just NATRebinding -> do
                  putStrLn "Result: (B) NAT rebinding ... OK"
                  exitSuccess
-             Just ActiveRebinding -> do
+             Just ActiveMigration -> do
                  let changed = remoteCID info1 /= remoteCID info2
                  if mig && changed then do
                      putStrLn "Result: (A) address mobility ... OK"
@@ -362,7 +362,7 @@ console aux client conn = do
                sendFrames conn RTT1Level [Ping]
                loop
            "n" -> do
-               migrate conn NATRebinding >>= print
+               controlConnection conn NATRebinding >>= print
                loop
            _   -> do
                putStrLn "No such command"

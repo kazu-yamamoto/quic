@@ -4,7 +4,8 @@
 module Network.QUIC.Client.Reader (
     readerClient
   , recvClient
-  , Migration(..)
+  , ConnectionControl(..)
+  , controlConnection
   , migrate
   ) where
 
@@ -94,38 +95,42 @@ recvClient = readRecvQ
 
 ----------------------------------------------------------------
 
--- | How to migrate a connection.
-data Migration = ChangeServerCID
-               | ChangeClientCID
-               | NATRebinding
-               | ActiveRebinding
-               deriving (Eq, Show)
+-- | How to control a connection.
+data ConnectionControl = ChangeServerCID
+                       | ChangeClientCID
+                       | NATRebinding
+                       | ActiveMigration
+                       deriving (Eq, Show)
 
--- | Migrating.
-migrate :: Connection -> Migration -> IO Bool
-migrate conn typ
+-- | When 'ccAutoMigration' is 'False', a new connected socket
+--   is created and a path validation is carried out.
+migrate :: Connection -> IO Bool
+migrate conn = controlConnection conn ActiveMigration
+
+controlConnection :: Connection -> ConnectionControl -> IO Bool
+controlConnection conn typ
   | isClient conn = do
         waitEstablished conn
-        migrationClient conn typ
+        controlConnection' conn typ
   | otherwise     = return False
 
-migrationClient :: Connection -> Migration -> IO Bool
-migrationClient conn ChangeServerCID = do
+controlConnection' :: Connection -> ConnectionControl -> IO Bool
+controlConnection' conn ChangeServerCID = do
     mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
     case mn of
       Nothing              -> return False
       Just (CIDInfo n _ _) -> do
           sendFrames conn RTT1Level [RetireConnectionID n]
           return True
-migrationClient conn ChangeClientCID = do
+controlConnection' conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
     x <- (+1) <$> getMyCIDSeqNum conn
     sendFrames conn RTT1Level [NewConnectionID cidInfo x]
     return True
-migrationClient conn NATRebinding = do
+controlConnection' conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
-migrationClient conn ActiveRebinding = do
+controlConnection' conn ActiveMigration = do
     mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
     case mn of
       Nothing  -> return False
