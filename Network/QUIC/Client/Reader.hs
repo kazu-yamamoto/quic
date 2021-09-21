@@ -102,8 +102,10 @@ data ConnectionControl = ChangeServerCID
                        | ActiveMigration
                        deriving (Eq, Show)
 
--- | When 'ccAutoMigration' is 'False', a new connected socket
---   is created and a path validation is carried out.
+-- | Creating a new socket and execute a path validation
+--   with a new connection ID. Typically, this is used
+--   for migration in the case where 'ccAutoMigration' is 'False'.
+--   But this can also be used even when the value is 'True'.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration
 
