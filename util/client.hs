@@ -132,7 +132,7 @@ options = [
     "measure performance"
   , Option ['n'] ["number-of-requests"]
     (ReqArg (\n o -> o { optNumOfReqs = read n }) "<n>")
-    "number of requests"
+    "specify the number of requests"
   , Option ['m'] ["use-connected-socket"]
     (NoArg (\o -> o { optUnconSock = False }))
     "use connected sockets instead of unconnected sockets"
