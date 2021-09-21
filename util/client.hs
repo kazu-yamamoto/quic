@@ -43,7 +43,7 @@ data Options = Options {
   , optPacketSize  :: Maybe Int
   , optPerformance :: Word64
   , optNumOfReqs   :: Int
-  , optManaulMig   :: Bool
+  , optUnconSock   :: Bool
   } deriving Show
 
 defaultOptions :: Options
@@ -65,7 +65,7 @@ defaultOptions = Options {
   , optPacketSize  = Nothing
   , optPerformance = 0
   , optNumOfReqs   = 1
-  , optManaulMig   = False
+  , optUnconSock   = True
   }
 
 usage :: String
@@ -133,9 +133,9 @@ options = [
   , Option ['n'] ["number-of-requests"]
     (ReqArg (\n o -> o { optNumOfReqs = read n }) "<n>")
     "number of requests"
-  , Option ['m'] ["manual-migration"]
-    (NoArg (\o -> o { optManaulMig = True }))
-    "manual migration instead of automatic"
+  , Option ['m'] ["use-connected-socket"]
+    (NoArg (\o -> o { optUnconSock = False }))
+    "use connected sockets instead of unconnected sockets"
   ]
 
 showUsageAndExit :: String -> IO a
@@ -190,7 +190,7 @@ main = do
           , ccHooks      = defaultHooks {
                 onCloseCompleted = putMVar cmvar ()
               }
-          , ccAutoMigration = not optManaulMig
+          , ccAutoMigration = optUnconSock
           }
         debug | optDebugLog = putStrLn
               | otherwise   = \_ -> return ()
