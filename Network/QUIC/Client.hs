@@ -28,7 +28,6 @@ module Network.QUIC.Client (
   , migrate
   ) where
 
-import Network.QUIC.Client.Reader
 import Network.QUIC.Client.Run
 import Network.QUIC.Config
 import Network.QUIC.Connection

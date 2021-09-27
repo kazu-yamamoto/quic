@@ -6,7 +6,6 @@ module Network.QUIC.Client.Reader (
   , recvClient
   , ConnectionControl(..)
   , controlConnection
-  , migrate
   ) where
 
 import Control.Concurrent
@@ -101,13 +100,6 @@ data ConnectionControl = ChangeServerCID
                        | NATRebinding
                        | ActiveMigration
                        deriving (Eq, Show)
-
--- | Creating a new socket and execute a path validation
---   with a new connection ID. Typically, this is used
---   for migration in the case where 'ccAutoMigration' is 'False'.
---   But this can also be used even when the value is 'True'.
-migrate :: Connection -> IO Bool
-migrate conn = controlConnection conn ActiveMigration
 
 controlConnection :: Connection -> ConnectionControl -> IO Bool
 controlConnection conn typ
