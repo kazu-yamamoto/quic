@@ -94,14 +94,14 @@ data ServerConfig = ServerConfig {
   , scParameters     :: Parameters
   , scKeyLog         :: String -> IO ()
   , scQLog           :: Maybe FilePath
-  , scCredentials    :: Credentials
+  , scCredentials    :: Credentials -- ^ Server certificate information.
   , scHooks          :: Hooks
   , scUse0RTT        :: Bool -- ^ Use 0-RTT on the 2nd connection if possible.
   -- server original
-  , scAddresses      :: [(IP,PortNumber)]
-  , scALPN           :: Maybe (Version -> [ByteString] -> IO ByteString)
-  , scRequireRetry   :: Bool
-  , scSessionManager :: SessionManager
+  , scAddresses      :: [(IP,PortNumber)] -- ^ Server addresses assigned to used network interfaces.
+  , scALPN           :: Maybe (Version -> [ByteString] -> IO ByteString) -- ^ ALPN handler.
+  , scRequireRetry   :: Bool -- ^ Requiring QUIC retry.
+  , scSessionManager :: SessionManager -- ^ A session manager of TLS 1.3.
   , scDebugLog       :: Maybe FilePath
   }
 
