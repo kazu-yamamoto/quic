@@ -21,7 +21,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 decryptCrypt :: Connection -> Buffer -> BufferSize -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
-decryptCrypt conn decBuf bufsiz Crypt{..} lvl = do
+decryptCrypt conn decBuf _bufsiz Crypt{..} lvl = do -- fixme: bufsiz is not used
     cipher <- getCipher conn lvl
     protector <- getProtector conn lvl
     let proFlags = Flags (cryptPacket `BS.index` 0)
