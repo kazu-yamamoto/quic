@@ -89,14 +89,14 @@ defaultClientConfig = ClientConfig {
 -- | Server configuration.
 data ServerConfig = ServerConfig {
     scVersions       :: [Version] -- ^ Versions in the preferred order.
-  , scCiphers        :: [Cipher]
-  , scGroups         :: [Group]
+  , scCiphers        :: [Cipher] -- ^ Cipher candidates defined in TLS 1.3.
+  , scGroups         :: [Group] -- ^ Key exchange group candidates defined in TLS 1.3.
   , scParameters     :: Parameters
   , scKeyLog         :: String -> IO ()
   , scQLog           :: Maybe FilePath
   , scCredentials    :: Credentials
   , scHooks          :: Hooks
-  , scUse0RTT        :: Bool
+  , scUse0RTT        :: Bool -- ^ Use 0-RTT on the 2nd connection if possible.
   -- server original
   , scAddresses      :: [(IP,PortNumber)]
   , scALPN           :: Maybe (Version -> [ByteString] -> IO ByteString)
