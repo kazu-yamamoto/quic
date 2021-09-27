@@ -14,7 +14,7 @@ module Network.QUIC.Server (
   , scUse0RTT
   , scCiphers
   , scGroups
-  , scParameters
+--   , scParameters
   , scCredentials
   , scSessionManager
   -- * Certificate
