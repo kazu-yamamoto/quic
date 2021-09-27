@@ -56,11 +56,13 @@ testServerConfigR = defaultServerConfig {
 testClientConfig :: ClientConfig
 testClientConfig = defaultClientConfig {
     ccPortName = "8003"
+  , ccValidate = False
   }
 
 testClientConfigR :: ClientConfig
 testClientConfigR = defaultClientConfig {
     ccPortName = "8002"
+  , ccValidate = False
   , ccDebugLog = True
   }
 
