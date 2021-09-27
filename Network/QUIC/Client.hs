@@ -16,7 +16,7 @@ module Network.QUIC.Client (
   , ccResumption
   , ccCiphers
   , ccGroups
-  , ccCredentials
+--  , ccCredentials
   , ccValidate -- fixme: should be True
   , ccAutoMigration
   -- * Resumption
