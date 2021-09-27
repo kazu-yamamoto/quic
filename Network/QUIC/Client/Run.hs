@@ -36,7 +36,7 @@ import Network.QUIC.Types
 --
 --   If 'ccAutoMigration' is 'True', a unconnected socket is made.
 --   Otherwise, a connected socket is made.
---   Use the 'migration' API for the connected socket.
+--   Use the 'migrate' API for the connected socket.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = case ccVersions conf of
