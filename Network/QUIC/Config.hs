@@ -41,20 +41,20 @@ defaultHooks = Hooks {
 -- | Client configuration.
 data ClientConfig = ClientConfig {
     ccVersions      :: [Version] -- ^ Versions in the preferred order.
-  , ccCiphers       :: [Cipher]
-  , ccGroups        :: [Group]
+  , ccCiphers       :: [Cipher] -- ^ Cipher candidates defined in TLS 1.3.
+  , ccGroups        :: [Group] -- ^ Key exchange group candidates defined in TLS 1.3.
   , ccParameters    :: Parameters
   , ccKeyLog        :: String -> IO ()
   , ccQLog          :: Maybe FilePath
-  , ccCredentials   :: Credentials
+  , ccCredentials   :: Credentials -- ^ TLS credentials.
   , ccHooks         :: Hooks
-  , ccUse0RTT       :: Bool
+  , ccUse0RTT       :: Bool -- ^ Use 0-RTT on the 2nd connection if possible.
   -- client original
   , ccServerName    :: HostName -- ^ Used to create a socket and SNI for TLS.
   , ccPortName      :: ServiceName -- ^ Used to create a socket.
-  , ccALPN          :: Version -> IO (Maybe [ByteString])
-  , ccValidate      :: Bool
-  , ccResumption    :: ResumptionInfo
+  , ccALPN          :: Version -> IO (Maybe [ByteString]) -- ^ An ALPN provider.
+  , ccValidate      :: Bool -- ^ Authenticating a server based on its certificate.
+  , ccResumption    :: ResumptionInfo  -- ^ Use resumption on the 2nd connection if possible.
   , ccPacketSize    :: Maybe Int -- ^ QUIC packet size (UDP payload size)
   , ccDebugLog      :: Bool
   , ccAutoMigration :: Bool -- ^ If 'True', use a unconnected socket for auto migration. Otherwise, use a connected socket.
