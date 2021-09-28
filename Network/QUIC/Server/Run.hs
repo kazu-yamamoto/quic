@@ -46,7 +46,9 @@ run conf server = handleLogUnit debugLog $ do
         acc <- accept dispatch
         void $ forkIO (runServer conf server dispatch baseThreadId acc)
   where
-    debugLog msg = stdoutLogger ("run: " <> msg)
+    doDebug = isJust $ scDebugLog conf
+    debugLog msg | doDebug   = stdoutLogger ("run: " <> msg)
+                 | otherwise = return ()
     setup = do
         dispatch <- newDispatch
         -- fixme: the case where sockets cannot be created.

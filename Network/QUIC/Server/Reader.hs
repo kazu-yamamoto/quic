@@ -168,8 +168,10 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction $
             (pkt, bs0RTT) <- decodePacket bs0
     --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
             let send bs = void $ NSB.sendTo s bs peersa
-            dispatch d conf pkt mysa peersa send buf bs0RTT bytes now
-    logAction msg = stdoutLogger ("dispatcher: " <> msg)
+            dispatch d conf logAction pkt mysa peersa send buf bs0RTT bytes now
+    doDebug = isJust $ scDebugLog conf
+    logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
+                  | otherwise = return ()
     recv = do
 --        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
         ex <- E.tryAny $ NSB.recvFrom s maximumUdpPayloadSize
@@ -178,7 +180,7 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction $
            Left se -> case E.fromException se of
               Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
               _ -> do
-                  stdoutLogger $ "recv again: " <> bhow se
+                  logAction $ "recv again: " <> bhow se
                   recv
 
 ----------------------------------------------------------------
@@ -190,12 +192,12 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction $
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Buffer -> ByteString -> Int -> TimeMicrosecond -> IO ()
-dispatch Dispatch{..} ServerConfig{..}
+dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Buffer -> ByteString -> Int -> TimeMicrosecond -> IO ()
+dispatch Dispatch{..} ServerConfig{..} logAction
          (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _) lvl)
          mysa peersa send _ bs0RTT bytes tim
   | bytes < defaultQUICPacketSize = do
-        stdoutLogger $ "dispatch: too small " <> bhow bytes <> ", " <> bhow peersa
+        logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
   | ver `notElem` scVersions= do
         let vers | ver == GreasingVersion = GreasingVersion2 : scVersions
                  | otherwise = GreasingVersion : scVersions
@@ -303,21 +305,23 @@ dispatch Dispatch{..} ServerConfig{..}
         retryToken <- generateRetryToken ver newdCID sCID dCID
         mnewtoken <- timeout (Microseconds 100000) $ encryptToken tokenMgr retryToken
         case mnewtoken of
-          Nothing       -> stdoutLogger "RETRY TOKEN STACKED"
+          Nothing       -> logAction "retry token stacked"
           Just newtoken -> do
               bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
               send bss
-dispatch Dispatch{..} _ (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
+dispatch Dispatch{..} _ _
+         (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> return ()
-dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ buf _ bytes tim  = do
+dispatch Dispatch{..} _ logAction
+         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ buf _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
-          stdoutLogger $ "dispatch: CID no match: " <> bhow dCID <> ", " <> bhow peersa
+          logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
           let bufsiz = maximumUdpPayloadSize
           mplain <- decryptCrypt conn buf bufsiz crypt RTT1Level
@@ -339,7 +343,7 @@ dispatch Dispatch{..} _ (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa
                         connDebugLog conn $ "debug: dispatch: " <> msg
                         void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
 
-dispatch _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
+dispatch _ _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
 
 ----------------------------------------------------------------
 
