@@ -1,7 +1,7 @@
 name:                quic
 version:             0.0.0
 synopsis:            QUIC
-description:         Library for A UDP-Based Multiplexed and Secure Transport
+description:         Library for QUIC: A UDP-Based Multiplexed and Secure Transport
 license:             BSD3
 license-file:        LICENSE
 author:              Kazu Yamamoto
