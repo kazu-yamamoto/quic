@@ -200,7 +200,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
         logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
   | ver `notElem` scVersions= do
         let vers | ver == GreasingVersion = GreasingVersion2 : scVersions
-                 | otherwise = GreasingVersion : scVersions
+                 | otherwise              = GreasingVersion  : scVersions
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID vers
         send bss
   | token == "" = do
