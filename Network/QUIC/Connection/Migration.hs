@@ -157,7 +157,7 @@ arrange n db@CIDDB{..} = (db', dropSeqnums)
     -- But receiver guarantees that there is at least one cidinfo.
     usedCIDInfo' | cidInfoSeq usedCIDInfo >= n = usedCIDInfo
                  | otherwise            = snd $ IntMap.findMin cidInfos'
-    revInfos' = foldr (\k m -> Map.delete k m) revInfos dropCIDs
+    revInfos' = foldr Map.delete revInfos dropCIDs
     db' = db {
         usedCIDInfo = usedCIDInfo'
       , cidInfos    = cidInfos'

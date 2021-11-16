@@ -59,7 +59,7 @@ addSocket Connection{..} s1 = atomicModifyIORef' sockets $
     \ss@(s0:_) -> (s1:ss,s0)
 
 clearSockets :: Connection -> IO [Socket]
-clearSockets Connection{..} = atomicModifyIORef sockets $ \ss -> ([],ss)
+clearSockets Connection{..} = atomicModifyIORef sockets ([],)
 
 ----------------------------------------------------------------
 
@@ -141,7 +141,7 @@ addTimeouter Connection{..} tid = do
     writeIORef tmouter (deRefWeak wtid >>= mapM_ killThread)
 
 replaceKillTimeouter :: Connection -> IO (IO ())
-replaceKillTimeouter Connection{..} = atomicModifyIORef' tmouter $ \m -> (return (), m)
+replaceKillTimeouter Connection{..} = atomicModifyIORef' tmouter (return (),)
 
 ----------------------------------------------------------------
 

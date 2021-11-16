@@ -1,5 +1,3 @@
-{-# LANGUAGE PatternSynonyms #-}
-
 -- | This main module provides APIs for QUIC servers.
 module Network.QUIC.Server (
   -- * Running a QUIC server

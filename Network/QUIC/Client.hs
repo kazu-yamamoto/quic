@@ -1,5 +1,3 @@
-{-# LANGUAGE PatternSynonyms #-}
-
 -- | This main module provides APIs for QUIC clients.
 --   When a new better network interface is up,
 --   migration is done automatically.

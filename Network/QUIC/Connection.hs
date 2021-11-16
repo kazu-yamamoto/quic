@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Network.QUIC.Connection (
     module Network.QUIC.Connection.PacketNumber
   , module Network.QUIC.Connection.Crypto
