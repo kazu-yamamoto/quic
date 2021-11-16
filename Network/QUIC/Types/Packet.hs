@@ -20,6 +20,8 @@ pattern Negotiation      :: Version
 pattern Negotiation       = Version 0
 pattern Version1         :: Version
 pattern Version1          = Version 1
+pattern Version2         :: Version
+pattern Version2          = Version 0xff010001
 pattern Draft29          :: Version
 pattern Draft29           = Version 0xff00001d
 pattern GreasingVersion  :: Version
