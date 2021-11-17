@@ -27,7 +27,7 @@ encodeParameters = encodeParameterList . toParameterList
 decodeParameters :: ByteString -> Maybe Parameters
 decodeParameters bs = fromParameterList <$> decodeParameterList bs
 
-newtype Key = Key Word16 deriving (Eq, Show)
+newtype Key = Key Word32 deriving (Eq, Show)
 type Value = ByteString
 
 type ParameterList = [(Key,Value)]
@@ -70,6 +70,9 @@ pattern Grease                          :: Key
 pattern Grease                           = Key 0xff
 pattern GreaseQuicBit                   :: Key
 pattern GreaseQuicBit                    = Key 0x2ab2
+pattern VersionInformation              :: Key
+pattern VersionInformation               = Key 0xff73db
+
 
 -- | QUIC transport parameters.
 data Parameters = Parameters {
@@ -92,6 +95,7 @@ data Parameters = Parameters {
   , retrySourceConnectionId         :: Maybe CID
   , grease                          :: Maybe ByteString
   , greaseQuicBit                   :: Bool
+  , versionInformation              :: Maybe VersionInfo
   } deriving (Eq,Show)
 
 -- | The default value for QUIC transport parameters.
@@ -116,6 +120,7 @@ baseParameters = Parameters {
   , retrySourceConnectionId            = Nothing
   , grease                             = Nothing
   , greaseQuicBit                      = False
+  , versionInformation                 = Nothing
   }
 
 decInt :: ByteString -> Int
@@ -129,6 +134,27 @@ decMilliseconds = Milliseconds . fromIntegral . decodeInt
 
 encMilliseconds :: Milliseconds -> ByteString
 encMilliseconds (Milliseconds n) = encodeInt $ fromIntegral n
+
+fromVersionInfo :: Maybe VersionInfo -> Value
+fromVersionInfo Nothing                = "" -- never reach
+fromVersionInfo (Just VersionInfo{..}) = unsafeDupablePerformIO $
+    withWriteBuffer len $ \wbuf -> do
+        let putVersion (Version ver) = write32 wbuf ver
+        putVersion chosenVersion
+        mapM_ putVersion otherVersions
+  where
+    len = 4 + length otherVersions
+
+toVersionInfo :: Value -> Maybe VersionInfo
+toVersionInfo bs
+  | len < 3 || remainder /= 0   = Just brokenVersionInfo
+  | otherwise                   = Just $ unsafeDupablePerformIO $
+    withReadBuffer bs $ \rbuf -> do
+        let getVersion = Version <$> read32 rbuf
+        VersionInfo <$> getVersion <*> replicateM (cnt - 1) getVersion
+  where
+    len = BS.length bs
+    (cnt,remainder) = len `divMod` 4
 
 fromParameterList :: ParameterList -> Parameters
 fromParameterList kvs = foldl' update params kvs
@@ -172,6 +198,8 @@ fromParameterList kvs = foldl' update params kvs
         = x { grease = Just v }
     update x (GreaseQuicBit,_)
         = x { greaseQuicBit = True }
+    update x (VersionInformation,v)
+        = x { versionInformation = toVersionInfo v }
     update x _ = x
 
 diff :: Eq a => Parameters -> (Parameters -> a) -> Key -> (a -> Value) -> Maybe (Key,Value)
@@ -206,6 +234,7 @@ toParameterList p = catMaybes [
          RetrySourceConnectionId      (fromCID . fromJust)
   , diff p greaseQuicBit           GreaseQuicBit           (const "")
   , diff p grease                  Grease                  fromJust
+  , diff p versionInformation      VersionInformation      fromVersionInfo
   ]
 
 encSRT :: Maybe StatelessResetToken -> ByteString

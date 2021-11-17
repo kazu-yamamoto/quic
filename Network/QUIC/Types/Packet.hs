@@ -31,6 +31,16 @@ pattern GreasingVersion2  = Version 0x1a2a3a4a
 
 ----------------------------------------------------------------
 
+data VersionInfo = VersionInfo {
+    chosenVersion :: Version
+  , otherVersions :: [Version]
+  } deriving (Eq, Show)
+
+brokenVersionInfo :: VersionInfo
+brokenVersionInfo = VersionInfo Negotiation []
+
+----------------------------------------------------------------
+
 data PacketI = PacketIV VersionNegotiationPacket
              | PacketIR RetryPacket
              | PacketIC CryptPacket EncryptionLevel
