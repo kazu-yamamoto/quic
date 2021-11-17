@@ -59,6 +59,9 @@ pattern AeadLimitReached         = TransportError  0xf
 pattern NoViablePath            :: TransportError
 pattern NoViablePath             = TransportError 0x10
 
+pattern VersionNegotiationError :: TransportError
+pattern VersionNegotiationError  = TransportError 0x53f8
+
 -- | Converting a TLS alert to a corresponding transport error.
 cryptoError :: TLS.AlertDescription -> TransportError
 cryptoError ad = TransportError ec
