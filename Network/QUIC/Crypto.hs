@@ -115,19 +115,23 @@ initialSecrets :: Version -> CID -> TrafficSecrets InitialSecret
 initialSecrets v c = (clientInitialSecret v c, serverInitialSecret v c)
 
 clientInitialSecret :: Version -> CID -> ClientTrafficSecret InitialSecret
-clientInitialSecret v c = ClientTrafficSecret $ initialSecret (Label "client in") v c
+clientInitialSecret v c = ClientTrafficSecret $ initialSecret v c $ Label "client in"
 
 serverInitialSecret :: Version -> CID -> ServerTrafficSecret InitialSecret
-serverInitialSecret v c = ServerTrafficSecret $ initialSecret (Label "server in") v c
+serverInitialSecret v c = ServerTrafficSecret $ initialSecret v c $ Label "server in"
 
-initialSecret :: Label -> Version -> CID -> ByteString
-initialSecret (Label label) ver cid
-  | ver == Draft29 || ver == Version1 || ver == Version2 = secret
-  | otherwise = "version not supported!!!"
+initialSecret :: Version -> CID -> Label -> ByteString
+initialSecret Draft29  = initialSecret' $ initialSalt Draft29
+initialSecret Version1 = initialSecret' $ initialSalt Version1
+initialSecret Version2 = initialSecret' $ initialSalt Version2
+initialSecret _        = \_ _ -> "not supported"
+
+initialSecret' :: ByteString -> CID -> Label -> ByteString
+initialSecret' salt cid (Label label) = secret
   where
     cipher    = defaultCipher
     hash      = cipherHash cipher
-    iniSecret = hkdfExtract hash (initialSalt ver) $ fromCID cid
+    iniSecret = hkdfExtract hash salt $ fromCID cid
     hashSize  = hashDigestSize hash
     secret    = hkdfExpandLabel hash iniSecret label "" hashSize
 
