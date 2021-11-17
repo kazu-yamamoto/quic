@@ -136,16 +136,16 @@ initialSecret' salt cid (Label label) = secret
     secret    = hkdfExpandLabel hash iniSecret label "" hashSize
 
 aeadKey :: Version -> Cipher -> Secret -> Key
-aeadKey Draft29  = genKey (Label "quic key")
-aeadKey Version1 = genKey (Label "quic key")
-aeadKey Version2 = genKey (Label "quicv2 key")
-aeadKey _        = genKey (Label "not supported")
+aeadKey Draft29  = genKey $ Label "quic key"
+aeadKey Version1 = genKey $ Label "quic key"
+aeadKey Version2 = genKey $ Label "quicv2 key"
+aeadKey _        = genKey $ Label "not supported"
 
 headerProtectionKey :: Version -> Cipher -> Secret -> Key
-headerProtectionKey Draft29  = genKey (Label "quic hp")
-headerProtectionKey Version1 = genKey (Label "quic hp")
-headerProtectionKey Version2 = genKey (Label "quicv2 hp")
-headerProtectionKey _        = genKey (Label "not supported")
+headerProtectionKey Draft29  = genKey $ Label "quic hp"
+headerProtectionKey Version1 = genKey $ Label "quic hp"
+headerProtectionKey Version2 = genKey $ Label "quicv2 hp"
+headerProtectionKey _        = genKey $ Label "not supported"
 
 genKey :: Label -> Cipher -> Secret -> Key
 genKey (Label label) cipher (Secret secret) = Key key
