@@ -46,3 +46,8 @@ spec = do
                 countZero (beg +. 1) (beg +. 10) `shouldReturn` 9
                 countZero (beg +. 1) (beg +. 11) `shouldReturn` 10
                 countZero (beg +. 2) (beg +. 3) `shouldReturn` 1
+                poke (beg +. 10) (1 :: Word8)
+                countZero beg end `shouldReturn` 10
+                countZero (beg +. 1) end `shouldReturn` 9
+                countZero (beg +. 2) end `shouldReturn` 8
+                countZero (beg +. 3) end `shouldReturn` 7
