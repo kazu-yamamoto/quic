@@ -183,7 +183,7 @@ processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
     -- see ackEli above
-    when (lvl /= RTT1Level) $ sendFrames conn lvl []
+    when (lvl /= InitialLevel && lvl /= RTT1Level) $ sendFrames conn lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ closeConnection ProtocolViolation "ACK"
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
