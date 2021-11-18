@@ -1,5 +1,5 @@
 name:                quic
-version:             0.0.0
+version:             0.0.1
 synopsis:            QUIC
 description:         Library for QUIC: A UDP-Based Multiplexed and Secure Transport
 license:             BSD3
@@ -9,8 +9,8 @@ maintainer:          kazu@iij.ad.jp
 -- copyright:
 category:            Web
 build-type:          Simple
--- extra-source-files:  ChangeLog.md
 cabal-version:       >= 1.10
+extra-source-files:  ChangeLog.md
 extra-source-files:  cbits/*.h
 extra-source-files:  cbits/picotls/*.h
 extra-source-files:  test/servercert.pem
