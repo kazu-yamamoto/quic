@@ -39,17 +39,16 @@ import Network.QUIC.Types
 --   Use the 'migrate' API for the connected socket.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
-run conf client = case ccVersions conf of
-  []           -> E.throwIO NoVersionIsSpecified
-  vers@(ver:_) -> do
-      ex <- E.try $ runClient conf client ver vers
-      case ex of
-        Right v                     -> return v
-        Left (NextVersion [])       -> E.throwIO VersionNegotiationFailed
-        Left (NextVersion vs@(v:_)) -> runClient conf client v vs
+run conf client = do
+  ex <- E.try $ runClient conf client $ ccVersionInfo conf
+  case ex of
+    Right v                     -> return v
+    Left (NextVersion verInfo)
+      | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
+      | otherwise                    -> runClient conf client verInfo
 
-runClient :: ClientConfig -> (Connection -> IO a) -> Version -> [Version] -> IO a
-runClient conf client0 ver vers = do
+runClient :: ClientConfig -> (Connection -> IO a) -> VersionInfo -> IO a
+runClient conf client0 verInfo = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
         forkIO reader    >>= addReader conn
         forkIO timeouter >>= addTimeouter conn
@@ -75,7 +74,7 @@ runClient conf client0 ver vers = do
                   Right r -> return r
         E.trySyncOrAsync runThreads >>= closure conn ldcc
   where
-    open = createClientConnection conf ver vers
+    open = createClientConnection conf verInfo
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
@@ -85,8 +84,8 @@ runClient conf client0 ver vers = do
         mapM_ NS.close socks
         join $ replaceKillTimeouter conn
 
-createClientConnection :: ClientConfig -> Version -> [Version] -> IO ConnRes
-createClientConnection conf@ClientConfig{..} ver vers = do
+createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
+createClientConnection conf@ClientConfig{..} verInfo = do
     (s0,sa0) <- if ccAutoMigration then
                   udpClientSocket ccServerName ccPortName
                 else
@@ -109,6 +108,7 @@ createClientConnection conf@ClientConfig{..} ver vers = do
     debugLog $ "Original CID: " <> bhow peerCID
     let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
+    let ver = chosenVersion verInfo
     conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog ccHooks sref q
     addResource conn qclean
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
@@ -119,7 +119,7 @@ createClientConnection conf@ClientConfig{..} ver vers = do
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
     when ccAutoMigration $ setServerAddr conn sa0
-    let reader = readerClient vers s0 conn -- dies when s0 is closed.
+    let reader = readerClient verInfo s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation

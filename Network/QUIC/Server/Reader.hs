@@ -198,9 +198,10 @@ dispatch Dispatch{..} ServerConfig{..} logAction
          mysa peersa send _ bs0RTT bytes tim
   | bytes < defaultQUICPacketSize = do
         logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
-  | ver `notElem` scVersions = do
-        let vers | ver == GreasingVersion = GreasingVersion2 : scVersions
-                 | otherwise              = GreasingVersion  : scVersions
+  | ver `notElem` otherVersions scVersionInfo = do
+        let supportedVersions = otherVersions scVersionInfo
+        let vers | ver == GreasingVersion = GreasingVersion2 : supportedVersions
+                 | otherwise              = GreasingVersion  : supportedVersions
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID vers
         send bss
   | token == "" = do

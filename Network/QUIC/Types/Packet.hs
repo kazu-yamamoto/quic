@@ -36,6 +36,9 @@ data VersionInfo = VersionInfo {
   , otherVersions :: [Version]
   } deriving (Eq, Show)
 
+defaultVersionInfo :: VersionInfo
+defaultVersionInfo = VersionInfo Version1 [Version2, Version1]
+
 brokenVersionInfo :: VersionInfo
 brokenVersionInfo = VersionInfo Negotiation []
 
