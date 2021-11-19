@@ -143,7 +143,7 @@ fromVersionInfo (Just VersionInfo{..}) = unsafeDupablePerformIO $
         putVersion chosenVersion
         mapM_ putVersion otherVersions
   where
-    len = 4 + length otherVersions
+    len = 4 * (length otherVersions + 1)
 
 toVersionInfo :: Value -> Maybe VersionInfo
 toVersionInfo bs
