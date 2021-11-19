@@ -66,7 +66,9 @@ defaultClientConfig = ClientConfig {
     ccVersionInfo   = defaultVersionInfo
   , ccCiphers       = supportedCiphers defaultSupported
   , ccGroups        = supportedGroups defaultSupported
-  , ccParameters    = defaultParameters
+  , ccParameters    = defaultParameters {
+        versionInformation = Just defaultVersionInfo
+      }
   , ccKeyLog        = \_ -> return ()
   , ccQLog          = Nothing
   , ccCredentials   = mempty
@@ -110,7 +112,9 @@ defaultServerConfig = ServerConfig {
     scVersionInfo    = defaultVersionInfo
   , scCiphers        = supportedCiphers defaultSupported
   , scGroups         = supportedGroups defaultSupported
-  , scParameters     = defaultParameters
+  , scParameters     = defaultParameters {
+        versionInformation = Just defaultVersionInfo
+      }
   , scKeyLog         = \_ -> return ()
   , scQLog           = Nothing
   , scCredentials    = mempty

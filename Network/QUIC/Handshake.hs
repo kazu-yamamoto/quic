@@ -224,6 +224,7 @@ setPeerParams conn _ctx ps0 = do
             when (isJust $ preferredAddress params) sendCCParamError
             when (isJust $ retrySourceConnectionId params) sendCCParamError
             when (isJust $ statelessResetToken params) sendCCParamError
+        when (versionInformation params == Just brokenVersionInfo) sendCCParamError
     setParams params = do
         setPeerParameters conn params
         mapM_ (setPeerStatelessResetToken conn) $ statelessResetToken params
