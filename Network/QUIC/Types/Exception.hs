@@ -35,12 +35,12 @@ data InternalControl = MustNotReached
 
 instance E.Exception InternalControl
 
-newtype NextVersion = NextVersion (Maybe Version) deriving (Show)
+newtype NextVersion = NextVersion [Version] deriving (Show)
 
 instance E.Exception NextVersion
 
 data Abort = Abort ApplicationProtocolError ReasonPhrase
-           | VerNego (Maybe Version)
+           | VerNego [Version]
            deriving (Show)
 
 instance E.Exception Abort where

@@ -40,16 +40,16 @@ import Network.QUIC.Types
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = case ccVersions conf of
-  []     -> E.throwIO NoVersionIsSpecified
-  ver1:_ -> do
-      ex <- E.try $ runClient conf client ver1
+  []           -> E.throwIO NoVersionIsSpecified
+  vers@(ver:_) -> do
+      ex <- E.try $ runClient conf client ver vers
       case ex of
-        Right v                        -> return v
-        Left (NextVersion Nothing)     -> E.throwIO VersionNegotiationFailed
-        Left (NextVersion (Just ver2)) -> runClient conf client ver2
+        Right v                     -> return v
+        Left (NextVersion [])       -> E.throwIO VersionNegotiationFailed
+        Left (NextVersion vs@(v:_)) -> runClient conf client v vs
 
-runClient :: ClientConfig -> (Connection -> IO a) -> Version -> IO a
-runClient conf client0 ver = do
+runClient :: ClientConfig -> (Connection -> IO a) -> Version -> [Version] -> IO a
+runClient conf client0 ver vers = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
         forkIO reader    >>= addReader conn
         forkIO timeouter >>= addTimeouter conn
@@ -75,7 +75,7 @@ runClient conf client0 ver = do
                   Right r -> return r
         E.trySyncOrAsync runThreads >>= closure conn ldcc
   where
-    open = createClientConnection conf ver
+    open = createClientConnection conf ver vers
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
@@ -85,8 +85,8 @@ runClient conf client0 ver = do
         mapM_ NS.close socks
         join $ replaceKillTimeouter conn
 
-createClientConnection :: ClientConfig -> Version -> IO ConnRes
-createClientConnection conf@ClientConfig{..} ver = do
+createClientConnection :: ClientConfig -> Version -> [Version] -> IO ConnRes
+createClientConnection conf@ClientConfig{..} ver vers = do
     (s0,sa0) <- if ccAutoMigration then
                   udpClientSocket ccServerName ccPortName
                 else
@@ -119,7 +119,7 @@ createClientConnection conf@ClientConfig{..} ver = do
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
     when ccAutoMigration $ setServerAddr conn sa0
-    let reader = readerClient ccVersions s0 conn -- dies when s0 is closed.
+    let reader = readerClient vers s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation

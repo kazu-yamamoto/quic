@@ -54,15 +54,15 @@ readerClient myVers s0 conn = handleLogUnit logAction $ do
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt t
-        mver <- case myVers of
-          []  -> return Nothing
-          [_] -> return Nothing
-          _:myVers' -> case myVers' `intersect` peerVers of
-                  []    -> return Nothing
-                  ver:_ -> do
-                      ok <- checkCIDs conn dCID (Left sCID)
-                      return $ if ok then Just ver else Nothing
-        E.throwTo (mainThreadId conn) $ VerNego mver
+        case myVers of
+          []        -> return () -- after rebind, just ignore it
+          myVer':myVers'
+            | myVer' `elem` peerVers -> return () -- MUST ignore it
+            | otherwise -> do
+                  ok <- checkCIDs conn dCID (Left sCID)
+                  let vers | ok        = myVers' `intersect` peerVers
+                           | otherwise = []
+                  E.throwTo (mainThreadId conn) $ VerNego vers
     putQ t z (PacketIC pkt lvl) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t z lvl
     putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
@@ -141,7 +141,6 @@ rebind conn microseconds = do
       Nothing  -> getPeerName s0 >>= udpNATRebindingConnectedSocket
       Just sa0 -> udpNATRebindingSocket sa0
     _ <- addSocket conn s1
-    v <- getVersion conn
-    let reader = readerClient [v] s1 conn -- versions are dummy
+    let reader = readerClient [] s1 conn
     forkIO reader >>= addReader conn
     fire conn microseconds $ close s0
