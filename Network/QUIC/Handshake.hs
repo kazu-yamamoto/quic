@@ -187,6 +187,7 @@ setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
 setPeerParams conn _ctx ps0 = do
     ver <- getVersion conn
     let mps | ver == Version1 = getTP extensionID_QuicTransportParameters ps0
+            | ver == Version2 = getTP extensionID_QuicTransportParameters ps0
             | otherwise       = getTP 0xffa5 ps0
     setPP mps
   where
