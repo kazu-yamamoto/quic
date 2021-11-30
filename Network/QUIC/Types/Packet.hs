@@ -35,9 +35,12 @@ instance Show Version where
     show (Version          1) = "Version1"
     show (Version 0xff020000) = "Version2"
     show (Version 0xff00001d) = "Draft29"
-    show (Version v)
-      | v .&. 0x0a0a0a0a == 0x0a0a0a0a = "Greasing 0x" ++ printf "%08x" v
-      | otherwise                      =  "Version 0x" ++ printf "%08x" v
+    show ver@(Version v)
+      | isGreasingVersion ver = "Greasing 0x" ++ printf "%08x" v
+      | otherwise             =  "Version 0x" ++ printf "%08x" v
+
+isGreasingVersion :: Version -> Bool
+isGreasingVersion (Version v) = v .&. 0x0a0a0a0a == 0x0a0a0a0a
 
 ----------------------------------------------------------------
 

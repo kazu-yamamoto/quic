@@ -56,7 +56,8 @@ readerClient verInfo s0 conn = handleLogUnit logAction $ do
         qlogReceived conn pkt t
         unless (chosenVersion verInfo `elem` peerVers) $ do
             ok <- checkCIDs conn dCID (Left sCID)
-            let verInfo' = case otherVersions verInfo `intersect` peerVers of
+            let myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
+                verInfo' = case myVers `intersect` peerVers of
                   vers@(ver:_) | ok -> VersionInfo ver vers
                   _                 -> brokenVersionInfo
             E.throwTo (mainThreadId conn) $ VerNego verInfo'
