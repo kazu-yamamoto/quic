@@ -52,7 +52,12 @@ runClient conf client0 verInfo = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
         forkIO reader    >>= addReader conn
         forkIO timeouter >>= addTimeouter conn
-        handshaker <- handshakeClient conf conn myAuthCIDs
+        let conf' = conf {
+                ccParameters = (ccParameters conf) {
+                      versionInformation = Just verInfo
+                    }
+              }
+        handshaker <- handshakeClient conf' conn myAuthCIDs
         let client = do
                 if ccUse0RTT conf then
                     wait0RTTReady conn

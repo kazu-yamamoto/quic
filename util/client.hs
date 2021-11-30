@@ -167,13 +167,13 @@ main = do
                             protos | optHQ     = [hqX,h3X]
                                    | otherwise = [h3X,hqX]
                         in return $ Just protos
-        confver verInfo
-          | optVerNego = verInfo {
+        verInfo vi
+          | optVerNego = vi {
                   chosenVersion = GreasingVersion
-                , otherVersions = GreasingVersion : otherVersions verInfo
+                , otherVersions = GreasingVersion : otherVersions vi
                 }
-          | otherwise  = verInfo
-        confparams params
+          | otherwise  = vi
+        setTPQuantum params
           | optQuantum = let bs = BS.replicate 1200 0
                          in params { grease = Just bs }
           | otherwise  = params
@@ -185,8 +185,8 @@ main = do
           , ccValidate    = optValidate
           , ccPacketSize  = optPacketSize
           , ccDebugLog    = optDebugLog
-          , ccVersionInfo = confver $ ccVersionInfo cc0
-          , ccParameters  = confparams $ ccParameters cc0
+          , ccVersionInfo = verInfo $ ccVersionInfo cc0
+          , ccParameters  = setTPQuantum $ ccParameters cc0
           , ccKeyLog      = getLogger optKeyLogFile
           , ccGroups      = getGroups (ccGroups cc0) optGroups
           , ccQLog        = optQLogDir
