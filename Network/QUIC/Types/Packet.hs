@@ -4,6 +4,7 @@
 module Network.QUIC.Types.Packet where
 
 import Data.Ix
+import Text.Printf
 
 import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
@@ -14,7 +15,7 @@ import Network.QUIC.Types.Time
 ----------------------------------------------------------------
 
 -- | QUIC version.
-newtype Version = Version Word32 deriving (Eq, Ord, Show)
+newtype Version = Version Word32 deriving (Eq, Ord)
 
 pattern Negotiation      :: Version
 pattern Negotiation       = Version 0
@@ -28,6 +29,15 @@ pattern GreasingVersion  :: Version
 pattern GreasingVersion   = Version 0x0a0a0a0a
 pattern GreasingVersion2 :: Version
 pattern GreasingVersion2  = Version 0x1a2a3a4a
+
+instance Show Version where
+    show (Version          0) = "Negotiation"
+    show (Version          1) = "Version1"
+    show (Version 0xff020000) = "Version2"
+    show (Version 0xff00001d) = "Draft29"
+    show (Version v)
+      | v .&. 0x0a0a0a0a == 0x0a0a0a0a = "Greasing 0x" ++ printf "%08x" v
+      | otherwise                      =  "Version 0x" ++ printf "%08x" v
 
 ----------------------------------------------------------------
 
