@@ -54,13 +54,16 @@ readerClient verInfo s0 conn = handleLogUnit logAction $ do
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt t
-        unless (chosenVersion verInfo `elem` peerVers) $ do
-            ok <- checkCIDs conn dCID (Left sCID)
-            let myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
-                verInfo' = case myVers `intersect` peerVers of
-                  vers@(ver:_) | ok -> VersionInfo ver vers
-                  _                 -> brokenVersionInfo
-            E.throwTo (mainThreadId conn) $ VerNego verInfo'
+        myVer <- getVersion conn
+        -- ignoring VN if the original version is included.
+        when (myVer `notElem` peerVers) $ do
+            unless (chosenVersion verInfo `elem` peerVers) $ do
+                ok <- checkCIDs conn dCID (Left sCID)
+                let myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
+                    verInfo' = case myVers `intersect` peerVers of
+                      vers@(ver:_) | ok -> VersionInfo ver vers
+                      _                 -> brokenVersionInfo
+                E.throwTo (mainThreadId conn) $ VerNego verInfo'
     putQ t z (PacketIC pkt lvl) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t z lvl
     putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
