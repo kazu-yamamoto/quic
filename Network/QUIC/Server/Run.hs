@@ -66,7 +66,12 @@ runServer conf server0 dispatch baseThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
         handleLogUnit (debugLog conn) $ do
             forkIO reader >>= addReader conn
-            handshaker <- handshakeServer conf conn myAuthCIDs
+            let conf' = conf {
+                    scParameters = (scParameters conf) {
+                          versionInformation = Just $ accVersionInfo acc
+                        }
+                  }
+            handshaker <- handshakeServer conf' conn myAuthCIDs
             let server = do
                     wait1RTTReady conn
                     afterHandshakeServer conn
