@@ -90,19 +90,19 @@ internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
 
 ----------------------------------------------------------------
 
-handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO (IO ())
-handshakeClient conf conn myAuthCIDs = do
+handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> Bool -> IO (IO ())
+handshakeClient conf conn myAuthCIDs isICVN = do
     qlogParamsSet conn (ccParameters conf, "local") -- fixme
-    handshakeClient' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
+    handshakeClient' conf conn myAuthCIDs isICVN <$> getVersion conn <*> newHndStateRef
 
-handshakeClient' :: ClientConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
-handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
+handshakeClient' :: ClientConfig -> Connection -> AuthCIDs -> Bool -> Version -> IORef HndState -> IO ()
+handshakeClient' conf conn myAuthCIDs isICVN ver hsr = handshaker
   where
     handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT `E.catch` sendCCTLSError
     qc = QUICCallbacks { quicSend = sendTLS conn hsr
                        , quicRecv = recvTLS conn hsr
                        , quicInstallKeys = installKeysClient
-                       , quicNotifyExtensions = setPeerParams conn
+                       , quicNotifyExtensions = setPeerParams conn isICVN
                        , quicDone = done
                        }
     setter = setResumptionSession conn
@@ -144,7 +144,7 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
     qc = QUICCallbacks { quicSend = sendTLS conn hsr
                        , quicRecv = recvTLS conn hsr
                        , quicInstallKeys = installKeysServer
-                       , quicNotifyExtensions = setPeerParams conn
+                       , quicNotifyExtensions = setPeerParams conn False
                        , quicDone = done
                        }
     installKeysServer _ctx (InstallEarlyKeys Nothing) = return ()
@@ -185,8 +185,8 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
 
 ----------------------------------------------------------------
 
-setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
-setPeerParams conn _ctx ps0 = do
+setPeerParams :: Connection -> Bool -> TLS.Context -> [ExtensionRaw] -> IO ()
+setPeerParams conn shouldCheckVerInfo _ctx ps0 = do
     ver <- getVersion conn
     let mps | ver == Version1 = getTP extensionID_QuicTransportParameters ps0
             | ver == Version2 = getTP extensionID_QuicTransportParameters ps0
@@ -229,7 +229,20 @@ setPeerParams conn _ctx ps0 = do
             when (isJust $ preferredAddress params) sendCCParamError
             when (isJust $ retrySourceConnectionId params) sendCCParamError
             when (isJust $ statelessResetToken params) sendCCParamError
-        when (versionInformation params == Just brokenVersionInfo) sendCCParamError
+        case versionInformation params of
+           Nothing | shouldCheckVerInfo      -> sendCCVNError
+           Just vi | vi == brokenVersionInfo -> sendCCParamError
+                   | shouldCheckVerInfo      -> do
+                         verInfo <- getVersionInfo conn
+                         let myVer  = chosenVersion verInfo
+                             myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
+                             peerVer = chosenVersion vi
+                             peerVers = otherVersions vi
+                         case myVers `intersect` peerVers of
+                           ver:_ | ver == myVer && ver == peerVer -> return ()
+                           _                                      -> sendCCVNError
+           _                                 -> return ()
+
     setParams params = do
         setPeerParameters conn params
         mapM_ (setPeerStatelessResetToken conn) $ statelessResetToken params
@@ -265,8 +278,12 @@ storeNegotiated conn ctx appSecInf = do
 sendCCParamError :: IO ()
 sendCCParamError = E.throwIO WrongTransportParameter
 
+sendCCVNError :: IO ()
+sendCCVNError = E.throwIO WrongVersionInformation
+
 sendCCTLSError :: TLS.TLSException -> IO ()
 sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection TransportParameterError "Transport parametter error"
+sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongVersionInformation")) = closeConnection VersionNegotiationError "Version negotiation error"
 sendCCTLSError e = closeConnection err msg
   where
     tlserr = getErrorCause e

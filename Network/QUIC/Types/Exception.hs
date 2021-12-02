@@ -30,6 +30,7 @@ instance E.Exception QUICException
 data InternalControl = MustNotReached
                      | ExitConnection
                      | WrongTransportParameter
+                     | WrongVersionInformation
                      | BreakForever
                      deriving (Eq, Show)
 

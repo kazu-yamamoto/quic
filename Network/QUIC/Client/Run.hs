@@ -40,15 +40,15 @@ import Network.QUIC.Types
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = do
-  ex <- E.try $ runClient conf client $ ccVersionInfo conf
+  ex <- E.try $ runClient conf client False $ ccVersionInfo conf
   case ex of
     Right v                     -> return v
     Left (NextVersion verInfo)
       | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
-      | otherwise                    -> runClient conf client verInfo
+      | otherwise                    -> runClient conf client True verInfo
 
-runClient :: ClientConfig -> (Connection -> IO a) -> VersionInfo -> IO a
-runClient conf client0 verInfo = do
+runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
+runClient conf client0 isICVN verInfo = do
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
         forkIO reader    >>= addReader conn
         forkIO timeouter >>= addTimeouter conn
@@ -57,7 +57,7 @@ runClient conf client0 verInfo = do
                       versionInformation = Just verInfo
                     }
               }
-        handshaker <- handshakeClient conf' conn myAuthCIDs
+        handshaker <- handshakeClient conf' conn myAuthCIDs isICVN
         let client = do
                 if ccUse0RTT conf then
                     wait0RTTReady conn
