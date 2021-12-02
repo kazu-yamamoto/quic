@@ -113,9 +113,9 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     debugLog $ "Original CID: " <> bhow peerCID
     let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
-    let ver = chosenVersion verInfo
-    conn <- clientConnection conf ver myAuthCIDs peerAuthCIDs debugLog qLog ccHooks sref q
+    conn <- clientConnection conf verInfo myAuthCIDs peerAuthCIDs debugLog qLog ccHooks sref q
     addResource conn qclean
+    let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz0 = fromMaybe 0 ccPacketSize
@@ -124,7 +124,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
     when ccAutoMigration $ setServerAddr conn sa0
-    let reader = readerClient verInfo s0 conn -- dies when s0 is closed.
+    let reader = readerClient s0 conn -- dies when s0 is closed.
     return $ ConnRes conn send recv myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation

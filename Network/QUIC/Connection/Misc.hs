@@ -2,7 +2,9 @@
 {-# LANGUAGE TupleSections #-}
 
 module Network.QUIC.Connection.Misc (
-    setVersion
+    setVersionInfo
+  , getVersionInfo
+  , setVersion
   , getVersion
   , getSockets
   , addSocket
@@ -43,11 +45,18 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+setVersionInfo :: Connection -> VersionInfo -> IO ()
+setVersionInfo Connection{..} ver = writeIORef quicVersionInfo ver
+
+getVersionInfo :: Connection -> IO VersionInfo
+getVersionInfo Connection{..} = readIORef quicVersionInfo
+
 setVersion :: Connection -> Version -> IO ()
-setVersion Connection{..} ver = writeIORef quicVersion ver
+setVersion Connection{..} ver = atomicModifyIORef'' quicVersionInfo $ \vi ->
+  vi { chosenVersion = ver }
 
 getVersion :: Connection -> IO Version
-getVersion Connection{..} = readIORef quicVersion
+getVersion conn = chosenVersion <$> getVersionInfo conn
 
 ----------------------------------------------------------------
 

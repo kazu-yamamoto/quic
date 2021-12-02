@@ -28,8 +28,8 @@ import Network.QUIC.Socket
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
-readerClient :: VersionInfo -> Socket -> Connection -> IO ()
-readerClient verInfo s0 conn = handleLogUnit logAction $ do
+readerClient :: Socket -> Connection -> IO ()
+readerClient s0 conn = handleLogUnit logAction $ do
     getServerAddr conn >>= loop
   where
     loop msa0 = do
@@ -54,16 +54,17 @@ readerClient verInfo s0 conn = handleLogUnit logAction $ do
     putQ _ _ (PacketIB BrokenPacket) = return ()
     putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt t
-        myVer <- getVersion conn
+        myVerInfo <- getVersionInfo conn
+        let myVer   = chosenVersion myVerInfo
+            myVers0 = otherVersions myVerInfo
         -- ignoring VN if the original version is included.
         when (myVer `notElem` peerVers) $ do
-            unless (chosenVersion verInfo `elem` peerVers) $ do
-                ok <- checkCIDs conn dCID (Left sCID)
-                let myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
-                    verInfo' = case myVers `intersect` peerVers of
-                      vers@(ver:_) | ok -> VersionInfo ver vers
-                      _                 -> brokenVersionInfo
-                E.throwTo (mainThreadId conn) $ VerNego verInfo'
+            ok <- checkCIDs conn dCID (Left sCID)
+            let myVers = filter (not . isGreasingVersion) myVers0
+                nextVerInfo = case myVers `intersect` peerVers of
+                  vers@(ver:_) | ok -> VersionInfo ver vers
+                  _                 -> brokenVersionInfo
+            E.throwTo (mainThreadId conn) $ VerNego nextVerInfo
     putQ t z (PacketIC pkt lvl) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t z lvl
     putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
@@ -142,7 +143,6 @@ rebind conn microseconds = do
       Nothing  -> getPeerName s0 >>= udpNATRebindingConnectedSocket
       Just sa0 -> udpNATRebindingSocket sa0
     _ <- addSocket conn s1
-    v <- getVersion conn
-    let reader = readerClient (VersionInfo v []) s1 conn
+    let reader = readerClient s1 conn
     forkIO reader >>= addReader conn
     fire conn microseconds $ close s0

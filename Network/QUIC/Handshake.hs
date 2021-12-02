@@ -3,6 +3,7 @@
 
 module Network.QUIC.Handshake where
 
+import Data.List (intersect)
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 import qualified UnliftIO.Exception as E
@@ -10,6 +11,7 @@ import qualified UnliftIO.Exception as E
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
+import Network.QUIC.Crypto
 import Network.QUIC.Imports
 import Network.QUIC.Info
 import Network.QUIC.Logger
@@ -205,6 +207,8 @@ setPeerParams conn _ctx ps0 = do
               checkInvalid params
               setParams params
               qlogParamsSet conn (params,"remote")
+              when (isServer conn) $
+                  serverVersionNegotiation $ versionInformation params
 
     checkAuthCIDs params = do
         peerAuthCIDs <- getPeerAuthCIDs conn
@@ -234,6 +238,20 @@ setPeerParams conn _ctx ps0 = do
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
         setMyMaxStreams conn $ initialMaxStreamsBidi params
         setMyUniMaxStreams conn $ initialMaxStreamsUni params
+
+    serverVersionNegotiation Nothing = return ()
+    serverVersionNegotiation (Just peerVerInfo) = do
+        myVerInfo <- getVersionInfo conn
+        let myVer    = chosenVersion myVerInfo
+            myVers0  = otherVersions myVerInfo
+            myVers   = filter (not . isGreasingVersion) myVers0
+            peerVers = otherVersions peerVerInfo
+        case myVers `intersect` peerVers of
+          vers@(ver1:_:_)
+            | myVer /= ver1 -> do
+                setVersionInfo conn $ VersionInfo ver1 vers
+                initializeCoder conn InitialLevel $ initialSecrets ver1 $ clientDstCID conn
+          _ -> return ()
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do

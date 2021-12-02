@@ -91,11 +91,11 @@ processReceivedPacketHandshake conn buf rpkt = do
                   setPeerAuthCIDs conn $ \auth ->
                       auth { initSrcCID = Just newPeerCID }
               case hdr of
-                Initial peerVer _ peerCID _ -> do
+                Initial peerVer _ _ _ -> do
                     myVer <- getVersion conn
                     when (myVer /= peerVer) $ do
                         setVersion conn peerVer
-                        initializeCoder conn InitialLevel $ initialSecrets peerVer peerCID
+                        initializeCoder conn InitialLevel $ initialSecrets peerVer $ clientDstCID conn
                 _ -> return ()
               processReceivedPacket conn buf rpkt
         | otherwise -> do

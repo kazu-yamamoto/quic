@@ -165,6 +165,7 @@ newConcurrency rl dir n = Concurrency typ typ n
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     connState         :: ConnState
+  , clientDstCID      :: CID
   -- Actions
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
@@ -177,7 +178,7 @@ data Connection = Connection {
   , mainThreadId      :: ThreadId
   -- Info
   , roleInfo          :: IORef RoleInfo
-  , quicVersion       :: IORef Version
+  , quicVersionInfo   :: IORef VersionInfo
   -- Mine
   , myParameters      :: Parameters
   , myCIDDB           :: IORef CIDDB
@@ -245,22 +246,22 @@ makePendingQ = do
 
 newConnection :: Role
               -> Parameters
-              -> Version -> AuthCIDs -> AuthCIDs
+              -> VersionInfo -> AuthCIDs -> AuthCIDs
               -> DebugLogger -> QLogger -> Hooks
               -> IORef [Socket]
               -> RecvQ
               -> IO Connection
-newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ = do
+newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ = do
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate debugLog qLog hooks recvQ sref
+    Connection connstate clientDstCID debugLog qLog hooks recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
         <*> myThreadId
         -- Info
         <*> newIORef initialRoleInfo
-        <*> newIORef ver
+        <*> newIORef verInfo
         -- Mine
         <*> return myparams
         <*> newIORef (newCIDDB myCID)
@@ -311,6 +312,8 @@ newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref r
     peer | isclient  = Server
          | otherwise = Client
     peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)
+    clientDstCID | isclient  = fromJust $ origDstCID peerAuthCIDs
+                 | otherwise = fromJust $ origDstCID myAuthCIDs
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
@@ -318,22 +321,22 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig
-                 -> Version -> AuthCIDs -> AuthCIDs
+                 -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
                  -> RecvQ
                  -> IO Connection
-clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
-    newConnection Client ccParameters ver myAuthCIDs peerAuthCIDs
+clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
+    newConnection Client ccParameters verInfo myAuthCIDs peerAuthCIDs
 
 serverConnection :: ServerConfig
-                 -> Version -> AuthCIDs -> AuthCIDs
+                 -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
                  -> RecvQ
                  -> IO Connection
-serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
-    newConnection Server scParameters ver myAuthCIDs peerAuthCIDs
+serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
+    newConnection Server scParameters verInfo myAuthCIDs peerAuthCIDs
 
 ----------------------------------------------------------------
 
