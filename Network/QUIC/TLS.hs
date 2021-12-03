@@ -44,9 +44,7 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
     convExt = onTLSExtensionCreated ccHooks
     qparams = convTP $ setCIDsToParameters myAuthCIDs ccParameters
     eQparams = encodeParameters qparams
-    tpId | ver == Version1 = extensionID_QuicTransportParameters
-         | ver == Version2 = extensionID_QuicTransportParameters
-         | otherwise       = 0xffa5
+    tpId = extensionIDForTtransportParameter ver
     cshared = def {
         sharedValidationCache = if ccValidate then
                                   def
@@ -85,9 +83,7 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
     convExt = onTLSExtensionCreated scHooks
     qparams = convTP $ setCIDsToParameters myAuthCIDs scParameters
     eQparams = encodeParameters qparams
-    tpId | ver == Version1 = extensionID_QuicTransportParameters
-         | ver == Version2 = extensionID_QuicTransportParameters
-         | otherwise       = 0xffa5
+    tpId = extensionIDForTtransportParameter ver
     sshared = def {
             sharedCredentials     = scCredentials
           , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]

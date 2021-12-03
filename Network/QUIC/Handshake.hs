@@ -187,11 +187,8 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
 
 setPeerParams :: Connection -> Bool -> TLS.Context -> [ExtensionRaw] -> IO ()
 setPeerParams conn shouldCheckVerInfo _ctx peerExts = do
-    ver <- getVersion conn
-    let extidTP | ver == Version1 = extensionID_QuicTransportParameters
-                | ver == Version2 = extensionID_QuicTransportParameters
-                | otherwise       = 0xffa5
-    case getTP extidTP peerExts of
+    tpId <- extensionIDForTtransportParameter <$> getVersion conn
+    case getTP tpId peerExts of
       Nothing                  -> return ()
       Just (ExtensionRaw _ bs) -> setPP bs
   where

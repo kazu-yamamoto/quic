@@ -4,6 +4,7 @@
 module Network.QUIC.Types.Packet where
 
 import Data.Ix
+import Network.TLS.QUIC (extensionID_QuicTransportParameters, ExtensionID)
 import Text.Printf
 
 import Network.QUIC.Imports
@@ -54,6 +55,13 @@ defaultVersionInfo = VersionInfo Version1 [Version2, Version1]
 
 brokenVersionInfo :: VersionInfo
 brokenVersionInfo = VersionInfo Negotiation []
+
+----------------------------------------------------------------
+
+extensionIDForTtransportParameter :: Version -> ExtensionID
+extensionIDForTtransportParameter Version1 = extensionID_QuicTransportParameters
+extensionIDForTtransportParameter Version2 = extensionID_QuicTransportParameters
+extensionIDForTtransportParameter _        = 0xffa5
 
 ----------------------------------------------------------------
 
