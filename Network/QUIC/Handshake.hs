@@ -186,29 +186,25 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
 ----------------------------------------------------------------
 
 setPeerParams :: Connection -> Bool -> TLS.Context -> [ExtensionRaw] -> IO ()
-setPeerParams conn shouldCheckVerInfo _ctx ps0 = do
+setPeerParams conn shouldCheckVerInfo _ctx peerExts = do
     ver <- getVersion conn
-    let mps | ver == Version1 = getTP extensionID_QuicTransportParameters ps0
-            | ver == Version2 = getTP extensionID_QuicTransportParameters ps0
-            | otherwise       = getTP 0xffa5 ps0
-    setPP mps
+    let extidTP | ver == Version1 = extensionID_QuicTransportParameters
+                | ver == Version2 = extensionID_QuicTransportParameters
+                | otherwise       = 0xffa5
+    case getTP extidTP peerExts of
+      Nothing                  -> return ()
+      Just (ExtensionRaw _ bs) -> setPP bs
   where
-    getTP _ [] = Nothing
-    getTP n (ExtensionRaw extid bs : ps)
-      | extid == n = Just bs
-      | otherwise  = getTP n ps
-    setPP Nothing = return ()
-    setPP (Just bs) = do
-        let mparams = decodeParameters bs
-        case mparams of
-          Nothing     -> sendCCParamError
-          Just params -> do
-              checkAuthCIDs params
-              checkInvalid params
-              setParams params
-              qlogParamsSet conn (params,"remote")
-              when (isServer conn) $
-                  serverVersionNegotiation $ versionInformation params
+    getTP n = find (\(ExtensionRaw extid _) -> extid == n)
+    setPP bs = case decodeParameters bs of
+      Nothing     -> sendCCParamError
+      Just params -> do
+          checkAuthCIDs params
+          checkInvalid params
+          setParams params
+          qlogParamsSet conn (params,"remote")
+          when (isServer conn) $
+              serverVersionNegotiation $ versionInformation params
 
     checkAuthCIDs params = do
         peerAuthCIDs <- getPeerAuthCIDs conn
