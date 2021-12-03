@@ -41,16 +41,14 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
     convTP = onTransportParametersCreated ccHooks
+    params = convTP $ setCIDsToParameters myAuthCIDs ccParameters
     convExt = onTLSExtensionCreated ccHooks
-    qparams = convTP $ setCIDsToParameters myAuthCIDs ccParameters
-    eQparams = encodeParameters qparams
-    tpId = extensionIDForTtransportParameter ver
     cshared = def {
         sharedValidationCache = if ccValidate then
                                   def
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
-      , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]
+      , sharedHelloExtensions = convExt $ parametersToExtensionRaw ver params
       , sharedSessionManager = sessionManager establish
       }
     hook = def {
@@ -64,12 +62,18 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
         debugKeyLogger = ccKeyLog
       }
 
+parametersToExtensionRaw :: Version -> Parameters -> [ExtensionRaw]
+parametersToExtensionRaw ver params = [ExtensionRaw tpId eParams]
+  where
+    tpId = extensionIDForTtransportParameter ver
+    eParams = encodeParameters params
+
 serverHandshaker :: QUICCallbacks
                  -> ServerConfig
                  -> Version
-                 -> AuthCIDs
+                 -> IO Parameters
                  -> IO ()
-serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
+serverHandshaker callbacks ServerConfig{..} ver getParams =
     tlsQUICServer sparams callbacks
   where
     sparams = def {
@@ -81,18 +85,18 @@ serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
       }
     convTP = onTransportParametersCreated scHooks
     convExt = onTLSExtensionCreated scHooks
-    qparams = convTP $ setCIDsToParameters myAuthCIDs scParameters
-    eQparams = encodeParameters qparams
-    tpId = extensionIDForTtransportParameter ver
     sshared = def {
-            sharedCredentials     = scCredentials
-          , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]
-          , sharedSessionManager  = scSessionManager
-          }
+        sharedCredentials     = scCredentials
+      , sharedSessionManager  = scSessionManager
+      }
     hook = def {
         onALPNClientSuggest = case scALPN of
           Nothing -> Nothing
           Just io -> Just $ io ver
+      , onEncryptedExtensionsCreating = \exts0 -> do
+            params <- getParams
+            let exts = convExt $ parametersToExtensionRaw ver $ convTP params
+            return $ exts ++ exts0
       }
     supported = def {
         supportedVersions = [TLS13]

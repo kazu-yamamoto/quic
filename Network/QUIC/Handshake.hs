@@ -135,14 +135,18 @@ handshakeClient' conf conn myAuthCIDs isICVN ver hsr = handshaker
 
 handshakeServer :: ServerConfig -> Connection -> AuthCIDs -> IO (IO ())
 handshakeServer conf conn myAuthCIDs =
-    handshakeServer' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
-
-handshakeServer' :: ServerConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
-handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
+    handshakeServer' conf conn <$> getVersion conn
+                               <*> newHndStateRef
+                               <*> newIORef params
   where
-    handshaker = serverHandshaker qc conf ver myAuthCIDs `E.catch` sendCCTLSError
-    qc = QUICCallbacks { quicSend = sendTLS conn hsr
-                       , quicRecv = recvTLS conn hsr
+    params = setCIDsToParameters myAuthCIDs $ scParameters conf
+
+handshakeServer' :: ServerConfig -> Connection -> Version -> IORef HndState -> IORef Parameters -> IO ()
+handshakeServer' conf conn ver hsRef paramRef = handshaker
+  where
+    handshaker = serverHandshaker qc conf ver getParams `E.catch` sendCCTLSError
+    qc = QUICCallbacks { quicSend = sendTLS conn hsRef
+                       , quicRecv = recvTLS conn hsRef
                        , quicInstallKeys = installKeysServer
                        , quicNotifyExtensions = setPeerParams conn False
                        , quicDone = done
@@ -157,7 +161,7 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
         setCipher conn RTT1Level cphr
         initializeCoder conn HandshakeLevel tss
         setEncryptionLevel conn HandshakeLevel
-        rxLevelChanged hsr
+        rxLevelChanged hsRef
     installKeysServer ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
         initializeCoder1RTT conn tss
@@ -182,6 +186,10 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
         --
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
+    getParams = do
+        params <- readIORef paramRef
+        verInfo <- getVersionInfo conn
+        return params { versionInformation = Just verInfo }
 
 ----------------------------------------------------------------
 
