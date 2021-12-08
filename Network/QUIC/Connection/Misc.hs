@@ -6,6 +6,7 @@ module Network.QUIC.Connection.Misc (
   , getVersionInfo
   , setVersion
   , getVersion
+  , getOriginalVersion
   , getSockets
   , addSocket
   , clearSockets
@@ -57,6 +58,9 @@ setVersion Connection{..} ver = atomicModifyIORef'' quicVersionInfo $ \vi ->
 
 getVersion :: Connection -> IO Version
 getVersion conn = chosenVersion <$> getVersionInfo conn
+
+getOriginalVersion :: Connection -> Version
+getOriginalVersion = chosenVersion . origVersionInfo
 
 ----------------------------------------------------------------
 

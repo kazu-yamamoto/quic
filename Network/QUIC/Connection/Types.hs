@@ -179,6 +179,7 @@ data Connection = Connection {
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersionInfo   :: IORef VersionInfo
+  , origVersionInfo   :: VersionInfo
   -- Mine
   , myParameters      :: Parameters
   , myCIDDB           :: IORef CIDDB
@@ -262,6 +263,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- Info
         <*> newIORef initialRoleInfo
         <*> newIORef verInfo
+        <*> return verInfo
         -- Mine
         <*> return myparams
         <*> newIORef (newCIDDB myCID)

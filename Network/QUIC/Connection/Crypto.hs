@@ -93,7 +93,10 @@ dropSecrets Connection{..} lvl = do
 
 initializeCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO ()
 initializeCoder conn lvl sec = do
-    ver <- getVersion conn
+    ver <- if lvl == RTT0Level then
+             return $ getOriginalVersion conn
+           else
+             getVersion conn
     cipher <- getCipher conn lvl
     (coder, protector, _) <- genCoder (isClient conn) ver cipher sec
     writeArray (coders conn) lvl coder
