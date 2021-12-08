@@ -230,19 +230,20 @@ setPeerParams conn shouldCheckVerInfo _ctx peerExts = do
             when (isJust $ preferredAddress params) sendCCParamError
             when (isJust $ retrySourceConnectionId params) sendCCParamError
             when (isJust $ statelessResetToken params) sendCCParamError
-        case versionInformation params of
-           Nothing | shouldCheckVerInfo      -> sendCCVNError
-           Just vi | vi == brokenVersionInfo -> sendCCParamError
-                   | shouldCheckVerInfo      -> do
-                         verInfo <- getVersionInfo conn
-                         let myVer  = chosenVersion verInfo
-                             myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
-                             peerVer = chosenVersion vi
-                             peerVers = otherVersions vi
-                         case myVers `intersect` peerVers of
-                           ver:_ | ver == myVer && ver == peerVer -> return ()
-                           _                                      -> sendCCVNError
-           _                                 -> return ()
+        let vi = case versionInformation params of
+              Nothing  -> VersionInfo Version1 [Version1]
+              Just vi0 -> vi0
+        when (vi == brokenVersionInfo) sendCCParamError
+        when shouldCheckVerInfo $ do
+            verInfo <- getVersionInfo conn
+            let myVer  = chosenVersion verInfo
+                myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
+                peerVer = chosenVersion vi
+                peerVers = otherVersions vi
+            case myVers `intersect` peerVers of
+              ver:_ | ver == myVer && ver == peerVer -> return ()
+              _                                      -> sendCCVNError
+
 
     setParams params = do
         setPeerParameters conn params
