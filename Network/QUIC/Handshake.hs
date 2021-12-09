@@ -127,6 +127,12 @@ handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
         putOutput conn $ OutHandshake [] -- for h3spec testing
         sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
     done _ctx = do
+        mPeerVerInfo <- versionInformation <$> getPeerParameters conn
+        case mPeerVerInfo of
+          Nothing -> return ()
+          Just peerVerInfo -> do
+              hdrVer <- getVersion conn
+              when (hdrVer /= chosenVersion peerVerInfo) sendCCVNError
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
     use0RTT = ccUse0RTT conf
