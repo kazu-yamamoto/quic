@@ -58,7 +58,7 @@ readerClient s0 conn = handleLogUnit logAction $ do
         let myVer   = chosenVersion myVerInfo
             myVers0 = otherVersions myVerInfo
         -- ignoring VN if the original version is included.
-        when (myVer `notElem` peerVers) $ do
+        when (myVer `notElem` peerVers && Negotiation `notElem` peerVers) $ do
             ok <- checkCIDs conn dCID (Left sCID)
             let myVers = filter (not . isGreasingVersion) myVers0
                 nextVerInfo = case myVers `intersect` peerVers of

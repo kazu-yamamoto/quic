@@ -234,6 +234,7 @@ setPeerParams conn shouldCheckVerInfo _ctx peerExts = do
               Nothing  -> VersionInfo Version1 [Version1]
               Just vi0 -> vi0
         when (vi == brokenVersionInfo) sendCCParamError
+        when (Negotiation `elem` otherVersions vi) sendCCParamError
         when shouldCheckVerInfo $ do
             verInfo <- getVersionInfo conn
             let myVer  = chosenVersion verInfo
