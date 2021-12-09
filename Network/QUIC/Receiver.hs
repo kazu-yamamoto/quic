@@ -93,7 +93,9 @@ processReceivedPacketHandshake conn buf rpkt = do
               case hdr of
                 Initial peerVer _ _ _ -> do
                     myVer <- getVersion conn
-                    when (myVer /= peerVer) $ do
+                    let myOrigiVer = getOriginalVersion conn
+                        firstTime = myVer == myOrigiVer
+                    when (firstTime && myVer /= peerVer) $ do
                         setVersion conn peerVer
                         initializeCoder conn InitialLevel $ initialSecrets peerVer $ clientDstCID conn
                 _ -> return ()
