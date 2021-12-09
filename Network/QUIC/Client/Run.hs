@@ -57,7 +57,8 @@ runClient conf client0 isICVN verInfo = do
                       versionInformation = Just verInfo
                     }
               }
-        handshaker <- handshakeClient conf' conn myAuthCIDs isICVN
+        setIncompatibleVN conn isICVN -- must be before handshaker
+        handshaker <- handshakeClient conf' conn myAuthCIDs
         let client = do
                 if ccUse0RTT conf then
                     wait0RTTReady conn

@@ -90,19 +90,19 @@ internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
 
 ----------------------------------------------------------------
 
-handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> Bool -> IO (IO ())
-handshakeClient conf conn myAuthCIDs isICVN = do
+handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO (IO ())
+handshakeClient conf conn myAuthCIDs = do
     qlogParamsSet conn (ccParameters conf, "local") -- fixme
-    handshakeClient' conf conn myAuthCIDs isICVN <$> getVersion conn <*> newHndStateRef
+    handshakeClient' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
 
-handshakeClient' :: ClientConfig -> Connection -> AuthCIDs -> Bool -> Version -> IORef HndState -> IO ()
-handshakeClient' conf conn myAuthCIDs isICVN ver hsr = handshaker
+handshakeClient' :: ClientConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
+handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
   where
     handshaker = clientHandshaker qc conf ver myAuthCIDs setter use0RTT `E.catch` sendCCTLSError
     qc = QUICCallbacks { quicSend = sendTLS conn hsr
                        , quicRecv = recvTLS conn hsr
                        , quicInstallKeys = installKeysClient
-                       , quicNotifyExtensions = setPeerParams conn isICVN
+                       , quicNotifyExtensions = setPeerParams conn
                        , quicDone = done
                        }
     setter = setResumptionSession conn
@@ -148,7 +148,7 @@ handshakeServer' conf conn ver hsRef paramRef = handshaker
     qc = QUICCallbacks { quicSend = sendTLS conn hsRef
                        , quicRecv = recvTLS conn hsRef
                        , quicInstallKeys = installKeysServer
-                       , quicNotifyExtensions = setPeerParams conn False
+                       , quicNotifyExtensions = setPeerParams conn
                        , quicDone = done
                        }
     installKeysServer _ctx (InstallEarlyKeys Nothing) = return ()
@@ -193,8 +193,8 @@ handshakeServer' conf conn ver hsRef paramRef = handshaker
 
 ----------------------------------------------------------------
 
-setPeerParams :: Connection -> Bool -> TLS.Context -> [ExtensionRaw] -> IO ()
-setPeerParams conn shouldCheckVerInfo _ctx peerExts = do
+setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
+setPeerParams conn _ctx peerExts = do
     tpId <- extensionIDForTtransportParameter <$> getVersion conn
     case getTP tpId peerExts of
       Nothing                  -> return ()
@@ -235,7 +235,8 @@ setPeerParams conn shouldCheckVerInfo _ctx peerExts = do
               Just vi0 -> vi0
         when (vi == brokenVersionInfo) sendCCParamError
         when (Negotiation `elem` otherVersions vi) sendCCParamError
-        when shouldCheckVerInfo $ do
+        isICVN <- getIncompatibleVN conn
+        when isICVN $ do
             verInfo <- getVersionInfo conn
             let myVer  = chosenVersion verInfo
                 myVers = filter (not . isGreasingVersion) $ otherVersions verInfo

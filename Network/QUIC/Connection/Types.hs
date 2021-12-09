@@ -39,6 +39,7 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
                            , serverAddr         :: Maybe SockAddr
+                           , incompatibleVN     :: Bool
                            }
               | ServerInfo { tokenManager    :: ~CT.TokenManager
                            , registerCID     :: CID -> Connection -> IO ()
@@ -51,8 +52,9 @@ data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
 defaultClientRoleInfo :: RoleInfo
 defaultClientRoleInfo = ClientInfo {
     clientInitialToken = emptyToken
-  , resumptionInfo = defaultResumptionInfo
-  , serverAddr     = Nothing
+  , resumptionInfo     = defaultResumptionInfo
+  , serverAddr         = Nothing
+  , incompatibleVN     = False
   }
 
 defaultServerRoleInfo :: RoleInfo
