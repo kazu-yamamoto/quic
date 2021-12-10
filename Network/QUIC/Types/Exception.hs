@@ -30,17 +30,18 @@ instance E.Exception QUICException
 data InternalControl = MustNotReached
                      | ExitConnection
                      | WrongTransportParameter
+                     | WrongVersionInformation
                      | BreakForever
                      deriving (Eq, Show)
 
 instance E.Exception InternalControl
 
-newtype NextVersion = NextVersion (Maybe Version) deriving (Show)
+newtype NextVersion = NextVersion VersionInfo deriving (Show)
 
 instance E.Exception NextVersion
 
 data Abort = Abort ApplicationProtocolError ReasonPhrase
-           | VerNego (Maybe Version)
+           | VerNego VersionInfo
            deriving (Show)
 
 instance E.Exception Abort where
