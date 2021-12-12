@@ -4,9 +4,10 @@ module Network.QUIC.Types.Error where
 
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
+import Text.Printf
 
 -- | Transport errors of QUIC.
-newtype TransportError = TransportError Int deriving (Eq, Show)
+newtype TransportError = TransportError Int deriving (Eq)
 
 pattern NoError                 :: TransportError
 pattern NoError                  = TransportError  0x0
@@ -58,6 +59,34 @@ pattern AeadLimitReached         = TransportError  0xf
 
 pattern NoViablePath            :: TransportError
 pattern NoViablePath             = TransportError 0x10
+
+pattern VersionNegotiationError :: TransportError
+pattern VersionNegotiationError  = TransportError 0x53f8
+
+instance Show TransportError where
+    show (TransportError    0x0) = "NoError"
+    show (TransportError    0x1) = "InternalError"
+    show (TransportError    0x2) = "ConnectionRefused"
+    show (TransportError    0x3) = "FlowControlError"
+    show (TransportError    0x4) = "StreamLimitError"
+    show (TransportError    0x5) = "StreamStateError"
+    show (TransportError    0x6) = "FinalSizeError"
+    show (TransportError    0x7) = "FrameEncodingError"
+    show (TransportError    0x8) = "TransportParameterError"
+    show (TransportError    0x9) = "ConnectionIdLimitError"
+    show (TransportError    0xa) = "ProtocolViolation"
+    show (TransportError    0xb) = "InvalidToken"
+    show (TransportError    0xc) = "ApplicationError"
+    show (TransportError    0xd) = "CryptoBufferExceeded"
+    show (TransportError    0xe) = "KeyUpdateError"
+    show (TransportError    0xf) = "AeadLimitReached"
+    show (TransportError   0x10) = "NoViablePath"
+    show (TransportError 0x53f8) = "VersionNegotiationError"
+    show (TransportError      x)
+      | 0x100 <= x && x <= 0x01ff = case toAlertDescription $ fromIntegral (x - 0x100) of
+          Just e  -> "TLS " ++ show e
+          Nothing -> "TLS Alert " ++ show x
+      | otherwise = "TransportError " ++ printf "%x" x
 
 -- | Converting a TLS alert to a corresponding transport error.
 cryptoError :: TLS.AlertDescription -> TransportError

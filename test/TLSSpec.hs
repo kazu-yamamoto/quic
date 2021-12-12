@@ -28,27 +28,27 @@ spec = do
             let dcID = makeCID (dec16s "8394c8f03e515708")
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret ver dcID
             client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "c00cf151ca5be075ed0ebfb5c80323c42d6b7db67881289af4008f1f6c357aea")
-            let ckey = aeadKey defaultCipher (Secret cis)
+            let ckey = aeadKey Version1 defaultCipher (Secret cis)
             ckey `shouldBe` Key (dec16 "1f369613dd76d5467730efcbe3b1a22d")
-            let civ = initialVector defaultCipher (Secret cis)
+            let civ = initialVector Version1 defaultCipher (Secret cis)
             civ `shouldBe` IV (dec16 "fa044b2f42a3fd3b46fb255c")
-            let chp = headerProtectionKey defaultCipher (Secret cis)
+            let chp = headerProtectionKey Version1 defaultCipher (Secret cis)
             chp `shouldBe` Key (dec16 "9f50449e04a0e810283a1e9933adedd2")
             let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret ver dcID
             server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b")
-            let skey = aeadKey defaultCipher (Secret sis)
+            let skey = aeadKey Version1 defaultCipher (Secret sis)
             skey `shouldBe` Key (dec16 "cf3a5331653c364c88f0f379b6067e37")
-            let siv = initialVector defaultCipher (Secret sis)
+            let siv = initialVector Version1 defaultCipher (Secret sis)
             siv `shouldBe` IV (dec16 "0ac1493ca1905853b0bba03e")
-            let shp = headerProtectionKey defaultCipher (Secret sis)
+            let shp = headerProtectionKey Version1 defaultCipher (Secret sis)
             shp `shouldBe` Key (dec16 "c206b8d9b9f0f37644430b490eeaa314")
 
         it "describes the examples of Client Initial" $ do
             let dcID = makeCID (dec16s "8394c8f03e515708")
                 ClientTrafficSecret cis = clientInitialSecret ver dcID
-                ckey = aeadKey defaultCipher (Secret cis)
-                civ = initialVector defaultCipher (Secret cis)
-                chp = headerProtectionKey defaultCipher (Secret cis)
+                ckey = aeadKey Version1 defaultCipher (Secret cis)
+                civ = initialVector Version1 defaultCipher (Secret cis)
+                chp = headerProtectionKey Version1 defaultCipher (Secret cis)
             ----------------------------------------------------------------
             -- payload encryption
             let clientCRYPTOframe = dec16 $ BS.concat [
