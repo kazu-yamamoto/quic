@@ -147,7 +147,7 @@ runDispatcher d conf ssa@(s,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
-dispatcher d conf (s,mysa) = handleLogUnit logAction $
+dispatcher d conf (s,mysa) = (handleLogUnit logAction. withSocketsDo) $
     E.bracket (mallocBytes maximumUdpPayloadSize)
               free
               body

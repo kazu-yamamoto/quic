@@ -12,7 +12,7 @@ module Network.QUIC.Recovery.Timer (
 
 import Control.Concurrent.STM
 import qualified Data.Sequence as Seq
-import GHC.Event hiding (new)
+import Network.QUIC.Event
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports
