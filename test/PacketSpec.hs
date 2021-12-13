@@ -39,12 +39,12 @@ spec = do
             (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
             let dlen = 2048
             dbuf <- mallocBytes dlen
-            Just plain <- decryptCrypt serverConn dbuf dlen crypt lvl
+            Just plain <- decryptCrypt dbuf dlen serverConn crypt lvl
             let ppkt = PlainPacket header plain
             clientInitialPacketBinary' <- BS.createAndTrim 4096 $ \buf -> do
                 fst <$> encodePlainPacket clientConn buf 2048 ppkt Nothing
             (PacketIC (CryptPacket header' crypt') lvl', _) <- decodePacket clientInitialPacketBinary'
-            Just plain' <- decryptCrypt serverConn dbuf dlen crypt' lvl'
+            Just plain' <- decryptCrypt dbuf dlen serverConn crypt' lvl'
             header' `shouldBe` header
             plainFrames plain' `shouldBe` plainFrames plain
 

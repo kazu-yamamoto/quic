@@ -32,7 +32,7 @@ receiver conn = handleLogT logAction $
   where
     bufsiz = maximumUdpPayloadSize
     body buf = do
-        let decrypt = decryptCrypt conn buf bufsiz
+        let decrypt = decryptCrypt buf bufsiz conn
         loopHandshake decrypt
         loopEstablished decrypt
     recvTimeout = do

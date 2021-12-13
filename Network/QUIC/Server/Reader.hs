@@ -156,7 +156,7 @@ dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
   where
     bufsiz = maximumUdpPayloadSize
     body buf = do
-        let decrypt conn = decryptCrypt conn buf bufsiz
+        let decrypt = decryptCrypt buf bufsiz
     --    let (opt,_cmsgid) = case mysa of
     --          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
     --          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
