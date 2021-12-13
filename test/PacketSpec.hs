@@ -32,9 +32,9 @@ spec = do
             q <- newRecvQ
             sref <- newIORef [s]
             let ver = chosenVersion defaultVersionInfo
-            clientConn <- clientConnection clientConf defaultVersionInfo clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref q
+            clientConn <- clientConnection clientConf defaultVersionInfo clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref q undefined undefined
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
-            serverConn <- serverConnection serverConf defaultVersionInfo serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q
+            serverConn <- serverConnection serverConf defaultVersionInfo serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q undefined undefined
             initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
             (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
             let dlen = 2048

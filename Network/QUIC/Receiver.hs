@@ -24,8 +24,8 @@ import Network.QUIC.Recovery
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-receiver :: Connection -> Receive -> IO ()
-receiver conn recv = handleLogT logAction $
+receiver :: Connection -> IO ()
+receiver conn = handleLogT logAction $
     E.bracket (mallocBytes maximumUdpPayloadSize)
               free
               body
@@ -37,7 +37,7 @@ receiver conn recv = handleLogT logAction $
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
         ito <- readMinIdleTimeout conn
-        mx <- timeout ito recv -- fixme: taking minimum with peer's one
+        mx <- timeout ito $ connRecv conn -- fixme: taking minimum with peer's one
         case mx of
           Nothing -> E.throwIO ConnectionIsTimeout
           Just x  -> return x

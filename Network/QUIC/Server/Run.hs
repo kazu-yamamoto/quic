@@ -63,7 +63,7 @@ run conf server = handleLogUnit debugLog $ do
 -- And the exception should be ignored.
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
 runServer conf server0 dispatch baseThreadId acc =
-    E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
+    E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) ->
         handleLogUnit (debugLog conn) $ do
             forkIO reader >>= addReader conn
             let conf' = conf {
@@ -78,8 +78,8 @@ runServer conf server0 dispatch baseThreadId acc =
                     server0 conn
                 ldcc = connLDCC conn
                 supporters = foldr1 concurrently_ [handshaker
-                                                  ,sender   conn send
-                                                  ,receiver conn recv
+                                                  ,sender   conn
+                                                  ,receiver conn
                                                   ,resender  ldcc
                                                   ,ldccTimer ldcc
                                                   ]
@@ -116,7 +116,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
     (qLog, qclean)     <- dirQLogger scQLog accTime ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     debugLog $ "Original CID: " <> bhow ocid
-    conn <- serverConnection conf accVersionInfo accMyAuthCIDs accPeerAuthCIDs debugLog qLog scHooks sref accRecvQ
+    conn <- serverConnection conf accVersionInfo accMyAuthCIDs accPeerAuthCIDs debugLog qLog scHooks sref accRecvQ send recv
     addResource conn qclean
     addResource conn dclean
     let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
@@ -147,7 +147,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
         mapM_ accUnregister myCIDs
     --
     let reader = readerServer s0 conn -- dies when s0 is closed.
-    return $ ConnRes conn send recv accMyAuthCIDs reader
+    return $ ConnRes conn accMyAuthCIDs reader
 
 afterHandshakeServer :: Connection -> IO ()
 afterHandshakeServer conn = handleLogT logAction $ do

@@ -171,6 +171,8 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
+  , connSend          :: ~SendBuf -- ~ for testing
+  , connRecv          :: ~Receive -- ~ for testing
   -- Manage
   , connRecvQ         :: RecvQ
   , sockets           :: IORef [Socket]
@@ -252,12 +254,14 @@ newConnection :: Role
               -> DebugLogger -> QLogger -> Hooks
               -> IORef [Socket]
               -> RecvQ
+              -> SendBuf
+              -> Receive
               -> IO Connection
-newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ = do
+newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ ~send ~recv = do
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate clientDstCID debugLog qLog hooks recvQ sref
+    Connection connstate clientDstCID debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
         <*> myThreadId
@@ -327,7 +331,7 @@ clientConnection :: ClientConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
-                 -> RecvQ
+                 -> RecvQ -> SendBuf -> Receive
                  -> IO Connection
 clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Client ccParameters verInfo myAuthCIDs peerAuthCIDs
@@ -336,7 +340,7 @@ serverConnection :: ServerConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
-                 -> RecvQ
+                 -> RecvQ -> SendBuf -> Receive
                  -> IO Connection
 serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Server scParameters verInfo myAuthCIDs peerAuthCIDs

@@ -8,10 +8,10 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data ConnRes = ConnRes Connection SendBuf Receive AuthCIDs (IO ())
+data ConnRes = ConnRes Connection AuthCIDs (IO ())
 
 connResConnection :: ConnRes -> Connection
-connResConnection (ConnRes conn _ _ _ _) = conn
+connResConnection (ConnRes conn _ _) = conn
 
 defaultPacketSize :: NS.SockAddr -> Int
 defaultPacketSize NS.SockAddrInet6{} = defaultQUICPacketSizeForIPv6
