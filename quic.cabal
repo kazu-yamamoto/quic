@@ -53,11 +53,11 @@ library
                        Network.QUIC.Connection.Types
                        Network.QUIC.Connector
                        Network.QUIC.Crypto
+                       Network.QUIC.Crypto.Fusion
                        Network.QUIC.Crypto.Keys
                        Network.QUIC.Crypto.Nite
                        Network.QUIC.Crypto.Types
                        Network.QUIC.Crypto.Utils
-                       Network.QUIC.CryptoFusion
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.IO

@@ -1,4 +1,4 @@
-module Network.QUIC.CryptoFusion (
+module Network.QUIC.Crypto.Fusion (
     FusionContext
   , fusionNewContext
   , fusionSetup
@@ -15,7 +15,7 @@ import Foreign.Ptr
 import Foreign.ForeignPtr
 import Network.TLS.Extra.Cipher
 
-import Network.QUIC.Crypto
+import Network.QUIC.Crypto.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
 

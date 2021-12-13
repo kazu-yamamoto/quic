@@ -30,7 +30,6 @@ import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
-import Network.QUIC.CryptoFusion
 import Network.QUIC.Imports
 import Network.QUIC.Types
 

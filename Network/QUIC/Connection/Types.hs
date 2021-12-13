@@ -20,7 +20,6 @@ import Network.TLS.QUIC
 import Network.QUIC.Config
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
-import Network.QUIC.CryptoFusion
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Parameters
