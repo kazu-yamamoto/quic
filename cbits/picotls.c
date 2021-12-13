@@ -25,7 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef _WINDOWS
-#include "wincompat.h"
+#include <ws2tcpip.h>
+#include <winsock.h>
+#include <winsock2.h>
 #else
 #include <arpa/inet.h>
 #include <sys/time.h>
@@ -115,6 +117,36 @@
 /**
  * list of supported versions in the preferred order
  */
+
+#ifdef _WINDOWS
+//Copy from https://www.man7.org/linux/man-pages/man2/gettimeofday.2.html
+struct timezone {
+               int tz_minuteswest;     /* minutes west of Greenwich */
+               int tz_dsttime;         /* type of DST correction */
+    };
+
+int gettimeofday(struct timeval * tp, struct timezone * tzp)
+{
+    // Copy from https://stackoverflow.com/questions/10905892/equivalent-of-gettimeday-for-windows
+    // Note: some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+    // This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+    // until 00:00:00 January 1, 1970 
+    static const uint64_t EPOCH = ((uint64_t) 116444736000000000ULL);
+
+    SYSTEMTIME  system_time;
+    FILETIME    file_time;
+    uint64_t    time;
+
+    GetSystemTime( &system_time );
+    SystemTimeToFileTime( &system_time, &file_time );
+    time =  ((uint64_t)file_time.dwLowDateTime )      ;
+    time += ((uint64_t)file_time.dwHighDateTime) << 32;
+
+    tp->tv_sec  = (long) ((time - EPOCH) / 10000000L);
+    tp->tv_usec = (long) (system_time.wMilliseconds * 1000);
+    return 0;
+}
+#endif
 static const uint16_t supported_versions[] = {PTLS_PROTOCOL_VERSION_TLS13_FINAL, PTLS_PROTOCOL_VERSION_TLS13_DRAFT28,
                                               PTLS_PROTOCOL_VERSION_TLS13_DRAFT27, PTLS_PROTOCOL_VERSION_TLS13_DRAFT26};
 
