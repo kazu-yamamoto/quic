@@ -66,7 +66,12 @@ runServer conf server0 dispatch baseThreadId acc =
     E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) ->
         handleLogUnit (debugLog conn) $ do
             forkIO reader >>= addReader conn
-            handshaker <- handshakeServer conf conn myAuthCIDs
+            let conf' = conf {
+                    scParameters = (scParameters conf) {
+                          versionInformation = Just $ accVersionInfo acc
+                        }
+                  }
+            handshaker <- handshakeServer conf' conn myAuthCIDs
             let server = do
                     wait1RTTReady conn
                     afterHandshakeServer conn
@@ -111,11 +116,12 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
     (qLog, qclean)     <- dirQLogger scQLog accTime ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     debugLog $ "Original CID: " <> bhow ocid
-    conn <- serverConnection conf accVersion accMyAuthCIDs accPeerAuthCIDs debugLog qLog scHooks sref accRecvQ
+    conn <- serverConnection conf accVersionInfo accMyAuthCIDs accPeerAuthCIDs debugLog qLog scHooks sref accRecvQ
     addResource conn qclean
     addResource conn dclean
     let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
-    initializeCoder conn InitialLevel $ initialSecrets accVersion cid
+        ver = chosenVersion accVersionInfo
+    initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz = (defaultPacketSize accMySockAddr `max` accPacketSize) `min` maximumPacketSize accMySockAddr
     setMaxPacketSize conn pktSiz

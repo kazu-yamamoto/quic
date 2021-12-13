@@ -31,8 +31,8 @@ closure conn ldcc (Left se)
   | Just (Abort err desc) <- E.fromException se = do
         closure' conn ldcc $ ConnectionCloseApp err desc
         E.throwIO $ ApplicationProtocolErrorIsSent err desc
-  | Just (VerNego ver) <- E.fromException se = do
-        E.throwIO $ NextVersion ver
+  | Just (VerNego vers) <- E.fromException se = do
+        E.throwIO $ NextVersion vers
   | otherwise = E.throwIO se
 
 closure' :: Connection -> LDCC -> Frame -> IO ()

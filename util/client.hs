@@ -167,27 +167,30 @@ main = do
                             protos | optHQ     = [hqX,h3X]
                                    | otherwise = [h3X,hqX]
                         in return $ Just protos
-        confver vers
-          | optVerNego = GreasingVersion : vers
-          | otherwise  = vers
-        confparams params
+        verInfo vi
+          | optVerNego = vi {
+                  chosenVersion = GreasingVersion
+                , otherVersions = GreasingVersion : otherVersions vi
+                }
+          | otherwise  = vi
+        setTPQuantum params
           | optQuantum = let bs = BS.replicate 1200 0
                          in params { grease = Just bs }
           | otherwise  = params
         cc0 = defaultClientConfig
         cc = cc0 {
-            ccServerName = addr
-          , ccPortName   = port
-          , ccALPN       = ccalpn
-          , ccValidate   = optValidate
-          , ccPacketSize = optPacketSize
-          , ccDebugLog   = optDebugLog
-          , ccVersions   = confver $ ccVersions cc0
-          , ccParameters = confparams $ ccParameters cc0
-          , ccKeyLog     = getLogger optKeyLogFile
-          , ccGroups     = getGroups (ccGroups cc0) optGroups
-          , ccQLog       = optQLogDir
-          , ccHooks      = defaultHooks {
+            ccServerName  = addr
+          , ccPortName    = port
+          , ccALPN        = ccalpn
+          , ccValidate    = optValidate
+          , ccPacketSize  = optPacketSize
+          , ccDebugLog    = optDebugLog
+          , ccVersionInfo = verInfo $ ccVersionInfo cc0
+          , ccParameters  = setTPQuantum $ ccParameters cc0
+          , ccKeyLog      = getLogger optKeyLogFile
+          , ccGroups      = getGroups (ccGroups cc0) optGroups
+          , ccQLog        = optQLogDir
+          , ccHooks       = defaultHooks {
                 onCloseCompleted = putMVar cmvar ()
               }
           , ccAutoMigration = optUnconSock

@@ -3,6 +3,7 @@
 
 module Network.QUIC.Handshake where
 
+import Data.List (intersect)
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 import qualified UnliftIO.Exception as E
@@ -10,6 +11,7 @@ import qualified UnliftIO.Exception as E
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
+import Network.QUIC.Crypto
 import Network.QUIC.Imports
 import Network.QUIC.Info
 import Network.QUIC.Logger
@@ -125,6 +127,12 @@ handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
         putOutput conn $ OutHandshake [] -- for h3spec testing
         sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
     done _ctx = do
+        mPeerVerInfo <- versionInformation <$> getPeerParameters conn
+        case mPeerVerInfo of
+          Nothing -> return ()
+          Just peerVerInfo -> do
+              hdrVer <- getVersion conn
+              when (hdrVer /= chosenVersion peerVerInfo) sendCCVNError
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
     use0RTT = ccUse0RTT conf
@@ -133,14 +141,18 @@ handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
 
 handshakeServer :: ServerConfig -> Connection -> AuthCIDs -> IO (IO ())
 handshakeServer conf conn myAuthCIDs =
-    handshakeServer' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
-
-handshakeServer' :: ServerConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
-handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
+    handshakeServer' conf conn <$> getVersion conn
+                               <*> newHndStateRef
+                               <*> newIORef params
   where
-    handshaker = serverHandshaker qc conf ver myAuthCIDs `E.catch` sendCCTLSError
-    qc = QUICCallbacks { quicSend = sendTLS conn hsr
-                       , quicRecv = recvTLS conn hsr
+    params = setCIDsToParameters myAuthCIDs $ scParameters conf
+
+handshakeServer' :: ServerConfig -> Connection -> Version -> IORef HndState -> IORef Parameters -> IO ()
+handshakeServer' conf conn ver hsRef paramRef = handshaker
+  where
+    handshaker = serverHandshaker qc conf ver getParams `E.catch` sendCCTLSError
+    qc = QUICCallbacks { quicSend = sendTLS conn hsRef
+                       , quicRecv = recvTLS conn hsRef
                        , quicInstallKeys = installKeysServer
                        , quicNotifyExtensions = setPeerParams conn
                        , quicDone = done
@@ -155,7 +167,7 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
         setCipher conn RTT1Level cphr
         initializeCoder conn HandshakeLevel tss
         setEncryptionLevel conn HandshakeLevel
-        rxLevelChanged hsr
+        rxLevelChanged hsRef
     installKeysServer ctx (InstallApplicationKeys appSecInf@(ApplicationSecretInfo tss)) = do
         storeNegotiated conn ctx appSecInf
         initializeCoder1RTT conn tss
@@ -180,30 +192,30 @@ handshakeServer' conf conn myAuthCIDs ver hsr = handshaker
         --
         info <- getConnectionInfo conn
         connDebugLog conn $ bhow info
+    getParams = do
+        params <- readIORef paramRef
+        verInfo <- getVersionInfo conn
+        return params { versionInformation = Just verInfo }
 
 ----------------------------------------------------------------
 
 setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
-setPeerParams conn _ctx ps0 = do
-    ver <- getVersion conn
-    let mps | ver == Version1 = getTP extensionID_QuicTransportParameters ps0
-            | otherwise       = getTP 0xffa5 ps0
-    setPP mps
+setPeerParams conn _ctx peerExts = do
+    tpId <- extensionIDForTtransportParameter <$> getVersion conn
+    case getTP tpId peerExts of
+      Nothing                  -> return ()
+      Just (ExtensionRaw _ bs) -> setPP bs
   where
-    getTP _ [] = Nothing
-    getTP n (ExtensionRaw extid bs : ps)
-      | extid == n = Just bs
-      | otherwise  = getTP n ps
-    setPP Nothing = return ()
-    setPP (Just bs) = do
-        let mparams = decodeParameters bs
-        case mparams of
-          Nothing     -> sendCCParamError
-          Just params -> do
-              checkAuthCIDs params
-              checkInvalid params
-              setParams params
-              qlogParamsSet conn (params,"remote")
+    getTP n = find (\(ExtensionRaw extid _) -> extid == n)
+    setPP bs = case decodeParameters bs of
+      Nothing     -> sendCCParamError
+      Just params -> do
+          checkAuthCIDs params
+          checkInvalid params
+          setParams params
+          qlogParamsSet conn (params,"remote")
+          when (isServer conn) $
+              serverVersionNegotiation $ versionInformation params
 
     checkAuthCIDs params = do
         peerAuthCIDs <- getPeerAuthCIDs conn
@@ -224,6 +236,23 @@ setPeerParams conn _ctx ps0 = do
             when (isJust $ preferredAddress params) sendCCParamError
             when (isJust $ retrySourceConnectionId params) sendCCParamError
             when (isJust $ statelessResetToken params) sendCCParamError
+        let vi = case versionInformation params of
+              Nothing  -> VersionInfo Version1 [Version1]
+              Just vi0 -> vi0
+        when (vi == brokenVersionInfo) sendCCParamError
+        when (Negotiation `elem` otherVersions vi) sendCCParamError
+        isICVN <- getIncompatibleVN conn
+        when isICVN $ do
+            verInfo <- getVersionInfo conn
+            let myVer  = chosenVersion verInfo
+                myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
+                peerVer = chosenVersion vi
+                peerVers = otherVersions vi
+            case myVers `intersect` peerVers of
+              ver:_ | ver == myVer && ver == peerVer -> return ()
+              _                                      -> sendCCVNError
+
+
     setParams params = do
         setPeerParameters conn params
         mapM_ (setPeerStatelessResetToken conn) $ statelessResetToken params
@@ -232,6 +261,20 @@ setPeerParams conn _ctx ps0 = do
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
         setMyMaxStreams conn $ initialMaxStreamsBidi params
         setMyUniMaxStreams conn $ initialMaxStreamsUni params
+
+    serverVersionNegotiation Nothing = return ()
+    serverVersionNegotiation (Just peerVerInfo) = do
+        myVerInfo <- getVersionInfo conn
+        let myVer    = chosenVersion myVerInfo
+            myVers0  = otherVersions myVerInfo
+            myVers   = filter (not . isGreasingVersion) myVers0
+            peerVers = otherVersions peerVerInfo
+        case myVers `intersect` peerVers of
+          vers@(ver1:_:_)
+            | myVer /= ver1 -> do
+                setVersionInfo conn $ VersionInfo ver1 vers
+                initializeCoder conn InitialLevel $ initialSecrets ver1 $ clientDstCID conn
+          _ -> return ()
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()
 storeNegotiated conn ctx appSecInf = do
@@ -245,8 +288,12 @@ storeNegotiated conn ctx appSecInf = do
 sendCCParamError :: IO ()
 sendCCParamError = E.throwIO WrongTransportParameter
 
+sendCCVNError :: IO ()
+sendCCVNError = E.throwIO WrongVersionInformation
+
 sendCCTLSError :: TLS.TLSException -> IO ()
 sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection TransportParameterError "Transport parametter error"
+sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongVersionInformation")) = closeConnection VersionNegotiationError "Version negotiation error"
 sendCCTLSError e = closeConnection err msg
   where
     tlserr = getErrorCause e
