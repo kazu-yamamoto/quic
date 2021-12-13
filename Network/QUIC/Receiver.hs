@@ -6,7 +6,6 @@ module Network.QUIC.Receiver (
   ) where
 
 import qualified Data.ByteString as BS
-import Foreign.Marshal.Alloc
 import Network.TLS (AlertDescription(..))
 import qualified UnliftIO.Exception as E
 
@@ -24,15 +23,12 @@ import Network.QUIC.Recovery
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-receiver :: Connection -> IO ()
-receiver conn = handleLogT logAction $
-    E.bracket (mallocBytes bufsiz) free body
+receiver :: Connection -> Decrypt -> IO ()
+receiver conn decrypt = handleLogT logAction body
   where
-    bufsiz = maximumUdpPayloadSize
-    body buf = do
-        let decrypt = decryptCrypt buf bufsiz
-        loopHandshake decrypt
-        loopEstablished decrypt
+    body = do
+        loopHandshake
+        loopEstablished
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
@@ -41,12 +37,12 @@ receiver conn = handleLogT logAction $
         case mx of
           Nothing -> E.throwIO ConnectionIsTimeout
           Just x  -> return x
-    loopHandshake decrypt = do
+    loopHandshake = do
         rpkt <- recvTimeout
         processReceivedPacketHandshake conn decrypt rpkt
         established <- isConnectionEstablished conn
-        unless established $ loopHandshake decrypt
-    loopEstablished decrypt = forever $ do
+        unless established loopHandshake
+    loopEstablished = forever $ do
         rpkt <- recvTimeout
         let CryptPacket hdr _ = rpCryptPacket rpkt
             cid = headerMyCID hdr
