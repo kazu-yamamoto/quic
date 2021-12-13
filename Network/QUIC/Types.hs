@@ -1,7 +1,5 @@
 module Network.QUIC.Types (
     Bytes
-  , SendBuf
-  , Receive
   , Close
   , Direction(..)
   , module Network.QUIC.Types.Ack
@@ -30,6 +28,4 @@ import Network.QUIC.Types.Queue
 import Network.QUIC.Types.Resumption
 import Network.QUIC.Types.Time
 
-type SendBuf = Buffer -> Int -> IO ()
-type Receive = IO ReceivedPacket
 type Close = IO ()

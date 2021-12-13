@@ -163,6 +163,11 @@ newConcurrency rl dir n = Concurrency typ typ n
 
 ----------------------------------------------------------------
 
+type Send = Buffer -> Int -> IO ()
+type Recv = IO ReceivedPacket
+
+----------------------------------------------------------------
+
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     connState         :: ConnState
@@ -171,8 +176,8 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
-  , connSend          :: ~SendBuf -- ~ for testing
-  , connRecv          :: ~Receive -- ~ for testing
+  , connSend          :: ~Send -- ~ for testing
+  , connRecv          :: ~Recv -- ~ for testing
   -- Manage
   , connRecvQ         :: RecvQ
   , sockets           :: IORef [Socket]
@@ -254,8 +259,8 @@ newConnection :: Role
               -> DebugLogger -> QLogger -> Hooks
               -> IORef [Socket]
               -> RecvQ
-              -> SendBuf
-              -> Receive
+              -> Send
+              -> Recv
               -> IO Connection
 newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ ~send ~recv = do
     outQ <- newTQueueIO
@@ -331,7 +336,7 @@ clientConnection :: ClientConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
-                 -> RecvQ -> SendBuf -> Receive
+                 -> RecvQ -> Send -> Recv
                  -> IO Connection
 clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Client ccParameters verInfo myAuthCIDs peerAuthCIDs
@@ -340,7 +345,7 @@ serverConnection :: ServerConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
-                 -> RecvQ -> SendBuf -> Receive
+                 -> RecvQ -> Send -> Recv
                  -> IO Connection
 serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Server scParameters verInfo myAuthCIDs peerAuthCIDs
