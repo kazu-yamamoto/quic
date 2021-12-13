@@ -56,6 +56,7 @@ library
                        Network.QUIC.Crypto.Keys
                        Network.QUIC.Crypto.Nite
                        Network.QUIC.Crypto.Types
+                       Network.QUIC.Crypto.Utils
                        Network.QUIC.CryptoFusion
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
