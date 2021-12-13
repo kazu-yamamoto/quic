@@ -6,7 +6,7 @@ module Network.QUIC.Crypto.Types (
   , IV(..)
   , CID
   , Secret(..)
-  , AddDat(..)
+  , AssDat(..)
   , Sample(..)
   , Mask(..)
   , Nonce(..)
@@ -35,7 +35,7 @@ type Salt       = ByteString
 newtype Key    = Key    ByteString deriving (Eq)
 newtype IV     = IV     ByteString deriving (Eq)
 newtype Secret = Secret ByteString deriving (Eq)
-newtype AddDat = AddDat ByteString deriving (Eq)
+newtype AssDat = AssDat ByteString deriving (Eq)
 newtype Sample = Sample ByteString deriving (Eq)
 newtype Mask   = Mask   ByteString deriving (Eq)
 newtype Label  = Label  ByteString deriving (Eq)
@@ -47,8 +47,8 @@ instance Show IV where
     show (IV x) = "IV=" ++ C8.unpack (enc16 x)
 instance Show Secret where
     show (Secret x) = "Secret=" ++ C8.unpack (enc16 x)
-instance Show AddDat where
-    show (AddDat x) = "AddDat=" ++ C8.unpack (enc16 x)
+instance Show AssDat where
+    show (AssDat x) = "AssDat=" ++ C8.unpack (enc16 x)
 instance Show Sample where
     show (Sample x) = "Sample=" ++ C8.unpack (enc16 x)
 instance Show Mask where
