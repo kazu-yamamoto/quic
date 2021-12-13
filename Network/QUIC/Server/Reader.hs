@@ -142,10 +142,6 @@ accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
-type Decrypt0 = Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
-
-----------------------------------------------------------------
-
 runDispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ThreadId
 runDispatcher d conf ssa@(s,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
@@ -196,7 +192,7 @@ dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Decrypt0 -> ByteString -> Int -> TimeMicrosecond -> IO ()
+dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Decrypt -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
          (PacketIC cpkt@(CryptPacket (Initial peerVer dCID sCID token) _) lvl)
          mysa peersa send _ bs0RTT bytes tim

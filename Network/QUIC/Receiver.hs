@@ -24,15 +24,13 @@ import Network.QUIC.Recovery
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-type Decrypt = Crypt -> EncryptionLevel -> IO (Maybe Plain)
-
 receiver :: Connection -> IO ()
 receiver conn = handleLogT logAction $
     E.bracket (mallocBytes bufsiz) free body
   where
     bufsiz = maximumUdpPayloadSize
     body buf = do
-        let decrypt = decryptCrypt buf bufsiz conn
+        let decrypt = decryptCrypt buf bufsiz
         loopHandshake decrypt
         loopEstablished decrypt
     recvTimeout = do
@@ -121,7 +119,7 @@ processReceivedPacket conn decrypt rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
         tim = rpTimeRecevied rpkt
-    mplain <- decrypt crypt lvl
+    mplain <- decrypt conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
           when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $

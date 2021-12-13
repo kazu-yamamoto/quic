@@ -165,6 +165,7 @@ newConcurrency rl dir n = Concurrency typ typ n
 
 type Send = Buffer -> Int -> IO ()
 type Recv = IO ReceivedPacket
+type Decrypt = Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
 
 ----------------------------------------------------------------
 
