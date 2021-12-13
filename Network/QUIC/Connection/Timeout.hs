@@ -11,7 +11,7 @@ module Network.QUIC.Connection.Timeout (
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Typeable
-import Network.QUIC.Event
+import GHC.Event
 import System.IO.Unsafe (unsafePerformIO)
 import qualified UnliftIO.Exception as E
 

@@ -111,7 +111,6 @@ library
                        Network.QUIC.Types.Resumption
                        Network.QUIC.Types.Time
                        Network.QUIC.Utils
-					   Network.QUIC.Event
   -- other-extensions:
   build-depends:       base >= 4.9 && < 5
                      , array
@@ -139,8 +138,6 @@ library
   default-language:    Haskell2010
   ghc-options:         -Wall -Wcompat
   default-extensions:  Strict StrictData
-  if os(windows)
-    cc-options: -D_WINDOWS -mavx2 -maes -mpclmul
   if arch(x86_64)
     cc-options:        -mavx2 -maes -mpclmul
     c-sources:         cbits/fusion.c cbits/picotls.c

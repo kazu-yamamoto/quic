@@ -40,7 +40,7 @@ import Data.IORef
 import Data.List (intersperse)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import Network.QUIC.Event
+import GHC.Event
 import System.Log.FastLogger
 
 import Network.QUIC.Connector
