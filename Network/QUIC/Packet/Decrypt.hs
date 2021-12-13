@@ -48,7 +48,7 @@ decryptCrypt decBuf _bufsiz conn Crypt{..} lvl = do -- fixme: bufsiz is not used
         let keyPhase | lvl == RTT1Level = flags `testBit` 2
                      | otherwise        = False
         coder <- getCoder conn lvl keyPhase
-        mpayload <- decrypt coder decBuf ciphertext header pn
+        mpayload <- decrypt coder decBuf ciphertext (AssDat header) pn
         let rrMask | lvl == RTT1Level = 0x18
                    | otherwise        = 0x0c
             marks | flags .&. rrMask == 0 = defaultPlainMarks

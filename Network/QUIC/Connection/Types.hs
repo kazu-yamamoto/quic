@@ -96,7 +96,7 @@ data MigrationState = NonMigration
 
 data Coder = Coder {
     encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-  , decrypt :: Buffer -> CipherText -> ByteString -> PacketNumber -> IO (Maybe PlainText)
+  , decrypt :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
   }
 
 initialCoder :: Coder

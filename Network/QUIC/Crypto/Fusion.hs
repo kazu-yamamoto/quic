@@ -58,8 +58,8 @@ fusionEncrypt (FC fctx) (SP fsupp) ibuf ilen abuf alen pn obuf =
     ilen' = fromIntegral ilen
     alen' = fromIntegral alen
 
-fusionDecrypt :: FusionContext -> Buffer -> CipherText -> ByteString -> PacketNumber -> IO (Maybe PlainText)
-fusionDecrypt (FC fctx) buf ciphertext header pn =
+fusionDecrypt :: FusionContext -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+fusionDecrypt (FC fctx) buf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
         withByteString header $ \abuf -> do
