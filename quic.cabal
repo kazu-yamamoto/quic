@@ -111,6 +111,7 @@ library
                        Network.QUIC.Types.Resumption
                        Network.QUIC.Types.Time
                        Network.QUIC.Utils
+					   Network.QUIC.Event
   -- other-extensions:
   build-depends:       base >= 4.9 && < 5
                      , array
