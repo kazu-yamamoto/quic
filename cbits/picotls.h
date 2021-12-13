@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #ifdef _WINDOWS
-#include "winsock.h"
+#include "wincompat.h"
 #endif
 
 #include <assert.h>
