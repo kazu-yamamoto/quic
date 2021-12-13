@@ -142,17 +142,21 @@ accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
+type Decrypt0 = Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
+
+----------------------------------------------------------------
+
 runDispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ThreadId
 runDispatcher d conf ssa@(s,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
 dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
-    E.bracket (mallocBytes maximumUdpPayloadSize)
-              free
-              body
+    E.bracket (mallocBytes bufsiz) free body
   where
+    bufsiz = maximumUdpPayloadSize
     body buf = do
+        let decrypt conn = decryptCrypt conn buf bufsiz
     --    let (opt,_cmsgid) = case mysa of
     --          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
     --          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
@@ -168,7 +172,7 @@ dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
             (pkt, bs0RTT) <- decodePacket bs0
     --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
             let send bs = void $ NSB.sendTo s bs peersa
-            dispatch d conf logAction pkt mysa peersa send buf bs0RTT bytes now
+            dispatch d conf logAction pkt mysa peersa send decrypt bs0RTT bytes now
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
@@ -192,7 +196,7 @@ dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Buffer -> ByteString -> Int -> TimeMicrosecond -> IO ()
+dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Decrypt0 -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
          (PacketIC cpkt@(CryptPacket (Initial peerVer dCID sCID token) _) lvl)
          mysa peersa send _ bs0RTT bytes tim
@@ -318,15 +322,14 @@ dispatch Dispatch{..} _ _
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> return ()
 dispatch Dispatch{..} _ logAction
-         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ buf _ bytes tim  = do
+         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ decrypt _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
           logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
-          let bufsiz = maximumUdpPayloadSize
-          mplain <- decryptCrypt conn buf bufsiz crypt RTT1Level
+          mplain <- decrypt conn crypt RTT1Level
           case mplain of
             Nothing -> connDebugLog conn "debug: dispatch: cannot decrypt"
             Just plain -> do
