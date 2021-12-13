@@ -143,6 +143,8 @@ library
   default-language:    Haskell2010
   ghc-options:         -Wall -Wcompat
   default-extensions:  Strict StrictData
+  if os(windows)
+    cc-options:        -D_WINDOWS
   if arch(x86_64)
     cpp-options:       -DUSE_FUSION
     cc-options:        -mavx2 -maes -mpclmul

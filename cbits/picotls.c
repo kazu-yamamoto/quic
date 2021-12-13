@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef _WINDOWS
-#include "wincompat.h"
+#include "winsock.h"
 #else
 #include <arpa/inet.h>
 #include <sys/time.h>

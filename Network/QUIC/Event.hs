@@ -21,7 +21,6 @@ getSystemTimerManager = pure TimerConstructor
 
 registerTimeout :: TimerManager -> Int -> TimeoutCallback -> IO TimeoutKey
 registerTimeout _ n callback = do
-    print "debug: registering a timeout"
     mvar <- newEmptyMVar :: IO (MVar TimeOutMsg)
     TimeKeyConstructor <$> forkIO (
         let action time = do

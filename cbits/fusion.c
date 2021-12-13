@@ -38,7 +38,9 @@
  * IN THE SOFTWARE.
  */
 #include <stdint.h>
-
+#ifdef _WINDOWS
+#include <intrin.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <immintrin.h>
@@ -1076,7 +1078,7 @@ void aead_context_free(ptls_aead_context_t *p) {
 
 /* ---------------------------------------------------------------- */
 
-ptls_aead_supplementary_encryption_t *supplement_new(uint8_t *key, uint siz) {
+ptls_aead_supplementary_encryption_t *supplement_new(uint8_t *key, unsigned int siz) {
   ptls_aead_supplementary_encryption_t *supp = malloc(sizeof(ptls_aead_supplementary_encryption_t));
   if (siz == PTLS_AES256_KEY_SIZE) {
     supp->ctx = ptls_cipher_new(&ptls_fusion_aes256ctr, 1, key);
