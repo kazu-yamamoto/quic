@@ -4,8 +4,6 @@
 module Network.QUIC.Types.Packet where
 
 import Data.Ix
-import Network.TLS.QUIC (extensionID_QuicTransportParameters, ExtensionID)
-import Text.Printf
 
 import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
@@ -16,52 +14,18 @@ import Network.QUIC.Types.Time
 ----------------------------------------------------------------
 
 -- | QUIC version.
-newtype Version = Version Word32 deriving (Eq, Ord)
+newtype Version = Version Word32 deriving (Eq, Ord, Show)
 
 pattern Negotiation      :: Version
 pattern Negotiation       = Version 0
 pattern Version1         :: Version
 pattern Version1          = Version 1
-pattern Version2         :: Version
-pattern Version2          = Version 0xff020000
 pattern Draft29          :: Version
 pattern Draft29           = Version 0xff00001d
 pattern GreasingVersion  :: Version
 pattern GreasingVersion   = Version 0x0a0a0a0a
 pattern GreasingVersion2 :: Version
 pattern GreasingVersion2  = Version 0x1a2a3a4a
-
-instance Show Version where
-    show (Version          0) = "Negotiation"
-    show (Version          1) = "Version1"
-    show (Version 0xff020000) = "Version2"
-    show (Version 0xff00001d) = "Draft29"
-    show ver@(Version v)
-      | isGreasingVersion ver = "Greasing 0x" ++ printf "%08x" v
-      | otherwise             =  "Version 0x" ++ printf "%08x" v
-
-isGreasingVersion :: Version -> Bool
-isGreasingVersion (Version v) = v .&. 0x0a0a0a0a == 0x0a0a0a0a
-
-----------------------------------------------------------------
-
-data VersionInfo = VersionInfo {
-    chosenVersion :: Version
-  , otherVersions :: [Version]
-  } deriving (Eq, Show)
-
-defaultVersionInfo :: VersionInfo
-defaultVersionInfo = VersionInfo Version1 [Version2, Version1]
-
-brokenVersionInfo :: VersionInfo
-brokenVersionInfo = VersionInfo Negotiation []
-
-----------------------------------------------------------------
-
-extensionIDForTtransportParameter :: Version -> ExtensionID
-extensionIDForTtransportParameter Version1 = extensionID_QuicTransportParameters
-extensionIDForTtransportParameter Version2 = extensionID_QuicTransportParameters
-extensionIDForTtransportParameter _        = 0xffa5
 
 ----------------------------------------------------------------
 

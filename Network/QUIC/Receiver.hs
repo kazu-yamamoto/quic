@@ -13,7 +13,6 @@ import qualified UnliftIO.Exception as E
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
-import Network.QUIC.Crypto
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Logger
@@ -90,15 +89,6 @@ processReceivedPacketHandshake conn buf rpkt = do
                       resetPeerCID conn newPeerCID
                   setPeerAuthCIDs conn $ \auth ->
                       auth { initSrcCID = Just newPeerCID }
-              case hdr of
-                Initial peerVer _ _ _ -> do
-                    myVer <- getVersion conn
-                    let myOrigiVer = getOriginalVersion conn
-                        firstTime = myVer == myOrigiVer
-                    when (firstTime && myVer /= peerVer) $ do
-                        setVersion conn peerVer
-                        initializeCoder conn InitialLevel $ initialSecrets peerVer $ clientDstCID conn
-                _ -> return ()
               processReceivedPacket conn buf rpkt
         | otherwise -> do
               mycid <- getMyCID conn

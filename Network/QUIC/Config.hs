@@ -40,7 +40,7 @@ defaultHooks = Hooks {
 
 -- | Client configuration.
 data ClientConfig = ClientConfig {
-    ccVersionInfo   :: VersionInfo -- ^ Versions in the preferred order.
+    ccVersions      :: [Version] -- ^ Versions in the preferred order.
   , ccCiphers       :: [Cipher] -- ^ Cipher candidates defined in TLS 1.3.
   , ccGroups        :: [Group] -- ^ Key exchange group candidates defined in TLS 1.3.
   , ccParameters    :: Parameters
@@ -63,12 +63,11 @@ data ClientConfig = ClientConfig {
 -- | The default value for client configuration.
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
-    ccVersionInfo   = defaultVersionInfo
+    ccVersions    = [Version1,Draft29]
+                         -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
   , ccCiphers       = supportedCiphers defaultSupported
   , ccGroups        = supportedGroups defaultSupported
-  , ccParameters    = defaultParameters {
-        versionInformation = Just defaultVersionInfo
-      }
+  , ccParameters    = defaultParameters
   , ccKeyLog        = \_ -> return ()
   , ccQLog          = Nothing
   , ccCredentials   = mempty
@@ -89,7 +88,7 @@ defaultClientConfig = ClientConfig {
 
 -- | Server configuration.
 data ServerConfig = ServerConfig {
-    scVersionInfo    :: VersionInfo -- ^ Versions in the preferred order.
+    scVersions       :: [Version] -- ^ Versions in the preferred order.
   , scCiphers        :: [Cipher] -- ^ Cipher candidates defined in TLS 1.3.
   , scGroups         :: [Group] -- ^ Key exchange group candidates defined in TLS 1.3.
   , scParameters     :: Parameters
@@ -109,12 +108,11 @@ data ServerConfig = ServerConfig {
 -- | The default value for server configuration.
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scVersionInfo    = defaultVersionInfo
+    scVersions       = [Version1,Draft29]
+                         -- intentionally excluding cipher_TLS13_CHACHA20POLY1305_SHA256 due to cryptonite limitation
   , scCiphers        = supportedCiphers defaultSupported
   , scGroups         = supportedGroups defaultSupported
-  , scParameters     = defaultParameters {
-        versionInformation = Just defaultVersionInfo
-      }
+  , scParameters     = defaultParameters
   , scKeyLog         = \_ -> return ()
   , scQLog           = Nothing
   , scCredentials    = mempty

@@ -6,8 +6,6 @@ module Network.QUIC.Connection.Role (
   , getResumptionInfo
   , setRetried
   , getRetried
-  , setIncompatibleVN
-  , getIncompatibleVN
   , setResumptionSession
   , setNewToken
   , setRegister
@@ -63,20 +61,6 @@ getRetried :: Connection -> IO Bool
 getRetried conn@Connection{..}
   | isClient conn = resumptionRetry . resumptionInfo <$> readIORef roleInfo
   | otherwise     = askRetry <$> readIORef roleInfo
-
-----------------------------------------------------------------
-
-setIncompatibleVN :: Connection -> Bool -> IO ()
-setIncompatibleVN conn@Connection{..} icvn
-  | isClient conn = atomicModifyIORef'' roleInfo $ \ci -> ci {
-        incompatibleVN = icvn
-      }
-  | otherwise     = return ()
-
-getIncompatibleVN :: Connection -> IO Bool
-getIncompatibleVN conn@Connection{..}
-  | isClient conn = incompatibleVN <$> readIORef roleInfo
-  | otherwise     = return False
 
 ----------------------------------------------------------------
 

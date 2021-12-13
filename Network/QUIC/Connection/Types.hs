@@ -39,7 +39,6 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
                            , serverAddr         :: Maybe SockAddr
-                           , incompatibleVN     :: Bool
                            }
               | ServerInfo { tokenManager    :: ~CT.TokenManager
                            , registerCID     :: CID -> Connection -> IO ()
@@ -52,9 +51,8 @@ data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
 defaultClientRoleInfo :: RoleInfo
 defaultClientRoleInfo = ClientInfo {
     clientInitialToken = emptyToken
-  , resumptionInfo     = defaultResumptionInfo
-  , serverAddr         = Nothing
-  , incompatibleVN     = False
+  , resumptionInfo = defaultResumptionInfo
+  , serverAddr     = Nothing
   }
 
 defaultServerRoleInfo :: RoleInfo
@@ -167,7 +165,6 @@ newConcurrency rl dir n = Concurrency typ typ n
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     connState         :: ConnState
-  , clientDstCID      :: CID
   -- Actions
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
@@ -180,8 +177,7 @@ data Connection = Connection {
   , mainThreadId      :: ThreadId
   -- Info
   , roleInfo          :: IORef RoleInfo
-  , quicVersionInfo   :: IORef VersionInfo
-  , origVersionInfo   :: VersionInfo
+  , quicVersion       :: IORef Version
   -- Mine
   , myParameters      :: Parameters
   , myCIDDB           :: IORef CIDDB
@@ -249,23 +245,22 @@ makePendingQ = do
 
 newConnection :: Role
               -> Parameters
-              -> VersionInfo -> AuthCIDs -> AuthCIDs
+              -> Version -> AuthCIDs -> AuthCIDs
               -> DebugLogger -> QLogger -> Hooks
               -> IORef [Socket]
               -> RecvQ
               -> IO Connection
-newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ = do
+newConnection rl myparams ver myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ = do
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate clientDstCID debugLog qLog hooks recvQ sref
+    Connection connstate debugLog qLog hooks recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
         <*> myThreadId
         -- Info
         <*> newIORef initialRoleInfo
-        <*> newIORef verInfo
-        <*> return verInfo
+        <*> newIORef ver
         -- Mine
         <*> return myparams
         <*> newIORef (newCIDDB myCID)
@@ -316,8 +311,6 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     peer | isclient  = Server
          | otherwise = Client
     peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)
-    clientDstCID | isclient  = fromJust $ origDstCID peerAuthCIDs
-                 | otherwise = fromJust $ origDstCID myAuthCIDs
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
@@ -325,22 +318,22 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 ----------------------------------------------------------------
 
 clientConnection :: ClientConfig
-                 -> VersionInfo -> AuthCIDs -> AuthCIDs
+                 -> Version -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
                  -> RecvQ
                  -> IO Connection
-clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
-    newConnection Client ccParameters verInfo myAuthCIDs peerAuthCIDs
+clientConnection ClientConfig{..} ver myAuthCIDs peerAuthCIDs =
+    newConnection Client ccParameters ver myAuthCIDs peerAuthCIDs
 
 serverConnection :: ServerConfig
-                 -> VersionInfo -> AuthCIDs -> AuthCIDs
+                 -> Version -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
                  -> RecvQ
                  -> IO Connection
-serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
-    newConnection Server scParameters verInfo myAuthCIDs peerAuthCIDs
+serverConnection ServerConfig{..} ver myAuthCIDs peerAuthCIDs =
+    newConnection Server scParameters ver myAuthCIDs peerAuthCIDs
 
 ----------------------------------------------------------------
 

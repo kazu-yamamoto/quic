@@ -41,14 +41,17 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
       , clientEarlyData         = if use0RTT then Just "" else Nothing
       }
     convTP = onTransportParametersCreated ccHooks
-    params = convTP $ setCIDsToParameters myAuthCIDs ccParameters
     convExt = onTLSExtensionCreated ccHooks
+    qparams = convTP $ setCIDsToParameters myAuthCIDs ccParameters
+    eQparams = encodeParameters qparams
+    tpId | ver == Version1 = extensionID_QuicTransportParameters
+         | otherwise       = 0xffa5
     cshared = def {
         sharedValidationCache = if ccValidate then
                                   def
                                 else
                                   ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
-      , sharedHelloExtensions = convExt $ parametersToExtensionRaw ver params
+      , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]
       , sharedSessionManager = sessionManager establish
       }
     hook = def {
@@ -62,18 +65,12 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
         debugKeyLogger = ccKeyLog
       }
 
-parametersToExtensionRaw :: Version -> Parameters -> [ExtensionRaw]
-parametersToExtensionRaw ver params = [ExtensionRaw tpId eParams]
-  where
-    tpId = extensionIDForTtransportParameter ver
-    eParams = encodeParameters params
-
 serverHandshaker :: QUICCallbacks
                  -> ServerConfig
                  -> Version
-                 -> IO Parameters
+                 -> AuthCIDs
                  -> IO ()
-serverHandshaker callbacks ServerConfig{..} ver getParams =
+serverHandshaker callbacks ServerConfig{..} ver myAuthCIDs =
     tlsQUICServer sparams callbacks
   where
     sparams = def {
@@ -85,18 +82,19 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
       }
     convTP = onTransportParametersCreated scHooks
     convExt = onTLSExtensionCreated scHooks
+    qparams = convTP $ setCIDsToParameters myAuthCIDs scParameters
+    eQparams = encodeParameters qparams
+    tpId | ver == Version1 = extensionID_QuicTransportParameters
+         | otherwise       = 0xffa5
     sshared = def {
-        sharedCredentials     = scCredentials
-      , sharedSessionManager  = scSessionManager
-      }
+            sharedCredentials     = scCredentials
+          , sharedHelloExtensions = convExt [ExtensionRaw tpId eQparams]
+          , sharedSessionManager  = scSessionManager
+          }
     hook = def {
         onALPNClientSuggest = case scALPN of
           Nothing -> Nothing
           Just io -> Just $ io ver
-      , onEncryptedExtensionsCreating = \exts0 -> do
-            params <- getParams
-            let exts = convExt $ parametersToExtensionRaw ver $ convTP params
-            return $ exts ++ exts0
       }
     supported = def {
         supportedVersions = [TLS13]

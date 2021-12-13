@@ -113,7 +113,7 @@ insertRecvQDict ref dcid q = atomicModifyIORef'' ref ins
 ----------------------------------------------------------------
 
 data Accept = Accept {
-    accVersionInfo  :: VersionInfo
+    accVersion      :: Version
   , accMyAuthCIDs   :: AuthCIDs
   , accPeerAuthCIDs :: AuthCIDs
   , accMySockAddr   :: SockAddr
@@ -194,15 +194,14 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction $
 -- cannot be connected.
 dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Buffer -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
-         (PacketIC cpkt@(CryptPacket (Initial peerVer dCID sCID token) _) lvl)
+         (PacketIC cpkt@(CryptPacket (Initial ver dCID sCID token) _) lvl)
          mysa peersa send _ bs0RTT bytes tim
   | bytes < defaultQUICPacketSize = do
         logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
-  | peerVer `notElem` myVersions = do
-        let offerVersions
-                | peerVer == GreasingVersion = GreasingVersion2 : myVersions
-                | otherwise                  = GreasingVersion  : myVersions
-        bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID offerVersions
+  | ver `notElem` scVersions= do
+        let vers | ver == GreasingVersion = GreasingVersion2 : scVersions
+                 | otherwise              = GreasingVersion  : scVersions
+        bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID vers
         send bss
   | token == "" = do
         mq <- lookupConnectionDict dstTable dCID
@@ -225,7 +224,6 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                     _       -> return ()
           _ -> sendRetry
   where
-    myVersions = otherVersions scVersionInfo
     pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
         mq <- lookupRecvQDict srcTable key
         case mq of
@@ -237,7 +235,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
               let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
                   ent = Accept {
-                      accVersionInfo  = VersionInfo peerVer myVersions
+                      accVersion      = ver
                     , accMyAuthCIDs   = myAuthCIDs
                     , accPeerAuthCIDs = peerAuthCIDs
                     , accMySockAddr   = mysa
@@ -297,19 +295,19 @@ dispatch Dispatch{..} ServerConfig{..} logAction
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver etim (Just (l,r,_))) = do
         diff <- getElapsedTimeMicrosecond etim
-        return $ tver == peerVer
+        return $ tver == ver
               && diff <= Microseconds 30000000 -- fixme
               && dCID == l
               && sCID == r
     isRetryTokenValid _ = return False
     sendRetry = do
         newdCID <- newCID
-        retryToken <- generateRetryToken peerVer newdCID sCID dCID
+        retryToken <- generateRetryToken ver newdCID sCID dCID
         mnewtoken <- timeout (Microseconds 100000) $ encryptToken tokenMgr retryToken
         case mnewtoken of
           Nothing       -> logAction "retry token stacked"
           Just newtoken -> do
-              bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
+              bss <- encodeRetryPacket $ RetryPacket ver sCID newdCID newtoken (Left dCID)
               send bss
 dispatch Dispatch{..} _ _
          (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
