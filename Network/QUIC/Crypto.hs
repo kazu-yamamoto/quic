@@ -50,7 +50,6 @@ import Crypto.Error (throwCryptoError, maybeCryptoError)
 import qualified Crypto.MAC.Poly1305 as Poly1305
 import qualified Data.ByteArray as Byte (convert, xor)
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Internal as BS
 import qualified Data.ByteString.Short as Short
 import Foreign.ForeignPtr (withForeignPtr)
@@ -61,6 +60,7 @@ import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
 import qualified UnliftIO.Exception as E
 
+import Network.QUIC.Crypto.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -71,45 +71,11 @@ defaultCipher = cipher_TLS13_AES128GCM_SHA256
 
 ----------------------------------------------------------------
 
-type PlainText  = ByteString
-type CipherText = ByteString
-type Salt       = ByteString
-
-newtype Key    = Key    ByteString deriving (Eq)
-newtype IV     = IV     ByteString deriving (Eq)
-newtype Secret = Secret ByteString deriving (Eq)
-newtype AddDat = AddDat ByteString deriving (Eq)
-newtype Sample = Sample ByteString deriving (Eq)
-newtype Mask   = Mask   ByteString deriving (Eq)
-newtype Label  = Label  ByteString deriving (Eq)
-newtype Nonce  = Nonce  ByteString deriving (Eq)
-
-instance Show Key where
-    show (Key x) = "Key=" ++ C8.unpack (enc16 x)
-instance Show IV where
-    show (IV x) = "IV=" ++ C8.unpack (enc16 x)
-instance Show Secret where
-    show (Secret x) = "Secret=" ++ C8.unpack (enc16 x)
-instance Show AddDat where
-    show (AddDat x) = "AddDat=" ++ C8.unpack (enc16 x)
-instance Show Sample where
-    show (Sample x) = "Sample=" ++ C8.unpack (enc16 x)
-instance Show Mask where
-    show (Mask x) = "Mask=" ++ C8.unpack (enc16 x)
-instance Show Label where
-    show (Label x) = "Label=" ++ C8.unpack (enc16 x)
-instance Show Nonce where
-    show (Nonce x) = "Nonce=" ++ C8.unpack (enc16 x)
-
-----------------------------------------------------------------
-
 initialSalt :: Version -> Salt
 initialSalt Draft29     = "\xaf\xbf\xec\x28\x99\x93\xd2\x4c\x9e\x97\x86\xf1\x9c\x61\x11\xe0\x43\x90\xa8\x99"
 initialSalt Version1    = "\x38\x76\x2c\xf7\xf5\x59\x34\xb3\x4d\x17\x9a\xe6\xa4\xc8\x0c\xad\xcc\xbb\x7f\x0a"
 initialSalt Version2    = "\xa7\x07\xc2\x03\xa5\x9b\x47\x18\x4a\x1d\x62\xca\x57\x04\x06\xea\x7a\xe3\xe5\xd3"
 initialSalt (Version v) = E.impureThrow $ VersionIsUnknown v
-
-data InitialSecret
 
 initialSecrets :: Version -> CID -> TrafficSecrets InitialSecret
 initialSecrets v c = (clientInitialSecret v c, serverInitialSecret v c)
