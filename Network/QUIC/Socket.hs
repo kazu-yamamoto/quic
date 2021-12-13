@@ -18,7 +18,7 @@ anySockAddr (SockAddrInet6 p f _ s) = SockAddrInet6 p f (0,0,0,0) s
 anySockAddr _                       = error "anySockAddr"
 
 udpServerListenSocket :: (IP, PortNumber) -> IO (Socket, SockAddr)
-udpServerListenSocket ip = E.bracketOnError open close $ \s -> withSocketsDo $ do
+udpServerListenSocket ip = E.bracketOnError open close $ \s -> do
     setSocketOption s ReuseAddr 1
     withFdSocket s setCloseOnExecIfNeeded
     -- setSocketOption s IPv6Only 1 -- fixme
