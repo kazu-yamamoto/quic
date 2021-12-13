@@ -39,7 +39,6 @@ decryptCrypt decBuf _bufsiz conn Crypt{..} lvl = do -- fixme: bufsiz is not used
             bytePN = bsXOR mask2 epn
             headerLen = cryptPktNumOffset + epnLen
             (proHeader, ciphertext) = BS.splitAt headerLen cryptPacket
-            ilen = BS.length ciphertext
         peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
         let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
         header <- BS.create headerLen $ \p -> do
@@ -49,27 +48,23 @@ decryptCrypt decBuf _bufsiz conn Crypt{..} lvl = do -- fixme: bufsiz is not used
         let keyPhase | lvl == RTT1Level = flags `testBit` 2
                      | otherwise        = False
         coder <- getCoder conn lvl keyPhase
-        siz <- withByteString ciphertext $ \ibuf ->
-                   withByteString header $ \abuf -> do
-            let ilen' = fromIntegral ilen
-                alen' = fromIntegral headerLen
-            decrypt coder ibuf ilen' abuf alen' pn decBuf
+        mpayload <- decrypt coder decBuf ciphertext header pn
         let rrMask | lvl == RTT1Level = 0x18
                    | otherwise        = 0x0c
             marks | flags .&. rrMask == 0 = defaultPlainMarks
                   | otherwise             = setIllegalReservedBits defaultPlainMarks
-        if siz < 0 then
-            return Nothing
-          else do
-            mframes <- decodeFrames decBuf siz
-            case mframes of
-              Nothing -> do
-                  let marks' = setUnknownFrame marks
-                  return $ Just $ Plain rawFlags pn [] marks'
-              Just frames -> do
-                  let marks' | null frames = setNoFrames marks
-                             | otherwise   = marks
-                  return $ Just $ Plain rawFlags pn frames marks'
+        case mpayload of
+          Nothing      -> return Nothing
+          Just payload -> do
+              mframes <- decodeFrames payload
+              case mframes of
+                Nothing -> do
+                    let marks' = setUnknownFrame marks
+                    return $ Just $ Plain rawFlags pn [] marks'
+                Just frames -> do
+                    let marks' | null frames = setNoFrames marks
+                               | otherwise   = marks
+                    return $ Just $ Plain rawFlags pn frames marks'
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ BS.unpack bs

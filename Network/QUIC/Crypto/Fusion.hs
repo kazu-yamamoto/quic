@@ -10,9 +10,10 @@ module Network.QUIC.Crypto.Fusion (
   , fusionGetMask
   ) where
 
+import qualified Data.ByteString as BS
 import Foreign.C.Types
-import Foreign.Ptr
 import Foreign.ForeignPtr
+import Foreign.Ptr
 import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Crypto.Types
@@ -57,14 +58,22 @@ fusionEncrypt (FC fctx) (SP fsupp) ibuf ilen abuf alen pn obuf =
     ilen' = fromIntegral ilen
     alen' = fromIntegral alen
 
-fusionDecrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-fusionDecrypt (FC fctx) ibuf ilen abuf alen pn buf =
+fusionDecrypt :: FusionContext -> Buffer -> CipherText -> ByteString -> PacketNumber -> IO (Maybe PlainText)
+fusionDecrypt (FC fctx) buf ciphertext header pn =
     withForeignPtr fctx $ \pctx ->
-        fromIntegral <$> c_aead_do_decrypt pctx buf ibuf ilen' pn' abuf alen'
+      withByteString ciphertext $ \ibuf ->
+        withByteString header $ \abuf -> do
+          -- fromIntegral must be here
+          siz <- fromIntegral <$> c_aead_do_decrypt pctx buf ibuf ilen' pn' abuf alen'
+          if siz < 0 then
+              return Nothing
+            else do
+              fptr <- newForeignPtr_ buf
+              return $ Just $ PS fptr 0 siz
   where
-    pn' = fromIntegral pn
-    ilen' = fromIntegral ilen
-    alen' = fromIntegral alen
+    pn'   = fromIntegral pn
+    ilen' = fromIntegral $ BS.length ciphertext
+    alen' = fromIntegral $ BS.length header
 
 ----------------------------------------------------------------
 

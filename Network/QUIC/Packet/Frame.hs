@@ -136,10 +136,8 @@ encodeFrame wbuf (UnknownFrame typ) =
 
 ----------------------------------------------------------------
 
-decodeFrames :: Buffer -> BufferSize -> IO (Maybe [Frame])
-decodeFrames buf bufsiz = do
-    rbuf <- newReadBuffer buf bufsiz
-    loop id rbuf
+decodeFrames :: ByteString -> IO (Maybe [Frame])
+decodeFrames bs = withReadBuffer bs $ loop id
   where
     loop frames rbuf = do
         ok <- (>= 1) <$> remainingSize rbuf
