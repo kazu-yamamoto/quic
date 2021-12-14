@@ -157,7 +157,7 @@ protectPayloadHeader conn wbuf encodeBuf frames pn epn epnLen headerBeg mlen lvl
     cryptoBeg <- currentOffset wbuf
     let sampleBeg = pnBeg `plusPtr` 4
     setSample protector sampleBeg
-    len <- encrypt coder encodeBuf plainLen headerBeg headerLen pn cryptoBeg
+    len <- encrypt coder cryptoBeg encodeBuf plainLen headerBeg headerLen pn
     if len < 0 then
          return (-1, -1)
       else do

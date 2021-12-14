@@ -48,8 +48,8 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-fusionEncrypt :: FusionContext -> Supplement -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-fusionEncrypt (FC fctx) (SP fsupp) ibuf ilen abuf alen pn obuf =
+fusionEncrypt :: FusionContext -> Supplement -> Buffer -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> IO Int
+fusionEncrypt (FC fctx) (SP fsupp) obuf ibuf ilen abuf alen pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
         c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen' psupp
         return (ilen + 16) -- fixme
@@ -59,16 +59,16 @@ fusionEncrypt (FC fctx) (SP fsupp) ibuf ilen abuf alen pn obuf =
     alen' = fromIntegral alen
 
 fusionDecrypt :: FusionContext -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
-fusionDecrypt (FC fctx) buf ciphertext (AssDat header) pn =
+fusionDecrypt (FC fctx) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
         withByteString header $ \abuf -> do
           -- fromIntegral must be here
-          siz <- fromIntegral <$> c_aead_do_decrypt pctx buf ibuf ilen' pn' abuf alen'
+          siz <- fromIntegral <$> c_aead_do_decrypt pctx obuf ibuf ilen' pn' abuf alen'
           if siz < 0 then
               return Nothing
             else do
-              fptr <- newForeignPtr_ buf
+              fptr <- newForeignPtr_ obuf
               return $ Just $ PS fptr 0 siz
   where
     pn'   = fromIntegral pn
