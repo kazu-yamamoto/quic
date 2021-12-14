@@ -5,6 +5,7 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import Control.Concurrent (forkIO)
 import qualified Data.ByteString as BS
 import Network.TLS (AlertDescription(..))
 import qualified UnliftIO.Exception as E
@@ -20,6 +21,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
+import Network.QUIC.Server.Reader (runNewServerReader)
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
@@ -125,8 +127,7 @@ processReceivedPacket conn decrypt rpkt = do
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl plainPacketNumber
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
-          unless (isCryptLogged crypt) $
-              qlogReceived conn (PlainPacket hdr plain) tim
+          qlogReceived conn (PlainPacket hdr plain) tim
           let ackEli   = any ackEliciting   plainFrames
               shouldDrop = rpReceivedBytes rpkt < defaultQUICPacketSize
                         && lvl == InitialLevel && ackEli
@@ -134,6 +135,10 @@ processReceivedPacket conn decrypt rpkt = do
               connDebugLog conn ("debug: drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr
             else do
+              case cryptMigraionInfo crypt of
+                Nothing -> return ()
+                Just (MigrationInfo mysa peersa dCID) ->
+                    void . forkIO $ runNewServerReader conn mysa peersa dCID
               (ckp,cpn) <- getCurrentKeyPhase conn
               let Flags flags = plainFlags
                   nkp = flags `testBit` 2
