@@ -58,6 +58,9 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 
 ----------------------------------------------------------------
 
+-- WriteBuffer: protect(header) + encrypt(plain_frames)
+-- encodeBuf:   plain_frames
+
 encodePlainPacket :: Connection -> Buffer -> BufferSize -> PlainPacket -> Maybe Int -> IO (Int,Int)
 encodePlainPacket conn buf bufsiz ppkt@(PlainPacket _ plain) mlen = do
     let mlen' | isNoPaddings (plainMarks plain) = Nothing
