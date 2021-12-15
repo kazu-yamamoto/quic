@@ -10,6 +10,7 @@ module Network.QUIC.Crypto.Fusion (
   , fusionSetupSupplement
   , fusionSetSample
   , fusionGetMask
+  , mkBS
   ) where
 
 import qualified Data.ByteString as BS
@@ -56,32 +57,41 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-fusionEncrypt :: FusionContext -> Supplement -> Buffer -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> IO Int
-fusionEncrypt (FC fctx) (SP fsupp) obuf ibuf ilen abuf alen pn =
+fusionEncrypt :: FusionContext -> Supplement -> Buffer
+              -> PlainText -> AssDat -> PacketNumber -> IO Int
+fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
-        c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen' psupp
-        return (ilen + 16) -- fixme
+      withByteString plaintext $ \ibuf ->
+        withByteString header $ \abuf -> do
+          c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen psupp
+          return (ilen + 16) -- fixme
   where
-    pn' = fromIntegral pn
+    pn'   = fromIntegral pn
+    ilen  = BS.length plaintext
     ilen' = fromIntegral ilen
-    alen' = fromIntegral alen
+    alen  = fromIntegral $ BS.length header
 
-fusionDecrypt :: FusionContext -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+fusionDecrypt :: FusionContext -> Buffer
+              -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
 fusionDecrypt (FC fctx) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
         withByteString header $ \abuf -> do
           -- fromIntegral must be here
-          siz <- fromIntegral <$> c_aead_do_decrypt pctx obuf ibuf ilen' pn' abuf alen'
+          siz <- fromIntegral <$> c_aead_do_decrypt pctx obuf ibuf ilen pn' abuf alen
           if siz < 0 then
               return Nothing
-            else do
-              fptr <- newForeignPtr_ obuf
-              return $ Just $ PS fptr 0 siz
+            else
+              Just <$> mkBS obuf siz
   where
-    pn'   = fromIntegral pn
-    ilen' = fromIntegral $ BS.length ciphertext
-    alen' = fromIntegral $ BS.length header
+    pn'  = fromIntegral pn
+    ilen = fromIntegral $ BS.length ciphertext
+    alen = fromIntegral $ BS.length header
+
+mkBS :: Buffer -> Int -> IO ByteString
+mkBS ptr siz = do
+    fptr <- newForeignPtr_ ptr
+    return $ PS fptr 0 siz
 
 ----------------------------------------------------------------
 

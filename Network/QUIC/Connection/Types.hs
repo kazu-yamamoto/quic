@@ -96,13 +96,13 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
-    encrypt :: Buffer -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> IO Int
+    encrypt :: Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
   , decrypt :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt = \_ _ _ _ _ _ -> return (-1)
+    encrypt = \_ _ _ _ -> return (-1)
   , decrypt = \_ _ _ _ -> return Nothing
   }
 

@@ -160,7 +160,9 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     cryptoBeg <- currentOffset wbuf
     let sampleBeg = pnBeg `plusPtr` 4
     setSample protector sampleBeg
-    len <- encrypt coder cryptoBeg encBuf plainLen headerBeg headerLen pn
+    plaintext <- mkBS encBuf plainLen
+    header <- mkBS headerBeg headerLen
+    len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
     if len < 0 then
          return (errorFusionRes, -1)
       else do
