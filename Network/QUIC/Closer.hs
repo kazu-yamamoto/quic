@@ -11,6 +11,7 @@ import Foreign.Ptr
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
+import Network.QUIC.Crypto
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Recovery
@@ -43,7 +44,7 @@ closure' conn ldcc frame = do
     let bufsiz = maximumUdpPayloadSize
     sendBuf <- mallocBytes bufsiz
     recvBuf <- mallocBytes bufsiz
-    siz <- encodeCC conn frame sendBuf bufsiz
+    siz <- encodeCC conn (FusionRes sendBuf bufsiz) frame
     let recv = NS.recvBuf s recvBuf bufsiz
         hook = onCloseCompleted $ connHooks conn
     send <- if isClient conn then do
@@ -60,26 +61,27 @@ closure' conn ldcc frame = do
         mapM_ NS.close socks
         killTimeouter
 
-encodeCC :: Connection -> Frame -> Buffer -> BufferSize -> IO Int
-encodeCC conn frame sendBuf0 bufsiz0 = do
+encodeCC :: Connection -> FusionRes -> Frame -> IO Int
+encodeCC conn res0@(FusionRes sendBuf0 bufsiz0) frame = do
     lvl0 <- getEncryptionLevel conn
     let lvl | lvl0 == RTT0Level = InitialLevel
             | otherwise         = lvl0
     if lvl == HandshakeLevel then do
-        siz0 <- encCC sendBuf0 bufsiz0 InitialLevel
+        siz0 <- encCC res0 InitialLevel
         let sendBuf1 = sendBuf0 `plusPtr` siz0
             bufsiz1 = bufsiz0 - siz0
-        siz1 <- encCC sendBuf1 bufsiz1 HandshakeLevel
+            res1 = FusionRes sendBuf1 bufsiz1
+        siz1 <- encCC res1 HandshakeLevel
         return (siz0 + siz1)
       else
-        encCC sendBuf0 bufsiz0 lvl
+        encCC res0 lvl
   where
-    encCC sendBuf bufsiz lvl = do
+    encCC res lvl = do
         header <- mkHeader conn lvl
         mypn <- nextPacketNumber conn
         let plain = Plain (Flags 0) mypn [frame] 0
             ppkt = PlainPacket header plain
-        siz <- fst <$> encodePlainPacket conn sendBuf bufsiz ppkt Nothing
+        FusionRes _ siz <- fst <$> encodePlainPacket conn res ppkt Nothing
         if siz >= 0 then do
             now <- getTimeMicrosecond
             qlogSent conn ppkt now

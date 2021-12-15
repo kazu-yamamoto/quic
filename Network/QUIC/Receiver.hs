@@ -117,8 +117,7 @@ processReceivedPacket conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
         tim = rpTimeRecevied rpkt
-        bufsiz = maximumUdpPayloadSize
-    mplain <- decryptCrypt (decryptBuf conn) bufsiz conn crypt lvl
+    mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
           when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $

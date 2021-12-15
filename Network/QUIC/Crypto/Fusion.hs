@@ -1,5 +1,7 @@
 module Network.QUIC.Crypto.Fusion (
-    FusionContext
+    FusionRes(..)
+  , errorFusionRes
+  , FusionContext
   , fusionNewContext
   , fusionSetup
   , fusionEncrypt
@@ -19,6 +21,12 @@ import Network.TLS.Extra.Cipher
 import Network.QUIC.Crypto.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
+
+
+data FusionRes = FusionRes Buffer BufferSize
+
+errorFusionRes :: FusionRes
+errorFusionRes = FusionRes nullPtr (-1)
 
 ----------------------------------------------------------------
 

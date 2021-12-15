@@ -228,8 +228,8 @@ data Connection = Connection {
   -- Resources
   , connResources     :: IORef (IO ())
   , encodeBuf         :: Buffer
-  , encryptBuf        :: Buffer
-  , decryptBuf        :: Buffer
+  , encryptRes        :: FusionRes
+  , decryptRes        :: FusionRes
   -- Recovery
   , connLDCC          :: LDCC
   }
@@ -270,9 +270,10 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    encBuf   <- mallocBytes maximumUdpPayloadSize
-    ecrptBuf <- mallocBytes maximumUdpPayloadSize
-    dcrptBuf <- mallocBytes maximumUdpPayloadSize
+    let bufsiz = maximumUdpPayloadSize
+    encBuf   <- mallocBytes bufsiz
+    ecrptBuf <- mallocBytes bufsiz
+    dcrptBuf <- mallocBytes bufsiz
     Connection connstate clientDstCID debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
@@ -319,9 +320,9 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newIORef peerAuthCIDs
         -- Resources
         <*> newIORef (free encBuf >> free ecrptBuf >> free dcrptBuf)
-        <*> return encBuf   -- used sender or closere
-        <*> return ecrptBuf -- used sender
-        <*> return dcrptBuf -- used receiver
+        <*> return encBuf                      -- used sender or closere
+        <*> return (FusionRes ecrptBuf bufsiz) -- used sender
+        <*> return (FusionRes dcrptBuf bufsiz) -- used receiver
         -- Recovery
         <*> newLDCC connstate qLog put
   where

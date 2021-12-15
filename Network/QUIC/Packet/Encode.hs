@@ -61,14 +61,14 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 -- WriteBuffer: protect(header) + encrypt(plain_frames)
 -- encodeBuf:   plain_frames
 
-encodePlainPacket :: Connection -> Buffer -> BufferSize -> PlainPacket -> Maybe Int -> IO (Int,Int)
-encodePlainPacket conn buf bufsiz ppkt@(PlainPacket _ plain) mlen = do
+encodePlainPacket :: Connection -> FusionRes -> PlainPacket -> Maybe Int -> IO (FusionRes,Int)
+encodePlainPacket conn (FusionRes buf bufsiz) ppkt@(PlainPacket _ plain) mlen = do
     let mlen' | isNoPaddings (plainMarks plain) = Nothing
               | otherwise                       = mlen
     wbuf <- newWriteBuffer buf bufsiz
     encodePlainPacket' conn wbuf ppkt mlen'
 
-encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO (Int,Int)
+encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO (FusionRes,Int)
 encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames _)) mlen = do
     headerBeg <- currentOffset wbuf
     -- flag ... sCID
@@ -140,10 +140,10 @@ encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
 
 ----------------------------------------------------------------
 
-protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> Bool -> IO (Int,Int)
+protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> Bool -> IO (FusionRes,Int)
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase = do
     -- Real size is maximumUdpPayloadSize. But smaller is better.
-    let encBuf = encodeBuf conn
+    let encBuf    = encodeBuf conn
         encBufLen = 1500 - 20 - 8
     payloadWithoutPaddingSiz <- encodeFramesWithPadding encBuf encBufLen frames
     cipher <- getCipher conn lvl
@@ -162,15 +162,15 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     setSample protector sampleBeg
     len <- encrypt coder cryptoBeg encBuf plainLen headerBeg headerLen pn
     if len < 0 then
-         return (-1, -1)
+         return (errorFusionRes, -1)
       else do
         -- protecting header
         maskBeg <- getMask protector
         if maskBeg == nullPtr then
-            return (-1, -1)
+            return (errorFusionRes, -1)
           else do
             protectHeader headerBeg pnBeg epnLen maskBeg
-            return (packetLen, padLen)
+            return (FusionRes (start wbuf) packetLen, padLen)
   where
     calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz = do
         let headerLen = (lengthOrPNBeg `minusPtr` headerBeg)
