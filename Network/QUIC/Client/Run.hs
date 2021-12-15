@@ -7,7 +7,6 @@ module Network.QUIC.Client.Run (
   , migrate
   ) where
 
-import Foreign.Marshal.Alloc
 import qualified Network.Socket as NS
 import UnliftIO.Async
 import UnliftIO.Concurrent
@@ -22,7 +21,6 @@ import Network.QUIC.Crypto
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
 import Network.QUIC.Logger
-import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.QLogger
 import Network.QUIC.Receiver
@@ -71,7 +69,7 @@ runClient conf client0 isICVN verInfo = do
             ldcc = connLDCC conn
             supporters = foldr1 concurrently_ [handshaker
                                               ,sender   conn
-                                              ,receiver' conn
+                                              ,receiver conn
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
                                               ]
@@ -91,10 +89,6 @@ runClient conf client0 isICVN verInfo = do
         socks <- getSockets conn
         mapM_ NS.close socks
         join $ replaceKillTimeouter conn
-    bufsiz = maximumUdpPayloadSize
-    receiver' conn = E.bracket (mallocBytes bufsiz) free $ \buf -> do
-        let decrypt = decryptCrypt buf bufsiz
-        receiver conn decrypt
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do

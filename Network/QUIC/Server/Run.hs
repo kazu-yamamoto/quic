@@ -7,7 +7,6 @@ module Network.QUIC.Server.Run (
   , stop
   ) where
 
-import Foreign.Marshal.Alloc
 import qualified Network.Socket as NS
 import System.Log.FastLogger
 import UnliftIO.Async
@@ -80,7 +79,7 @@ runServer conf server0 dispatch baseThreadId acc =
                 ldcc = connLDCC conn
                 supporters = foldr1 concurrently_ [handshaker
                                                   ,sender   conn
-                                                  ,receiver' conn
+                                                  ,receiver conn
                                                   ,resender  ldcc
                                                   ,ldccTimer ldcc
                                                   ]
@@ -102,10 +101,6 @@ runServer conf server0 dispatch baseThreadId acc =
     debugLog conn msg = do
         connDebugLog conn ("runServer: " <> msg)
         qlogDebug conn $ Debug $ toLogStr msg
-    bufsiz = maximumUdpPayloadSize
-    receiver' conn = E.bracket (mallocBytes bufsiz) free $ \buf -> do
-        let decrypt = decryptCrypt buf bufsiz
-        receiver conn decrypt
 
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes

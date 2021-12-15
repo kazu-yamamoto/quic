@@ -25,8 +25,8 @@ import Network.QUIC.Server.Reader (runNewServerReader)
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-receiver :: Connection -> Decrypt -> IO ()
-receiver conn decrypt = handleLogT logAction body
+receiver :: Connection -> IO ()
+receiver conn = handleLogT logAction body
   where
     body = do
         loopHandshake
@@ -41,7 +41,7 @@ receiver conn decrypt = handleLogT logAction body
           Just x  -> return x
     loopHandshake = do
         rpkt <- recvTimeout
-        processReceivedPacketHandshake conn decrypt rpkt
+        processReceivedPacketHandshake conn rpkt
         established <- isConnectionEstablished conn
         unless established loopHandshake
     loopEstablished = forever $ do
@@ -59,7 +59,7 @@ receiver conn decrypt = handleLogT logAction body
                     register <- getRegister conn
                     register (cidInfoCID cidInfo) conn
                 sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
-            processReceivedPacket conn decrypt rpkt
+            processReceivedPacket conn rpkt
             shouldUpdatePeer <- if shouldUpdate then shouldUpdatePeerCID conn
                                                 else return False
             when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
@@ -68,8 +68,8 @@ receiver conn decrypt = handleLogT logAction body
             connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("debug: receiver: " <> msg)
 
-processReceivedPacketHandshake :: Connection -> Decrypt -> ReceivedPacket -> IO ()
-processReceivedPacketHandshake conn decrypt rpkt = do
+processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
+processReceivedPacketHandshake conn rpkt = do
     let CryptPacket hdr _ = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
     mx <- timeout (Microseconds 10000) $ waitEncryptionLevel conn lvl
@@ -97,7 +97,7 @@ processReceivedPacketHandshake conn decrypt rpkt = do
                         setVersion conn peerVer
                         initializeCoder conn InitialLevel $ initialSecrets peerVer $ clientDstCID conn
                 _ -> return ()
-              processReceivedPacket conn decrypt rpkt
+              processReceivedPacket conn rpkt
         | otherwise -> do
               mycid <- getMyCID conn
               when (lvl == HandshakeLevel
@@ -110,14 +110,15 @@ processReceivedPacketHandshake conn decrypt rpkt = do
                       dropSecrets conn InitialLevel
                       clearCryptoStream conn InitialLevel
                       onPacketNumberSpaceDiscarded ldcc InitialLevel
-              processReceivedPacket conn decrypt rpkt
+              processReceivedPacket conn rpkt
 
-processReceivedPacket :: Connection -> Decrypt -> ReceivedPacket -> IO ()
-processReceivedPacket conn decrypt rpkt = do
+processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
+processReceivedPacket conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
         tim = rpTimeRecevied rpkt
-    mplain <- decrypt conn crypt lvl
+        bufsiz = maximumUdpPayloadSize
+    mplain <- decryptCrypt (decryptBuf conn) bufsiz conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
           when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $

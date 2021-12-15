@@ -166,7 +166,6 @@ newConcurrency rl dir n = Concurrency typ typ n
 
 type Send = Buffer -> Int -> IO ()
 type Recv = IO ReceivedPacket
-type Decrypt = Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
 
 ----------------------------------------------------------------
 
@@ -229,6 +228,7 @@ data Connection = Connection {
   -- Resources
   , connResources     :: IORef (IO ())
   , encodeBuf         :: Buffer
+  , decryptBuf        :: Buffer
   -- Recovery
   , connLDCC          :: LDCC
   }
@@ -269,7 +269,8 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    buf <- mallocBytes maximumUdpPayloadSize
+    encBuf   <- mallocBytes maximumUdpPayloadSize
+    dcrptBuf <- mallocBytes maximumUdpPayloadSize
     Connection connstate clientDstCID debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
@@ -315,8 +316,9 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources
-        <*> newIORef (free buf)
-        <*> return buf -- used sender or closere
+        <*> newIORef (free encBuf >> free dcrptBuf)
+        <*> return encBuf   -- used sender or closere
+        <*> return dcrptBuf -- used receiver
         -- Recovery
         <*> newLDCC connstate qLog put
   where
