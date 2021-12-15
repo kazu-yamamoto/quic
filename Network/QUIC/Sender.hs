@@ -208,7 +208,7 @@ data Switch = SwPing EncryptionLevel
 
 sender :: Connection -> IO ()
 sender conn = handleLogT logAction $
-    E.bracket (mallocBytes (maximumUdpPayloadSize * 2))
+    E.bracket (mallocBytes maximumUdpPayloadSize)
               free
               body
   where

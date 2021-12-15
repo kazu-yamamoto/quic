@@ -41,10 +41,10 @@ closure' conn ldcc frame = do
     killTimeouter <- replaceKillTimeouter conn
     socks@(s:_) <- clearSockets conn
     let bufsiz = maximumUdpPayloadSize
-    sendBuf <- mallocBytes (bufsiz * 3)
+    sendBuf <- mallocBytes bufsiz
+    recvBuf <- mallocBytes bufsiz
     siz <- encodeCC conn frame sendBuf bufsiz
-    let recvBuf = sendBuf `plusPtr` (bufsiz * 2)
-        recv = NS.recvBuf s recvBuf bufsiz
+    let recv = NS.recvBuf s recvBuf bufsiz
         hook = onCloseCompleted $ connHooks conn
     send <- if isClient conn then do
                msa <- getServerAddr conn
@@ -56,6 +56,7 @@ closure' conn ldcc frame = do
     pto <- getPTO ldcc
     void $ forkFinally (closer pto send recv hook) $ \_ -> do
         free sendBuf
+        free recvBuf
         mapM_ NS.close socks
         killTimeouter
 

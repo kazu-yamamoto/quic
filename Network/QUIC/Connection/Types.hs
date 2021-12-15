@@ -13,6 +13,7 @@ import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
+import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
@@ -227,6 +228,7 @@ data Connection = Connection {
   , handshakeCIDs     :: IORef AuthCIDs
   -- Resources
   , connResources     :: IORef (IO ())
+  , encodeBuf         :: Buffer
   -- Recovery
   , connLDCC          :: LDCC
   }
@@ -267,6 +269,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
+    buf <- mallocBytes maximumUdpPayloadSize
     Connection connstate clientDstCID debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
@@ -312,7 +315,8 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources
-        <*> newIORef (return ())
+        <*> newIORef (free buf)
+        <*> return buf -- used sender or closere
         -- Recovery
         <*> newLDCC connstate qLog put
   where
