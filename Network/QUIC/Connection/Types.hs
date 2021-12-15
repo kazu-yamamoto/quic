@@ -228,6 +228,7 @@ data Connection = Connection {
   -- Resources
   , connResources     :: IORef (IO ())
   , encodeBuf         :: Buffer
+  , encryptBuf        :: Buffer
   , decryptBuf        :: Buffer
   -- Recovery
   , connLDCC          :: LDCC
@@ -270,6 +271,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
     encBuf   <- mallocBytes maximumUdpPayloadSize
+    ecrptBuf <- mallocBytes maximumUdpPayloadSize
     dcrptBuf <- mallocBytes maximumUdpPayloadSize
     Connection connstate clientDstCID debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
@@ -316,8 +318,9 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources
-        <*> newIORef (free encBuf >> free dcrptBuf)
+        <*> newIORef (free encBuf >> free ecrptBuf >> free dcrptBuf)
         <*> return encBuf   -- used sender or closere
+        <*> return ecrptBuf -- used sender
         <*> return dcrptBuf -- used receiver
         -- Recovery
         <*> newLDCC connstate qLog put
