@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
@@ -95,15 +96,24 @@ data MigrationState = NonMigration
                     | RecvResponse
                     deriving (Eq, Show)
 
-data Coder = Coder {
-    encrypt :: FusionRes -> PlainText  -> AssDat -> PacketNumber -> IO Int
-  , decrypt :: FusionRes -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+class Decrypt d where
+    decrypt :: d -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+
+instance Decrypt FusionDecrypt where
+    decrypt = fusionDecrypt
+
+instance Decrypt NiteDecrypt where
+    decrypt (NiteDecrypt dec) ~_ c a p = return $ dec c a p
+
+data Coder = forall d . Decrypt d => Coder {
+    encrypt :: FusionRes -> PlainText -> AssDat -> PacketNumber -> IO Int
+  , decRes  :: ~d
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
     encrypt = \_ _ _ _ -> return (-1)
-  , decrypt = \_ _ _ _ -> return Nothing
+  , decRes  = undefined :: FusionDecrypt
   }
 
 data Coder1RTT = Coder1RTT {
@@ -229,7 +239,7 @@ data Connection = Connection {
   , connResources     :: IORef (IO ())
   , encodeBuf         :: Buffer
   , encryptRes        :: FusionRes
-  , decryptRes        :: FusionRes
+  , decryptBuf        :: Buffer
   -- Recovery
   , connLDCC          :: LDCC
   }
@@ -320,9 +330,9 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newIORef peerAuthCIDs
         -- Resources
         <*> newIORef (free encBuf >> free ecrptBuf >> free dcrptBuf)
-        <*> return encBuf                      -- used sender or closere
+        <*> return encBuf   -- used sender or closere
         <*> return (FusionRes ecrptBuf bufsiz) -- used sender
-        <*> return (FusionRes dcrptBuf bufsiz) -- used receiver
+        <*> return dcrptBuf -- used receiver
         -- Recovery
         <*> newLDCC connstate qLog put
   where

@@ -82,8 +82,8 @@ spec = do
             let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ $ dec16 "00000002"
             let add = AssDat clientPacketHeader
-            let ciphertext = BS.concat $ encryptPayload' defaultCipher ckey nonce plaintext add
-            let Just plaintext' = decryptPayload' defaultCipher ckey nonce ciphertext add
+            let ciphertext = BS.concat $ niteEncrypt' defaultCipher ckey nonce plaintext add
+            let Just plaintext' = niteDecrypt' defaultCipher ckey nonce ciphertext add
             plaintext' `shouldBe` plaintext
 
             ----------------------------------------------------------------

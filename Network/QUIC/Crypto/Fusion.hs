@@ -11,6 +11,7 @@ module Network.QUIC.Crypto.Fusion (
   , fusionSetSample
   , fusionGetMask
   , mkBS
+  , FusionDecrypt(..)
   ) where
 
 import qualified Data.ByteString as BS
@@ -71,9 +72,10 @@ fusionEncrypt (FC fctx) (SP fsupp) (FusionRes obuf _) plaintext (AssDat header) 
     ilen' = fromIntegral ilen
     alen  = fromIntegral $ BS.length header
 
-fusionDecrypt :: FusionContext -> FusionRes
-              -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
-fusionDecrypt (FC fctx) (FusionRes obuf _) ciphertext (AssDat header) pn =
+data FusionDecrypt = FusionDecrypt FusionContext
+
+fusionDecrypt :: FusionDecrypt -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+fusionDecrypt (FusionDecrypt (FC fctx)) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
         withByteString header $ \abuf -> do

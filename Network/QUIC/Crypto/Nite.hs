@@ -1,13 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Crypto.Nite (
-    encryptPayload
-  , encryptPayload'
-  , decryptPayload
-  , decryptPayload'
+    niteEncrypt
+  , niteEncrypt'
+  , niteDecrypt
+  , niteDecrypt'
   , protectionMask
   , aes128gcmEncrypt
   , makeNonce
+  , NiteDecrypt(..)
   ) where
 
 import Crypto.Cipher.AES
@@ -150,32 +151,34 @@ bsXORpad' iv pn = BS.pack $ zipWith xor ivl pnl
 
 ----------------------------------------------------------------
 
-encryptPayload :: Cipher -> Key -> IV
-               -> (PlainText -> ByteString -> PacketNumber -> [CipherText])
-encryptPayload cipher key iv =
+niteEncrypt :: Cipher -> Key -> IV
+            -> (PlainText -> AssDat -> PacketNumber -> [CipherText])
+niteEncrypt cipher key iv =
     let enc = cipherEncrypt cipher key
         mk  = makeNonce iv
     in \plaintext header pn -> let bytePN = bytestring64 $ fromIntegral pn
                                    nonce  = mk bytePN
-                               in enc nonce plaintext (AssDat header)
+                               in enc nonce plaintext header
 
-encryptPayload' :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> [CipherText]
-encryptPayload' cipher key nonce plaintext header =
+niteEncrypt' :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> [CipherText]
+niteEncrypt' cipher key nonce plaintext header =
     cipherEncrypt cipher key nonce plaintext header
 
 ----------------------------------------------------------------
 
-decryptPayload :: Cipher -> Key -> IV
-               -> (CipherText -> ByteString -> PacketNumber -> Maybe PlainText)
-decryptPayload cipher key iv =
+data NiteDecrypt = NiteDecrypt (CipherText -> AssDat -> PacketNumber -> Maybe PlainText)
+
+niteDecrypt :: Cipher -> Key -> IV
+            -> (CipherText -> AssDat -> PacketNumber -> Maybe PlainText)
+niteDecrypt cipher key iv =
     let dec = cipherDecrypt cipher key
         mk  = makeNonce iv
     in \ciphertext header pn -> let bytePN = bytestring64 (fromIntegral pn)
                                     nonce = mk bytePN
-                                in dec nonce ciphertext (AssDat header)
+                                in dec nonce ciphertext header
 
-decryptPayload' :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
-decryptPayload' cipher key nonce ciphertext header =
+niteDecrypt' :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
+niteDecrypt' cipher key nonce ciphertext header =
     cipherDecrypt cipher key nonce ciphertext header
 
 ----------------------------------------------------------------
