@@ -96,8 +96,8 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 data Coder = Coder {
-    encrypt :: Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
-  , decrypt :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+    encrypt :: FusionRes -> PlainText  -> AssDat -> PacketNumber -> IO Int
+  , decrypt :: FusionRes -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
   }
 
 initialCoder :: Coder

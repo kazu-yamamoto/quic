@@ -22,8 +22,6 @@ import Network.QUIC.Types
 
 decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
 decryptCrypt conn Crypt{..} lvl = do
-    -- fixme: bufsiz is not used
-    let FusionRes decBuf _bufsiz = decryptRes conn
     cipher <- getCipher conn lvl
     protector <- getProtector conn lvl
     let proFlags = Flags (cryptPacket `BS.index` 0)
@@ -50,7 +48,7 @@ decryptCrypt conn Crypt{..} lvl = do
         let keyPhase | lvl == RTT1Level = flags `testBit` 2
                      | otherwise        = False
         coder <- getCoder conn lvl keyPhase
-        mpayload <- decrypt coder decBuf ciphertext (AssDat header) pn
+        mpayload <- decrypt coder (decryptRes conn) ciphertext (AssDat header) pn
         let rrMask | lvl == RTT1Level = 0x18
                    | otherwise        = 0x0c
             marks | flags .&. rrMask == 0 = defaultPlainMarks

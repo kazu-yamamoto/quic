@@ -57,9 +57,9 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-fusionEncrypt :: FusionContext -> Supplement -> Buffer
+fusionEncrypt :: FusionContext -> Supplement -> FusionRes
               -> PlainText -> AssDat -> PacketNumber -> IO Int
-fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
+fusionEncrypt (FC fctx) (SP fsupp) (FusionRes obuf _) plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
       withByteString plaintext $ \ibuf ->
         withByteString header $ \abuf -> do
@@ -71,9 +71,9 @@ fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     ilen' = fromIntegral ilen
     alen  = fromIntegral $ BS.length header
 
-fusionDecrypt :: FusionContext -> Buffer
+fusionDecrypt :: FusionContext -> FusionRes
               -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
-fusionDecrypt (FC fctx) obuf ciphertext (AssDat header) pn =
+fusionDecrypt (FC fctx) (FusionRes obuf _) ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
         withByteString header $ \abuf -> do
