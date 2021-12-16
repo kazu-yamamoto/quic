@@ -14,7 +14,6 @@ import qualified UnliftIO.Exception as E
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
-import Network.QUIC.Crypto
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
@@ -41,7 +40,7 @@ sendPacket :: Connection -> [SentPacket] -> IO ()
 sendPacket _ [] = return ()
 sendPacket conn spkts0 = getMaxPacketSize conn >>= go
   where
-    FusionRes buf0 bufsiz0 = encryptRes conn
+    SizedBuffer buf0 bufsiz0 = encryptRes conn
     ldcc = connLDCC conn
     go maxSiz = do
         mx <- atomically ((Just    <$> takePingSTM ldcc)
@@ -65,7 +64,7 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
     buildPackets _ _ _ [] _ = error "sendPacket: buildPackets"
     buildPackets buf bufsiz siz [spkt] build0 = do
         let pkt = spPlainPacket spkt
-        (FusionRes _ bytes,padlen) <- encodePlainPacket conn (FusionRes buf bufsiz) pkt $ Just siz
+        (bytes,padlen) <- encodePlainPacket conn (SizedBuffer buf bufsiz) pkt $ Just siz
         if bytes < 0 then
             return (build0 [], bufsiz)
           else do
@@ -73,7 +72,7 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
             return (build0 [sentPacket], bufsiz - bytes)
     buildPackets buf bufsiz siz (spkt:spkts) build0 = do
         let pkt = spPlainPacket spkt
-        (FusionRes _ bytes,padlen) <- encodePlainPacket conn (FusionRes buf bufsiz) pkt Nothing
+        (bytes,padlen) <- encodePlainPacket conn (SizedBuffer buf bufsiz) pkt Nothing
         if bytes < 0 then
             buildPackets buf bufsiz siz spkts build0
           else do
@@ -108,7 +107,8 @@ sendPingPacket conn lvl = do
           else do
             let spkt = last xs
                 ping = spPlainPacket spkt
-            (FusionRes buf bytes,padlen) <- encodePlainPacket conn (encryptRes conn) ping (Just maxSiz)
+            let sizbuf@(SizedBuffer buf _) = encryptRes conn
+            (bytes,padlen) <- encodePlainPacket conn sizbuf ping (Just maxSiz)
             when (bytes >= 0) $ do
                 now <- getTimeMicrosecond
                 connSend conn buf bytes

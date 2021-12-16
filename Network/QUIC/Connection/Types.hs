@@ -117,7 +117,7 @@ instance Decrypt NiteDecrypt where
         mplaintext = dec ciphertext ad pn
 
 data Coder = forall d . Decrypt d => Coder {
-    encrypt :: FusionRes -> PlainText -> AssDat -> PacketNumber -> IO Int
+    encrypt :: Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
   , decRes  :: ~d
   }
 
@@ -249,7 +249,7 @@ data Connection = Connection {
   -- Resources
   , connResources     :: IORef (IO ())
   , encodeBuf         :: Buffer
-  , encryptRes        :: FusionRes
+  , encryptRes        :: SizedBuffer
   , decryptBuf        :: Buffer
   -- Recovery
   , connLDCC          :: LDCC
@@ -342,7 +342,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- Resources
         <*> newIORef (free encBuf >> free ecrptBuf >> free dcrptBuf)
         <*> return encBuf   -- used sender or closere
-        <*> return (FusionRes ecrptBuf bufsiz) -- used sender
+        <*> return (SizedBuffer ecrptBuf bufsiz) -- used sender
         <*> return dcrptBuf -- used receiver
         -- Recovery
         <*> newLDCC connstate qLog put

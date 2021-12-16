@@ -1,7 +1,5 @@
 module Network.QUIC.Crypto.Fusion (
-    FusionRes(..)
-  , errorFusionRes
-  , FusionContext
+    FusionContext
   , fusionNewContext
   , fusionSetup
   , fusionEncrypt
@@ -22,12 +20,6 @@ import Network.TLS.Extra.Cipher
 import Network.QUIC.Crypto.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
-
-
-data FusionRes = FusionRes Buffer BufferSize
-
-errorFusionRes :: FusionRes
-errorFusionRes = FusionRes nullPtr (-1)
 
 ----------------------------------------------------------------
 
@@ -57,9 +49,9 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-fusionEncrypt :: FusionContext -> Supplement -> FusionRes
-              -> PlainText -> AssDat -> PacketNumber -> IO Int
-fusionEncrypt (FC fctx) (SP fsupp) (FusionRes obuf _) plaintext (AssDat header) pn =
+fusionEncrypt :: FusionContext -> Supplement
+              -> Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
+fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
       withByteString plaintext $ \ibuf ->
         withByteString header $ \abuf -> do
@@ -73,7 +65,8 @@ fusionEncrypt (FC fctx) (SP fsupp) (FusionRes obuf _) plaintext (AssDat header) 
 
 data FusionDecrypt = FusionDecrypt FusionContext
 
-fusionDecrypt :: FusionDecrypt -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+fusionDecrypt :: FusionDecrypt
+              -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
 fusionDecrypt (FusionDecrypt (FC fctx)) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->

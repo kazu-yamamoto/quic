@@ -11,7 +11,6 @@ import Foreign.Ptr
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
-import Network.QUIC.Crypto
 import Network.QUIC.Imports
 import Network.QUIC.Packet
 import Network.QUIC.Recovery
@@ -44,7 +43,7 @@ closure' conn ldcc frame = do
     let bufsiz = maximumUdpPayloadSize
     sendBuf <- mallocBytes bufsiz
     recvBuf <- mallocBytes bufsiz
-    siz <- encodeCC conn (FusionRes sendBuf bufsiz) frame
+    siz <- encodeCC conn (SizedBuffer sendBuf bufsiz) frame
     let recv = NS.recvBuf s recvBuf bufsiz
         hook = onCloseCompleted $ connHooks conn
     send <- if isClient conn then do
@@ -61,8 +60,8 @@ closure' conn ldcc frame = do
         mapM_ NS.close socks
         killTimeouter
 
-encodeCC :: Connection -> FusionRes -> Frame -> IO Int
-encodeCC conn res0@(FusionRes sendBuf0 bufsiz0) frame = do
+encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
+encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
     lvl0 <- getEncryptionLevel conn
     let lvl | lvl0 == RTT0Level = InitialLevel
             | otherwise         = lvl0
@@ -70,7 +69,7 @@ encodeCC conn res0@(FusionRes sendBuf0 bufsiz0) frame = do
         siz0 <- encCC res0 InitialLevel
         let sendBuf1 = sendBuf0 `plusPtr` siz0
             bufsiz1 = bufsiz0 - siz0
-            res1 = FusionRes sendBuf1 bufsiz1
+            res1 = SizedBuffer sendBuf1 bufsiz1
         siz1 <- encCC res1 HandshakeLevel
         return (siz0 + siz1)
       else
@@ -81,7 +80,7 @@ encodeCC conn res0@(FusionRes sendBuf0 bufsiz0) frame = do
         mypn <- nextPacketNumber conn
         let plain = Plain (Flags 0) mypn [frame] 0
             ppkt = PlainPacket header plain
-        FusionRes _ siz <- fst <$> encodePlainPacket conn res ppkt Nothing
+        siz <- fst <$> encodePlainPacket conn res ppkt Nothing
         if siz >= 0 then do
             now <- getTimeMicrosecond
             qlogSent conn ppkt now

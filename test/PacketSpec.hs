@@ -38,9 +38,8 @@ spec = do
             (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt lvl
             let ppkt = PlainPacket header plain
-            clientInitialPacketBinary' <- BS.createAndTrim 4096 $ \buf -> do
-                FusionRes _ siz <- fst <$> encodePlainPacket clientConn (FusionRes buf 2048) ppkt Nothing
-                return siz
+            clientInitialPacketBinary' <- BS.createAndTrim 4096 $ \buf ->
+                fst <$> encodePlainPacket clientConn (SizedBuffer buf 2048) ppkt Nothing
             (PacketIC (CryptPacket header' crypt') lvl', _) <- decodePacket clientInitialPacketBinary'
             Just plain' <- decryptCrypt serverConn crypt' lvl'
             header' `shouldBe` header

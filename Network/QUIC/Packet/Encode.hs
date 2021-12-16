@@ -62,14 +62,14 @@ encodeRetryPacket _ = error "encodeRetryPacket"
 -- WriteBuffer: protect(header) + encrypt(plain_frames)
 -- encodeBuf:   plain_frames
 
-encodePlainPacket :: Connection -> FusionRes -> PlainPacket -> Maybe Int -> IO (FusionRes,Int)
-encodePlainPacket conn (FusionRes buf bufsiz) ppkt@(PlainPacket _ plain) mlen = do
+encodePlainPacket :: Connection -> SizedBuffer -> PlainPacket -> Maybe Int -> IO (Int,Int)
+encodePlainPacket conn (SizedBuffer buf bufsiz) ppkt@(PlainPacket _ plain) mlen = do
     let mlen' | isNoPaddings (plainMarks plain) = Nothing
               | otherwise                       = mlen
     wbuf <- newWriteBuffer buf bufsiz
     encodePlainPacket' conn wbuf ppkt mlen'
 
-encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO (FusionRes,Int)
+encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO (Int,Int)
 encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames _)) mlen = do
     headerBeg <- currentOffset wbuf
     -- flag ... sCID
@@ -141,7 +141,7 @@ encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
 
 ----------------------------------------------------------------
 
-protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> Bool -> IO (FusionRes,Int)
+protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> Bool -> IO (Int,Int)
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase = do
     -- Real size is maximumUdpPayloadSize. But smaller is better.
     let encBuf    = encodeBuf conn
@@ -163,17 +163,17 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     setSample protector sampleBeg
     plaintext <- mkBS encBuf plainLen
     header <- mkBS headerBeg headerLen
-    len <- encrypt coder (FusionRes cryptoBeg 0) plaintext (AssDat header) pn
+    len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
     if len < 0 then
-         return (errorFusionRes, -1)
+         return (-1, -1)
       else do
         -- protecting header
         maskBeg <- getMask protector
         if maskBeg == nullPtr then
-            return (errorFusionRes, -1)
+            return (-1, -1)
           else do
             protectHeader headerBeg pnBeg epnLen maskBeg
-            return (FusionRes (start wbuf) packetLen, padLen)
+            return (packetLen, padLen)
   where
     calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz = do
         let headerLen = (lengthOrPNBeg `minusPtr` headerBeg)

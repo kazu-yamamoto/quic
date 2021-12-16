@@ -2,6 +2,7 @@ module Network.QUIC.Types (
     Bytes
   , Close
   , Direction(..)
+  , SizedBuffer(..)
   , module Network.QUIC.Types.Ack
   , module Network.QUIC.Types.CID
   , module Network.QUIC.Types.Constants
@@ -29,3 +30,4 @@ import Network.QUIC.Types.Resumption
 import Network.QUIC.Types.Time
 
 type Close = IO ()
+data SizedBuffer = SizedBuffer Buffer BufferSize
