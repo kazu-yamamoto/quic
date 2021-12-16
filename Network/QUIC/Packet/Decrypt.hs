@@ -49,16 +49,16 @@ decryptCrypt conn Crypt{..} lvl = do
         let keyPhase | lvl == RTT1Level = flags `testBit` 2
                      | otherwise        = False
         coder <- getCoder conn lvl keyPhase
-        mpayload <- case coder of
+        siz <- case coder of
           Coder{..} -> decrypt decRes (decryptBuf conn) ciphertext (AssDat header) pn
         let rrMask | lvl == RTT1Level = 0x18
                    | otherwise        = 0x0c
             marks | flags .&. rrMask == 0 = defaultPlainMarks
                   | otherwise             = setIllegalReservedBits defaultPlainMarks
-        case mpayload of
-          Nothing      -> return Nothing
-          Just payload -> do
-              mframes <- decodeFrames payload
+        if siz < 0 then
+            return Nothing
+          else do
+              mframes <- decodeFramesBuffer (decryptBuf conn) siz
               case mframes of
                 Nothing -> do
                     let marks' = setUnknownFrame marks

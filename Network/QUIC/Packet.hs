@@ -11,7 +11,8 @@ module Network.QUIC.Packet (
   , decodeStatelessResetToken
   -- * Frame
   , encodeFrames
-  , decodeFrames
+  , decodeFramesBuffer
+  , decodeFramesBS
   , countZero -- testing
   -- * Header
   , isLong

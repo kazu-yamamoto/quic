@@ -14,10 +14,12 @@ import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
+import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
+import Data.ByteString.Internal
 
 import Network.QUIC.Config
 import Network.QUIC.Connector
@@ -97,13 +99,22 @@ data MigrationState = NonMigration
                     deriving (Eq, Show)
 
 class Decrypt d where
-    decrypt :: d -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+    decrypt :: d -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
 
 instance Decrypt FusionDecrypt where
     decrypt = fusionDecrypt
 
 instance Decrypt NiteDecrypt where
-    decrypt (NiteDecrypt dec) ~_ c a p = return $ dec c a p
+    decrypt (NiteDecrypt dec) dst ciphertext ad pn = do
+        case mplaintext of
+          Nothing                -> return (-1)
+          Just (PS fptr off len) -> do
+              withForeignPtr fptr $ \src0 -> do
+                  let src = src0 `plusPtr` off
+                  memcpy dst src len
+              return len
+      where
+        mplaintext = dec ciphertext ad pn
 
 data Coder = forall d . Decrypt d => Coder {
     encrypt :: FusionRes -> PlainText -> AssDat -> PacketNumber -> IO Int

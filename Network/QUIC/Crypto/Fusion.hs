@@ -10,7 +10,6 @@ module Network.QUIC.Crypto.Fusion (
   , fusionSetupSupplement
   , fusionSetSample
   , fusionGetMask
-  , mkBS
   , FusionDecrypt(..)
   ) where
 
@@ -74,26 +73,16 @@ fusionEncrypt (FC fctx) (SP fsupp) (FusionRes obuf _) plaintext (AssDat header) 
 
 data FusionDecrypt = FusionDecrypt FusionContext
 
-fusionDecrypt :: FusionDecrypt -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO (Maybe PlainText)
+fusionDecrypt :: FusionDecrypt -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
 fusionDecrypt (FusionDecrypt (FC fctx)) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
-        withByteString header $ \abuf -> do
-          -- fromIntegral must be here
-          siz <- fromIntegral <$> c_aead_do_decrypt pctx obuf ibuf ilen pn' abuf alen
-          if siz < 0 then
-              return Nothing
-            else
-              Just <$> mkBS obuf siz
+        withByteString header $ \abuf ->
+            fromIntegral <$> c_aead_do_decrypt pctx obuf ibuf ilen pn' abuf alen
   where
     pn'  = fromIntegral pn
     ilen = fromIntegral $ BS.length ciphertext
     alen = fromIntegral $ BS.length header
-
-mkBS :: Buffer -> Int -> IO ByteString
-mkBS ptr siz = do
-    fptr <- newForeignPtr_ ptr
-    return $ PS fptr 0 siz
 
 ----------------------------------------------------------------
 

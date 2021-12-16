@@ -6,6 +6,7 @@ module Network.QUIC.Packet.Encode (
   ) where
 
 import qualified Data.ByteString as BS
+import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable (peek)
 
@@ -214,3 +215,10 @@ protectHeader headerBeg pnBeg epnLen maskBeg = do
         maskn1 <- mask (n + 1)
         let pp0 = p0 `xor` maskn1
         poke8 pp0 pnBeg n
+
+----------------------------------------------------------------
+
+mkBS :: Buffer -> Int -> IO ByteString
+mkBS ptr siz = do
+    fptr <- newForeignPtr_ ptr
+    return $ PS fptr 0 siz
