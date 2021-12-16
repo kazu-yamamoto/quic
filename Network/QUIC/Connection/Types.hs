@@ -117,14 +117,14 @@ initialCoder = Coder {
 data Coder1RTT = Coder1RTT {
     coder1RTT  :: Coder
   , secretN    :: TrafficSecrets ApplicationSecret
-  , supplement :: ~Supplement
+--  , supplement :: ~Supplement
   }
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
     coder1RTT  = initialCoder
   , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
-  , supplement = undefined
+--  , supplement = undefined
   }
 
 data Protector = Protector {

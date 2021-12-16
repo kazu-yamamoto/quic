@@ -10,6 +10,7 @@ module Network.QUIC.Crypto.Nite (
   , makeNonce
   , makeNiteEncrypt
   , makeNiteDecrypt
+  , makeNiteProtector
   ) where
 
 import Crypto.Cipher.AES
@@ -21,8 +22,9 @@ import qualified Crypto.MAC.Poly1305 as Poly1305
 import qualified Data.ByteArray as Byte (convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
-import Foreign.ForeignPtr (withForeignPtr)
-import Foreign.Ptr (Ptr, plusPtr)
+import Foreign.ForeignPtr (withForeignPtr, newForeignPtr_)
+import Foreign.Marshal.Alloc (mallocBytes)
+import Foreign.Ptr (Ptr, plusPtr, nullPtr)
 import Foreign.Storable (peek, poke)
 import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
@@ -237,3 +239,27 @@ chachaEncrypt (Key key) (Sample sample0) = Mask mask
     (_counter,nonce) = BS.splitAt 4 sample0
     st = ChaCha.initialize 20 key nonce
     (mask,_) = ChaCha.combine st "\x0\x0\x0\x0\x0"
+
+----------------------------------------------------------------
+
+makeNiteProtector :: Cipher -> Key -> IO (Buffer -> IO (), IO Buffer)
+makeNiteProtector cipher key = do
+    ref <- newIORef nullPtr
+    dstbuf <- mallocBytes 32 -- fixme: free
+    return (niteSetSample ref, niteGetMask ref samplelen mkMask dstbuf)
+  where
+    samplelen = 16 -- sampleLength cipher -- fixme
+    mkMask = protectionMask cipher key
+
+niteSetSample :: IORef Buffer -> Buffer -> IO ()
+niteSetSample = writeIORef
+
+niteGetMask :: IORef Buffer -> Int -> (Sample -> Mask) -> Buffer -> IO Buffer
+niteGetMask ref samplelen mkMask dstbuf = do
+    srcbuf <- readIORef ref
+    sample <- do
+        fptr <- newForeignPtr_ srcbuf
+        return $ PS fptr 0 samplelen
+    let Mask mask = mkMask $ Sample sample
+    _len <- copyBS dstbuf mask
+    return dstbuf
