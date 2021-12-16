@@ -14,7 +14,6 @@ import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
-import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import Network.Socket (Socket, SockAddr)
@@ -135,12 +134,6 @@ instance Decrypt NiteDecrypt where
       where
         mplaintext = dec ciphertext ad pn
 
-copyBS :: Buffer -> ByteString -> IO Int
-copyBS dst (PS fptr off len) = withForeignPtr fptr $ \src0 -> do
-    let src = src0 `plusPtr` off
-    memcpy dst src len
-    return len
-
 ----------------------------------------------------------------
 
 data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
@@ -150,14 +143,14 @@ data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
 
 initialCoderFusion :: Coder
 initialCoderFusion = Coder {
-    encRes = FusionEncrypt (\_ _ _ _ -> return (-1)) (\_ -> return ()) (return nullPtr)
-  , decRes = FusionDecrypt (\_ _ _ _ -> return (-1))
+    encRes = initialFusionEncrypt
+  , decRes = initialFusionDecrypt
   }
 
 initialCoderNite :: Coder
 initialCoderNite = Coder {
-    encRes = NiteEncrypt $ \_ _ _ -> ("","")
-  , decRes = NiteDecrypt $ \_ _ _ -> Nothing
+    encRes = initialNiteEncrypt
+  , decRes = initialNiteDecrypt
   }
 
 data Coder1RTT = Coder1RTT {
@@ -168,7 +161,7 @@ data Coder1RTT = Coder1RTT {
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
-    coder1RTT  = initialCoderFusion
+    coder1RTT  = initialCoderNite
   , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
   , supplement = undefined
   }
@@ -362,7 +355,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher
-        <*> newArray (InitialLevel,HandshakeLevel) initialCoderFusion
+        <*> newArray (InitialLevel,HandshakeLevel) initialCoderNite
         <*> newArray (False,True) initialCoder1RTT
         <*> newArray (InitialLevel,RTT1Level) initialProtector
         <*> newIORef (False,0)

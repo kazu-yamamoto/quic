@@ -9,7 +9,9 @@ module Network.QUIC.Crypto.Fusion (
   , fusionSetSample
   , fusionGetMask
   , FusionEncrypt(..)
+  , initialFusionEncrypt
   , FusionDecrypt(..)
+  , initialFusionDecrypt
   ) where
 
 import qualified Data.ByteString as BS
@@ -56,6 +58,11 @@ type FusionGet = IO (Ptr Word8)
 
 data FusionEncrypt = FusionEncrypt FusionEnc FusionSet FusionGet
 
+initialFusionEncrypt :: FusionEncrypt
+initialFusionEncrypt = FusionEncrypt (\_ _ _ _ -> return (-1))
+                                     (\_ -> return ())
+                                     (return nullPtr)
+
 fusionEncrypt :: FusionContext -> Supplement -> FusionEnc
 fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
@@ -70,7 +77,11 @@ fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     alen  = fromIntegral $ BS.length header
 
 type FusionDec = Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+
 data FusionDecrypt = FusionDecrypt FusionDec
+
+initialFusionDecrypt :: FusionDecrypt
+initialFusionDecrypt = FusionDecrypt (\_ _ _ _ -> return (-1))
 
 fusionDecrypt :: FusionContext -> FusionDec
 fusionDecrypt (FC fctx) obuf ciphertext (AssDat header) pn =

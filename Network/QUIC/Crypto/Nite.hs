@@ -9,7 +9,9 @@ module Network.QUIC.Crypto.Nite (
   , aes128gcmEncrypt
   , makeNonce
   , NiteEncrypt(..)
+  , initialNiteEncrypt
   , NiteDecrypt(..)
+  , initialNiteDecrypt
   ) where
 
 import Crypto.Cipher.AES
@@ -152,10 +154,14 @@ bsXORpad' iv pn = BS.pack $ zipWith xor ivl pnl
 
 ----------------------------------------------------------------
 
-data NiteEncrypt = NiteEncrypt (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText))
+type NiteEnc = PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)
 
-niteEncrypt :: Cipher -> Key -> IV
-            -> PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)
+data NiteEncrypt = NiteEncrypt NiteEnc
+
+initialNiteEncrypt :: NiteEncrypt
+initialNiteEncrypt = NiteEncrypt $ \_ _ _ -> ("","")
+
+niteEncrypt :: Cipher -> Key -> IV -> NiteEnc
 niteEncrypt cipher key iv =
     let enc = cipherEncrypt cipher key
         mk  = makeNonce iv
@@ -169,10 +175,14 @@ niteEncrypt' cipher key nonce plaintext header =
 
 ----------------------------------------------------------------
 
-data NiteDecrypt = NiteDecrypt (CipherText -> AssDat -> PacketNumber -> Maybe PlainText)
+type NiteDec = CipherText -> AssDat -> PacketNumber -> Maybe PlainText
 
-niteDecrypt :: Cipher -> Key -> IV
-            -> CipherText -> AssDat -> PacketNumber -> Maybe PlainText
+data NiteDecrypt = NiteDecrypt NiteDec
+
+initialNiteDecrypt :: NiteDecrypt
+initialNiteDecrypt = NiteDecrypt $ \_ _ _ -> Nothing
+
+niteDecrypt :: Cipher -> Key -> IV -> NiteDec
 niteDecrypt cipher key iv =
     let dec = cipherDecrypt cipher key
         mk  = makeNonce iv
