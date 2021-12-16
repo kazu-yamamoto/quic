@@ -106,7 +106,7 @@ processReceivedPacketHandshake conn rpkt = do
               when (lvl == HandshakeLevel) $ do
                   let ldcc = connLDCC conn
                   discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
-                  unless discarded $ do
+                  unless discarded $ fire conn (Microseconds 100000) $ do
                       dropSecrets conn InitialLevel
                       clearCryptoStream conn InitialLevel
                       onPacketNumberSpaceDiscarded ldcc InitialLevel
