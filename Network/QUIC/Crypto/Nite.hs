@@ -8,6 +8,7 @@ module Network.QUIC.Crypto.Nite (
   , protectionMask
   , aes128gcmEncrypt
   , makeNonce
+  , NiteEncrypt(..)
   , NiteDecrypt(..)
   ) where
 
@@ -35,7 +36,7 @@ import Network.QUIC.Types
 -- It would be nice to take [PlainText] and update AEAD context with
 -- [PlainText]. But since each PlainText is not aligned to cipher block,
 -- it's impossible.
-cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> [CipherText]
+cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> (CipherText,CipherText)
 cipherEncrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmEncrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
@@ -52,14 +53,14 @@ cipherDecrypt cipher
   | otherwise                                      = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
-aes128gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> [CipherText])
+aes128gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> (CipherText,CipherText))
 aes128gcmEncrypt (Key key) =
     let aes = throwCryptoError (cipherInit key) :: AES128
     in \(Nonce nonce) plaintext (AssDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
           (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
           tag = Byte.convert tag0
-      in [ciphertext,tag]
+      in (ciphertext,tag)
 
 aes128gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
 aes128gcmDecrypt (Key key) =
@@ -70,14 +71,14 @@ aes128gcmDecrypt (Key key) =
           authtag = AuthTag $ Byte.convert tag
        in aeadSimpleDecrypt aead ad ciphertext authtag
 
-aes256gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> [CipherText])
+aes256gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> (CipherText,CipherText))
 aes256gcmEncrypt (Key key) =
     let aes = throwCryptoError (cipherInit key) :: AES256
     in \(Nonce nonce) plaintext (AssDat ad) ->
       let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
           (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
           tag = Byte.convert tag0
-      in [ciphertext, tag]
+      in (ciphertext,tag)
 
 aes256gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
 aes256gcmDecrypt (Key key) =
@@ -88,9 +89,9 @@ aes256gcmDecrypt (Key key) =
           authtag = AuthTag $ Byte.convert tag
       in aeadSimpleDecrypt aead ad ciphertext authtag
 
-chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AssDat -> [CipherText]
+chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AssDat -> (CipherText,CipherText)
 chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AssDat ad) =
-    [ciphertext,Byte.convert tag]
+    (ciphertext,Byte.convert tag)
   where
     st1 = throwCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
     st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st1)
@@ -151,8 +152,10 @@ bsXORpad' iv pn = BS.pack $ zipWith xor ivl pnl
 
 ----------------------------------------------------------------
 
+data NiteEncrypt = NiteEncrypt (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText))
+
 niteEncrypt :: Cipher -> Key -> IV
-            -> (PlainText -> AssDat -> PacketNumber -> [CipherText])
+            -> (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText))
 niteEncrypt cipher key iv =
     let enc = cipherEncrypt cipher key
         mk  = makeNonce iv
@@ -160,7 +163,7 @@ niteEncrypt cipher key iv =
                                    nonce  = mk bytePN
                                in enc nonce plaintext header
 
-niteEncrypt' :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> [CipherText]
+niteEncrypt' :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> (CipherText,CipherText)
 niteEncrypt' cipher key nonce plaintext header =
     cipherEncrypt cipher key nonce plaintext header
 

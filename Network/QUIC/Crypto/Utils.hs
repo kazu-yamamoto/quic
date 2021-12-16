@@ -44,9 +44,9 @@ sampleLength cipher
 ----------------------------------------------------------------
 
 calculateIntegrityTag :: Version -> CID -> ByteString -> ByteString
-calculateIntegrityTag ver oCID pseudo0 =
-    BS.concat $ aes128gcmEncrypt (key ver) (nonce ver) "" (AssDat pseudo)
+calculateIntegrityTag ver oCID pseudo0 = hdr `BS.append` bdy
   where
+    (hdr,bdy) = aes128gcmEncrypt (key ver) (nonce ver) "" (AssDat pseudo)
     (ocid, ocidlen) = unpackCID oCID
     pseudo = BS.concat [BS.singleton ocidlen
                        ,Short.fromShort ocid

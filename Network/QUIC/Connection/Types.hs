@@ -98,6 +98,8 @@ data MigrationState = NonMigration
                     | RecvResponse
                     deriving (Eq, Show)
 
+----------------------------------------------------------------
+
 class Encrypt e where
     encrypt :: e -> Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
 
@@ -107,20 +109,33 @@ class Decrypt d where
 instance Encrypt FusionEncrypt where
     encrypt = fusionEncrypt
 
+instance Encrypt NiteEncrypt where
+    encrypt (NiteEncrypt enc) dst plaintext ad pn =
+        case enc plaintext ad pn of
+          ("","")   -> return (-1)
+          (hdr,bdy) -> do
+              len <- copyBS dst hdr
+              let dst' = dst `plusPtr` len
+              copyBS dst' bdy
+
 instance Decrypt FusionDecrypt where
     decrypt = fusionDecrypt
 
 instance Decrypt NiteDecrypt where
     decrypt (NiteDecrypt dec) dst ciphertext ad pn = do
         case mplaintext of
-          Nothing                -> return (-1)
-          Just (PS fptr off len) -> do
-              withForeignPtr fptr $ \src0 -> do
-                  let src = src0 `plusPtr` off
-                  memcpy dst src len
-              return len
+          Nothing -> return (-1)
+          Just bs -> copyBS dst bs
       where
         mplaintext = dec ciphertext ad pn
+
+copyBS :: Buffer -> ByteString -> IO Int
+copyBS dst (PS fptr off len) = withForeignPtr fptr $ \src0 -> do
+    let src = src0 `plusPtr` off
+    memcpy dst src len
+    return len
+
+----------------------------------------------------------------
 
 data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
     encRes :: ~e
@@ -129,8 +144,8 @@ data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encRes = undefined :: FusionEncrypt
-  , decRes = undefined :: FusionDecrypt
+    encRes = NiteEncrypt $ \_ _ _ -> ("","")
+  , decRes = NiteDecrypt $ \_ _ _ -> Nothing
   }
 
 data Coder1RTT = Coder1RTT {
