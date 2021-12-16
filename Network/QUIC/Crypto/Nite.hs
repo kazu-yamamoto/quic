@@ -155,7 +155,7 @@ bsXORpad' iv pn = BS.pack $ zipWith xor ivl pnl
 data NiteEncrypt = NiteEncrypt (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText))
 
 niteEncrypt :: Cipher -> Key -> IV
-            -> (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText))
+            -> PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)
 niteEncrypt cipher key iv =
     let enc = cipherEncrypt cipher key
         mk  = makeNonce iv
@@ -172,7 +172,7 @@ niteEncrypt' cipher key nonce plaintext header =
 data NiteDecrypt = NiteDecrypt (CipherText -> AssDat -> PacketNumber -> Maybe PlainText)
 
 niteDecrypt :: Cipher -> Key -> IV
-            -> (CipherText -> AssDat -> PacketNumber -> Maybe PlainText)
+            -> CipherText -> AssDat -> PacketNumber -> Maybe PlainText
 niteDecrypt cipher key iv =
     let dec = cipherDecrypt cipher key
         mk  = makeNonce iv

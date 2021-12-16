@@ -85,7 +85,7 @@ setNegotiated Connection{..} mode mproto appSecInf =
 
 dropSecrets :: Connection -> EncryptionLevel -> IO ()
 dropSecrets Connection{..} lvl = do
-    writeArray coders lvl initialCoder
+    writeArray coders lvl initialCoderFusion
     writeArray protectors lvl initialProtector
 
 ----------------------------------------------------------------
@@ -98,7 +98,7 @@ initializeCoder conn lvl sec = do
              getVersion conn
     cipher <- getCipher conn lvl
     (coder, protector, _) <-
-        if False then
+        if True then
           genFusionCoder (isClient conn) ver cipher sec
         else
           genNiteCoder (isClient conn) ver cipher sec
@@ -110,7 +110,7 @@ initializeCoder1RTT conn sec = do
     ver <- getVersion conn
     cipher <- getCipher conn RTT1Level
     (coder, protector, supp) <-
-        if False then
+        if True then
           genFusionCoder (isClient conn) ver cipher sec
         else
           genNiteCoder (isClient conn) ver cipher sec
@@ -143,12 +143,10 @@ genFusionCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = d
     fusionSetup cipher fctxt txPayloadKey txPayloadIV
     fusionSetup cipher fctxr rxPayloadKey rxPayloadIV
     supp <- fusionSetupSupplement cipher txHeaderKey
-    let enc = FusionEncrypt fctxt supp
+    let enc = FusionEncrypt (fusionEncrypt fctxt supp) (fusionSetSample supp) (fusionGetMask supp)
         dec = FusionDecrypt fctxr
         coder = Coder enc dec
-    let set = fusionSetSample supp
-        get = fusionGetMask supp
-    let protector = Protector set get unp
+    let protector = Protector unp
     return (coder, protector, supp)
   where
     txSecret | cli           = Secret c
@@ -168,12 +166,10 @@ genNiteCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
     fctxt <- fusionNewContext
     fusionSetup cipher fctxt txPayloadKey txPayloadIV
     supp <- fusionSetupSupplement cipher txHeaderKey
-    let enc = FusionEncrypt fctxt supp
+    let enc = FusionEncrypt (fusionEncrypt fctxt supp) (fusionSetSample supp) (fusionGetMask supp)
         dec = niteDecrypt cipher rxPayloadKey rxPayloadIV
         coder = Coder enc (NiteDecrypt dec)
-    let set = fusionSetSample supp
-        get = fusionGetMask supp
-    let protector = Protector set get unp
+    let protector = Protector unp
     return (coder, protector, supp)
   where
     txSecret | cli           = Secret c
@@ -194,7 +190,7 @@ genCoder1RTT cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) supp 
     fctxr <- fusionNewContext
     fusionSetup cipher fctxt txPayloadKey txPayloadIV
     fusionSetup cipher fctxr rxPayloadKey rxPayloadIV
-    let enc = FusionEncrypt fctxt supp
+    let enc = FusionEncrypt (fusionEncrypt fctxt supp) (fusionSetSample supp) (fusionGetMask supp)
         dec = FusionDecrypt fctxr
         coder = Coder enc dec
     return coder

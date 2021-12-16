@@ -50,11 +50,14 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-data FusionEncrypt = FusionEncrypt FusionContext Supplement
+type FusionEnc = Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
+type FusionSet = Ptr Word8 -> IO ()
+type FusionGet = IO (Ptr Word8)
 
-fusionEncrypt :: FusionEncrypt
-              -> Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
-fusionEncrypt (FusionEncrypt (FC fctx) (SP fsupp)) obuf plaintext (AssDat header) pn =
+data FusionEncrypt = FusionEncrypt FusionEnc FusionSet FusionGet
+
+fusionEncrypt :: FusionContext -> Supplement -> FusionEnc
+fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
       withByteString plaintext $ \ibuf ->
         withByteString header $ \abuf -> do
@@ -66,7 +69,7 @@ fusionEncrypt (FusionEncrypt (FC fctx) (SP fsupp)) obuf plaintext (AssDat header
     ilen' = fromIntegral ilen
     alen  = fromIntegral $ BS.length header
 
-newtype FusionDecrypt = FusionDecrypt FusionContext
+data FusionDecrypt = FusionDecrypt ~FusionContext
 
 fusionDecrypt :: FusionDecrypt
               -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
@@ -93,11 +96,11 @@ fusionSetupSupplement cipher (Key hpkey) = withByteString hpkey $ \hpkeyp ->
     | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
     | otherwise                               = 32
 
-fusionSetSample :: Supplement -> Ptr Word8 -> IO ()
+fusionSetSample :: Supplement -> FusionSet
 fusionSetSample (SP fsupp) p = withForeignPtr fsupp $ \psupp ->
   c_supplement_set_sample psupp p
 
-fusionGetMask :: Supplement -> IO (Ptr Word8)
+fusionGetMask :: Supplement -> FusionGet
 fusionGetMask (SP fsupp) = withForeignPtr fsupp c_supplement_get_mask
 
 ----------------------------------------------------------------

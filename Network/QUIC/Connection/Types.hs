@@ -102,12 +102,16 @@ data MigrationState = NonMigration
 
 class Encrypt e where
     encrypt :: e -> Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
+    setSample :: e -> Buffer -> IO ()
+    getMask   :: e -> IO Buffer
 
 class Decrypt d where
     decrypt :: d -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
 
 instance Encrypt FusionEncrypt where
-    encrypt = fusionEncrypt
+    encrypt   (FusionEncrypt enc _ _) = enc
+    setSample (FusionEncrypt _ set _) = set
+    getMask   (FusionEncrypt _ _ get) = get
 
 instance Encrypt NiteEncrypt where
     encrypt (NiteEncrypt enc) dst plaintext ad pn =
@@ -117,6 +121,8 @@ instance Encrypt NiteEncrypt where
               len <- copyBS dst hdr
               let dst' = dst `plusPtr` len
               copyBS dst' bdy
+    setSample = undefined
+    getMask   = undefined
 
 instance Decrypt FusionDecrypt where
     decrypt = fusionDecrypt
@@ -142,8 +148,14 @@ data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
   , decRes :: ~d
   }
 
-initialCoder :: Coder
-initialCoder = Coder {
+initialCoderFusion :: Coder
+initialCoderFusion = Coder {
+    encRes = FusionEncrypt (\_ _ _ _ -> return (-1)) (\_ -> return ()) (return nullPtr)
+  , decRes = FusionDecrypt undefined
+  }
+
+initialCoderNite :: Coder
+initialCoderNite = Coder {
     encRes = NiteEncrypt $ \_ _ _ -> ("","")
   , decRes = NiteDecrypt $ \_ _ _ -> Nothing
   }
@@ -156,22 +168,18 @@ data Coder1RTT = Coder1RTT {
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
-    coder1RTT  = initialCoder
+    coder1RTT  = initialCoderFusion
   , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
   , supplement = undefined
   }
 
 data Protector = Protector {
-    setSample :: Ptr Word8 -> IO ()
-  , getMask   :: IO (Ptr Word8)
-  , unprotect :: Sample -> Mask
+    unprotect :: Sample -> Mask
   }
 
 initialProtector :: Protector
 initialProtector = Protector {
-    setSample = \_ -> return ()
-  , getMask   = return nullPtr
-  , unprotect = \_ -> Mask ""
+    unprotect = \_ -> Mask ""
   }
 
 ----------------------------------------------------------------
@@ -354,7 +362,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher
-        <*> newArray (InitialLevel,HandshakeLevel) initialCoder
+        <*> newArray (InitialLevel,HandshakeLevel) initialCoderFusion
         <*> newArray (False,True) initialCoder1RTT
         <*> newArray (InitialLevel,RTT1Level) initialProtector
         <*> newIORef (False,0)
