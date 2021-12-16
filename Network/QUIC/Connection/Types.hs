@@ -100,31 +100,31 @@ data MigrationState = NonMigration
 ----------------------------------------------------------------
 
 data Coder = Coder {
-    encrypt   :: Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
-  , decrypt   :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
-  , setSample :: Buffer -> IO ()
-  , getMask   :: IO Buffer
+    encrypt    :: Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
+  , decrypt    :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+  , setSample  :: Buffer -> IO ()
+  , getMask    :: IO Buffer
+  , supplement :: Maybe Supplement
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt   = \_ _ _ _ -> return (-1)
-  , decrypt   = \_ _ _ _ -> return (-1)
-  , setSample = \_ -> return ()
-  , getMask   = return nullPtr
+    encrypt    = \_ _ _ _ -> return (-1)
+  , decrypt    = \_ _ _ _ -> return (-1)
+  , setSample  = \_ -> return ()
+  , getMask    = return nullPtr
+  , supplement = Nothing
   }
 
 data Coder1RTT = Coder1RTT {
     coder1RTT  :: Coder
   , secretN    :: TrafficSecrets ApplicationSecret
---  , supplement :: ~Supplement
   }
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
     coder1RTT  = initialCoder
   , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
---  , supplement = undefined
   }
 
 data Protector = Protector {
