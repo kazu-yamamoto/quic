@@ -125,7 +125,7 @@ instance Encrypt NiteEncrypt where
     getMask   = undefined
 
 instance Decrypt FusionDecrypt where
-    decrypt = fusionDecrypt
+    decrypt (FusionDecrypt dec) = dec
 
 instance Decrypt NiteDecrypt where
     decrypt (NiteDecrypt dec) dst ciphertext ad pn = do
@@ -144,14 +144,14 @@ copyBS dst (PS fptr off len) = withForeignPtr fptr $ \src0 -> do
 ----------------------------------------------------------------
 
 data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
-    encRes :: ~e
-  , decRes :: ~d
+    encRes :: e
+  , decRes :: d
   }
 
 initialCoderFusion :: Coder
 initialCoderFusion = Coder {
     encRes = FusionEncrypt (\_ _ _ _ -> return (-1)) (\_ -> return ()) (return nullPtr)
-  , decRes = FusionDecrypt undefined
+  , decRes = FusionDecrypt (\_ _ _ _ -> return (-1))
   }
 
 initialCoderNite :: Coder

@@ -69,11 +69,11 @@ fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     ilen' = fromIntegral ilen
     alen  = fromIntegral $ BS.length header
 
-data FusionDecrypt = FusionDecrypt ~FusionContext
+type FusionDec = Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+data FusionDecrypt = FusionDecrypt FusionDec
 
-fusionDecrypt :: FusionDecrypt
-              -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
-fusionDecrypt (FusionDecrypt (FC fctx)) obuf ciphertext (AssDat header) pn =
+fusionDecrypt :: FusionContext -> FusionDec
+fusionDecrypt (FC fctx) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
         withByteString header $ \abuf ->

@@ -144,7 +144,7 @@ genFusionCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = d
     fusionSetup cipher fctxr rxPayloadKey rxPayloadIV
     supp <- fusionSetupSupplement cipher txHeaderKey
     let enc = FusionEncrypt (fusionEncrypt fctxt supp) (fusionSetSample supp) (fusionGetMask supp)
-        dec = FusionDecrypt fctxr
+        dec = FusionDecrypt (fusionDecrypt fctxr)
         coder = Coder enc dec
     let protector = Protector unp
     return (coder, protector, supp)
@@ -191,7 +191,7 @@ genCoder1RTT cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) supp 
     fusionSetup cipher fctxt txPayloadKey txPayloadIV
     fusionSetup cipher fctxr rxPayloadKey rxPayloadIV
     let enc = FusionEncrypt (fusionEncrypt fctxt supp) (fusionSetSample supp) (fusionGetMask supp)
-        dec = FusionDecrypt fctxr
+        dec = FusionDecrypt (fusionDecrypt fctxr)
         coder = Coder enc dec
     return coder
   where
