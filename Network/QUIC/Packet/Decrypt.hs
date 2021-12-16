@@ -49,8 +49,7 @@ decryptCrypt conn Crypt{..} lvl = do
         let keyPhase | lvl == RTT1Level = flags `testBit` 2
                      | otherwise        = False
         coder <- getCoder conn lvl keyPhase
-        siz <- case coder of
-          Coder{..} -> decrypt decRes (decryptBuf conn) ciphertext (AssDat header) pn
+        siz <- decrypt coder (decryptBuf conn) ciphertext (AssDat header) pn
         let rrMask | lvl == RTT1Level = 0x18
                    | otherwise        = 0x0c
             marks | flags .&. rrMask == 0 = defaultPlainMarks

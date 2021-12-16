@@ -9,15 +9,16 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
+import Data.ByteString.Internal
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
+import Foreign.Ptr (nullPtr)
 import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
-import Data.ByteString.Internal
 
 import Network.QUIC.Config
 import Network.QUIC.Connector
@@ -98,47 +99,19 @@ data MigrationState = NonMigration
 
 ----------------------------------------------------------------
 
-class Encrypt e where
-    encrypt :: e -> Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
-    setSample :: e -> Buffer -> IO ()
-    getMask   :: e -> IO Buffer
-
-class Decrypt d where
-    decrypt :: d -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
-
-instance Encrypt FusionEncrypt where
-    encrypt   (FusionEncrypt enc _ _) = enc
-    setSample (FusionEncrypt _ set _) = set
-    getMask   (FusionEncrypt _ _ get) = get
-
-instance Encrypt NiteEncrypt where
-    encrypt (NiteEncrypt enc) = enc
-    setSample = undefined
-    getMask   = undefined
-
-instance Decrypt FusionDecrypt where
-    decrypt (FusionDecrypt dec) = dec
-
-instance Decrypt NiteDecrypt where
-    decrypt (NiteDecrypt dec) = dec
-
-----------------------------------------------------------------
-
-data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
-    encRes :: e
-  , decRes :: d
+data Coder = Coder {
+    encrypt   :: Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
+  , decrypt   :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+  , setSample :: Buffer -> IO ()
+  , getMask   :: IO Buffer
   }
 
-initialCoderFusion :: Coder
-initialCoderFusion = Coder {
-    encRes = initialFusionEncrypt
-  , decRes = initialFusionDecrypt
-  }
-
-initialCoderNite :: Coder
-initialCoderNite = Coder {
-    encRes = initialNiteEncrypt
-  , decRes = initialNiteDecrypt
+initialCoder :: Coder
+initialCoder = Coder {
+    encrypt   = \_ _ _ _ -> return (-1)
+  , decrypt   = \_ _ _ _ -> return (-1)
+  , setSample = \_ -> return ()
+  , getMask   = return nullPtr
   }
 
 data Coder1RTT = Coder1RTT {
@@ -149,7 +122,7 @@ data Coder1RTT = Coder1RTT {
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
-    coder1RTT  = initialCoderNite
+    coder1RTT  = initialCoder
   , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
   , supplement = undefined
   }
@@ -343,7 +316,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel,RTT1Level) defaultCipher
-        <*> newArray (InitialLevel,HandshakeLevel) initialCoderNite
+        <*> newArray (InitialLevel,HandshakeLevel) initialCoder
         <*> newArray (False,True) initialCoder1RTT
         <*> newArray (InitialLevel,RTT1Level) initialProtector
         <*> newIORef (False,0)

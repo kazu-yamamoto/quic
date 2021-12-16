@@ -162,13 +162,12 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     cryptoBeg <- currentOffset wbuf
     plaintext <- mkBS encBuf plainLen
     header <- mkBS headerBeg headerLen
-    (len,maskBeg) <- case coder of
-      Coder{..} -> do
-          let sampleBeg = pnBeg `plusPtr` 4
-          setSample encRes sampleBeg
-          l <- encrypt encRes cryptoBeg plaintext (AssDat header) pn
-          m <- getMask encRes
-          return (l,m)
+    --
+    let sampleBeg = pnBeg `plusPtr` 4
+    setSample coder sampleBeg
+    len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
+    maskBeg <- getMask coder
+    --
     if len < 0 || maskBeg == nullPtr then
          return (-1, -1)
        else do

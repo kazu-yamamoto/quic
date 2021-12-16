@@ -8,10 +8,6 @@ module Network.QUIC.Crypto.Fusion (
   , fusionSetupSupplement
   , fusionSetSample
   , fusionGetMask
-  , FusionEncrypt(..)
-  , initialFusionEncrypt
-  , FusionDecrypt(..)
-  , initialFusionDecrypt
   ) where
 
 import qualified Data.ByteString as BS
@@ -52,18 +48,8 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-type FusionEnc = Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
-type FusionSet = Ptr Word8 -> IO ()
-type FusionGet = IO (Ptr Word8)
-
-data FusionEncrypt = FusionEncrypt FusionEnc FusionSet FusionGet
-
-initialFusionEncrypt :: FusionEncrypt
-initialFusionEncrypt = FusionEncrypt (\_ _ _ _ -> return (-1))
-                                     (\_ -> return ())
-                                     (return nullPtr)
-
-fusionEncrypt :: FusionContext -> Supplement -> FusionEnc
+fusionEncrypt :: FusionContext -> Supplement
+              -> Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
 fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
       withByteString plaintext $ \ibuf ->
@@ -76,14 +62,8 @@ fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     ilen' = fromIntegral ilen
     alen  = fromIntegral $ BS.length header
 
-type FusionDec = Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
-
-data FusionDecrypt = FusionDecrypt FusionDec
-
-initialFusionDecrypt :: FusionDecrypt
-initialFusionDecrypt = FusionDecrypt (\_ _ _ _ -> return (-1))
-
-fusionDecrypt :: FusionContext -> FusionDec
+fusionDecrypt :: FusionContext
+              -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
 fusionDecrypt (FC fctx) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
       withByteString ciphertext $ \ibuf ->
@@ -107,11 +87,11 @@ fusionSetupSupplement cipher (Key hpkey) = withByteString hpkey $ \hpkeyp ->
     | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
     | otherwise                               = 32
 
-fusionSetSample :: Supplement -> FusionSet
+fusionSetSample :: Supplement -> Buffer -> IO ()
 fusionSetSample (SP fsupp) p = withForeignPtr fsupp $ \psupp ->
   c_supplement_set_sample psupp p
 
-fusionGetMask :: Supplement -> FusionGet
+fusionGetMask :: Supplement -> IO Buffer
 fusionGetMask (SP fsupp) = withForeignPtr fsupp c_supplement_get_mask
 
 ----------------------------------------------------------------

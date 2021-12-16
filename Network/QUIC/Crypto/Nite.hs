@@ -8,11 +8,7 @@ module Network.QUIC.Crypto.Nite (
   , protectionMask
   , aes128gcmEncrypt
   , makeNonce
-  , NiteEncrypt(..)
-  , initialNiteEncrypt
   , makeNiteEncrypt
-  , NiteDecrypt(..)
-  , initialNiteDecrypt
   , makeNiteDecrypt
   ) where
 
@@ -156,17 +152,12 @@ bsXORpad' iv pn = BS.pack $ zipWith xor ivl pnl
 
 ----------------------------------------------------------------
 
-type NiteEnc = Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
-
-data NiteEncrypt = NiteEncrypt NiteEnc
-
-initialNiteEncrypt :: NiteEncrypt
-initialNiteEncrypt = NiteEncrypt (\_ _ _ _ -> return (-1))
+type NiteEncrypt = Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
 
 makeNiteEncrypt :: Cipher -> Key -> IV -> NiteEncrypt
-makeNiteEncrypt cipher key iv = NiteEncrypt $ niteEncryptWrapper (niteEncrypt cipher key iv)
+makeNiteEncrypt cipher key iv = niteEncryptWrapper (niteEncrypt cipher key iv)
 
-niteEncryptWrapper :: (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)) -> NiteEnc
+niteEncryptWrapper :: (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)) -> NiteEncrypt
 niteEncryptWrapper enc dst plaintext ad pn = case enc plaintext ad pn of
     ("","")   -> return (-1)
     (hdr,bdy) -> do
@@ -189,17 +180,12 @@ niteEncrypt' cipher key nonce plaintext header =
 
 ----------------------------------------------------------------
 
-type NiteDec = Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
-
-data NiteDecrypt = NiteDecrypt NiteDec
-
-initialNiteDecrypt :: NiteDecrypt
-initialNiteDecrypt = NiteDecrypt (\_ _ _ _ -> return (-1))
+type NiteDecrypt = Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
 
 makeNiteDecrypt :: Cipher -> Key -> IV -> NiteDecrypt
-makeNiteDecrypt cipher key iv = NiteDecrypt $ niteDecryptWrapper (niteDecrypt cipher key iv)
+makeNiteDecrypt cipher key iv = niteDecryptWrapper (niteDecrypt cipher key iv)
 
-niteDecryptWrapper :: (CipherText -> AssDat -> PacketNumber -> Maybe PlainText) -> NiteDec
+niteDecryptWrapper :: (CipherText -> AssDat -> PacketNumber -> Maybe PlainText) -> NiteDecrypt
 niteDecryptWrapper dec dst ciphertext ad pn = case dec ciphertext ad pn of
   Nothing -> return (-1)
   Just bs -> copyBS dst bs
