@@ -8,6 +8,7 @@ module Network.QUIC.Crypto.Fusion (
   , fusionSetupSupplement
   , fusionSetSample
   , fusionGetMask
+  , FusionEncrypt(..)
   , FusionDecrypt(..)
   ) where
 
@@ -49,9 +50,11 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-fusionEncrypt :: FusionContext -> Supplement
+data FusionEncrypt = FusionEncrypt FusionContext Supplement
+
+fusionEncrypt :: FusionEncrypt
               -> Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
-fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
+fusionEncrypt (FusionEncrypt (FC fctx) (SP fsupp)) obuf plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
       withByteString plaintext $ \ibuf ->
         withByteString header $ \abuf -> do
@@ -63,7 +66,7 @@ fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     ilen' = fromIntegral ilen
     alen  = fromIntegral $ BS.length header
 
-data FusionDecrypt = FusionDecrypt FusionContext
+newtype FusionDecrypt = FusionDecrypt FusionContext
 
 fusionDecrypt :: FusionDecrypt
               -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int

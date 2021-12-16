@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Network.QUIC.Packet.Encode (
 --    encodePacket
     encodeVersionNegotiationPacket
@@ -163,7 +165,8 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     setSample protector sampleBeg
     plaintext <- mkBS encBuf plainLen
     header <- mkBS headerBeg headerLen
-    len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
+    len <- case coder of
+      Coder{..} -> encrypt encRes cryptoBeg plaintext (AssDat header) pn
     if len < 0 then
          return (-1, -1)
       else do

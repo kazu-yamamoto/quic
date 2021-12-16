@@ -98,8 +98,14 @@ data MigrationState = NonMigration
                     | RecvResponse
                     deriving (Eq, Show)
 
+class Encrypt e where
+    encrypt :: e -> Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
+
 class Decrypt d where
     decrypt :: d -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+
+instance Encrypt FusionEncrypt where
+    encrypt = fusionEncrypt
 
 instance Decrypt FusionDecrypt where
     decrypt = fusionDecrypt
@@ -116,15 +122,15 @@ instance Decrypt NiteDecrypt where
       where
         mplaintext = dec ciphertext ad pn
 
-data Coder = forall d . Decrypt d => Coder {
-    encrypt :: Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
-  , decRes  :: ~d
+data Coder = forall e d . (Encrypt e, Decrypt d) => Coder {
+    encRes :: ~e
+  , decRes :: ~d
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt = \_ _ _ _ -> return (-1)
-  , decRes  = undefined :: FusionDecrypt
+    encRes = undefined :: FusionEncrypt
+  , decRes = undefined :: FusionDecrypt
   }
 
 data Coder1RTT = Coder1RTT {
