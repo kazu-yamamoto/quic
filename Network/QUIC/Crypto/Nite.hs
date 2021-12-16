@@ -10,8 +10,10 @@ module Network.QUIC.Crypto.Nite (
   , makeNonce
   , NiteEncrypt(..)
   , initialNiteEncrypt
+  , makeNiteEncrypt
   , NiteDecrypt(..)
   , initialNiteDecrypt
+  , makeNiteDecrypt
   ) where
 
 import Crypto.Cipher.AES
@@ -154,14 +156,26 @@ bsXORpad' iv pn = BS.pack $ zipWith xor ivl pnl
 
 ----------------------------------------------------------------
 
-type NiteEnc = PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)
+type NiteEnc = Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
 
 data NiteEncrypt = NiteEncrypt NiteEnc
 
 initialNiteEncrypt :: NiteEncrypt
-initialNiteEncrypt = NiteEncrypt $ \_ _ _ -> ("","")
+initialNiteEncrypt = NiteEncrypt (\_ _ _ _ -> return (-1))
 
-niteEncrypt :: Cipher -> Key -> IV -> NiteEnc
+makeNiteEncrypt :: Cipher -> Key -> IV -> NiteEncrypt
+makeNiteEncrypt cipher key iv = NiteEncrypt $ niteEncryptWrapper (niteEncrypt cipher key iv)
+
+niteEncryptWrapper :: (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)) -> NiteEnc
+niteEncryptWrapper enc dst plaintext ad pn = case enc plaintext ad pn of
+    ("","")   -> return (-1)
+    (hdr,bdy) -> do
+        len <- copyBS dst hdr
+        let dst' = dst `plusPtr` len
+        copyBS dst' bdy
+
+niteEncrypt :: Cipher -> Key -> IV
+             -> PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)
 niteEncrypt cipher key iv =
     let enc = cipherEncrypt cipher key
         mk  = makeNonce iv
@@ -175,14 +189,23 @@ niteEncrypt' cipher key nonce plaintext header =
 
 ----------------------------------------------------------------
 
-type NiteDec = CipherText -> AssDat -> PacketNumber -> Maybe PlainText
+type NiteDec = Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
 
 data NiteDecrypt = NiteDecrypt NiteDec
 
 initialNiteDecrypt :: NiteDecrypt
-initialNiteDecrypt = NiteDecrypt $ \_ _ _ -> Nothing
+initialNiteDecrypt = NiteDecrypt (\_ _ _ _ -> return (-1))
 
-niteDecrypt :: Cipher -> Key -> IV -> NiteDec
+makeNiteDecrypt :: Cipher -> Key -> IV -> NiteDecrypt
+makeNiteDecrypt cipher key iv = NiteDecrypt $ niteDecryptWrapper (niteDecrypt cipher key iv)
+
+niteDecryptWrapper :: (CipherText -> AssDat -> PacketNumber -> Maybe PlainText) -> NiteDec
+niteDecryptWrapper dec dst ciphertext ad pn = case dec ciphertext ad pn of
+  Nothing -> return (-1)
+  Just bs -> copyBS dst bs
+
+niteDecrypt :: Cipher -> Key -> IV
+            -> CipherText -> AssDat -> PacketNumber -> Maybe PlainText
 niteDecrypt cipher key iv =
     let dec = cipherDecrypt cipher key
         mk  = makeNonce iv

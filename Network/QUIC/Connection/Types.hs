@@ -15,7 +15,6 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
-import Foreign.Ptr
 import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
 import Data.ByteString.Internal
@@ -113,13 +112,7 @@ instance Encrypt FusionEncrypt where
     getMask   (FusionEncrypt _ _ get) = get
 
 instance Encrypt NiteEncrypt where
-    encrypt (NiteEncrypt enc) dst plaintext ad pn =
-        case enc plaintext ad pn of
-          ("","")   -> return (-1)
-          (hdr,bdy) -> do
-              len <- copyBS dst hdr
-              let dst' = dst `plusPtr` len
-              copyBS dst' bdy
+    encrypt (NiteEncrypt enc) = enc
     setSample = undefined
     getMask   = undefined
 
@@ -127,12 +120,7 @@ instance Decrypt FusionDecrypt where
     decrypt (FusionDecrypt dec) = dec
 
 instance Decrypt NiteDecrypt where
-    decrypt (NiteDecrypt dec) dst ciphertext ad pn = do
-        case mplaintext of
-          Nothing -> return (-1)
-          Just bs -> copyBS dst bs
-      where
-        mplaintext = dec ciphertext ad pn
+    decrypt (NiteDecrypt dec) = dec
 
 ----------------------------------------------------------------
 

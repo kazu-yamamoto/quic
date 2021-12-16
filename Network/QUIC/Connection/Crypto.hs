@@ -97,11 +97,8 @@ initializeCoder conn lvl sec = do
            else
              getVersion conn
     cipher <- getCipher conn lvl
-    (coder, protector, _) <-
-        if True then
-          genFusionCoder (isClient conn) ver cipher sec
-        else
-          genNiteCoder (isClient conn) ver cipher sec
+    -- (coder, protector, _) <- genFusionCoder (isClient conn) ver cipher sec
+    (coder, protector) <- genNiteCoder (isClient conn) ver cipher sec
     writeArray (coders conn) lvl coder
     writeArray (protectors conn) lvl protector
 
@@ -109,12 +106,9 @@ initializeCoder1RTT :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 initializeCoder1RTT conn sec = do
     ver <- getVersion conn
     cipher <- getCipher conn RTT1Level
-    (coder, protector, supp) <-
-        if True then
-          genFusionCoder (isClient conn) ver cipher sec
-        else
-          genNiteCoder (isClient conn) ver cipher sec
-    let coder1 = Coder1RTT coder sec supp
+--    (coder, protector, supp) <- genFusionCoder (isClient conn) ver cipher sec
+    (coder, protector) <- genNiteCoder (isClient conn) ver cipher sec
+    let coder1 = Coder1RTT coder sec undefined
     writeArray (coders1RTT conn) False coder1
     writeArray (protectors conn) RTT1Level protector
     updateCoder1RTT conn True
@@ -161,16 +155,13 @@ genFusionCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = d
     rxHeaderKey  = headerProtectionKey ver cipher rxSecret
     unp = protectionMask cipher rxHeaderKey
 
-genNiteCoder :: Bool -> Version -> Cipher -> TrafficSecrets a -> IO (Coder, Protector, Supplement)
+genNiteCoder :: Bool -> Version -> Cipher -> TrafficSecrets a -> IO (Coder, Protector)
 genNiteCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
-    fctxt <- fusionNewContext
-    fusionSetup cipher fctxt txPayloadKey txPayloadIV
-    supp <- fusionSetupSupplement cipher txHeaderKey
-    let enc = FusionEncrypt (fusionEncrypt fctxt supp) (fusionSetSample supp) (fusionGetMask supp)
-        dec = niteDecrypt cipher rxPayloadKey rxPayloadIV
-        coder = Coder enc (NiteDecrypt dec)
+    let enc = makeNiteEncrypt cipher txPayloadKey txPayloadIV
+        dec = makeNiteDecrypt cipher rxPayloadKey rxPayloadIV
+        coder = Coder enc dec
     let protector = Protector unp
-    return (coder, protector, supp)
+    return (coder, protector)
   where
     txSecret | cli           = Secret c
              | otherwise     = Secret s
