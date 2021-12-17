@@ -166,7 +166,7 @@ test-suite spec
                       , bytestring
                       , containers
                       , cryptonite
-                      , hspec < 2.9
+                      , hspec < 2.8
                       , network >= 3.1.2
                       , quic
                       , tls
