@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 
 module Network.QUIC.Connection.Crypto (
     setEncryptionLevel
@@ -32,6 +33,13 @@ import Network.QUIC.Connector
 import Network.QUIC.Crypto
 import Network.QUIC.Imports
 import Network.QUIC.Types
+
+useFusion :: Bool
+#ifdef USE_FUSION
+useFusion = True
+#else
+useFusion = False
+#endif
 
 ----------------------------------------------------------------
 
@@ -97,8 +105,11 @@ initializeCoder conn lvl sec = do
            else
              getVersion conn
     cipher <- getCipher conn lvl
-    (coder, protector) <- genFusionCoder (isClient conn) ver cipher sec
-    -- (coder, protector) <- genNiteCoder (isClient conn) ver cipher sec
+    (coder, protector) <-
+        if useFusion then
+            genFusionCoder (isClient conn) ver cipher sec
+          else
+            genNiteCoder (isClient conn) ver cipher sec
     writeArray (coders conn) lvl coder
     writeArray (protectors conn) lvl protector
 
@@ -106,8 +117,11 @@ initializeCoder1RTT :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 initializeCoder1RTT conn sec = do
     ver <- getVersion conn
     cipher <- getCipher conn RTT1Level
-    (coder, protector) <- genFusionCoder (isClient conn) ver cipher sec
-    -- (coder, protector) <- genNiteCoder (isClient conn) ver cipher sec
+    (coder, protector) <-
+        if useFusion then
+            genFusionCoder (isClient conn) ver cipher sec
+          else
+            genNiteCoder (isClient conn) ver cipher sec
     let coder1 = Coder1RTT coder sec
     writeArray (coders1RTT conn) False coder1
     writeArray (protectors conn) RTT1Level protector
@@ -119,8 +133,10 @@ updateCoder1RTT conn nextPhase = do
     cipher <- getCipher conn RTT1Level
     Coder1RTT coder secN <- readArray (coders1RTT conn) (not nextPhase)
     let secN1 = updateSecret ver cipher secN
-    coderN1 <- genFusionCoder1RTT (isClient conn) ver cipher secN1 coder
---    coderN1 <- genNiteCoder1RTT (isClient conn) ver cipher secN1 coder
+    coderN1 <- if useFusion then
+                   genFusionCoder1RTT (isClient conn) ver cipher secN1 coder
+                 else
+                   genNiteCoder1RTT (isClient conn) ver cipher secN1 coder
     let nextCoder = Coder1RTT coderN1 secN1
     writeArray (coders1RTT conn) nextPhase nextCoder
 

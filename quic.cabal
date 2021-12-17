@@ -144,6 +144,7 @@ library
   ghc-options:         -Wall -Wcompat
   default-extensions:  Strict StrictData
   if arch(x86_64)
+    cpp-options:       -DUSE_FUSION
     cc-options:        -mavx2 -maes -mpclmul
     c-sources:         cbits/fusion.c cbits/picotls.c
 
