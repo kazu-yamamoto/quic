@@ -39,7 +39,7 @@ jobs:
         cabal build --disable-tests --disable-benchmarks all
     - name: Test
       run: |
-        cabal test spec
+        cabal test spec --test-show-details=streaming
     - name: Haddock
       run: |
         cabal haddock
