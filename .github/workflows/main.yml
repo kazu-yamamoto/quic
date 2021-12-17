@@ -12,19 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        ghc: ['8.0', '8.2', '8.4', '8.6', '8.8', '8.10']
-        exclude:
-        - os: windows-latest
-          ghc: "8.0"
-        - os: windows-latest
-          ghc: "8.2"
-        - os: windows-latest
-          ghc: "8.4"
-        - os: windows-latest
-          ghc: "8.6"
-        - os: windows-latest
-          ghc: "8.8"
+        os: [macOS-latest]
+        ghc: ['8.10']
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-haskell@v1
@@ -51,6 +40,8 @@ jobs:
     - name: Test
       run: |
         cabal test spec --test-show-details=streaming
+      if: failure()
+         run: cat /Users/runner/work/quic/quic/dist-newstyle/build/x86_64-osx/ghc-8.10.2/quic-0.0.1/t/spec/test/quic-0.0.1-spec.log
     - name: Haddock
       run: |
         cabal haddock
