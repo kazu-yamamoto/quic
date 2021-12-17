@@ -151,7 +151,8 @@ niteEncryptWrapper enc dst plaintext ad pn = case enc plaintext ad pn of
     Just (hdr,bdy) -> do
         len <- copyBS dst hdr
         let dst' = dst `plusPtr` len
-        copyBS dst' bdy
+        len' <- copyBS dst' bdy
+        return (len + len')
 
 niteEncrypt :: Cipher -> Key -> IV
              -> PlainText -> AssDat -> PacketNumber -> Maybe (CipherText,CipherText)
