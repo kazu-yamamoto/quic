@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Crypto.Nite (
     niteEncrypt
@@ -14,11 +15,8 @@ module Network.QUIC.Crypto.Nite (
   ) where
 
 import Crypto.Cipher.AES
-import qualified Crypto.Cipher.ChaCha as ChaCha
-import qualified Crypto.Cipher.ChaChaPoly1305 as ChaChaPoly
 import Crypto.Cipher.Types hiding (Cipher, IV)
-import Crypto.Error (throwCryptoError, maybeCryptoError)
-import qualified Crypto.MAC.Poly1305 as Poly1305
+import Crypto.Error (maybeCryptoError)
 import qualified Data.ByteArray as Byte (convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
@@ -38,12 +36,11 @@ import Network.QUIC.Types
 -- It would be nice to take [PlainText] and update AEAD context with
 -- [PlainText]. But since each PlainText is not aligned to cipher block,
 -- it's impossible.
-cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> (CipherText,CipherText)
+cipherEncrypt :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText,CipherText)
 cipherEncrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmEncrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
   | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256gcmEncrypt
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chacha20poly1305Encrypt
   | otherwise                                      = error "cipherEncrypt"
 
 cipherDecrypt :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
@@ -51,63 +48,52 @@ cipherDecrypt cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128gcmDecrypt
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
   | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256gcmDecrypt
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chacha20poly1305Decrypt
   | otherwise                                      = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
-aes128gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> (CipherText,CipherText))
-aes128gcmEncrypt (Key key) =
-    let aes = throwCryptoError (cipherInit key) :: AES128
-    in \(Nonce nonce) plaintext (AssDat ad) ->
-      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-          (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-          tag = Byte.convert tag0
-      in (ciphertext,tag)
+aes128gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> Maybe (CipherText,CipherText))
+aes128gcmEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
+  Nothing -> \_ _ _  -> Nothing
+  Just (aes :: AES128) -> \(Nonce nonce) plaintext (AssDat ad) ->
+    case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
+      Nothing -> Nothing
+      Just aead ->
+          let  (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+               tag = Byte.convert tag0
+          in Just (ciphertext,tag)
 
 aes128gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
-aes128gcmDecrypt (Key key) =
-    let aes = throwCryptoError (cipherInit key) :: AES128
-    in \(Nonce nonce) ciphertag (AssDat ad) ->
-      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-          (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
-          authtag = AuthTag $ Byte.convert tag
-       in aeadSimpleDecrypt aead ad ciphertext authtag
+aes128gcmDecrypt (Key key) = case maybeCryptoError $ cipherInit key of
+  Nothing -> \_ _ _  -> Nothing
+  Just (aes :: AES128) -> \(Nonce nonce) ciphertag (AssDat ad) ->
+    case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
+      Nothing -> Nothing
+      Just aead ->
+          let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
+              authtag = AuthTag $ Byte.convert tag
+           in aeadSimpleDecrypt aead ad ciphertext authtag
 
-aes256gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> (CipherText,CipherText))
-aes256gcmEncrypt (Key key) =
-    let aes = throwCryptoError (cipherInit key) :: AES256
-    in \(Nonce nonce) plaintext (AssDat ad) ->
-      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-          (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-          tag = Byte.convert tag0
-      in (ciphertext,tag)
+aes256gcmEncrypt :: Key -> (Nonce -> PlainText -> AssDat -> Maybe (CipherText,CipherText))
+aes256gcmEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
+  Nothing -> \_ _ _  -> Nothing
+  Just (aes :: AES256) -> \(Nonce nonce) plaintext (AssDat ad) ->
+    case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
+      Nothing -> Nothing
+      Just aead ->
+          let  (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+               tag = Byte.convert tag0
+          in Just (ciphertext,tag)
 
 aes256gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
-aes256gcmDecrypt (Key key) =
-    let aes = throwCryptoError (cipherInit key) :: AES256
-    in \(Nonce nonce) ciphertag (AssDat ad) ->
-      let aead = throwCryptoError $ aeadInit AEAD_GCM aes nonce
-          (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
-          authtag = AuthTag $ Byte.convert tag
-      in aeadSimpleDecrypt aead ad ciphertext authtag
-
-chacha20poly1305Encrypt :: Key -> Nonce -> PlainText -> AssDat -> (CipherText,CipherText)
-chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AssDat ad) =
-    (ciphertext,Byte.convert tag)
-  where
-    st1 = throwCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
-    st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st1)
-    (ciphertext, st3) = ChaChaPoly.encrypt plaintext st2
-    Poly1305.Auth tag = ChaChaPoly.finalize st3
-
-chacha20poly1305Decrypt :: Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
-chacha20poly1305Decrypt (Key key) (Nonce nonce) ciphertag (AssDat ad) = do
-    st <- maybeCryptoError (ChaChaPoly.nonce12 nonce >>= ChaChaPoly.initialize key)
-    let st2 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st)
-        (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
-        (plaintext, st3) = ChaChaPoly.decrypt ciphertext st2
-        Poly1305.Auth tag' = ChaChaPoly.finalize st3
-    if tag == Byte.convert tag' then Just plaintext else Nothing
+aes256gcmDecrypt (Key key) = case maybeCryptoError $ cipherInit key of
+  Nothing -> \_ _ _  -> Nothing
+  Just (aes :: AES256) -> \(Nonce nonce) ciphertag (AssDat ad) ->
+    case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
+      Nothing -> Nothing
+      Just aead ->
+          let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
+              authtag = AuthTag $ Byte.convert tag
+           in aeadSimpleDecrypt aead ad ciphertext authtag
 
 ----------------------------------------------------------------
 
@@ -159,16 +145,16 @@ type NiteEncrypt = Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
 makeNiteEncrypt :: Cipher -> Key -> IV -> NiteEncrypt
 makeNiteEncrypt cipher key iv = niteEncryptWrapper (niteEncrypt cipher key iv)
 
-niteEncryptWrapper :: (PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)) -> NiteEncrypt
+niteEncryptWrapper :: (PlainText -> AssDat -> PacketNumber -> Maybe (CipherText,CipherText)) -> NiteEncrypt
 niteEncryptWrapper enc dst plaintext ad pn = case enc plaintext ad pn of
-    ("","")   -> return (-1)
-    (hdr,bdy) -> do
+    Nothing -> return (-1)
+    Just (hdr,bdy) -> do
         len <- copyBS dst hdr
         let dst' = dst `plusPtr` len
         copyBS dst' bdy
 
 niteEncrypt :: Cipher -> Key -> IV
-             -> PlainText -> AssDat -> PacketNumber -> (CipherText,CipherText)
+             -> PlainText -> AssDat -> PacketNumber -> Maybe (CipherText,CipherText)
 niteEncrypt cipher key iv =
     let enc = cipherEncrypt cipher key
         mk  = makeNonce iv
@@ -176,7 +162,7 @@ niteEncrypt cipher key iv =
                                    nonce  = mk bytePN
                                in enc nonce plaintext header
 
-niteEncrypt' :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> (CipherText,CipherText)
+niteEncrypt' :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText,CipherText)
 niteEncrypt' cipher key nonce plaintext header =
     cipherEncrypt cipher key nonce plaintext header
 
@@ -217,28 +203,23 @@ cipherHeaderProtection cipher key
   | cipher == cipher_TLS13_AES128GCM_SHA256        = aes128ecbEncrypt key
   | cipher == cipher_TLS13_AES128CCM_SHA256        = error "cipher_TLS13_AES128CCM_SHA256"
   | cipher == cipher_TLS13_AES256GCM_SHA384        = aes256ecbEncrypt key
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = chachaEncrypt key
   | otherwise                                      = error "cipherHeaderProtection"
 
 aes128ecbEncrypt :: Key -> (Sample -> Mask)
-aes128ecbEncrypt (Key key) =
-    let encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES128)
+aes128ecbEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
+  Nothing -> \_ -> Mask "0123456789012345"
+  Just (aes :: AES128) ->
+    let encrypt = ecbEncrypt aes
     in \(Sample sample) -> let mask = encrypt sample
                            in Mask mask
 
 aes256ecbEncrypt :: Key -> (Sample -> Mask)
-aes256ecbEncrypt (Key key) =
-    let encrypt = ecbEncrypt (throwCryptoError (cipherInit key) :: AES256)
+aes256ecbEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
+  Nothing -> \_ -> Mask "0123456789012345"
+  Just (aes :: AES256) ->
+    let encrypt = ecbEncrypt aes
     in \(Sample sample) -> let mask = encrypt sample
                            in Mask mask
-
-chachaEncrypt :: Key -> Sample -> Mask
-chachaEncrypt (Key key) (Sample sample0) = Mask mask
-  where
-    -- fixme: cryptonite hard-codes the counter, sigh
-    (_counter,nonce) = BS.splitAt 4 sample0
-    st = ChaCha.initialize 20 key nonce
-    (mask,_) = ChaCha.combine st "\x0\x0\x0\x0\x0"
 
 ----------------------------------------------------------------
 

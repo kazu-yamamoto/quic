@@ -30,7 +30,6 @@ tagLength cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = 16
   | cipher == cipher_TLS13_AES128CCM_SHA256        = 16
   | cipher == cipher_TLS13_AES256GCM_SHA384        = 16
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = 16 -- fixme
   | otherwise                                      = error "tagLength"
 
 sampleLength :: Cipher -> Int
@@ -38,15 +37,16 @@ sampleLength cipher
   | cipher == cipher_TLS13_AES128GCM_SHA256        = 16
   | cipher == cipher_TLS13_AES128CCM_SHA256        = 16
   | cipher == cipher_TLS13_AES256GCM_SHA384        = 16
-  | cipher == cipher_TLS13_CHACHA20POLY1305_SHA256 = 16 -- fixme
   | otherwise                                      = error "sampleLength"
 
 ----------------------------------------------------------------
 
 calculateIntegrityTag :: Version -> CID -> ByteString -> ByteString
-calculateIntegrityTag ver oCID pseudo0 = hdr `BS.append` bdy
+calculateIntegrityTag ver oCID pseudo0 =
+    case aes128gcmEncrypt (key ver) (nonce ver) "" (AssDat pseudo) of
+      Nothing -> ""
+      Just (hdr,bdy) -> hdr `BS.append` bdy
   where
-    (hdr,bdy) = aes128gcmEncrypt (key ver) (nonce ver) "" (AssDat pseudo)
     (ocid, ocidlen) = unpackCID oCID
     pseudo = BS.concat [BS.singleton ocidlen
                        ,Short.fromShort ocid
