@@ -128,6 +128,7 @@ shutdownStream s = do
     when sclosed $ E.throwIO StreamIsClosed
     setTxStreamClosed s
     putSendStreamQ (streamConnection s) $ TxStreamData s [] 0 True
+    waitFinTx s
 
 -- | Closing a stream without an error.
 --   This sends FIN if necessary.
@@ -140,6 +141,7 @@ closeStream s = do
         setTxStreamClosed s
         setRxStreamClosed s
         putSendStreamQ conn $ TxStreamData s [] 0 True
+        waitFinTx s
     delStream conn s
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
