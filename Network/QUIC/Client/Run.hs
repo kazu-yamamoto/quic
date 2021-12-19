@@ -39,7 +39,7 @@ import Network.QUIC.Types
 --   Use the 'migrate' API for the connected socket.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
-run conf client = do
+run conf client = NS.withSocketsDo $ do
   ex <- E.try $ runClient conf client False $ ccVersionInfo conf
   case ex of
     Right v                     -> return v

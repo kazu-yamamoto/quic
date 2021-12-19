@@ -148,7 +148,7 @@ runDispatcher d conf ssa@(s,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
-dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction body
+dispatcher d conf (s,mysa) = handleLogUnit logAction body
   where
     body = do
     --    let (opt,_cmsgid) = case mysa of

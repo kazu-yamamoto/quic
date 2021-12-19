@@ -39,7 +39,7 @@ import Network.QUIC.Types
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
-run conf server = handleLogUnit debugLog $ do
+run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     baseThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch,_) -> forever $ do
         acc <- accept dispatch
