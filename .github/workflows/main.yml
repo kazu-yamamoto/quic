@@ -25,7 +25,7 @@ jobs:
         - os: windows-latest
           ghc: "8.6"
         - os: windows-latest
-          ghc: "8.8"
+          ghc: "8.10"
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-haskell@v1
