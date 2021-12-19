@@ -49,7 +49,7 @@ run conf client = do
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
 runClient conf client0 isICVN verInfo = do
-    E.bracket open clse $ \(ConnRes conn send recv myAuthCIDs reader) -> do
+    E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) -> do
         forkIO reader    >>= addReader conn
         forkIO timeouter >>= addTimeouter conn
         let conf' = conf {
@@ -68,8 +68,8 @@ runClient conf client0 isICVN verInfo = do
                 client0 conn
             ldcc = connLDCC conn
             supporters = foldr1 concurrently_ [handshaker
-                                              ,sender   conn send
-                                              ,receiver conn recv
+                                              ,sender   conn
+                                              ,receiver conn
                                               ,resender  ldcc
                                               ,ldccTimer ldcc
                                               ]
@@ -114,7 +114,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     debugLog $ "Original CID: " <> bhow peerCID
     let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
         peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
-    conn <- clientConnection conf verInfo myAuthCIDs peerAuthCIDs debugLog qLog ccHooks sref q
+    conn <- clientConnection conf verInfo myAuthCIDs peerAuthCIDs debugLog qLog ccHooks sref q send recv
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
@@ -126,7 +126,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     setAddressValidated conn
     when ccAutoMigration $ setServerAddr conn sa0
     let reader = readerClient s0 conn -- dies when s0 is closed.
-    return $ ConnRes conn send recv myAuthCIDs reader
+    return $ ConnRes conn myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation
 --   with a new connection ID. Typically, this is used

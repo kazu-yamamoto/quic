@@ -123,6 +123,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = concurrently_ server client
             s <- acceptStream conn
             bs <- recvStream s 1024
             sendStream s "bye"
+            closeStream s
             when (bs == "second") $ stop conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
@@ -136,4 +137,5 @@ testHandshake3 cc1 cc2 sc selector = concurrently_ server client
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
         sendStream s "bye"
+        closeStream s
         stop conn

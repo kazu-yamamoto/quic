@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 module Network.QUIC.Packet.Decrypt (
     decryptCrypt
@@ -20,8 +21,8 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-decryptCrypt :: Connection -> Buffer -> BufferSize -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
-decryptCrypt conn decBuf _bufsiz Crypt{..} lvl = do -- fixme: bufsiz is not used
+decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
+decryptCrypt conn Crypt{..} lvl = do
     cipher <- getCipher conn lvl
     protector <- getProtector conn lvl
     let proFlags = Flags (cryptPacket `BS.index` 0)
@@ -39,7 +40,6 @@ decryptCrypt conn decBuf _bufsiz Crypt{..} lvl = do -- fixme: bufsiz is not used
             bytePN = bsXOR mask2 epn
             headerLen = cryptPktNumOffset + epnLen
             (proHeader, ciphertext) = BS.splitAt headerLen cryptPacket
-            ilen = BS.length ciphertext
         peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
         let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
         header <- BS.create headerLen $ \p -> do
@@ -49,11 +49,7 @@ decryptCrypt conn decBuf _bufsiz Crypt{..} lvl = do -- fixme: bufsiz is not used
         let keyPhase | lvl == RTT1Level = flags `testBit` 2
                      | otherwise        = False
         coder <- getCoder conn lvl keyPhase
-        siz <- withByteString ciphertext $ \ibuf ->
-                   withByteString header $ \abuf -> do
-            let ilen' = fromIntegral ilen
-                alen' = fromIntegral headerLen
-            decrypt coder ibuf ilen' abuf alen' pn decBuf
+        siz <- decrypt coder (decryptBuf conn) ciphertext (AssDat header) pn
         let rrMask | lvl == RTT1Level = 0x18
                    | otherwise        = 0x0c
             marks | flags .&. rrMask == 0 = defaultPlainMarks
@@ -61,15 +57,15 @@ decryptCrypt conn decBuf _bufsiz Crypt{..} lvl = do -- fixme: bufsiz is not used
         if siz < 0 then
             return Nothing
           else do
-            mframes <- decodeFrames decBuf siz
-            case mframes of
-              Nothing -> do
-                  let marks' = setUnknownFrame marks
-                  return $ Just $ Plain rawFlags pn [] marks'
-              Just frames -> do
-                  let marks' | null frames = setNoFrames marks
-                             | otherwise   = marks
-                  return $ Just $ Plain rawFlags pn frames marks'
+              mframes <- decodeFramesBuffer (decryptBuf conn) siz
+              case mframes of
+                Nothing -> do
+                    let marks' = setUnknownFrame marks
+                    return $ Just $ Plain rawFlags pn [] marks'
+                Just frames -> do
+                    let marks' | null frames = setNoFrames marks
+                               | otherwise   = marks
+                    return $ Just $ Plain rawFlags pn frames marks'
 
 toEncodedPacketNumber :: ByteString -> EncodedPacketNumber
 toEncodedPacketNumber bs = foldl' (\b a -> b * 256 + fromIntegral a) 0 $ BS.unpack bs

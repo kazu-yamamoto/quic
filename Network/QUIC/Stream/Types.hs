@@ -11,8 +11,11 @@ module Network.QUIC.Stream.Types (
   , RecvStreamQ(..)
   , RxStreamData(..)
   , Length
+  , syncFinTx
+  , waitFinTx
   ) where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 
@@ -37,6 +40,7 @@ data Stream = Stream {
   , streamStateRx    :: IORef StreamState -- offset, fin
   , streamRecvQ      :: RecvStreamQ       -- input bytestring
   , streamReass      :: IORef (Skew RxStreamData) -- input stream fragments to streamQ
+  , streamSyncFinTx  :: MVar ()
   }
 
 instance Show Stream where
@@ -49,6 +53,13 @@ newStream conn sid = Stream sid conn <$> newTVarIO defaultFlow
                                      <*> newIORef  emptyStreamState
                                      <*> newRecvStreamQ
                                      <*> newIORef Skew.empty
+                                     <*> newEmptyMVar
+
+syncFinTx :: Stream -> IO ()
+syncFinTx s = void $ tryPutMVar (streamSyncFinTx s) ()
+
+waitFinTx :: Stream -> IO ()
+waitFinTx s = takeMVar $ streamSyncFinTx s
 
 ----------------------------------------------------------------
 

@@ -5,8 +5,8 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
+import Control.Concurrent (forkIO)
 import qualified Data.ByteString as BS
-import Foreign.Marshal.Alloc
 import Network.TLS (AlertDescription(..))
 import qualified UnliftIO.Exception as E
 
@@ -21,32 +21,30 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
+import Network.QUIC.Server.Reader (runNewServerReader)
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
-receiver :: Connection -> Receive -> IO ()
-receiver conn recv = handleLogT logAction $
-    E.bracket (mallocBytes maximumUdpPayloadSize)
-              free
-              body
+receiver :: Connection -> IO ()
+receiver conn = handleLogT logAction body
   where
-    body buf = do
-        loopHandshake buf
-        loopEstablished buf
+    body = do
+        loopHandshake
+        loopEstablished
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
         ito <- readMinIdleTimeout conn
-        mx <- timeout ito recv -- fixme: taking minimum with peer's one
+        mx <- timeout ito $ connRecv conn -- fixme: taking minimum with peer's one
         case mx of
           Nothing -> E.throwIO ConnectionIsTimeout
           Just x  -> return x
-    loopHandshake buf = do
+    loopHandshake = do
         rpkt <- recvTimeout
-        processReceivedPacketHandshake conn buf rpkt
+        processReceivedPacketHandshake conn rpkt
         established <- isConnectionEstablished conn
-        unless established $ loopHandshake buf
-    loopEstablished buf = forever $ do
+        unless established loopHandshake
+    loopEstablished = forever $ do
         rpkt <- recvTimeout
         let CryptPacket hdr _ = rpCryptPacket rpkt
             cid = headerMyCID hdr
@@ -61,7 +59,7 @@ receiver conn recv = handleLogT logAction $
                     register <- getRegister conn
                     register (cidInfoCID cidInfo) conn
                 sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
-            processReceivedPacket conn buf rpkt
+            processReceivedPacket conn rpkt
             shouldUpdatePeer <- if shouldUpdate then shouldUpdatePeerCID conn
                                                 else return False
             when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
@@ -70,8 +68,8 @@ receiver conn recv = handleLogT logAction $
             connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("debug: receiver: " <> msg)
 
-processReceivedPacketHandshake :: Connection -> Buffer -> ReceivedPacket -> IO ()
-processReceivedPacketHandshake conn buf rpkt = do
+processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
+processReceivedPacketHandshake conn rpkt = do
     let CryptPacket hdr _ = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
     mx <- timeout (Microseconds 10000) $ waitEncryptionLevel conn lvl
@@ -99,7 +97,7 @@ processReceivedPacketHandshake conn buf rpkt = do
                         setVersion conn peerVer
                         initializeCoder conn InitialLevel $ initialSecrets peerVer $ clientDstCID conn
                 _ -> return ()
-              processReceivedPacket conn buf rpkt
+              processReceivedPacket conn rpkt
         | otherwise -> do
               mycid <- getMyCID conn
               when (lvl == HandshakeLevel
@@ -108,19 +106,18 @@ processReceivedPacketHandshake conn buf rpkt = do
               when (lvl == HandshakeLevel) $ do
                   let ldcc = connLDCC conn
                   discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
-                  unless discarded $ do
+                  unless discarded $ fire conn (Microseconds 100000) $ do
                       dropSecrets conn InitialLevel
                       clearCryptoStream conn InitialLevel
                       onPacketNumberSpaceDiscarded ldcc InitialLevel
-              processReceivedPacket conn buf rpkt
+              processReceivedPacket conn rpkt
 
-processReceivedPacket :: Connection -> Buffer -> ReceivedPacket -> IO ()
-processReceivedPacket conn buf rpkt = do
+processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
+processReceivedPacket conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
         tim = rpTimeRecevied rpkt
-        bufsiz = maximumUdpPayloadSize
-    mplain <- decryptCrypt conn buf bufsiz crypt lvl
+    mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
           when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
@@ -130,8 +127,7 @@ processReceivedPacket conn buf rpkt = do
           -- For Ping, record PPN first, then send an ACK.
           onPacketReceived (connLDCC conn) lvl plainPacketNumber
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
-          unless (isCryptLogged crypt) $
-              qlogReceived conn (PlainPacket hdr plain) tim
+          qlogReceived conn (PlainPacket hdr plain) tim
           let ackEli   = any ackEliciting   plainFrames
               shouldDrop = rpReceivedBytes rpkt < defaultQUICPacketSize
                         && lvl == InitialLevel && ackEli
@@ -139,6 +135,10 @@ processReceivedPacket conn buf rpkt = do
               connDebugLog conn ("debug: drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr
             else do
+              case cryptMigraionInfo crypt of
+                Nothing -> return ()
+                Just (MigrationInfo mysa peersa dCID) ->
+                    void . forkIO $ runNewServerReader conn mysa peersa dCID
               (ckp,cpn) <- getCurrentKeyPhase conn
               let Flags flags = plainFlags
                   nkp = flags `testBit` 2

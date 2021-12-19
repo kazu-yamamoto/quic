@@ -53,7 +53,11 @@ library
                        Network.QUIC.Connection.Types
                        Network.QUIC.Connector
                        Network.QUIC.Crypto
-                       Network.QUIC.CryptoFusion
+                       Network.QUIC.Crypto.Fusion
+                       Network.QUIC.Crypto.Keys
+                       Network.QUIC.Crypto.Nite
+                       Network.QUIC.Crypto.Types
+                       Network.QUIC.Crypto.Utils
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.IO
@@ -140,6 +144,7 @@ library
   ghc-options:         -Wall -Wcompat
   default-extensions:  Strict StrictData
   if arch(x86_64)
+    cpp-options:       -DUSE_FUSION
     cc-options:        -mavx2 -maes -mpclmul
     c-sources:         cbits/fusion.c cbits/picotls.c
 

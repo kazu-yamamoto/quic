@@ -1,3 +1,4 @@
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
@@ -8,19 +9,20 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
+import Data.ByteString.Internal
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
-import Foreign.Ptr
+import Foreign.Marshal.Alloc
+import Foreign.Ptr (nullPtr)
 import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
 
 import Network.QUIC.Config
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
-import Network.QUIC.CryptoFusion
 import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Parameters
@@ -95,41 +97,43 @@ data MigrationState = NonMigration
                     | RecvResponse
                     deriving (Eq, Show)
 
+----------------------------------------------------------------
+
 data Coder = Coder {
-    encrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-  , decrypt :: Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
+    encrypt    :: Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
+  , decrypt    :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+  , setSample  :: Buffer -> IO ()
+  , getMask    :: IO Buffer
+  , supplement :: Maybe Supplement
   }
 
 initialCoder :: Coder
 initialCoder = Coder {
-    encrypt = \_ _ _ _ _ _ -> return (-1)
-  , decrypt = \_ _ _ _ _ _ -> return (-1)
+    encrypt    = \_ _ _ _ -> return (-1)
+  , decrypt    = \_ _ _ _ -> return (-1)
+  , setSample  = \_ -> return ()
+  , getMask    = return nullPtr
+  , supplement = Nothing
   }
 
 data Coder1RTT = Coder1RTT {
     coder1RTT  :: Coder
   , secretN    :: TrafficSecrets ApplicationSecret
-  , supplement :: ~Supplement
   }
 
 initialCoder1RTT :: Coder1RTT
 initialCoder1RTT = Coder1RTT {
     coder1RTT  = initialCoder
   , secretN    = (ClientTrafficSecret "", ServerTrafficSecret "")
-  , supplement = undefined
   }
 
 data Protector = Protector {
-    setSample :: Ptr Word8 -> IO ()
-  , getMask   :: IO (Ptr Word8)
-  , unprotect :: Sample -> Mask
+    unprotect :: Sample -> Mask
   }
 
 initialProtector :: Protector
 initialProtector = Protector {
-    setSample = \_ -> return ()
-  , getMask   = return nullPtr
-  , unprotect = \_ -> Mask ""
+    unprotect = \_ -> Mask ""
   }
 
 ----------------------------------------------------------------
@@ -164,6 +168,11 @@ newConcurrency rl dir n = Concurrency typ typ n
 
 ----------------------------------------------------------------
 
+type Send = Buffer -> Int -> IO ()
+type Recv = IO ReceivedPacket
+
+----------------------------------------------------------------
+
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     connState         :: ConnState
@@ -172,6 +181,8 @@ data Connection = Connection {
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
   , connHooks         :: Hooks
+  , connSend          :: ~Send -- ~ for testing
+  , connRecv          :: ~Recv -- ~ for testing
   -- Manage
   , connRecvQ         :: RecvQ
   , sockets           :: IORef [Socket]
@@ -220,6 +231,9 @@ data Connection = Connection {
   , handshakeCIDs     :: IORef AuthCIDs
   -- Resources
   , connResources     :: IORef (IO ())
+  , encodeBuf         :: Buffer
+  , encryptRes        :: SizedBuffer
+  , decryptBuf        :: Buffer
   -- Recovery
   , connLDCC          :: LDCC
   }
@@ -253,12 +267,18 @@ newConnection :: Role
               -> DebugLogger -> QLogger -> Hooks
               -> IORef [Socket]
               -> RecvQ
+              -> Send
+              -> Recv
               -> IO Connection
-newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ = do
+newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ ~send ~recv = do
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
-    Connection connstate clientDstCID debugLog qLog hooks recvQ sref
+    let bufsiz = maximumUdpPayloadSize
+    encBuf   <- mallocBytes bufsiz
+    ecrptBuf <- mallocBytes bufsiz
+    dcrptBuf <- mallocBytes bufsiz
+    Connection connstate clientDstCID debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
         <*> myThreadId
@@ -303,7 +323,10 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newIORef initialNegotiated
         <*> newIORef peerAuthCIDs
         -- Resources
-        <*> newIORef (return ())
+        <*> newIORef (free encBuf >> free ecrptBuf >> free dcrptBuf)
+        <*> return encBuf   -- used sender or closere
+        <*> return (SizedBuffer ecrptBuf bufsiz) -- used sender
+        <*> return dcrptBuf -- used receiver
         -- Recovery
         <*> newLDCC connstate qLog put
   where
@@ -328,7 +351,7 @@ clientConnection :: ClientConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
-                 -> RecvQ
+                 -> RecvQ -> Send -> Recv
                  -> IO Connection
 clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Client ccParameters verInfo myAuthCIDs peerAuthCIDs
@@ -337,7 +360,7 @@ serverConnection :: ServerConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
                  -> IORef [Socket]
-                 -> RecvQ
+                 -> RecvQ -> Send -> Recv
                  -> IO Connection
 serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Server scParameters verInfo myAuthCIDs peerAuthCIDs

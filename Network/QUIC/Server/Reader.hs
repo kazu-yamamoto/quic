@@ -14,6 +14,8 @@ module Network.QUIC.Server.Reader (
   , RecvQ
   , recvServer
   , readerServer
+  -- * Misc
+  , runNewServerReader
   ) where
 
 import Control.Concurrent
@@ -24,7 +26,6 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Data.OrdPSQ (OrdPSQ)
 import qualified Data.OrdPSQ as PSQ
-import Foreign.Marshal.Alloc
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Socket hiding (accept, Debug)
@@ -147,12 +148,9 @@ runDispatcher d conf ssa@(s,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
-dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
-    E.bracket (mallocBytes maximumUdpPayloadSize)
-              free
-              body
+dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction body
   where
-    body buf = do
+    body = do
     --    let (opt,_cmsgid) = case mysa of
     --          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
     --          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
@@ -168,7 +166,7 @@ dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
             (pkt, bs0RTT) <- decodePacket bs0
     --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
             let send bs = void $ NSB.sendTo s bs peersa
-            dispatch d conf logAction pkt mysa peersa send buf bs0RTT bytes now
+            dispatch d conf logAction pkt mysa peersa send bs0RTT bytes now
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
@@ -192,10 +190,10 @@ dispatcher d conf (s,mysa) = withSocketsDo $ handleLogUnit logAction $
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> Buffer -> ByteString -> Int -> TimeMicrosecond -> IO ()
+dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
          (PacketIC cpkt@(CryptPacket (Initial peerVer dCID sCID token) _) lvl)
-         mysa peersa send _ bs0RTT bytes tim
+         mysa peersa send bs0RTT bytes tim
   | bytes < defaultQUICPacketSize = do
         logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
   | peerVer `notElem` myVersions = do
@@ -312,40 +310,27 @@ dispatch Dispatch{..} ServerConfig{..} logAction
               bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
               send bss
 dispatch Dispatch{..} _ _
-         (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
+         (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ bytes tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> return ()
 dispatch Dispatch{..} _ logAction
-         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ buf _ bytes tim  = do
+         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
           logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
-          let bufsiz = maximumUdpPayloadSize
-          mplain <- decryptCrypt conn buf bufsiz crypt RTT1Level
-          case mplain of
-            Nothing -> connDebugLog conn "debug: dispatch: cannot decrypt"
-            Just plain -> do
-                alive <- getAlive conn
-                when alive $ do
-                    qlogReceived conn (PlainPacket hdr plain) tim
-                    let cpkt' = CryptPacket hdr $ setCryptLogged crypt
-                    writeMigrationQ conn $ mkReceivedPacket cpkt' tim bytes lvl
-                    migrating <- isPathValidating conn
-                    unless migrating $ do
-                        setMigrationStarted conn
-                        -- fixme: should not block in this loop
-                        mcidinfo <- timeout (Microseconds 100000) $ waitPeerCID conn
-                        let msg = "Migration: " <> bhow peersa <> " (" <> bhow dCID <> ")"
-                        qlogDebug conn $ Debug $ toLogStr msg
-                        connDebugLog conn $ "debug: dispatch: " <> msg
-                        void $ forkIO $ migrator conn mysa peersa dCID mcidinfo
+            alive <- getAlive conn
+            when alive $ do
+                let miginfo = MigrationInfo mysa peersa dCID
+                    crypt' = crypt { cryptMigraionInfo = Just miginfo }
+                    cpkt = CryptPacket hdr crypt'
+                writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 
-dispatch _ _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
+dispatch _ _ _ _ipkt _ _peersa _ _ _ _ = return ()
 
 ----------------------------------------------------------------
 
@@ -372,15 +357,24 @@ recvServer = readRecvQ
 
 ----------------------------------------------------------------
 
-migrator :: Connection -> SockAddr -> SockAddr -> CID -> Maybe CIDInfo -> IO ()
-migrator conn mysa peersa1 dcid mcidinfo = handleLogUnit logAction $
-    E.bracketOnError setup close $ \s1 ->
-        E.bracket (addSocket conn s1) close $ \_ -> do
-            void $ forkIO $ readerServer s1 conn
-            -- fixme: if cannot set
-            setMyCID conn dcid
-            validatePath conn mcidinfo
-            void $ timeout (Microseconds 2000000) $ forever (readMigrationQ conn >>= writeRecvQ (connRecvQ conn))
+runNewServerReader :: Connection -> SockAddr -> SockAddr -> CID -> IO ()
+runNewServerReader conn mysa peersa dCID = handleLogUnit logAction $ do
+    migrating <- isPathValidating conn -- fixme: test and set
+    unless migrating $ do
+        setMigrationStarted conn
+        -- fixme: should not block
+        mcidinfo <- timeout (Microseconds 100000) $ waitPeerCID conn
+        let msg = "Migration: " <> bhow peersa <> " (" <> bhow dCID <> ")"
+        qlogDebug conn $ Debug $ toLogStr msg
+        connDebugLog conn $ "debug: runNewServerReader: " <> msg
+        E.bracketOnError setup close $ \s1 ->
+            E.bracket (addSocket conn s1) close $ \_ -> do
+                void $ forkIO $ readerServer s1 conn
+                -- fixme: if cannot set
+                setMyCID conn dCID
+                validatePath conn mcidinfo
+                -- holding the old socket for a while
+                delay $ Microseconds 20000
   where
-    setup = udpServerConnectedSocket mysa peersa1
-    logAction msg = connDebugLog conn ("debug: migrator: " <> msg)
+    setup = udpServerConnectedSocket mysa peersa
+    logAction msg = connDebugLog conn ("debug: runNewServerReader: " <> msg)

@@ -6,7 +6,6 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
 import Data.IORef
-import Foreign.Marshal.Alloc
 import qualified Network.Socket as NS
 import Test.Hspec
 
@@ -32,19 +31,17 @@ spec = do
             q <- newRecvQ
             sref <- newIORef [s]
             let ver = chosenVersion defaultVersionInfo
-            clientConn <- clientConnection clientConf defaultVersionInfo clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref q
+            clientConn <- clientConnection clientConf defaultVersionInfo clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref q undefined undefined
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
-            serverConn <- serverConnection serverConf defaultVersionInfo serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q
+            serverConn <- serverConnection serverConf defaultVersionInfo serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q undefined undefined
             initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
             (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
-            let dlen = 2048
-            dbuf <- mallocBytes dlen
-            Just plain <- decryptCrypt serverConn dbuf dlen crypt lvl
+            Just plain <- decryptCrypt serverConn crypt lvl
             let ppkt = PlainPacket header plain
-            clientInitialPacketBinary' <- BS.createAndTrim 4096 $ \buf -> do
-                fst <$> encodePlainPacket clientConn buf 2048 ppkt Nothing
+            clientInitialPacketBinary' <- BS.createAndTrim 4096 $ \buf ->
+                fst <$> encodePlainPacket clientConn (SizedBuffer buf 2048) ppkt Nothing
             (PacketIC (CryptPacket header' crypt') lvl', _) <- decodePacket clientInitialPacketBinary'
-            Just plain' <- decryptCrypt serverConn dbuf dlen crypt' lvl'
+            Just plain' <- decryptCrypt serverConn crypt' lvl'
             header' `shouldBe` header
             plainFrames plain' `shouldBe` plainFrames plain
 

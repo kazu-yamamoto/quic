@@ -3,7 +3,8 @@
 module Network.QUIC.Packet.Frame (
     encodeFrames
   , encodeFramesWithPadding
-  , decodeFrames
+  , decodeFramesBS
+  , decodeFramesBuffer
   , countZero -- testing
   ) where
 
@@ -136,18 +137,22 @@ encodeFrame wbuf (UnknownFrame typ) =
 
 ----------------------------------------------------------------
 
-decodeFrames :: Buffer -> BufferSize -> IO (Maybe [Frame])
-decodeFrames buf bufsiz = do
-    rbuf <- newReadBuffer buf bufsiz
-    loop id rbuf
+decodeFramesBS :: ByteString -> IO (Maybe [Frame])
+decodeFramesBS bs = withReadBuffer bs decodeFrames
+
+decodeFramesBuffer :: Buffer -> BufferSize -> IO (Maybe [Frame])
+decodeFramesBuffer buf bufsiz = newReadBuffer buf bufsiz >>= decodeFrames
+
+decodeFrames :: ReadBuffer -> IO (Maybe [Frame])
+decodeFrames rbuf = loop id
   where
-    loop frames rbuf = do
+    loop frames = do
         ok <- (>= 1) <$> remainingSize rbuf
         if ok then do
             frame <- decodeFrame rbuf
             case frame of
               UnknownFrame _ -> return Nothing
-              _              -> loop (frames . (frame:)) rbuf
+              _              -> loop (frames . (frame:))
           else
             return $ Just $ frames []
 

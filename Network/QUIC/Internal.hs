@@ -3,7 +3,6 @@ module Network.QUIC.Internal (
   , module Network.QUIC.Connection
   , module Network.QUIC.Connector
   , module Network.QUIC.Crypto
-  , module Network.QUIC.CryptoFusion
   , module Network.QUIC.Logger
   , module Network.QUIC.Packet
   , module Network.QUIC.Parameters
@@ -21,7 +20,6 @@ import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
-import Network.QUIC.CryptoFusion
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters

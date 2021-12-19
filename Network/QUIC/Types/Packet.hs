@@ -4,6 +4,7 @@
 module Network.QUIC.Types.Packet where
 
 import Data.Ix
+import Network.Socket (SockAddr)
 import Network.TLS.QUIC (extensionID_QuicTransportParameters, ExtensionID)
 import Text.Printf
 
@@ -146,20 +147,17 @@ isNoPaddings = (`testBit` 8)
 is4bytesPN :: Int -> Bool
 is4bytesPN = (`testBit` 9)
 
+data MigrationInfo = MigrationInfo SockAddr SockAddr CID deriving (Eq, Show)
+
 data Crypt = Crypt {
     cryptPktNumOffset :: Int
   , cryptPacket       :: ByteString
   , cryptMarks        :: Int
+  , cryptMigraionInfo :: Maybe MigrationInfo
   } deriving (Eq, Show)
-
-isCryptLogged :: Crypt -> Bool
-isCryptLogged  crypt = cryptMarks crypt `testBit` 0
 
 isCryptDelayed :: Crypt -> Bool
 isCryptDelayed crypt = cryptMarks crypt `testBit` 1
-
-setCryptLogged :: Crypt -> Crypt
-setCryptLogged  crypt = crypt { cryptMarks = cryptMarks crypt `setBit` 0 }
 
 setCryptDelayed :: Crypt -> Crypt
 setCryptDelayed crypt = crypt { cryptMarks = cryptMarks crypt `setBit` 1 }

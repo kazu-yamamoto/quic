@@ -8,7 +8,6 @@ module Network.QUIC.Sender (
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.ByteString as BS
-import Foreign.Marshal.Alloc
 import Foreign.Ptr (plusPtr)
 import qualified UnliftIO.Exception as E
 
@@ -37,26 +36,26 @@ cryptoFrame conn crypto lvl = do
 
 ----------------------------------------------------------------
 
-sendPacket :: Connection -> SendBuf -> Buffer -> [SentPacket] -> IO ()
-sendPacket _ _ _ [] = return ()
-sendPacket conn send buf0 spkts0 = getMaxPacketSize conn >>= go
+sendPacket :: Connection -> [SentPacket] -> IO ()
+sendPacket _ [] = return ()
+sendPacket conn spkts0 = getMaxPacketSize conn >>= go
   where
+    SizedBuffer buf0 bufsiz0 = encryptRes conn
     ldcc = connLDCC conn
     go maxSiz = do
         mx <- atomically ((Just    <$> takePingSTM ldcc)
                  `orElse` (Nothing <$  checkWindowOpenSTM ldcc maxSiz))
         case mx of
           Just lvl | lvl `elem` [InitialLevel,HandshakeLevel] -> do
-            sendPingPacket conn send buf0 lvl
+            sendPingPacket conn lvl
             go maxSiz
           _ -> do
             when (isJust mx) $ qlogDebug conn $ Debug "probe new"
-            let bufsiz = maximumUdpPayloadSize
-            (sentPackets, leftsiz) <- buildPackets buf0 bufsiz maxSiz spkts0 id
-            let bytes = bufsiz - leftsiz
+            (sentPackets, leftsiz) <- buildPackets buf0 bufsiz0 maxSiz spkts0 id
+            let bytes = bufsiz0 - leftsiz
             when (isServer conn) $ waitAntiAmplificationFree conn bytes
             now <- getTimeMicrosecond
-            send buf0 bytes
+            connSend conn buf0 bytes
             addTxBytes conn bytes
             forM_ sentPackets $ \sentPacket0 -> do
                 let sentPacket = sentPacket0 { spTimeSent = now }
@@ -65,7 +64,7 @@ sendPacket conn send buf0 spkts0 = getMaxPacketSize conn >>= go
     buildPackets _ _ _ [] _ = error "sendPacket: buildPackets"
     buildPackets buf bufsiz siz [spkt] build0 = do
         let pkt = spPlainPacket spkt
-        (bytes,padlen) <- encodePlainPacket conn buf bufsiz pkt $ Just siz
+        (bytes,padlen) <- encodePlainPacket conn (SizedBuffer buf bufsiz) pkt $ Just siz
         if bytes < 0 then
             return (build0 [], bufsiz)
           else do
@@ -73,7 +72,7 @@ sendPacket conn send buf0 spkts0 = getMaxPacketSize conn >>= go
             return (build0 [sentPacket], bufsiz - bytes)
     buildPackets buf bufsiz siz (spkt:spkts) build0 = do
         let pkt = spPlainPacket spkt
-        (bytes,padlen) <- encodePlainPacket conn buf bufsiz pkt Nothing
+        (bytes,padlen) <- encodePlainPacket conn (SizedBuffer buf bufsiz) pkt Nothing
         if bytes < 0 then
             buildPackets buf bufsiz siz spkts build0
           else do
@@ -86,8 +85,8 @@ sendPacket conn send buf0 spkts0 = getMaxPacketSize conn >>= go
 
 ----------------------------------------------------------------
 
-sendPingPacket :: Connection -> SendBuf -> Buffer -> EncryptionLevel -> IO ()
-sendPingPacket conn send buf lvl = do
+sendPingPacket :: Connection -> EncryptionLevel -> IO ()
+sendPingPacket conn lvl = do
     maxSiz <- getMaxPacketSize conn
     ok <- if isClient conn then return True
           else checkAntiAmplificationFree conn maxSiz
@@ -108,11 +107,11 @@ sendPingPacket conn send buf lvl = do
           else do
             let spkt = last xs
                 ping = spPlainPacket spkt
-                bufsiz = maximumUdpPayloadSize
-            (bytes,padlen) <- encodePlainPacket conn buf bufsiz ping (Just maxSiz)
+            let sizbuf@(SizedBuffer buf _) = encryptRes conn
+            (bytes,padlen) <- encodePlainPacket conn sizbuf ping (Just maxSiz)
             when (bytes >= 0) $ do
                 now <- getTimeMicrosecond
-                send buf bytes
+                connSend conn buf bytes
                 addTxBytes conn bytes
                 let sentPacket0 = fixSentPacket spkt bytes padlen
                     sentPacket = sentPacket0 { spTimeSent = now }
@@ -206,20 +205,17 @@ data Switch = SwPing EncryptionLevel
             | SwOut  Output
             | SwStrm TxStreamData
 
-sender :: Connection -> SendBuf -> IO ()
-sender conn send = handleLogT logAction $
-    E.bracket (mallocBytes (maximumUdpPayloadSize * 2))
-              free
-              body
+sender :: Connection -> IO ()
+sender conn = handleLogT logAction body
   where
-    body buf = forever $ do
+    body = forever $ do
         x <- atomically ((SwPing <$> takePingSTM (connLDCC conn))
                 `orElse` (SwOut  <$> takeOutputSTM conn)
                 `orElse` (SwStrm <$> takeSendStreamQSTM conn))
         case x of
-          SwPing lvl -> sendPingPacket   conn send buf lvl
-          SwOut  out -> sendOutput       conn send buf out
-          SwStrm tx  -> sendTxStreamData conn send buf tx
+          SwPing lvl -> sendPingPacket   conn lvl
+          SwOut  out -> sendOutput       conn out
+          SwStrm tx  -> sendTxStreamData conn tx
     logAction msg = connDebugLog conn ("debug: sender: " <> msg)
 
 ----------------------------------------------------------------
@@ -229,30 +225,30 @@ discardClientInitialPacketNumberSpace conn
   | isClient conn = do
         let ldcc = connLDCC conn
         discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
-        unless discarded $ do
+        unless discarded $ fire conn (Microseconds 100000) $ do
             dropSecrets conn InitialLevel
             clearCryptoStream conn InitialLevel
             onPacketNumberSpaceDiscarded ldcc InitialLevel
   | otherwise = return ()
 
-sendOutput :: Connection -> SendBuf -> Buffer -> Output -> IO ()
-sendOutput conn send buf (OutControl lvl frames action) = do
-    construct conn lvl frames >>= sendPacket conn send buf
+sendOutput :: Connection -> Output -> IO ()
+sendOutput conn (OutControl lvl frames action) = do
+    construct conn lvl frames >>= sendPacket conn
     when (lvl == HandshakeLevel) $ discardClientInitialPacketNumberSpace conn
     action
 
-sendOutput conn send buf (OutHandshake lcs0) = do
+sendOutput conn (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
         (lcs,wait) = convert lcs0
     -- only for h3spec
     when wait $ wait0RTTReady conn
-    sendCryptoFragments conn send buf lcs
+    sendCryptoFragments conn lcs
     when (any (\(l,_) -> l == HandshakeLevel) lcs) $
         discardClientInitialPacketNumberSpace conn
-sendOutput conn send buf (OutRetrans (PlainPacket hdr0 plain0)) = do
+sendOutput conn (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0
     let lvl = levelFromHeader hdr0
-    construct conn lvl frames >>= sendPacket conn send buf
+    construct conn lvl frames >>= sendPacket conn
 
 levelFromHeader :: Header -> EncryptionLevel
 levelFromHeader hdr
@@ -289,29 +285,29 @@ limitationC = 1024
 thresholdC :: Int
 thresholdC = 200
 
-sendCryptoFragments :: Connection -> SendBuf -> Buffer -> [(EncryptionLevel, CryptoData)] -> IO ()
-sendCryptoFragments _ _ _ [] = return ()
-sendCryptoFragments conn send buf lcs = do
+sendCryptoFragments :: Connection -> [(EncryptionLevel, CryptoData)] -> IO ()
+sendCryptoFragments _ [] = return ()
+sendCryptoFragments conn lcs = do
     loop limitationC id lcs
   where
     loop :: Int -> ([SentPacket] -> [SentPacket]) -> [(EncryptionLevel, CryptoData)] -> IO ()
     loop _ build0 [] = do
         let spkts0 = build0 []
-        unless (null spkts0) $ sendPacket conn send buf spkts0
+        unless (null spkts0) $ sendPacket conn spkts0
     loop len0 build0 ((lvl, bs) : xs) | BS.length bs > len0 = do
         let (target, rest) = BS.splitAt len0 bs
         frame1 <- cryptoFrame conn target lvl
         spkts1 <- construct conn lvl [frame1]
-        sendPacket conn send buf $ build0 spkts1
+        sendPacket conn $ build0 spkts1
         loop limitationC id ((lvl, rest) : xs)
     loop _ build0 [(lvl, bs)] = do
         frame1 <- cryptoFrame conn bs lvl
         spkts1 <- construct conn lvl [frame1]
-        sendPacket conn send buf $ build0 spkts1
+        sendPacket conn $ build0 spkts1
     loop len0 build0 ((lvl, bs) : xs) | len0 - BS.length bs < thresholdC = do
         frame1 <- cryptoFrame conn bs lvl
         spkts1 <- construct conn lvl [frame1]
-        sendPacket conn send buf $ build0 spkts1
+        sendPacket conn $ build0 spkts1
         loop limitationC id xs
     loop len0 build0 ((lvl, bs) : xs) = do
         frame1 <- cryptoFrame conn bs lvl
@@ -339,24 +335,26 @@ packFin conn s False = do
                 return True
       _ -> return False
 
-sendTxStreamData :: Connection -> SendBuf -> Buffer -> TxStreamData -> IO ()
-sendTxStreamData conn send buf (TxStreamData s dats len fin0) = do
+sendTxStreamData :: Connection -> TxStreamData -> IO ()
+sendTxStreamData conn (TxStreamData s dats len fin0) = do
     fin <- packFin conn s fin0
-    if len < limitation then do
-        sendStreamSmall conn send buf s dats fin len
+    if len < limitation then
+        sendStreamSmall conn s dats fin len
       else
-        sendStreamLarge conn send buf s dats fin
+        sendStreamLarge conn s dats fin
 
-sendStreamSmall :: Connection -> SendBuf -> Buffer -> Stream -> [StreamData] -> Bool -> Int -> IO ()
-sendStreamSmall conn send buf s0 dats0 fin0 len0 = do
+sendStreamSmall :: Connection -> Stream -> [StreamData] -> Bool -> Int -> IO ()
+sendStreamSmall conn s0 dats0 fin0 len0 = do
     off0 <- getTxStreamOffset s0 len0
     let sid0 = streamId s0
         frame0 = StreamF sid0 off0 dats0 fin0
-    frames <- loop s0 frame0 len0 id
+        sb = if fin0 then (s0 :) else id
+    (frames,streams) <- loop s0 frame0 len0 id sb
     ready <- isConnection1RTTReady conn
     let lvl | ready     = RTT1Level
             | otherwise = RTT0Level
-    construct conn lvl frames >>= sendPacket conn send buf
+    construct conn lvl frames >>= sendPacket conn
+    mapM_ syncFinTx streams
   where
     tryPeek = do
         mx <- tryPeekSendStreamQ conn
@@ -365,11 +363,14 @@ sendStreamSmall conn send buf s0 dats0 fin0 len0 = do
               yield
               tryPeekSendStreamQ conn
           Just _ -> return mx
-    loop :: Stream -> Frame -> Int -> ([Frame] -> [Frame]) -> IO [Frame]
-    loop s frame total build = do
+    loop :: Stream -> Frame -> Int
+         -> ([Frame] -> [Frame])
+         -> ([Stream] -> [Stream])
+         -> IO ([Frame], [Stream])
+    loop s frame total build sb = do
         mx <- tryPeek
         case mx of
-          Nothing -> return $ build [frame]
+          Nothing -> return (build [frame], sb [])
           Just (TxStreamData s1 dats1 len1 fin1) -> do
               let total1 = len1 + total
               if total1 < limitation then do
@@ -381,16 +382,20 @@ sendStreamSmall conn send buf s0 dats0 fin0 len0 = do
                   if sid == sid1 then do
                       let StreamF _ off dats _ = frame
                           frame1 = StreamF sid off (dats ++ dats1) fin1'
-                      loop s1 frame1 total1 build
+                          sb1 = if fin1 then (sb . (s1 :)) else sb
+                      loop s1 frame1 total1 build sb1
                     else do
                       let frame1 = StreamF sid1 off1 dats1 fin1'
                           build1 = build . (frame :)
-                      loop s1 frame1 total1 build1
+                          sb1 = if fin1 then (sb . (s1 :)) else sb
+                      loop s1 frame1 total1 build1 sb1
                 else
-                  return $ build [frame]
+                  return (build [frame], sb [])
 
-sendStreamLarge :: Connection -> SendBuf -> Buffer -> Stream -> [ByteString] -> Bool -> IO ()
-sendStreamLarge conn send buf s dats0 fin0 = loop dats0
+sendStreamLarge :: Connection -> Stream -> [ByteString] -> Bool -> IO ()
+sendStreamLarge conn s dats0 fin0 = do
+    loop dats0
+    when fin0 $ syncFinTx s
   where
     sid = streamId s
     loop [] = return ()
@@ -403,7 +408,7 @@ sendStreamLarge conn send buf s dats0 fin0 = loop dats0
         ready <- isConnection1RTTReady conn
         let lvl | ready     = RTT1Level
                 | otherwise = RTT0Level
-        construct conn lvl [frame] >>= sendPacket conn send buf
+        construct conn lvl [frame] >>= sendPacket conn
         loop dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]

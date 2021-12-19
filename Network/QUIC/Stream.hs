@@ -11,6 +11,8 @@ module Network.QUIC.Stream (
   , RecvStreamQ(..)
   , RxStreamData(..)
   , Length
+  , syncFinTx
+  , waitFinTx
   -- * Misc
   , getTxStreamOffset
   , isTxStreamClosed

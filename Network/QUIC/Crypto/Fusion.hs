@@ -1,4 +1,4 @@
-module Network.QUIC.CryptoFusion (
+module Network.QUIC.Crypto.Fusion (
     FusionContext
   , fusionNewContext
   , fusionSetup
@@ -10,12 +10,13 @@ module Network.QUIC.CryptoFusion (
   , fusionGetMask
   ) where
 
+import qualified Data.ByteString as BS
 import Foreign.C.Types
-import Foreign.Ptr
 import Foreign.ForeignPtr
+import Foreign.Ptr
 import Network.TLS.Extra.Cipher
 
-import Network.QUIC.Crypto
+import Network.QUIC.Crypto.Types
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -47,24 +48,31 @@ fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
 
 ----------------------------------------------------------------
 
-fusionEncrypt :: FusionContext -> Supplement -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-fusionEncrypt (FC fctx) (SP fsupp) ibuf ilen abuf alen pn obuf =
+fusionEncrypt :: FusionContext -> Supplement
+              -> Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
+fusionEncrypt (FC fctx) (SP fsupp) obuf plaintext (AssDat header) pn =
     withForeignPtr fctx $ \pctx -> withForeignPtr fsupp $ \psupp -> do
-        c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen' psupp
-        return (ilen + 16) -- fixme
+      withByteString plaintext $ \ibuf ->
+        withByteString header $ \abuf -> do
+          c_aead_do_encrypt pctx obuf ibuf ilen' pn' abuf alen psupp
+          return (ilen + 16) -- fixme
   where
-    pn' = fromIntegral pn
+    pn'   = fromIntegral pn
+    ilen  = BS.length plaintext
     ilen' = fromIntegral ilen
-    alen' = fromIntegral alen
+    alen  = fromIntegral $ BS.length header
 
-fusionDecrypt :: FusionContext -> Buffer -> Int -> Buffer -> Int -> PacketNumber -> Buffer -> IO Int
-fusionDecrypt (FC fctx) ibuf ilen abuf alen pn buf =
+fusionDecrypt :: FusionContext
+              -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+fusionDecrypt (FC fctx) obuf ciphertext (AssDat header) pn =
     withForeignPtr fctx $ \pctx ->
-        fromIntegral <$> c_aead_do_decrypt pctx buf ibuf ilen' pn' abuf alen'
+      withByteString ciphertext $ \ibuf ->
+        withByteString header $ \abuf ->
+            fromIntegral <$> c_aead_do_decrypt pctx obuf ibuf ilen pn' abuf alen
   where
-    pn' = fromIntegral pn
-    ilen' = fromIntegral ilen
-    alen' = fromIntegral alen
+    pn'  = fromIntegral pn
+    ilen = fromIntegral $ BS.length ciphertext
+    alen = fromIntegral $ BS.length header
 
 ----------------------------------------------------------------
 
@@ -79,11 +87,11 @@ fusionSetupSupplement cipher (Key hpkey) = withByteString hpkey $ \hpkeyp ->
     | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
     | otherwise                               = 32
 
-fusionSetSample :: Supplement -> Ptr Word8 -> IO ()
+fusionSetSample :: Supplement -> Buffer -> IO ()
 fusionSetSample (SP fsupp) p = withForeignPtr fsupp $ \psupp ->
   c_supplement_set_sample psupp p
 
-fusionGetMask :: Supplement -> IO (Ptr Word8)
+fusionGetMask :: Supplement -> IO Buffer
 fusionGetMask (SP fsupp) = withForeignPtr fsupp c_supplement_get_mask
 
 ----------------------------------------------------------------
