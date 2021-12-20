@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 module Network.QUIC.Crypto.Fusion (
     FusionContext
   , fusionNewContext
@@ -10,6 +12,7 @@ module Network.QUIC.Crypto.Fusion (
   , fusionGetMask
   ) where
 
+#ifdef USE_FUSION
 import qualified Data.ByteString as BS
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -152,3 +155,35 @@ foreign import ccall unsafe "supplement_set_sample"
 
 foreign import ccall unsafe "supplement_get_mask"
     c_supplement_get_mask :: Ptr SupplementOpaque -> IO (Ptr Word8)
+#else
+import Network.QUIC.Crypto.Types
+import Network.QUIC.Imports
+import Network.QUIC.Types
+
+data FusionContext
+
+fusionNewContext :: IO FusionContext
+fusionNewContext = undefined
+
+fusionSetup :: Cipher -> FusionContext -> Key -> IV -> IO ()
+fusionSetup = undefined
+
+fusionEncrypt :: FusionContext -> Supplement
+              -> Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
+fusionEncrypt = undefined
+
+fusionDecrypt :: FusionContext
+              -> Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
+fusionDecrypt = undefined
+
+data Supplement
+
+fusionSetupSupplement :: Cipher -> Key -> IO Supplement
+fusionSetupSupplement = undefined
+
+fusionSetSample :: Supplement -> Buffer -> IO ()
+fusionSetSample = undefined
+
+fusionGetMask :: Supplement -> IO Buffer
+fusionGetMask = undefined
+#endif
