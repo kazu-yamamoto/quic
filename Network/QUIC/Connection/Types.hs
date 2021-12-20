@@ -102,8 +102,6 @@ data MigrationState = NonMigration
 data Coder = Coder {
     encrypt    :: Buffer -> PlainText  -> AssDat -> PacketNumber -> IO Int
   , decrypt    :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
-  , setSample  :: Buffer -> IO ()
-  , getMask    :: IO Buffer
   , supplement :: Maybe Supplement
   }
 
@@ -111,8 +109,6 @@ initialCoder :: Coder
 initialCoder = Coder {
     encrypt    = \_ _ _ _ -> return (-1)
   , decrypt    = \_ _ _ _ -> return (-1)
-  , setSample  = \_ -> return ()
-  , getMask    = return nullPtr
   , supplement = Nothing
   }
 
@@ -128,12 +124,16 @@ initialCoder1RTT = Coder1RTT {
   }
 
 data Protector = Protector {
-    unprotect :: Sample -> Mask
+    setSample  :: Buffer -> IO ()
+  , getMask    :: IO Buffer
+  , unprotect :: Sample -> Mask
   }
 
 initialProtector :: Protector
 initialProtector = Protector {
-    unprotect = \_ -> Mask ""
+    setSample  = \_ -> return ()
+  , getMask    = return nullPtr
+  , unprotect = \_ -> Mask ""
   }
 
 ----------------------------------------------------------------

@@ -150,7 +150,6 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
         encBufLen = 1500 - 20 - 8
     payloadWithoutPaddingSiz <- encodeFramesWithPadding encBuf encBufLen frames
     cipher <- getCipher conn lvl
-    coder <- getCoder conn lvl keyPhase
     -- before length or packer number
     lengthOrPNBeg <- currentOffset wbuf
     (packetLen, headerLen, plainLen, tagLen, padLen)
@@ -164,9 +163,11 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     header <- mkBS headerBeg headerLen
     --
     let sampleBeg = pnBeg `plusPtr` 4
-    setSample coder sampleBeg
+    coder <- getCoder conn lvl keyPhase
+    protector <- getProtector conn lvl
+    setSample protector sampleBeg
     len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
-    maskBeg <- getMask coder
+    maskBeg <- getMask protector
     --
     if len < 0 || maskBeg == nullPtr then
          return (-1, -1)

@@ -157,11 +157,13 @@ genFusionCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = d
     let coder = Coder {
             encrypt    = fusionEncrypt fctxt supp
           , decrypt    = fusionDecrypt fctxr
-          , setSample  = fusionSetSample supp
-          , getMask    = fusionGetMask supp
           , supplement = Just supp
           }
-    let protector = Protector unp
+    let protector = Protector {
+            setSample  = fusionSetSample supp
+          , getMask    = fusionGetMask supp
+          , unprotect = unp
+          }
     return (coder, protector)
   where
     txSecret | cli           = Secret c
@@ -184,11 +186,13 @@ genNiteCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
     let coder = Coder {
             encrypt    = enc
           , decrypt    = dec
-          , setSample  = set
-          , getMask    = get
           , supplement = Nothing
           }
-    let protector = Protector unp
+    let protector = Protector {
+            setSample  = set
+          , getMask    = get
+          , unprotect  = unp
+          }
     return (coder, protector)
   where
     txSecret | cli           = Secret c
@@ -213,8 +217,6 @@ genFusionCoder1RTT cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s)
     let coder = Coder {
             encrypt    = fusionEncrypt fctxt supp
           , decrypt    = fusionDecrypt fctxr
-          , setSample  = fusionSetSample supp
-          , getMask    = fusionGetMask supp
           , supplement = Just supp
           }
     return coder
@@ -229,14 +231,12 @@ genFusionCoder1RTT cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s)
     rxPayloadIV  = initialVector ver cipher rxSecret
 
 genNiteCoder1RTT :: Bool -> Version -> Cipher -> TrafficSecrets a -> Coder -> IO Coder
-genNiteCoder1RTT cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) oldcoder = do
+genNiteCoder1RTT cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) _oldcoder = do
     let enc = makeNiteEncrypt cipher txPayloadKey txPayloadIV
         dec = makeNiteDecrypt cipher rxPayloadKey rxPayloadIV
     let coder = Coder {
             encrypt    = enc
           , decrypt    = dec
-          , setSample  = setSample oldcoder
-          , getMask    = getMask oldcoder
           , supplement = Nothing
           }
     return coder
