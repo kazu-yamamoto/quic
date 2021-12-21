@@ -46,7 +46,13 @@ readerClient s0 conn = handleLogUnit logAction $ do
             case msa0 of
               Nothing  ->     NSB.recv     s0 maximumUdpPayloadSize
               Just sa0 -> do
+                  putStr "recvFrom getSocketName "
+                  (getSocketName s0 >>= print) `E.catchAny` \e -> print e
+                  putStr "recvFrom getPeerName "
+                  (getPeerName s0 >>= print) `E.catchAny` \e -> print e
+                  putStrLn "recvFrom..."
                   (bs, sa) <- NSB.recvFrom s0 maximumUdpPayloadSize
+                  putStrLn "recvFrom...done"
                   return $ if sa == sa0 then bs else ""
         case mbs of
           Nothing -> close s0

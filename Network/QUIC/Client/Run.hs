@@ -100,8 +100,13 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     sref <- newIORef [s0]
     let send buf siz = do
             s:_ <- readIORef sref
-            if ccAutoMigration then
+            if ccAutoMigration then do
+                putStrLn $ "sendBufTo " ++ show sa0
                 void $ NS.sendBufTo s buf siz sa0
+                putStr "sendBufTo getSocketName "
+                (NS.getSocketName s0 >>= print) `E.catchAny` \e -> print e
+                putStr "sendBufTo getPeerName "
+                (NS.getPeerName s0 >>= print) `E.catchAny` \e -> print e
               else
                 void $ NS.sendBuf s buf siz
         recv = recvClient q
