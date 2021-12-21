@@ -82,7 +82,7 @@ defaultClientConfig = ClientConfig {
   , ccResumption    = defaultResumptionInfo
   , ccPacketSize    = Nothing
   , ccDebugLog      = False
-  , ccAutoMigration = True
+  , ccAutoMigration = False
   }
 
 ----------------------------------------------------------------
