@@ -57,6 +57,7 @@ testClientConfig :: ClientConfig
 testClientConfig = defaultClientConfig {
     ccPortName = "8003"
   , ccValidate = False
+  , ccDebugLog = True
   }
 
 testClientConfigR :: ClientConfig
