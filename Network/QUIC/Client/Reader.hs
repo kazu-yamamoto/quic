@@ -9,6 +9,7 @@ module Network.QUIC.Client.Reader (
   ) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import Data.List (intersect)
 import Network.Socket (Socket, getPeerName, close)
@@ -28,8 +29,11 @@ import Network.QUIC.Socket
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
-readerClient :: Socket -> Connection -> IO ()
-readerClient s0 conn = handleLogUnit logAction $ do
+readerClient :: Socket -> TVar Bool -> Connection -> IO ()
+readerClient s0 tvar conn = handleLogUnit logAction $ do
+    atomically $ do
+        bound <- readTVar tvar
+        check bound
     getServerAddr conn >>= loop
   where
     loop msa0 = do
@@ -143,6 +147,7 @@ rebind conn microseconds = do
       Nothing  -> getPeerName s0 >>= udpNATRebindingConnectedSocket
       Just sa0 -> udpNATRebindingSocket sa0
     _ <- addSocket conn s1
-    let reader = readerClient s1 conn
+    tvar <- newTVarIO True
+    let reader = readerClient s1 tvar conn -- tvar is dummy
     forkIO reader >>= addReader conn
     fire conn microseconds $ close s0

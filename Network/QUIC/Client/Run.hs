@@ -7,6 +7,7 @@ module Network.QUIC.Client.Run (
   , migrate
   ) where
 
+import Control.Concurrent.STM
 import qualified Network.Socket as NS
 import UnliftIO.Async
 import UnliftIO.Concurrent
@@ -98,10 +99,12 @@ createClientConnection conf@ClientConfig{..} verInfo = do
                   udpClientConnectedSocket ccServerName ccPortName
     q <- newRecvQ
     sref <- newIORef [s0]
+    tvar <- newTVarIO False
     let send buf siz = do
             s:_ <- readIORef sref
-            if ccAutoMigration then
+            if ccAutoMigration then do
                 void $ NS.sendBufTo s buf siz sa0
+                atomically $ writeTVar tvar True
               else
                 void $ NS.sendBuf s buf siz
         recv = recvClient q
@@ -125,7 +128,9 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
     when ccAutoMigration $ setServerAddr conn sa0
-    let reader = readerClient s0 conn -- dies when s0 is closed.
+    let reader = readerClient s0 tvar conn -- dies when s0 is closed.
+        (SizedBuffer buf _) = encryptRes conn
+    when ccAutoMigration $ send buf 0
     return $ ConnRes conn myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation
