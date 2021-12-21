@@ -11,7 +11,7 @@ module Network.QUIC.Client.Reader (
 import Control.Concurrent
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, getPeerName, close)
+import Network.Socket (Socket, getSocketName, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
 import qualified UnliftIO.Exception as E
 
@@ -30,8 +30,16 @@ import Network.QUIC.Types
 -- | readerClient dies when the socket is closed.
 readerClient :: Socket -> Connection -> IO ()
 readerClient s0 conn = handleLogUnit logAction $ do
+    wait
     getServerAddr conn >>= loop
   where
+    wait = do
+        bound <- E.handleAny (\_ -> return False) $ do
+            _ <- getSocketName s0
+            return True
+        unless bound $ do
+            yield
+            wait
     loop msa0 = do
         ito <- readMinIdleTimeout conn
         mbs <- timeout ito $ do
