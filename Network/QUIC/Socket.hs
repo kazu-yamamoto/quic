@@ -1,11 +1,12 @@
 module Network.QUIC.Socket where
 
 import Control.Concurrent
-import qualified UnliftIO.Exception as E
 import Data.IP hiding (addr)
 import qualified GHC.IO.Exception as E
 import Network.Socket
+import System.IO
 import qualified System.IO.Error as E
+import qualified UnliftIO.Exception as E
 
 sockAddrFamily :: SockAddr -> Family
 sockAddrFamily SockAddrInet{}  = AF_INET
@@ -31,13 +32,22 @@ udpServerListenSocket ip = E.bracketOnError open close $ \s -> do
 
 udpServerConnectedSocket :: SockAddr -> SockAddr -> IO Socket
 udpServerConnectedSocket mysa peersa = E.bracketOnError open close $ \s -> do
+    putStrLn "udpServerConnectedSocket" >> hFlush stdout
     setSocketOption s ReuseAddr 1
     withFdSocket s setCloseOnExecIfNeeded
     -- bind and connect is not atomic
     -- So, bind may results in EADDRINUSE
+    putStrLn ("bind to " ++ show anysa ++ "...") >> hFlush stdout
     bind s anysa      -- (UDP, *:13443, *:*)
        `E.catch` postphone (bind s anysa)
+    putStrLn ("bind done") >> hFlush stdout
+    putStrLn ("connect to " ++ show peersa ++ "...") >> hFlush stdout
     connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
+    putStrLn ("connect done") >> hFlush stdout
+    getSocketName s >>= print
+    hFlush stdout
+    getPeerName s >>= print
+    hFlush stdout
     return s
   where
     postphone action e
