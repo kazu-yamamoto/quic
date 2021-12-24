@@ -6,7 +6,7 @@ module Network.QUIC.Server (
   -- * Configuration
   , ServerConfig
   , defaultServerConfig
-  , scAddresses
+  , scPort
   , scALPN
   , scRequireRetry
   , scUse0RTT

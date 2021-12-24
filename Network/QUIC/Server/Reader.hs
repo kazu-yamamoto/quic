@@ -151,28 +151,30 @@ dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
 dispatcher d conf (s,mysa) = handleLogUnit logAction body
   where
     body = do
-    --    let (opt,_cmsgid) = case mysa of
-    --          SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
-    --          SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
-    --          _               -> error "dispatcher"
-    --    setSocketOption s opt 1
+        let (opt,cmsgid) = case mysa of
+              SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
+              SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
+              _               -> error "dispatcher"
+        setSocketOption s opt 1
         forever $ do
-    --        (peersa, bs0, _cmsgs, _) <- recv
-            (bs0, peersa) <- recv
+            (peersa, bs0, cmsgs, _) <- recv
+            let Just pktinfo = lookupCmsg cmsgid cmsgs
+            let mysa' = case mysa of
+                  SockAddrInet p _  -> let Just (IPv4PktInfo _ _ addr) = decodeCmsg pktinfo
+                                       in SockAddrInet p addr
+                  SockAddrInet6 p f _ sc -> let Just (IPv6PktInfo _ addr) = decodeCmsg pktinfo
+                                            in SockAddrInet6 p f addr sc
+                  _               -> error "dispatcher"
             let bytes = BS.length bs0 -- both Initial and 0RTT
             now <- getTimeMicrosecond
-            -- macOS overrides the local address of the socket
-            -- if in_pktinfo is used.
             (pkt, bs0RTT) <- decodePacket bs0
-    --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
-            let send bs = void $ NSB.sendTo s bs peersa
-            dispatch d conf logAction pkt mysa peersa send bs0RTT bytes now
+            let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs 0
+            dispatch d conf logAction pkt mysa' peersa send bs0RTT bytes now
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
     recv = do
---        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
-        ex <- E.tryAny $ NSB.recvFrom s maximumUdpPayloadSize
+        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
         case ex of
            Right x -> return x
            Left se -> case E.fromException se of
