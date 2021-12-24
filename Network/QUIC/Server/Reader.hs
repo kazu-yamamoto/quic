@@ -33,6 +33,7 @@ import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import System.Log.FastLogger
 import qualified UnliftIO.Exception as E
+import System.IO
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -161,6 +162,7 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction body
             (bs0, peersa) <- recv
             let bytes = BS.length bs0 -- both Initial and 0RTT
             now <- getTimeMicrosecond
+            print (bytes, now) >> hFlush stdout
             -- macOS overrides the local address of the socket
             -- if in_pktinfo is used.
             (pkt, bs0RTT) <- decodePacket bs0
