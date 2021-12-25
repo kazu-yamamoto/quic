@@ -33,6 +33,7 @@ import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import System.Log.FastLogger
 import qualified UnliftIO.Exception as E
+import System.IO
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -164,6 +165,7 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction body
             -- macOS overrides the local address of the socket
             -- if in_pktinfo is used.
             (pkt, bs0RTT) <- decodePacket bs0
+            print pkt >> hFlush stdout
     --        let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs' 0
             let send bs = void $ NSB.sendTo s bs peersa
             dispatch d conf logAction pkt mysa peersa send bs0RTT bytes now
@@ -322,8 +324,10 @@ dispatch Dispatch{..} _ logAction
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
+          putStrLn "Nothing" >> hFlush stdout
           logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
+          putStrLn "Just" >> hFlush stdout
           writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 
 dispatch _ _ _ _ipkt _ _peersa _ _ _ _ = return ()
