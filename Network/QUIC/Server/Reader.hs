@@ -316,19 +316,15 @@ dispatch Dispatch{..} _ _
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> return ()
 dispatch Dispatch{..} _ logAction
-         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ _ bytes tim  = do
+         (PacketIC cpkt@(CryptPacket hdr _crypt) lvl) _mysa peersa _ _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
+    let dCID = headerMyCID hdr
     mx <- lookupConnectionDict dstTable dCID
     case mx of
       Nothing -> do
           logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
-            alive <- getAlive conn
-            when alive $ do
-                let miginfo = MigrationInfo mysa peersa dCID
-                    crypt' = crypt { cryptMigraionInfo = Just miginfo }
-                    cpkt = CryptPacket hdr crypt'
-                writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+          writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 
 dispatch _ _ _ _ipkt _ _peersa _ _ _ _ = return ()
 
