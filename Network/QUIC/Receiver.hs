@@ -95,7 +95,8 @@ processReceivedPacketHandshake conn rpkt = do
                         firstTime = myVer == myOrigiVer
                     when (firstTime && myVer /= peerVer) $ do
                         setVersion conn peerVer
-                        initializeCoder conn InitialLevel $ initialSecrets peerVer $ clientDstCID conn
+                        dcid <- getClientDstCID conn
+                        initializeCoder conn InitialLevel $ initialSecrets peerVer dcid
                 _ -> return ()
               processReceivedPacket conn rpkt
         | otherwise -> do

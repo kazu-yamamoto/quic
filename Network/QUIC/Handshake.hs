@@ -273,7 +273,8 @@ setPeerParams conn _ctx peerExts = do
           vers@(ver1:_:_)
             | myVer /= ver1 -> do
                 setVersionInfo conn $ VersionInfo ver1 vers
-                initializeCoder conn InitialLevel $ initialSecrets ver1 $ clientDstCID conn
+                dcid <- getClientDstCID conn
+                initializeCoder conn InitialLevel $ initialSecrets ver1 dcid
           _ -> return ()
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()

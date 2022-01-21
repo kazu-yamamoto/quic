@@ -176,7 +176,6 @@ type Recv = IO ReceivedPacket
 -- | A quic connection to carry multiple streams.
 data Connection = Connection {
     connState         :: ConnState
-  , clientDstCID      :: CID
   -- Actions
   , connDebugLog      :: DebugLogger -- ^ A logger for debugging.
   , connQLog          :: QLogger
@@ -228,7 +227,8 @@ data Connection = Connection {
   , protectors        :: IOArray EncryptionLevel Protector
   , currentKeyPhase   :: IORef (Bool, PacketNumber)
   , negotiated        :: IORef Negotiated
-  , handshakeCIDs     :: IORef AuthCIDs
+  , connMyAuthCIDs    :: IORef AuthCIDs
+  , connPeerAuthCIDs  :: IORef AuthCIDs
   -- Resources
   , connResources     :: IORef (IO ())
   , encodeBuf         :: Buffer
@@ -278,7 +278,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     encBuf   <- mallocBytes bufsiz
     ecrptBuf <- mallocBytes bufsiz
     dcrptBuf <- mallocBytes bufsiz
-    Connection connstate clientDstCID debugLog qLog hooks send recv recvQ sref
+    Connection connstate debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
         <*> newIORef (return ())
         <*> myThreadId
@@ -321,6 +321,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newArray (InitialLevel,RTT1Level) initialProtector
         <*> newIORef (False,0)
         <*> newIORef initialNegotiated
+        <*> newIORef myAuthCIDs
         <*> newIORef peerAuthCIDs
         -- Resources
         <*> newIORef (free encBuf >> free ecrptBuf >> free dcrptBuf)
@@ -339,8 +340,6 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     peer | isclient  = Server
          | otherwise = Client
     peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)
-    clientDstCID | isclient  = fromJust $ origDstCID peerAuthCIDs
-                 | otherwise = fromJust $ origDstCID myAuthCIDs
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")

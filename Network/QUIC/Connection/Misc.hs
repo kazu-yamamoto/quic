@@ -12,6 +12,7 @@ module Network.QUIC.Connection.Misc (
   , clearSockets
   , getPeerAuthCIDs
   , setPeerAuthCIDs
+  , getClientDstCID
   , getMyParameters
   , getPeerParameters
   , setPeerParameters
@@ -76,11 +77,24 @@ clearSockets Connection{..} = atomicModifyIORef sockets ([],)
 
 ----------------------------------------------------------------
 
+getMyAuthCIDs :: Connection -> IO AuthCIDs
+getMyAuthCIDs Connection{..} = readIORef connMyAuthCIDs
+
 getPeerAuthCIDs :: Connection -> IO AuthCIDs
-getPeerAuthCIDs Connection{..} = readIORef handshakeCIDs
+getPeerAuthCIDs Connection{..} = readIORef connPeerAuthCIDs
 
 setPeerAuthCIDs :: Connection -> (AuthCIDs -> AuthCIDs) -> IO ()
-setPeerAuthCIDs Connection{..} f = atomicModifyIORef'' handshakeCIDs f
+setPeerAuthCIDs Connection{..} f = atomicModifyIORef'' connPeerAuthCIDs f
+
+getClientDstCID :: Connection -> IO CID
+getClientDstCID conn = do
+    cids <- if isClient conn then
+              getPeerAuthCIDs conn
+            else
+              getMyAuthCIDs conn
+    return $ case retrySrcCID cids of
+      Nothing   -> fromJust $ origDstCID cids
+      Just dcid -> dcid
 
 ----------------------------------------------------------------
 
