@@ -53,7 +53,7 @@ decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
         case ver of
           Negotiation      -> do
               decodeVersionNegotiationPacket rbuf dCID sCID
-          _                -> case decodeLongHeaderPacketType proFlags of
+          _                -> case decodeLongHeaderPacketType ver proFlags of
             RetryPacketType     -> do
                 decodeRetryPacket rbuf proFlags ver dCID sCID
             RTT0PacketType      -> do
