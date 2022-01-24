@@ -24,7 +24,7 @@ pattern Negotiation       = Version 0
 pattern Version1         :: Version
 pattern Version1          = Version 1
 pattern Version2         :: Version
-pattern Version2          = Version 0xff020000
+pattern Version2          = Version 0x709a50c4
 pattern Draft29          :: Version
 pattern Draft29           = Version 0xff00001d
 pattern GreasingVersion  :: Version
@@ -35,7 +35,7 @@ pattern GreasingVersion2  = Version 0x1a2a3a4a
 instance Show Version where
     show (Version          0) = "Negotiation"
     show (Version          1) = "Version1"
-    show (Version 0xff020000) = "Version2"
+    show (Version 0x709a50c4) = "Version2"
     show (Version 0xff00001d) = "Draft29"
     show ver@(Version v)
       | isGreasingVersion ver = "Greasing 0x" ++ printf "%08x" v
