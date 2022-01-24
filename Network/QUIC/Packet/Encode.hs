@@ -48,7 +48,7 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
 encodeRetryPacket :: RetryPacket -> IO ByteString
 encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     save wbuf
-    Flags flags <- retryPacketType
+    Flags flags <- retryPacketType ver
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
     copyByteString wbuf token
@@ -60,7 +60,7 @@ encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuff
 -- only for testing
 encodeRetryPacket (RetryPacket ver dCID sCID token (Right (_,tag))) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     save wbuf
-    Flags flags <- retryPacketType
+    Flags flags <- retryPacketType ver
     write8 wbuf flags
     encodeLongHeader wbuf ver dCID sCID
     copyByteString wbuf token
@@ -144,7 +144,7 @@ encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
     let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength pnLen
     quicBit <- greaseQuicBit <$> getPeerParameters conn
-    Flags flags' <- encodeLongHeaderFlags pkttyp flags pp quicBit
+    Flags flags' <- encodeLongHeaderFlags ver pkttyp flags pp quicBit
     write8 wbuf flags'
     encodeLongHeader wbuf ver dCID sCID
     return el

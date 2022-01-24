@@ -273,11 +273,10 @@ spec = do
             sample `shouldBe` Sample (dec16 "ebb7972fdce59d50e7e49ff2a7e8de76")
             let Mask mask = protectionMask defaultCipher shp sample
             BS.take 5 mask `shouldBe` dec16 "41103f438e"
-{-
+
         it "describes the examples of Retry" $ do
             let wire0 = dec16 "cf709a50c40008f067a5502a4262b5746f6b656e1dc71130cd1ed39d6efcee5c85806501"
             (ipkt,rest) <- decodePacket wire0
-            print ipkt
             rest `shouldBe` ""
             case ipkt of
               PacketIR retrypkt -> do
@@ -288,4 +287,3 @@ spec = do
                   r0 `shouldBe` r1
               _                 -> error "Retry version 2"
 
--}
