@@ -227,3 +227,65 @@ spec = do
             sample `shouldBe` Sample (dec16 "23b8e610589c83c92d0e97eb7a6e5003")
             let Mask mask = protectionMask defaultCipher chp sample
             BS.take 5 mask `shouldBe` dec16 "8e4391d84a"
+
+        it "describes the examples of Server Initial" $ do
+            let dcID = makeCID (dec16s "8394c8f03e515708")
+                ServerTrafficSecret sis = serverInitialSecret ver dcID
+                skey = aeadKey ver defaultCipher (Secret sis)
+                siv = initialVector ver defaultCipher (Secret sis)
+                shp = headerProtectionKey ver defaultCipher (Secret sis)
+            ----------------------------------------------------------------
+            -- payload encryption
+            let serverCRYPTOframe = dec16 $ BS.concat [
+                    "02000000000600405a020000560303eefce7f7b37ba1d1632e96677825ddf739"
+                  , "88cfc79825df566dc5430b9a045a1200130100002e00330024001d00209d3c94"
+                  , "0d89690b84d08a60993c144eca684d1081287c834d5311bcf32bb9da1a002b00"
+                  , "020304"
+                  ]
+            let serverPacketHeader = dec16 "d1709a50c40008f067a5502a4262b50040750001"
+            -- d1 709a50c4 00 08 f067a5502a4262b5 00 4075 0001
+            -- d1 (11010001)    -- flags
+            -- 709a50c4         -- version 2
+            -- 00               -- dcid len
+            -- 08               -- scid len
+            -- f067a5502a4262b5 -- scid
+            -- 00               -- token length
+            -- 4075             -- length
+            -- 0001             -- encoded packet number
+
+            let bodyLen = fromIntegral $ decodeInt (dec16 "4075")
+            let padLen = bodyLen
+                       - 2  -- packet number length
+                       - 16 -- GCM encrypt expansion
+                       - BS.length serverCRYPTOframe
+                serverCRYPTOframePadded = serverCRYPTOframe `BS.append` BS.pack (replicate padLen 0)
+            let plaintext = serverCRYPTOframePadded
+            let nonce = makeNonce siv $ dec16 "0001"
+            let add = AssDat serverPacketHeader
+            let Just (hdr,bdy) = niteEncrypt' defaultCipher skey nonce plaintext add
+                ciphertext = hdr `BS.append` bdy
+            let Just plaintext' = niteDecrypt' defaultCipher skey nonce ciphertext add
+            plaintext' `shouldBe` plaintext
+
+            ----------------------------------------------------------------
+            -- header protection
+            let sample = Sample (BS.take 16 $ BS.drop 2 ciphertext)
+            sample `shouldBe` Sample (dec16 "ebb7972fdce59d50e7e49ff2a7e8de76")
+            let Mask mask = protectionMask defaultCipher shp sample
+            BS.take 5 mask `shouldBe` dec16 "41103f438e"
+{-
+        it "describes the examples of Retry" $ do
+            let wire0 = dec16 "cf709a50c40008f067a5502a4262b5746f6b656e1dc71130cd1ed39d6efcee5c85806501"
+            (ipkt,rest) <- decodePacket wire0
+            print ipkt
+            rest `shouldBe` ""
+            case ipkt of
+              PacketIR retrypkt -> do
+                  wire1 <- encodeRetryPacket retrypkt
+                  let Just (f0,r0) = BS.uncons wire0
+                      Just (f1,r1) = BS.uncons wire1
+                  f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
+                  r0 `shouldBe` r1
+              _                 -> error "Retry version 2"
+
+-}
