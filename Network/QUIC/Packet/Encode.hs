@@ -57,7 +57,15 @@ encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuff
     let tag = calculateIntegrityTag ver odCID pseudo0
     copyByteString wbuf tag
     -- no header protection
-encodeRetryPacket _ = error "encodeRetryPacket"
+-- only for testing
+encodeRetryPacket (RetryPacket ver dCID sCID token (Right (_,tag))) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
+    save wbuf
+    Flags flags <- retryPacketType
+    write8 wbuf flags
+    encodeLongHeader wbuf ver dCID sCID
+    copyByteString wbuf token
+    copyByteString wbuf tag
+    -- no header protection
 
 ----------------------------------------------------------------
 

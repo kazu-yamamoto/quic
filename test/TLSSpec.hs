@@ -3,6 +3,7 @@
 
 module TLSSpec where
 
+import Data.Bits
 import qualified Data.ByteString as BS
 import Test.Hspec
 
@@ -139,6 +140,19 @@ spec = do
             sample `shouldBe` Sample (dec16 "2cd0991cd25b0aac406a5816b6394100")
             let Mask mask = protectionMask defaultCipher shp sample
             BS.take 5 mask `shouldBe` dec16 "2ec0d8356a"
+
+        it "describes the examples of Retry" $ do
+            let wire0 = dec16 "ff000000010008f067a5502a4262b5746f6b656e04a265ba2eff4d829058fb3f0f2496ba"
+            (ipkt,rest) <- decodePacket wire0
+            rest `shouldBe` ""
+            case ipkt of
+              PacketIR retrypkt -> do
+                  wire1 <- encodeRetryPacket retrypkt
+                  let Just (f0,r0) = BS.uncons wire0
+                      Just (f1,r1) = BS.uncons wire1
+                  f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
+                  r0 `shouldBe` r1
+              _                 -> error "Retry version 1"
 
     describe "test vector for version 2" $ do
         let ver = Version2
