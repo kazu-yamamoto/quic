@@ -40,12 +40,16 @@ import Network.QUIC.Types
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = NS.withSocketsDo $ do
-  ex <- E.try $ runClient conf client False $ ccVersionInfo conf
+  let resInfo = ccResumption conf
+      verInfo = case resumptionSession resInfo of
+        Nothing | resumptionToken resInfo == emptyToken -> ccVersionInfo conf
+        _  -> let ver = resumptionVersion resInfo in VersionInfo ver [ver]
+  ex <- E.try $ runClient conf client False verInfo
   case ex of
     Right v                     -> return v
-    Left (NextVersion verInfo)
+    Left (NextVersion nextVerInfo)
       | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
-      | otherwise                    -> runClient conf client True verInfo
+      | otherwise                    -> runClient conf client True nextVerInfo
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
 runClient conf client0 isICVN verInfo = do

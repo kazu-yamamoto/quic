@@ -28,6 +28,7 @@ import qualified Crypto.Token as CT
 import Data.X509 (CertificateChain)
 import Network.Socket (SockAddr)
 
+import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
@@ -81,14 +82,24 @@ getIncompatibleVN conn@Connection{..}
 ----------------------------------------------------------------
 
 setResumptionSession :: Connection -> SessionEstablish
-setResumptionSession Connection{..} si sd = atomicModifyIORef'' roleInfo $ \ci -> ci {
-    resumptionInfo = (resumptionInfo ci) { resumptionSession = Just (si,sd) }
-  }
+setResumptionSession conn@Connection{..} si sd = do
+    ver <- getVersion conn
+    atomicModifyIORef'' roleInfo $ \ci -> ci {
+        resumptionInfo = (resumptionInfo ci) {
+              resumptionVersion = ver
+            , resumptionSession = Just (si,sd)
+            }
+      }
 
 setNewToken :: Connection -> Token -> IO ()
-setNewToken Connection{..} token = atomicModifyIORef'' roleInfo $ \ci -> ci {
-    resumptionInfo = (resumptionInfo ci) { resumptionToken = token }
-  }
+setNewToken conn@Connection{..} token = do
+    ver <- getVersion conn
+    atomicModifyIORef'' roleInfo $ \ci -> ci {
+        resumptionInfo = (resumptionInfo ci) {
+              resumptionVersion = ver
+            , resumptionToken = token
+            }
+      }
 
 ----------------------------------------------------------------
 
