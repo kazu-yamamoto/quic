@@ -7,18 +7,17 @@ maximumUdpPayloadSize = 2048 -- no global locking when allocating ByteString
 
 ----------------------------------------------------------------
 
--- minimum PMTU = 1024 + 256 = 1280
--- IPv4 payload = 1280 - 20 - 8 = 1252
--- IPv6 payload = 1280 - 40 - 8 = 1232
-
 defaultQUICPacketSize :: Int
 defaultQUICPacketSize = 1200
 
+-- Google paper: UDP payload size = 1350
+--    http://www.audentia-gestion.fr/Recherche-Research-Google/46403.pdf
+
 defaultQUICPacketSizeForIPv4 :: Int
-defaultQUICPacketSizeForIPv4 = 1252
+defaultQUICPacketSizeForIPv4 = 1350
 
 defaultQUICPacketSizeForIPv6 :: Int
-defaultQUICPacketSizeForIPv6 = 1232
+defaultQUICPacketSizeForIPv6 = 1330
 
 ----------------------------------------------------------------
 
