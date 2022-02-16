@@ -36,7 +36,7 @@ makeTestServerConfig = do
 
 testServerConfig :: ServerConfig
 testServerConfig = defaultServerConfig {
-    scPort = 8003
+    scPort = 50003
   }
 
 makeTestServerConfigR :: IO ServerConfig
@@ -50,19 +50,19 @@ makeTestServerConfigR = do
 
 testServerConfigR :: ServerConfig
 testServerConfigR = defaultServerConfig {
-    scPort = 8003
+    scPort = 50003
   }
 
 testClientConfig :: ClientConfig
 testClientConfig = defaultClientConfig {
-    ccPortName = "8003"
+    ccPortName = "50003"
   , ccValidate = False
   , ccDebugLog = True
   }
 
 testClientConfigR :: ClientConfig
 testClientConfigR = defaultClientConfig {
-    ccPortName = "8002"
+    ccPortName = "50002"
   , ccValidate = False
   , ccDebugLog = True
   }
@@ -79,9 +79,9 @@ data Scenario = Randomly Int
 
 withPipe :: Scenario -> IO () -> IO ()
 withPipe scenario body = do
-    addrC <- resolve "8002"
+    addrC <- resolve "50002"
     let saC = addrAddress addrC
-    addrS <- resolve "8003"
+    addrS <- resolve "50003"
     let saS = addrAddress addrS
     irefC <- newIORef 0
     irefS <- newIORef 0
