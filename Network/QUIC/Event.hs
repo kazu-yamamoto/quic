@@ -5,7 +5,8 @@ module Network.QUIC.Event(getSystemTimerManager, registerTimeout, unregisterTime
 import GHC.Event
 #else
 import Control.Concurrent
-import System.Timeout
+import UnliftIO.Timeout
+
 -- In case of Windows
 -- We don't really need a timer manager type
 data TimerManager = TimerConstructor

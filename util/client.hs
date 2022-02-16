@@ -18,6 +18,7 @@ import System.Environment
 import System.Exit
 import System.IO
 import Text.Printf
+import qualified UnliftIO.Timeout as T
 
 import ClientX
 import Common
@@ -205,7 +206,7 @@ main = do
           , auxDebug = debug
           , auxShow = showContent
           , auxCheckClose = do
-                mx <- timeout 1000000 $ takeMVar cmvar
+                mx <- T.timeout 1000000 $ takeMVar cmvar
                 case mx of
                   Nothing -> return False
                   _       -> return True
