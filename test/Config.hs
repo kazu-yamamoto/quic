@@ -88,7 +88,9 @@ withPipe scenario body = do
     E.bracket (openSocket addrC) close $ \sockC ->
       E.bracket (openSocket addrS) close $ \sockS -> do
         setSocketOption sockC ReuseAddr 1
+        setSocketOption sockC IPv6Only 0
         setSocketOption sockS ReuseAddr 1
+        setSocketOption sockS IPv6Only 0
         bind sockC saC
         connect sockS saS
         -- from client
@@ -113,9 +115,9 @@ withPipe scenario body = do
         killThread tid0
         killThread tid1
   where
-    hints = defaultHints { addrSocketType = Datagram }
+    hints = defaultHints { addrSocketType = Datagram, addrFlags = [AI_NUMERICHOST ] }
     resolve port =
-        head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just port)
+        head <$> getAddrInfo (Just hints) (Just "::") (Just port)
     shouldDrop (Randomly n) _ _ = do
         w <- getRandomOneByte
         return ((w `mod` fromIntegral n) == 0)

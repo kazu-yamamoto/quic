@@ -18,7 +18,7 @@ udpServerListenSocket :: PortNumber -> IO (Socket, SockAddr)
 udpServerListenSocket port = E.bracketOnError open close $ \s -> do
     setSocketOption s ReuseAddr 1
     withFdSocket s setCloseOnExecIfNeeded
-    -- setSocketOption s IPv6Only 1 -- fixme
+    setSocketOption s IPv6Only 0
     bind s sa
     return (s,sa)
   where
