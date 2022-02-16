@@ -2,13 +2,13 @@
 
 module HandshakeSpec where
 
-import Control.Concurrent
 import Control.Monad
 import qualified Data.ByteString as BS
 import Network.TLS (HandshakeMode13(..), Group(..))
 import qualified Network.TLS as TLS
 import Test.Hspec
 import UnliftIO.Async
+import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
 import Network.QUIC

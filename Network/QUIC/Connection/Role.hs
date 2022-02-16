@@ -23,10 +23,10 @@ module Network.QUIC.Connection.Role (
   , getServerAddr
   ) where
 
-import Control.Concurrent
 import qualified Crypto.Token as CT
 import Data.X509 (CertificateChain)
 import Network.Socket (SockAddr)
+import UnliftIO.Concurrent
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
