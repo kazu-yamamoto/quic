@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -152,10 +153,14 @@ freeResources Connection{..} =
 
 addReader :: Connection -> ThreadId -> IO ()
 addReader Connection{..} tid = do
+#if defined(mingw32_HOST_OS)
+    return ()
+#else
     wtid <- mkWeakThreadId tid
     atomicModifyIORef'' readers $ \m -> do
         m
         deRefWeak wtid >>= mapM_ killThread
+#endif
 
 killReaders :: Connection -> IO ()
 killReaders Connection{..} = join $ readIORef readers
@@ -164,8 +169,12 @@ killReaders Connection{..} = join $ readIORef readers
 
 addTimeouter :: Connection -> ThreadId -> IO ()
 addTimeouter Connection{..} tid = do
+#if defined(mingw32_HOST_OS)
+    return ()
+#else
     wtid <- mkWeakThreadId tid
     writeIORef tmouter (deRefWeak wtid >>= mapM_ killThread)
+#endif
 
 replaceKillTimeouter :: Connection -> IO (IO ())
 replaceKillTimeouter Connection{..} = atomicModifyIORef' tmouter (return (),)
