@@ -2,11 +2,11 @@
 
 module IOSpec where
 
-import Control.Concurrent
 import Control.Monad
 import qualified Data.ByteString as BS
 import Test.Hspec
 import UnliftIO.Async
+import UnliftIO.Concurrent
 
 import qualified Network.QUIC.Client as C
 import Network.QUIC

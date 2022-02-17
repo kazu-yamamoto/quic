@@ -4,7 +4,7 @@ module Network.QUIC.Event(getSystemTimerManager, registerTimeout, unregisterTime
 -- Re-export GHC.Event
 import GHC.Event
 #else
-import Control.Concurrent
+import UnliftIO.Concurrent
 import UnliftIO.Timeout
 
 -- In case of Windows

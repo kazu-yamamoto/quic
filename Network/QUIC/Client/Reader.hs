@@ -8,11 +8,11 @@ module Network.QUIC.Client.Reader (
   , controlConnection
   ) where
 
-import Control.Concurrent
 import qualified Data.ByteString as BS
 import Data.List (intersect)
 import Network.Socket (Socket, getSocketName, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
+import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Connection

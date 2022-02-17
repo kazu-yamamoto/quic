@@ -4,13 +4,13 @@ module TransportError (
     transportErrorSpec
   ) where
 
-import Control.Concurrent
 import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC (ExtensionRaw)
 import Test.Hspec
+import UnliftIO.Concurrent
 import UnliftIO.Timeout
 
 import Network.QUIC.Client

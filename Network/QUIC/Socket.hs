@@ -1,10 +1,10 @@
 module Network.QUIC.Socket where
 
-import Control.Concurrent
-import qualified UnliftIO.Exception as E
 import qualified GHC.IO.Exception as E
 import Network.Socket
 import qualified System.IO.Error as E
+import UnliftIO.Concurrent
+import qualified UnliftIO.Exception as E
 
 sockAddrFamily :: SockAddr -> Family
 sockAddrFamily SockAddrInet{}  = AF_INET

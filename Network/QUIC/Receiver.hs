@@ -5,9 +5,9 @@ module Network.QUIC.Receiver (
     receiver
   ) where
 
-import Control.Concurrent (forkIO)
 import qualified Data.ByteString as BS
 import Network.TLS (AlertDescription(..))
+import UnliftIO.Concurrent (forkIO)
 import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
