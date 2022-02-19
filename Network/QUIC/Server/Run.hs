@@ -51,10 +51,10 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     setup = do
         dispatch <- newDispatch
         -- fixme: the case where sockets cannot be created.
-        ssa <- udpServerListenSocket $ scPort conf
-        tid <- runDispatcher dispatch conf ssa
+        ssas <- mapM  udpServerListenSocket $ scAddresses conf
+        tids <- mapM (runDispatcher dispatch conf) ssas
         ttid <- forkIO timeouter -- fixme
-        return (dispatch, [ttid,tid])
+        return (dispatch, ttid:tids)
     teardown (dispatch, tids) = do
         clearDispatch dispatch
         mapM_ killThread tids

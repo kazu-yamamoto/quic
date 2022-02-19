@@ -71,7 +71,7 @@ options = [
   ]
 
 usage :: String
-usage = "Usage: server [OPTION] port"
+usage = "Usage: server [OPTION] addr [addrs] port"
 
 showUsageAndExit :: String -> IO a
 showUsageAndExit msg = do
@@ -104,14 +104,16 @@ main :: IO ()
 main = do
     hSetBuffering stdout NoBuffering
     args <- getArgs
-    (Options{..}, ps) <- serverOpts args
-    when (length ps /= 1) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
-    let port = read $ head ps
+    (Options{..}, ips) <- serverOpts args
+    when (length ips < 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
+    let port = read (last ips)
+        addrs = read <$> init ips
+        aps = (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
     Right cred@(!_cc,!_priv) <- credentialLoadX509 optCertFile optKeyFile
     let sc0 = defaultServerConfig
         sc = sc0 {
-            scPort           = port
+            scAddresses      = aps
           , scALPN           = Just chooseALPN
           , scRequireRetry   = optRetry
           , scSessionManager = smgr

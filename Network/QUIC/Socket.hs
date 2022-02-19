@@ -1,5 +1,6 @@
 module Network.QUIC.Socket where
 
+import Data.IP hiding (addr)
 import qualified GHC.IO.Exception as E
 import Network.Socket
 import qualified System.IO.Error as E
@@ -11,18 +12,25 @@ sockAddrFamily SockAddrInet{}  = AF_INET
 sockAddrFamily SockAddrInet6{} = AF_INET6
 sockAddrFamily _               = error "sockAddrFamily"
 
-anySockAddr :: PortNumber -> SockAddr
-anySockAddr p = SockAddrInet6 p 0 (0,0,0,0) 0
+anySockAddr :: SockAddr -> SockAddr
+anySockAddr (SockAddrInet p _)      = SockAddrInet  p 0
+anySockAddr (SockAddrInet6 p f _ s) = SockAddrInet6 p f (0,0,0,0) s
+anySockAddr _                       = error "anySockAddr"
 
-udpServerListenSocket :: PortNumber -> IO (Socket, SockAddr)
-udpServerListenSocket port = E.bracketOnError open close $ \s -> do
+isAnySockAddr :: SockAddr -> Bool
+isAnySockAddr (SockAddrInet _ a)      = a == 0
+isAnySockAddr (SockAddrInet6 _ _ a _) = a == (0,0,0,0)
+isAnySockAddr _                       = error "isAnySockAddr"
+
+udpServerListenSocket :: (IP, PortNumber) -> IO (Socket, SockAddr)
+udpServerListenSocket ip = E.bracketOnError open close $ \s -> do
     setSocketOption s ReuseAddr 1
     withFdSocket s setCloseOnExecIfNeeded
     setSocketOption s IPv6Only 0
     bind s sa
     return (s,sa)
   where
-    sa     = anySockAddr port
+    sa     = toSockAddr ip -- fixme
     family = sockAddrFamily sa
     open   = socket family Datagram defaultProtocol
 
@@ -32,14 +40,15 @@ udpServerConnectedSocket mysa peersa = E.bracketOnError open close $ \s -> do
     withFdSocket s setCloseOnExecIfNeeded
     -- bind and connect is not atomic
     -- So, bind may results in EADDRINUSE
-    bind s mysa      -- (UDP, 127.0.0.1:13443, *:*)
-       `E.catch` postphone (bind s mysa)
+    bind s anysa      -- (UDP, *:13443, *:*)
+       `E.catch` postphone (bind s anysa)
     connect s peersa  -- (UDP, 127.0.0.1:13443, pa:pp)
     return s
   where
     postphone action e
       | E.ioeGetErrorType e == E.ResourceBusy = threadDelay 10000 >> action
       | otherwise                             = E.throwIO e
+    anysa  = anySockAddr mysa
     family = sockAddrFamily mysa
     open   = socket family Datagram defaultProtocol
 

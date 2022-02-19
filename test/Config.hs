@@ -36,7 +36,7 @@ makeTestServerConfig = do
 
 testServerConfig :: ServerConfig
 testServerConfig = defaultServerConfig {
-    scPort = 50003
+    scAddresses = [("127.0.0.1",50003)]
   }
 
 makeTestServerConfigR :: IO ServerConfig
@@ -50,7 +50,7 @@ makeTestServerConfigR = do
 
 testServerConfigR :: ServerConfig
 testServerConfigR = defaultServerConfig {
-    scPort = 50003
+    scAddresses = [("127.0.0.1",50003)]
   }
 
 testClientConfig :: ClientConfig

@@ -99,15 +99,12 @@ data ServerConfig = ServerConfig {
   , scHooks          :: Hooks
   , scUse0RTT        :: Bool -- ^ Use 0-RTT on the 2nd connection if possible.
   -- server original
-  , scAddresses      :: [(IP,PortNumber)] -- ^ Deprecated and no effects.
-  , scPort           :: PortNumber -- ^ Server addresses assigned to used network interfaces.
+  , scAddresses      :: [(IP,PortNumber)] -- ^ Server addresses assigned to used network interfaces.
   , scALPN           :: Maybe (Version -> [ByteString] -> IO ByteString) -- ^ ALPN handler.
   , scRequireRetry   :: Bool -- ^ Requiring QUIC retry.
   , scSessionManager :: SessionManager -- ^ A session manager of TLS 1.3.
   , scDebugLog       :: Maybe FilePath
   }
-
-{-# DEPRECATED scAddresses "Use scPort instead" #-}
 
 -- | The default value for server configuration.
 defaultServerConfig :: ServerConfig
@@ -125,7 +122,6 @@ defaultServerConfig = ServerConfig {
   , scUse0RTT        = False
   -- server original
   , scAddresses      = [("127.0.0.1",4433)]
-  , scPort           = 4433
   , scALPN           = Nothing
   , scRequireRetry   = False
   , scSessionManager = noSessionManager

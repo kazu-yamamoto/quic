@@ -174,7 +174,7 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction body
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
     recv = do
-        ex <- E.try $ NSB.recvMsg s maximumUdpPayloadSize 64 0
+        ex <- E.tryAny $ NSB.recvMsg s maximumUdpPayloadSize 64 0
         case ex of
            Right x -> return x
            Left se -> case E.fromException se of
