@@ -105,7 +105,7 @@ runServer conf server0 dispatch baseThreadId acc =
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
-    s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr
+    s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr accWildcard
     sref <- newIORef [s0]
     let send buf siz = void $ do
             s:_ <- readIORef sref

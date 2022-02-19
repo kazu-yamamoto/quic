@@ -121,7 +121,7 @@ defaultServerConfig = ServerConfig {
   , scHooks          = defaultHooks
   , scUse0RTT        = False
   -- server original
-  , scAddresses      = [("127.0.0.1",4433)]
+  , scAddresses      = [("0.0.0.0",4433),("::",4433)]
   , scALPN           = Nothing
   , scRequireRetry   = False
   , scSessionManager = noSessionManager

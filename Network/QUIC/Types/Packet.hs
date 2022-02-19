@@ -147,7 +147,7 @@ isNoPaddings = (`testBit` 8)
 is4bytesPN :: Int -> Bool
 is4bytesPN = (`testBit` 9)
 
-data MigrationInfo = MigrationInfo SockAddr SockAddr CID deriving (Eq, Show)
+data MigrationInfo = MigrationInfo SockAddr SockAddr CID Bool deriving (Eq, Show)
 
 data Crypt = Crypt {
     cryptPktNumOffset :: Int

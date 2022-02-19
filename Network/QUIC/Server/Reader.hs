@@ -125,6 +125,7 @@ data Accept = Accept {
   , accUnregister   :: CID -> IO ()
   , accAddressValidated :: Bool
   , accTime         :: TimeMicrosecond
+  , accWildcard     :: Bool
   }
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
@@ -143,12 +144,12 @@ accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
-runDispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ThreadId
-runDispatcher d conf ssa@(s,_) =
+runDispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ThreadId
+runDispatcher d conf ssa@(s,_,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
-dispatcher :: Dispatch -> ServerConfig -> (Socket, SockAddr) -> IO ()
-dispatcher d conf (s,mysa) = handleLogUnit logAction body
+dispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ()
+dispatcher d conf (s,mysa,wildcard) = handleLogUnit logAction body
   where
     body = do
         let (opt,cmsgid) = case mysa of
@@ -169,7 +170,7 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction body
             now <- getTimeMicrosecond
             (pkt, bs0RTT) <- decodePacket bs0
             let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs 0
-            dispatch d conf logAction pkt mysa' peersa send bs0RTT bytes now
+            dispatch d conf logAction pkt mysa' peersa wildcard send bs0RTT bytes now
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
@@ -192,10 +193,10 @@ dispatcher d conf (s,mysa) = handleLogUnit logAction body
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> (ByteString -> IO ()) -> ByteString -> Int -> TimeMicrosecond -> IO ()
+dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> Bool -> (ByteString -> IO ()) -> ByteString -> Int -> TimeMicrosecond -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
          (PacketIC cpkt@(CryptPacket (Initial peerVer dCID sCID token) _) lvl)
-         mysa peersa send bs0RTT bytes tim
+         mysa peersa wildcard send bs0RTT bytes tim
   | bytes < defaultQUICPacketSize = do
         logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
   | peerVer `notElem` myVersions = do
@@ -248,6 +249,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                     , accUnregister   = unreg
                     , accAddressValidated = addrValid
                     , accTime         = tim
+                    , accWildcard     = wildcard
                     }
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
@@ -312,13 +314,13 @@ dispatch Dispatch{..} ServerConfig{..} logAction
               bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
               send bss
 dispatch Dispatch{..} _ _
-         (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ bytes tim = do
+         (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> return ()
 dispatch Dispatch{..} _ logAction
-         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa _ _ bytes tim  = do
+         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa wildcard _ _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
     mx <- lookupConnectionDict dstTable dCID
     case mx of
@@ -327,12 +329,12 @@ dispatch Dispatch{..} _ logAction
       Just conn -> do
             alive <- getAlive conn
             when alive $ do
-                let miginfo = MigrationInfo mysa peersa dCID
+                let miginfo = MigrationInfo mysa peersa dCID wildcard
                     crypt' = crypt { cryptMigraionInfo = Just miginfo }
                     cpkt = CryptPacket hdr crypt'
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 
-dispatch _ _ _ _ipkt _ _peersa _ _ _ _ = return ()
+dispatch _ _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
 
 ----------------------------------------------------------------
 
@@ -359,8 +361,8 @@ recvServer = readRecvQ
 
 ----------------------------------------------------------------
 
-runNewServerReader :: Connection -> SockAddr -> SockAddr -> CID -> IO ()
-runNewServerReader conn mysa peersa dCID = handleLogUnit logAction $ do
+runNewServerReader :: Connection -> MigrationInfo -> IO ()
+runNewServerReader conn (MigrationInfo mysa peersa dCID wildcard) = handleLogUnit logAction $ do
     migrating <- isPathValidating conn -- fixme: test and set
     unless migrating $ do
         setMigrationStarted conn
@@ -378,5 +380,5 @@ runNewServerReader conn mysa peersa dCID = handleLogUnit logAction $ do
                 -- holding the old socket for a while
                 delay $ Microseconds 20000
   where
-    setup = udpServerConnectedSocket mysa peersa
+    setup = udpServerConnectedSocket mysa peersa wildcard
     logAction msg = connDebugLog conn ("debug: runNewServerReader: " <> msg)

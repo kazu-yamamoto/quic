@@ -138,8 +138,8 @@ processReceivedPacket conn rpkt = do
             else do
               case cryptMigraionInfo crypt of
                 Nothing -> return ()
-                Just (MigrationInfo mysa peersa dCID) ->
-                    void . forkIO $ runNewServerReader conn mysa peersa dCID
+                Just miginfo ->
+                    void . forkIO $ runNewServerReader conn miginfo
               (ckp,cpn) <- getCurrentKeyPhase conn
               let Flags flags = plainFlags
                   nkp = flags `testBit` 2
