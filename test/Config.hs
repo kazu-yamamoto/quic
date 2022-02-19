@@ -36,7 +36,7 @@ makeTestServerConfig = do
 
 testServerConfig :: ServerConfig
 testServerConfig = defaultServerConfig {
-    scPort = 50003
+    scAddresses = [("0.0.0.0",50003)]
   }
 
 makeTestServerConfigR :: IO ServerConfig
@@ -50,21 +50,23 @@ makeTestServerConfigR = do
 
 testServerConfigR :: ServerConfig
 testServerConfigR = defaultServerConfig {
-    scPort = 50003
+    scAddresses = [("0.0.0.0",50003)]
   }
 
 testClientConfig :: ClientConfig
 testClientConfig = defaultClientConfig {
-    ccPortName = "50003"
-  , ccValidate = False
-  , ccDebugLog = True
+    ccServerName = "127.0.0.1"
+  , ccPortName   = "50003"
+  , ccValidate   = False
+  , ccDebugLog   = True
   }
 
 testClientConfigR :: ClientConfig
 testClientConfigR = defaultClientConfig {
-    ccPortName = "50002"
-  , ccValidate = False
-  , ccDebugLog = True
+    ccServerName = "127.0.0.1"
+  , ccPortName   = "50002"
+  , ccValidate   = False
+  , ccDebugLog   = True
   }
 
 setServerQlog :: ServerConfig -> ServerConfig
@@ -88,9 +90,7 @@ withPipe scenario body = do
     E.bracket (openSocket addrC) close $ \sockC ->
       E.bracket (openSocket addrS) close $ \sockS -> do
         setSocketOption sockC ReuseAddr 1
-        setSocketOption sockC IPv6Only 0
         setSocketOption sockS ReuseAddr 1
-        setSocketOption sockS IPv6Only 0
         bind sockC saC
         connect sockS saS
         -- from client
@@ -115,9 +115,12 @@ withPipe scenario body = do
         killThread tid0
         killThread tid1
   where
-    hints = defaultHints { addrSocketType = Datagram, addrFlags = [AI_NUMERICHOST ] }
+    hints = defaultHints { addrSocketType = Datagram
+                         , addrFlags = [AI_NUMERICHOST]
+                         , addrFamily = AF_INET
+                         }
     resolve port =
-        head <$> getAddrInfo (Just hints) (Just "::") (Just port)
+        head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just port)
     shouldDrop (Randomly n) _ _ = do
         w <- getRandomOneByte
         return ((w `mod` fromIntegral n) == 0)
