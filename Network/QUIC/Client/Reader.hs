@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -26,6 +27,9 @@ import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Socket
 import Network.QUIC.Types
+#if defined(mingw32_HOST_OS)
+import Network.QUIC.Windows
+#endif
 
 -- | readerClient dies when the socket is closed.
 readerClient :: Socket -> Connection -> IO ()
@@ -42,7 +46,10 @@ readerClient s0 conn = handleLogUnit logAction $ do
             wait
     loop msa0 = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito $ do
+        mbs <- timeout ito $
+#if defined(mingw32_HOST_OS)
+          windowsThreadBlockHack $
+#endif
             case msa0 of
               Nothing  ->     NSB.recv     s0 maximumUdpPayloadSize
               Just sa0 -> do

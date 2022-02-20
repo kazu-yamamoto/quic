@@ -58,6 +58,7 @@ library
                        Network.QUIC.Crypto.Nite
                        Network.QUIC.Crypto.Types
                        Network.QUIC.Crypto.Utils
+                       Network.QUIC.Event
                        Network.QUIC.Exception
                        Network.QUIC.Handshake
                        Network.QUIC.IO
@@ -115,7 +116,7 @@ library
                        Network.QUIC.Types.Resumption
                        Network.QUIC.Types.Time
                        Network.QUIC.Utils
-                       Network.QUIC.Event
+                       Network.QUIC.Windows
   -- other-extensions:
   build-depends:       base >= 4.9 && < 5
                      , array

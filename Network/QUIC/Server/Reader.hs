@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -45,6 +46,9 @@ import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Socket
 import Network.QUIC.Types
+#if defined(mingw32_HOST_OS)
+import Network.QUIC.Windows
+#endif
 
 ----------------------------------------------------------------
 
@@ -175,7 +179,11 @@ dispatcher d conf (s,mysa,wildcard) = handleLogUnit logAction body
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
     recv = do
-        ex <- E.tryAny $ NSB.recvMsg s maximumUdpPayloadSize 64 0
+        ex <- E.tryAny $
+#if defined(mingw32_HOST_OS)
+                windowsThreadBlockHack $
+#endif
+                  NSB.recvMsg s maximumUdpPayloadSize 64 0
         case ex of
            Right x -> return x
            Left se -> case E.fromException se of
@@ -344,7 +352,11 @@ readerServer s conn = handleLogUnit logAction loop
   where
     loop = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
+        mbs <- timeout ito $
+#if defined(mingw32_HOST_OS)
+                 windowsThreadBlockHack $
+#endif
+                   NSB.recv s maximumUdpPayloadSize
         case mbs of
           Nothing -> close s
           Just bs -> do
