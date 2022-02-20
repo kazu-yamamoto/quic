@@ -8,9 +8,9 @@ module Network.QUIC.Recovery.LossRecovery (
   , onPacketNumberSpaceDiscarded
   ) where
 
-import Control.Concurrent.STM
 import Data.Sequence (Seq, (|>), ViewR(..))
 import qualified Data.Sequence as Seq
+import UnliftIO.STM
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports

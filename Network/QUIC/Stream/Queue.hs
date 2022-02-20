@@ -3,7 +3,7 @@
 module Network.QUIC.Stream.Queue where
 
 import Data.ByteString (ByteString)
-import Control.Concurrent.STM
+import UnliftIO.STM
 
 import Network.QUIC.Stream.Types
 

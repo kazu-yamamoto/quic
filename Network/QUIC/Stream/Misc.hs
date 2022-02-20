@@ -19,7 +19,7 @@ module Network.QUIC.Stream.Misc (
   , getRxStreamWindow
   ) where
 
-import Control.Concurrent.STM
+import UnliftIO.STM
 
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Types

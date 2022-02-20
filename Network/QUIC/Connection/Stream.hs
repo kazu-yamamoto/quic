@@ -11,7 +11,7 @@ module Network.QUIC.Connection.Stream (
   , setPeerMaxStreams
   ) where
 
-import Control.Concurrent.STM
+import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
@@ -31,7 +31,7 @@ waitMyNewUniStreamId Connection{..} = get myUniStreamId
 get :: TVar Concurrency -> IO Int
 get tvar = atomically $ do
     conc@Concurrency{..} <- readTVar tvar
-    check (currentStream < maxStreams * 4 + streamType)
+    checkSTM (currentStream < maxStreams * 4 + streamType)
     let currentStream' = currentStream + 4
     writeTVar tvar conc { currentStream = currentStream' }
     return currentStream

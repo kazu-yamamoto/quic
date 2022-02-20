@@ -28,7 +28,7 @@ module Network.QUIC.Connection.State (
   , checkAntiAmplificationFree
   ) where
 
-import Control.Concurrent.STM
+import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
@@ -66,20 +66,20 @@ isConnection1RTTReady Connection{..} = atomically $ do
 wait0RTTReady :: Connection -> IO ()
 wait0RTTReady Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
-    check (cs >= ReadyFor0RTT)
+    checkSTM (cs >= ReadyFor0RTT)
 
 -- | Waiting until 1-RTT data can be sent.
 wait1RTTReady :: Connection -> IO ()
 wait1RTTReady Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
-    check (cs >= ReadyFor1RTT)
+    checkSTM (cs >= ReadyFor1RTT)
 
 -- | For clients, waiting until HANDSHAKE_DONE is received.
 --   For servers, waiting until a TLS stack reports that the handshake is complete.
 waitEstablished :: Connection -> IO ()
 waitEstablished Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
-    check (cs >= Established)
+    checkSTM (cs >= Established)
 
 ----------------------------------------------------------------
 
@@ -154,7 +154,7 @@ waitAntiAmplificationFree conn@Connection{..} siz = do
     ok <- checkAntiAmplificationFree conn siz
     unless ok $ do
         beforeAntiAmp connLDCC
-        atomically (checkAntiAmplificationFreeSTM conn siz >>= check)
+        atomically (checkAntiAmplificationFreeSTM conn siz >>= checkSTM)
         -- setLossDetectionTimer is called eventually.
 
 checkAntiAmplificationFreeSTM :: Connection -> Int -> STM Bool

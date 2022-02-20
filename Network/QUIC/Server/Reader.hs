@@ -18,7 +18,6 @@ module Network.QUIC.Server.Reader (
   , runNewServerReader
   ) where
 
-import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
@@ -33,6 +32,7 @@ import qualified System.IO.Error as E
 import System.Log.FastLogger
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
+import UnliftIO.STM
 
 import Network.QUIC.Config
 import Network.QUIC.Connection

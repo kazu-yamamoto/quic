@@ -1,6 +1,6 @@
 module Network.QUIC.Types.Queue where
 
-import Control.Concurrent.STM
+import UnliftIO.STM
 
 import Network.QUIC.Types.Packet
 

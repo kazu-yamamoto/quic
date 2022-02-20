@@ -2,9 +2,9 @@
 
 module Network.QUIC.IO where
 
-import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import qualified UnliftIO.Exception as E
+import UnliftIO.STM
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -106,7 +106,7 @@ checkBlocked s len wait = atomically $ do
         connWindow = flowWindow connFlow
         minFlow = min strmWindow connWindow
         n = min len minFlow
-    when wait $ check (n > 0)
+    when wait $ checkSTM (n > 0)
     if n > 0 then
         return $ Right n
       else do

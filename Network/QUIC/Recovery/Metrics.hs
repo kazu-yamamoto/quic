@@ -9,8 +9,8 @@ module Network.QUIC.Recovery.Metrics (
   , setInitialCongestionWindow
   ) where
 
-import Control.Concurrent.STM
 import Data.Sequence (Seq)
+import UnliftIO.STM
 
 import Network.QUIC.Imports
 import Network.QUIC.Qlog

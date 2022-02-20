@@ -10,9 +10,9 @@ module Network.QUIC.Recovery.Timer (
   , ldccTimer
   ) where
 
-import Control.Concurrent.STM
 import qualified Data.Sequence as Seq
 import Network.QUIC.Event
+import UnliftIO.STM
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports
@@ -114,7 +114,7 @@ ldccTimer :: LDCC -> IO ()
 ldccTimer ldcc@LDCC{..} = forever $ do
     atomically $ do
         x <- readTVar timerInfoQ
-        check (x /= Empty)
+        checkSTM (x /= Empty)
     delay timerGranularity
     updateWithNext ldcc
 

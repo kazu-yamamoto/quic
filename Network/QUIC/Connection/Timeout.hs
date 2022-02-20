@@ -8,12 +8,12 @@ module Network.QUIC.Connection.Timeout (
   , delay
   ) where
 
-import Control.Concurrent.STM
 import Data.Typeable
 import Network.QUIC.Event
 import System.IO.Unsafe (unsafePerformIO)
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
+import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector

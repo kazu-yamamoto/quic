@@ -35,13 +35,13 @@ module Network.QUIC.Recovery.Types (
   , qlogLossTimerExpired
   ) where
 
-import Control.Concurrent.STM
 import Data.IORef
 import Data.List (intersperse)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 import Network.QUIC.Event
 import System.Log.FastLogger
+import UnliftIO.STM
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports
