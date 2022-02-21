@@ -8,7 +8,7 @@ import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Network.TLS as TLS
-import Network.TLS.QUIC (ExtensionRaw)
+import Network.TLS.QUIC (ExtensionRaw(..))
 import Test.Hspec
 import UnliftIO.Concurrent
 import UnliftIO.Timeout
@@ -129,6 +129,9 @@ transportErrorSpec cc0 ms = do
             runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.NoApplicationProtocol]
         it "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
+            runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
+        it "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]" $ \_ -> do
+            let cc = addHook cc0 $ setOnTLSExtensionCreated (\[ExtensionRaw _ v] -> [ExtensionRaw 0xffa5 v])
             runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
         it "MUST send unexpected_message TLS alert if EndOfEarlyData is received [TLS 8.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTLSHandshakeCreated cryptoEndOfEarlyData
