@@ -203,7 +203,7 @@ setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
 setPeerParams conn _ctx peerExts = do
     tpId <- extensionIDForTtransportParameter <$> getVersion conn
     case getTP tpId peerExts of
-      Nothing                  -> return ()
+      Nothing                  -> sendCCTLSAlert TLS.MissingExtension "QUIC transport parameters are mssing"
       Just (ExtensionRaw _ bs) -> setPP bs
   where
     getTP n = find (\(ExtensionRaw extid _) -> extid == n)
@@ -300,6 +300,9 @@ sendCCTLSError e = closeConnection err msg
     tlserr = getErrorCause e
     err = cryptoError $ errorToAlertDescription tlserr
     msg = shortpack $ errorToAlertMessage tlserr
+
+sendCCTLSAlert :: TLS.AlertDescription -> ReasonPhrase -> IO ()
+sendCCTLSAlert a msg = closeConnection (cryptoError a) msg
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.HandshakeFailed e) = e
