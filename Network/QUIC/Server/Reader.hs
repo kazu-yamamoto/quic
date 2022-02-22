@@ -307,10 +307,14 @@ dispatch Dispatch{..} ServerConfig{..} logAction
     pushToAcceptRetried _ = return ()
     isRetryTokenValid (CryptoToken tver etim (Just (l,r,_))) = do
         diff <- getElapsedTimeMicrosecond etim
-        return $ tver == peerVer
-              && diff <= Microseconds 30000000 -- fixme
+        return $ diff <= Microseconds 30000000 -- fixme
               && dCID == l
               && sCID == r
+#if !defined(mingw32_HOST_OS)
+              -- Initial for ACK contains the retry token but
+              -- the version would be already version 2, sigh.
+              && tver == peerVer
+#endif
     isRetryTokenValid _ = return False
     sendRetry = do
         newdCID <- newCID
