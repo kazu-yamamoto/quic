@@ -36,7 +36,9 @@ makeTestServerConfig = do
 
 testServerConfig :: ServerConfig
 testServerConfig = defaultServerConfig {
-    scAddresses = [("0.0.0.0",50003)]
+    -- Don't use "0.0.0.0" and "::" for Windows (UDP dispatching bug)
+    -- Don't use "127.0.0.1" for macOS (recvmsg bug)
+    scAddresses = [("::1",50003)]
   }
 
 makeTestServerConfigR :: IO ServerConfig
@@ -50,12 +52,14 @@ makeTestServerConfigR = do
 
 testServerConfigR :: ServerConfig
 testServerConfigR = defaultServerConfig {
-    scAddresses = [("0.0.0.0",50003)]
+    -- Don't use "0.0.0.0" and "::" for Windows (UDP dispatching bug)
+    -- Don't use "127.0.0.1" for macOS (recvmsg bug)
+    scAddresses = [("::1",50003)]
   }
 
 testClientConfig :: ClientConfig
 testClientConfig = defaultClientConfig {
-    ccServerName = "127.0.0.1"
+    ccServerName = "::1"
   , ccPortName   = "50003"
   , ccValidate   = False
   , ccDebugLog   = True
@@ -63,7 +67,7 @@ testClientConfig = defaultClientConfig {
 
 testClientConfigR :: ClientConfig
 testClientConfigR = defaultClientConfig {
-    ccServerName = "127.0.0.1"
+    ccServerName = "::1"
   , ccPortName   = "50002"
   , ccValidate   = False
   , ccDebugLog   = True
@@ -117,10 +121,10 @@ withPipe scenario body = do
   where
     hints = defaultHints { addrSocketType = Datagram
                          , addrFlags = [AI_NUMERICHOST]
-                         , addrFamily = AF_INET
+                         , addrFamily = AF_INET6
                          }
     resolve port =
-        head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just port)
+        head <$> getAddrInfo (Just hints) (Just "::1") (Just port)
     shouldDrop (Randomly n) _ _ = do
         w <- getRandomOneByte
         return ((w `mod` fromIntegral n) == 0)
