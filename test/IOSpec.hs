@@ -74,6 +74,7 @@ testSendRecv :: C.ClientConfig -> ServerConfig -> Int -> IO ()
 testSendRecv cc sc times = do
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
+    threadDelay 10000
   where
     client mvar = do
         threadDelay 10000
