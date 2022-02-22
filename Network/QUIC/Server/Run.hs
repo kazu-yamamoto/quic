@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -63,9 +64,11 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 -- And the exception should be ignored.
 runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
 runServer conf server0 dispatch baseThreadId acc =
-    E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) ->
+    E.bracket open clse $ \(ConnRes conn myAuthCIDs _reader) ->
         handleLogUnit (debugLog conn) $ do
-            forkIO reader >>= addReader conn
+#if !defined(mingw32_HOST_OS)
+            forkIO _reader >>= addReader conn
+#endif
             let conf' = conf {
                     scParameters = (scParameters conf) {
                           versionInformation = Just $ accVersionInfo acc
@@ -95,7 +98,9 @@ runServer conf server0 dispatch baseThreadId acc =
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
+#if !defined(mingw32_HOST_OS)
         killReaders conn
+#endif
         socks <- getSockets conn
         mapM_ NS.close socks
     debugLog conn msg = do
@@ -146,8 +151,12 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
         myCIDs <- getMyCIDs conn
         mapM_ accUnregister myCIDs
     --
+#if defined(mingw32_HOST_OS)
+    return $ ConnRes conn accMyAuthCIDs undefined
+#else
     let reader = readerServer s0 conn -- dies when s0 is closed.
     return $ ConnRes conn accMyAuthCIDs reader
+#endif
 
 afterHandshakeServer :: Connection -> IO ()
 afterHandshakeServer conn = handleLogT logAction $ do

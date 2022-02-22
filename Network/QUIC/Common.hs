@@ -1,3 +1,5 @@
+{-# LANGUAGE StrictData #-}
+
 module Network.QUIC.Common where
 
 import qualified Network.Socket as NS
@@ -8,7 +10,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-data ConnRes = ConnRes Connection AuthCIDs (IO ())
+data ConnRes = ConnRes Connection AuthCIDs ~(IO ())
 
 connResConnection :: ConnRes -> Connection
 connResConnection (ConnRes conn _ _) = conn
