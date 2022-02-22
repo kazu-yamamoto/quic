@@ -37,7 +37,6 @@ import UnliftIO.STM
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
-import Network.QUIC.Connector
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Logger
@@ -48,6 +47,8 @@ import Network.QUIC.Socket
 import Network.QUIC.Types
 #if defined(mingw32_HOST_OS)
 import Network.QUIC.Windows
+#else
+import Network.QUIC.Connector
 #endif
 
 ----------------------------------------------------------------
@@ -219,7 +220,11 @@ dispatch Dispatch{..} ServerConfig{..} logAction
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst False
+#if defined(mingw32_HOST_OS)
+          Just conn          -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+#else
           _                  -> return ()
+#endif
   | otherwise = do
         mct <- decryptToken tokenMgr token
         case mct of
@@ -231,7 +236,11 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                   mq <- lookupConnectionDict dstTable dCID
                   case mq of
                     Nothing -> pushToAcceptFirst True
+#if defined(mingw32_HOST_OS)
+                    Just conn          -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+#else
                     _       -> return ()
+#endif
           _ -> sendRetry
   where
     myVersions = otherVersions scVersionInfo
@@ -331,6 +340,18 @@ dispatch Dispatch{..} _ _
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> return ()
+#if defined(mingw32_HOST_OS)
+dispatch Dispatch{..} _ logAction
+         (PacketIC cpkt@(CryptPacket hdr _crypt) lvl) _mysa peersa _wildcard _ _ bytes tim  = do
+    let dCID = headerMyCID hdr
+    mx <- lookupConnectionDict dstTable dCID
+    case mx of
+      Nothing -> do
+          logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
+      Just conn -> do
+          -- fixme: migration
+          writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+#else
 dispatch Dispatch{..} _ logAction
          (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa wildcard _ _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
@@ -345,7 +366,7 @@ dispatch Dispatch{..} _ logAction
                     crypt' = crypt { cryptMigraionInfo = Just miginfo }
                     cpkt = CryptPacket hdr crypt'
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
-
+#endif
 dispatch _ _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
 
 ----------------------------------------------------------------
