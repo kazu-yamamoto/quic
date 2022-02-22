@@ -293,7 +293,7 @@ sendCCVNError :: IO ()
 sendCCVNError = E.throwIO WrongVersionInformation
 
 sendCCTLSError :: TLS.TLSException -> IO ()
-sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection TransportParameterError "Transport parametter error"
+sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection TransportParameterError "Transport parameter error"
 sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongVersionInformation")) = closeConnection VersionNegotiationError "Version negotiation error"
 sendCCTLSError e = closeConnection err msg
   where
