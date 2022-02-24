@@ -314,7 +314,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
               }
         pushToAcceptQ myAuthCIDs peerAuthCIDs o True
     pushToAcceptRetried _ = return ()
-    isRetryTokenValid (CryptoToken tver etim (Just (l,r,_))) = do
+    isRetryTokenValid (CryptoToken _tver etim (Just (l,r,_))) = do
         diff <- getElapsedTimeMicrosecond etim
         return $ diff <= Microseconds 30000000 -- fixme
               && dCID == l
@@ -322,7 +322,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
 #if !defined(mingw32_HOST_OS)
               -- Initial for ACK contains the retry token but
               -- the version would be already version 2, sigh.
-              && tver == peerVer
+              && _tver == peerVer
 #endif
     isRetryTokenValid _ = return False
     sendRetry = do
