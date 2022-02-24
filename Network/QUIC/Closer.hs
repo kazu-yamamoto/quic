@@ -45,23 +45,24 @@ closure' conn ldcc frame = do
     recvBuf <- mallocBytes bufsiz
     siz <- encodeCC conn (SizedBuffer sendBuf bufsiz) frame
     msa <- if isClient conn then getServerAddr conn else return Nothing
-    let recv = case msa of
+    recv <- return $ case msa of
           Nothing -> NS.recvBuf s recvBuf bufsiz
-          Just sa -> loop sa
-          where
-            loop sa = do
-                (len, sa') <- NS.recvBufFrom s recvBuf bufsiz
-                if sa == sa' then return len else loop sa
-        hook = onCloseCompleted $ connHooks conn
-    let send = case msa of
+          Just sa -> let action = NS.recvBufFrom s recvBuf bufsiz
+                     in loop sa action
+    send <- return $ case msa of
                  Nothing -> NS.sendBuf   s sendBuf siz
                  Just sa -> NS.sendBufTo s sendBuf siz sa
+    let hook = onCloseCompleted $ connHooks conn
     pto <- getPTO ldcc
     void $ forkFinally (closer pto send recv hook) $ \_ -> do
         free sendBuf
         free recvBuf
         mapM_ NS.close socks
         killTimeouter
+  where
+    loop sa action = do
+        (len, sa') <- action
+        if sa == sa' then return len else loop sa action
 
 encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
 encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
