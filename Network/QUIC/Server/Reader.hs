@@ -161,7 +161,7 @@ dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
         forever $ do
             (bs, mysa, peersa, cmsgs) <- safeRecv recv
             let bytes = BS.length bs
-            if BS.length bs < defaultQUICPacketSize then
+            if bytes < defaultQUICPacketSize then
                 logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
               else do
                 now <- getTimeMicrosecond
