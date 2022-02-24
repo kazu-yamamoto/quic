@@ -62,7 +62,7 @@ spec = do
                     | TransportErrorIsReceived te@(TransportError _) _ <- e = te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
             testHandshake3 cc1 cc2 sc handshakeFailure
-        it "can handshake with large EE from a client" $ do
+        it "can handshake with large HE from a client" $ do
             let cc0 = testClientConfig
                 params = (ccParameters cc0) {
                       grease = Just (BS.pack (replicate 2400 0))
