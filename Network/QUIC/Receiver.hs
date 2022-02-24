@@ -131,33 +131,26 @@ processReceivedPacket conn rpkt = do
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
           qlogReceived conn (PlainPacket hdr plain) tim
           let ackEli   = any ackEliciting   plainFrames
---              shouldDrop = rpReceivedBytes rpkt < defaultQUICPacketSize
---                        && lvl == InitialLevel && ackEli
-              shouldDrop = False
-          if shouldDrop then do
-              connDebugLog conn ("debug: drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
-              qlogDropped conn hdr
-            else do
-              case cryptMigraionInfo crypt of
-                Nothing -> return ()
-                Just miginfo ->
-                    void . forkIO $ runNewServerReader conn miginfo
-              (ckp,cpn) <- getCurrentKeyPhase conn
-              let Flags flags = plainFlags
-                  nkp = flags `testBit` 2
-              when (nkp /= ckp && plainPacketNumber > cpn) $ do
-                  setCurrentKeyPhase conn nkp plainPacketNumber
-                  updateCoder1RTT conn ckp -- ckp is now next
-              mapM_ (processFrame conn lvl) plainFrames
-              when ackEli $ do
-                  case lvl of
-                    RTT0Level -> return ()
-                    RTT1Level -> delayedAck conn
-                    _         -> do
-                        sup <- getSpeedingUp (connLDCC conn)
-                        when sup $ do
-                            qlogDebug conn $ Debug "ping for speedup"
-                            sendFrames conn lvl [Ping]
+          case cryptMigraionInfo crypt of
+            Nothing -> return ()
+            Just miginfo ->
+                void . forkIO $ runNewServerReader conn miginfo
+          (ckp,cpn) <- getCurrentKeyPhase conn
+          let Flags flags = plainFlags
+              nkp = flags `testBit` 2
+          when (nkp /= ckp && plainPacketNumber > cpn) $ do
+              setCurrentKeyPhase conn nkp plainPacketNumber
+              updateCoder1RTT conn ckp -- ckp is now next
+          mapM_ (processFrame conn lvl) plainFrames
+          when ackEli $ do
+              case lvl of
+                RTT0Level -> return ()
+                RTT1Level -> delayedAck conn
+                _         -> do
+                    sup <- getSpeedingUp (connLDCC conn)
+                    when sup $ do
+                        qlogDebug conn $ Debug "ping for speedup"
+                        sendFrames conn lvl [Ping]
       Nothing -> do
           statelessReset <- isStatelessReset conn hdr crypt
           if statelessReset then do
