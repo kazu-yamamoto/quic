@@ -9,7 +9,6 @@ module Network.QUIC.Client.Reader (
   , controlConnection
   ) where
 
-import qualified Data.ByteString as BS
 import Data.List (intersect)
 import Network.Socket (Socket, getSocketName, getPeerName, close)
 import qualified Network.Socket.ByteString as NSB
@@ -60,14 +59,12 @@ readerClient s0 conn = handleLogUnit logAction $ do
           Just "" -> loop msa0
           Just bs -> do
             now <- getTimeMicrosecond
-            let bytes = BS.length bs
-            addRxBytes conn bytes
             pkts <- decodePackets bs
-            mapM_ (putQ now bytes) pkts
+            mapM_ (putQ now) pkts
             loop msa0
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
-    putQ _ _ (PacketIB BrokenPacket) = return ()
-    putQ t _ (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
+    putQ _ (PacketIB BrokenPacket) = return ()
+    putQ t (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt t
         myVerInfo <- getVersionInfo conn
         let myVer   = chosenVersion myVerInfo
@@ -80,8 +77,8 @@ readerClient s0 conn = handleLogUnit logAction $ do
                   vers@(ver:_) | ok -> VersionInfo ver vers
                   _                 -> brokenVersionInfo
             E.throwTo (mainThreadId conn) $ VerNego nextVerInfo
-    putQ t z (PacketIC pkt lvl) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t z lvl
-    putQ t _ (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
+    putQ t (PacketIC pkt lvl siz) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t siz lvl
+    putQ t (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
         ok <- checkCIDs conn dCID ex
         when ok $ do

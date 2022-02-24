@@ -36,12 +36,12 @@ spec = do
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
             serverConn <- serverConnection serverConf verInfo serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q undefined undefined
             initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
-            (PacketIC (CryptPacket header crypt) lvl, _) <- decodePacket clientInitialPacketBinary
+            (PacketIC (CryptPacket header crypt) lvl _, _) <- decodePacket clientInitialPacketBinary
             Just plain <- decryptCrypt serverConn crypt lvl
             let ppkt = PlainPacket header plain
             clientInitialPacketBinary' <- BS.createAndTrim 4096 $ \buf ->
                 fst <$> encodePlainPacket clientConn (SizedBuffer buf 2048) ppkt Nothing
-            (PacketIC (CryptPacket header' crypt') lvl', _) <- decodePacket clientInitialPacketBinary'
+            (PacketIC (CryptPacket header' crypt') lvl' _, _) <- decodePacket clientInitialPacketBinary'
             Just plain' <- decryptCrypt serverConn crypt' lvl'
             header' `shouldBe` header
             plainFrames plain' `shouldBe` plainFrames plain

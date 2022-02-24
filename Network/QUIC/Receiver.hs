@@ -121,6 +121,7 @@ processReceivedPacket conn rpkt = do
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
       Just plain@Plain{..} -> do
+          addRxBytes conn $ rpReceivedBytes rpkt
           when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
               closeConnection ProtocolViolation "Non 0 RR bits or no frames"
           when (isUnknownFrame plainMarks) $
@@ -130,8 +131,9 @@ processReceivedPacket conn rpkt = do
           when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
           qlogReceived conn (PlainPacket hdr plain) tim
           let ackEli   = any ackEliciting   plainFrames
-              shouldDrop = rpReceivedBytes rpkt < defaultQUICPacketSize
-                        && lvl == InitialLevel && ackEli
+--              shouldDrop = rpReceivedBytes rpkt < defaultQUICPacketSize
+--                        && lvl == InitialLevel && ackEli
+              shouldDrop = False
           if shouldDrop then do
               connDebugLog conn ("debug: drop packet whose size is " <> bhow (rpReceivedBytes rpkt))
               qlogDropped conn hdr
