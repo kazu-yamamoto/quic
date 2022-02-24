@@ -157,24 +157,13 @@ dispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ()
 dispatcher d conf (s,mysa,wildcard) = handleLogUnit logAction body
   where
     body = do
-        let (opt,cmsgid) = case mysa of
-              SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
-              SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
-              _               -> error "dispatcher"
-        setSocketOption s opt 1
+        recv <- mkRecv
         forever $ do
-            (peersa, bs0, cmsgs, _) <- recv
+            (bs0, mysa', peersa, cmsgs) <- safeRecv recv
             let bytes = BS.length bs0
             if BS.length bs0 < defaultQUICPacketSize then
                 logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
               else do
-                let Just pktinfo = lookupCmsg cmsgid cmsgs
-                let mysa' = case mysa of
-                      SockAddrInet p _  -> let Just (IPv4PktInfo _ _ addr) = decodeCmsg pktinfo
-                                           in SockAddrInet p addr
-                      SockAddrInet6 p f _ sc -> let Just (IPv6PktInfo _ addr) = decodeCmsg pktinfo
-                                                in SockAddrInet6 p f addr sc
-                      _               -> error "dispatcher"
                 now <- getTimeMicrosecond
                 cpckts <- decodeCryptPackets bs0
                 let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs 0
@@ -182,12 +171,28 @@ dispatcher d conf (s,mysa,wildcard) = handleLogUnit logAction body
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
-    recv = do
+    mkRecv = do
+        let (opt,cmsgid) = case mysa of
+              SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
+              SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
+              _               -> error "dispatcher"
+        setSocketOption s opt 1
+        return $ do
+            (peersa, bs0, cmsgs, _) <- NSB.recvMsg s maximumUdpPayloadSize 64 0
+            let Just pktinfo = lookupCmsg cmsgid cmsgs
+            let mysa' = case mysa of
+                  SockAddrInet p _  -> let Just (IPv4PktInfo _ _ addr) = decodeCmsg pktinfo
+                                       in SockAddrInet p addr
+                  SockAddrInet6 p f _ sc -> let Just (IPv6PktInfo _ addr) = decodeCmsg pktinfo
+                                            in SockAddrInet6 p f addr sc
+                  _               -> error "dispatcher"
+            return (bs0, mysa', peersa, cmsgs)
+    safeRecv recv = do
         ex <- E.tryAny $
 #if defined(mingw32_HOST_OS)
                 windowsThreadBlockHack $
 #endif
-                  NSB.recvMsg s maximumUdpPayloadSize 64 0
+                  recv
         case ex of
            Right x -> return x
            Left se -> case E.fromException se of
