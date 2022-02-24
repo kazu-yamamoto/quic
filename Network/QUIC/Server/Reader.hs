@@ -154,39 +154,39 @@ runDispatcher d conf ssa@(s,_,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ()
-dispatcher d conf (s,mysa,wildcard) = handleLogUnit logAction body
+dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
   where
     body = do
         recv <- mkRecv
         forever $ do
-            (bs0, mysa', peersa, cmsgs) <- safeRecv recv
-            let bytes = BS.length bs0
-            if BS.length bs0 < defaultQUICPacketSize then
+            (bs, mysa, peersa, cmsgs) <- safeRecv recv
+            let bytes = BS.length bs
+            if BS.length bs < defaultQUICPacketSize then
                 logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
               else do
                 now <- getTimeMicrosecond
-                cpckts <- decodeCryptPackets bs0
-                let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs 0
-                mapM_ (dispatch d conf logAction mysa' peersa wildcard send now) cpckts
+                cpckts <- decodeCryptPackets bs
+                let send b = void $ NSB.sendMsg s peersa [b] cmsgs 0
+                mapM_ (dispatch d conf logAction mysa peersa wildcard send now) cpckts
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
     mkRecv = do
-        let (opt,cmsgid) = case mysa of
+        let (opt,cmsgid) = case mysa0 of
               SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
               SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
               _               -> error "dispatcher"
         setSocketOption s opt 1
         return $ do
-            (peersa, bs0, cmsgs, _) <- NSB.recvMsg s maximumUdpPayloadSize 64 0
+            (peersa, bs, cmsgs, _) <- NSB.recvMsg s maximumUdpPayloadSize 64 0
             let Just pktinfo = lookupCmsg cmsgid cmsgs
-            let mysa' = case mysa of
+            let mysa = case mysa0 of
                   SockAddrInet p _  -> let Just (IPv4PktInfo _ _ addr) = decodeCmsg pktinfo
                                        in SockAddrInet p addr
                   SockAddrInet6 p f _ sc -> let Just (IPv6PktInfo _ addr) = decodeCmsg pktinfo
                                             in SockAddrInet6 p f addr sc
                   _               -> error "dispatcher"
-            return (bs0, mysa', peersa, cmsgs)
+            return (bs, mysa, peersa, cmsgs)
     safeRecv recv = do
         ex <- E.tryAny $
 #if defined(mingw32_HOST_OS)
