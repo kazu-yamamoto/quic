@@ -221,7 +221,9 @@ dispatch Dispatch{..} ServerConfig{..} logAction
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst False
 #if defined(mingw32_HOST_OS)
-          Just conn          -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+          Just conn          -> do
+              addRxBytes conn bytes
+              writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 #else
           _                  -> return ()
 #endif
@@ -237,7 +239,9 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                   case mconn of
                     Nothing -> pushToAcceptFirst True
 #if defined(mingw32_HOST_OS)
-                    Just conn          -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+                    Just conn          -> do
+                        addRxBytes conn bytes
+                        writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 #else
                     _       -> return ()
 #endif
@@ -247,7 +251,9 @@ dispatch Dispatch{..} ServerConfig{..} logAction
     pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
         mq <- lookupRecvQDict srcTable key
         case mq of
-          Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
+          Just q -> do
+              -- addRxBytes conn bytes: fixme
+              writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
           Nothing -> do
               q <- newRecvQ
               insertRecvQDict srcTable key q
@@ -338,7 +344,9 @@ dispatch Dispatch{..} _ _
          (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
     mq <- lookupRecvQDict srcTable o
     case mq of
-      Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
+      Just q  -> do
+          -- addRxBytes conn bytes: fixme
+          writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
       Nothing -> return ()
 #if defined(mingw32_HOST_OS)
 dispatch Dispatch{..} _ logAction
@@ -350,6 +358,7 @@ dispatch Dispatch{..} _ logAction
           logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
           -- fixme: migration
+          addRxBytes conn bytes
           writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 #else
 dispatch Dispatch{..} _ logAction
@@ -365,6 +374,7 @@ dispatch Dispatch{..} _ logAction
                 let miginfo = MigrationInfo mysa peersa dCID wildcard
                     crypt' = crypt { cryptMigraionInfo = Just miginfo }
                     cpkt = CryptPacket hdr crypt'
+                addRxBytes conn bytes
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
 #endif
 dispatch _ _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
