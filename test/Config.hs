@@ -32,7 +32,7 @@ makeTestServerConfig = do
     let credentials = Credentials [cred]
     return testServerConfig {
         scCredentials = credentials
-      , scALPN = Just chooseALPN
+      , scALPN        = Just chooseALPN
       }
 
 testServerConfig :: ServerConfig
@@ -48,7 +48,7 @@ makeTestServerConfigR = do
     let credentials = Credentials [cred]
     return testServerConfigR {
         scCredentials = credentials
-      , scALPN = Just chooseALPN
+      , scALPN        = Just chooseALPN
       }
 
 testServerConfigR :: ServerConfig
