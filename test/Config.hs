@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Config (
@@ -105,13 +106,21 @@ withPipe scenario body = do
             dropPacket0 <- shouldDrop scenario True n0
             unless dropPacket0 $ void $ send sockS bs
             forever $ do
-                bs1 <- recv sockC 2048
+                bs1 <-
+#if defined(mingw32_HOST_OS)
+                       windowsThreadBlockHack $
+#endif
+                         recv sockC 2048
                 n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
                 dropPacket <- shouldDrop scenario True n
                 unless dropPacket $ void $ send sockS bs1
         -- from server
         tid1 <- forkIO $ forever $ do
-            bs <- recv sockS 2048
+            bs <-
+#if defined(mingw32_HOST_OS)
+                  windowsThreadBlockHack $
+#endif
+                    recv sockS 2048
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
             dropPacket <- shouldDrop scenario False n
             unless dropPacket $ void $ send sockC bs
