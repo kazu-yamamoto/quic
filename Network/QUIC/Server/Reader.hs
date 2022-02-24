@@ -215,8 +215,8 @@ dispatch Dispatch{..} ServerConfig{..} logAction
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID offerVersions
         send bss
   | token == "" = do
-        mq <- lookupConnectionDict dstTable dCID
-        case mq of
+        mconn <- lookupConnectionDict dstTable dCID
+        case mconn of
           Nothing
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst False
@@ -233,8 +233,8 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                   ok <- isRetryTokenValid ct
                   if ok then pushToAcceptRetried ct else sendRetry
             | otherwise -> do
-                  mq <- lookupConnectionDict dstTable dCID
-                  case mq of
+                  mconn <- lookupConnectionDict dstTable dCID
+                  case mconn of
                     Nothing -> pushToAcceptFirst True
 #if defined(mingw32_HOST_OS)
                     Just conn          -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
@@ -344,8 +344,8 @@ dispatch Dispatch{..} _ _
 dispatch Dispatch{..} _ logAction
          (PacketIC cpkt@(CryptPacket hdr _crypt) lvl) _mysa peersa _wildcard _ _ bytes tim  = do
     let dCID = headerMyCID hdr
-    mx <- lookupConnectionDict dstTable dCID
-    case mx of
+    mconn <- lookupConnectionDict dstTable dCID
+    case mconn of
       Nothing -> do
           logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
@@ -355,8 +355,8 @@ dispatch Dispatch{..} _ logAction
 dispatch Dispatch{..} _ logAction
          (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa wildcard _ _ bytes tim  = do
     -- fixme: packets for closed connections also match here.
-    mx <- lookupConnectionDict dstTable dCID
-    case mx of
+    mconn <- lookupConnectionDict dstTable dCID
+    case mconn of
       Nothing -> do
           logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> do
