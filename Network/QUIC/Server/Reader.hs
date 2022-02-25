@@ -154,37 +154,51 @@ runDispatcher d conf ssa@(s,_,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ()
-dispatcher d conf (s,mysa,wildcard) = handleLogUnit logAction body
+dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction $ do
+    recv <- mkRecv wildcard
+    forever $ do
+        (bs, mysa, peersa, cmsgs) <- safeRecv recv
+        now <- getTimeMicrosecond
+        send <- mkSend wildcard peersa cmsgs
+        cpckts <- decodeCryptPackets bs
+        let bytes = BS.length bs
+            switch = dispatch d conf logAction mysa peersa wildcard send bytes now
+        mapM_ switch cpckts
   where
-    body = do
-        let (opt,cmsgid) = case mysa of
+    doDebug = isJust $ scDebugLog conf
+    logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
+                  | otherwise = return ()
+
+    mkSend False peersa _     = return $ \b -> void $ NSB.sendTo s b peersa
+    mkSend True  peersa cmsgs = return $ \b ->
+      void $ NSB.sendMsg s peersa [b] cmsgs 0
+
+    mkRecv False  = return $ do
+        (bs, peersa) <- NSB.recvFrom s maximumUdpPayloadSize
+        return (bs, mysa0, peersa, [])
+    mkRecv True = do
+        let (opt,cmsgid) = case mysa0 of
               SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
               SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
               _               -> error "dispatcher"
         setSocketOption s opt 1
-        forever $ do
-            (peersa, bs0, cmsgs, _) <- recv
+        return $ do
+            (peersa, bs, cmsgs, _) <- NSB.recvMsg s maximumUdpPayloadSize 64 0
             let Just pktinfo = lookupCmsg cmsgid cmsgs
-            let mysa' = case mysa of
+            let mysa = case mysa0 of
                   SockAddrInet p _  -> let Just (IPv4PktInfo _ _ addr) = decodeCmsg pktinfo
                                        in SockAddrInet p addr
                   SockAddrInet6 p f _ sc -> let Just (IPv6PktInfo _ addr) = decodeCmsg pktinfo
                                             in SockAddrInet6 p f addr sc
                   _               -> error "dispatcher"
-            let bytes = BS.length bs0 -- both Initial and 0RTT
-            now <- getTimeMicrosecond
-            (pkt, bs0RTT) <- decodePacket bs0
-            let send bs = void $ NSB.sendMsg s peersa [bs] cmsgs 0
-            dispatch d conf logAction pkt mysa' peersa wildcard send bs0RTT bytes now
-    doDebug = isJust $ scDebugLog conf
-    logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
-                  | otherwise = return ()
-    recv = do
+            return (bs, mysa, peersa, cmsgs)
+
+    safeRecv recv = do
         ex <- E.tryAny $
 #if defined(mingw32_HOST_OS)
                 windowsThreadBlockHack $
 #endif
-                  NSB.recvMsg s maximumUdpPayloadSize 64 0
+                  recv
         case ex of
            Right x -> return x
            Left se -> case E.fromException se of
@@ -202,10 +216,13 @@ dispatcher d conf (s,mysa,wildcard) = handleLogUnit logAction body
 -- retransmitted.
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
-dispatch :: Dispatch -> ServerConfig -> DebugLogger -> PacketI -> SockAddr -> SockAddr -> Bool -> (ByteString -> IO ()) -> ByteString -> Int -> TimeMicrosecond -> IO ()
+dispatch :: Dispatch -> ServerConfig -> DebugLogger
+         -> SockAddr -> SockAddr -> Bool -> (ByteString -> IO ()) -> Int -> TimeMicrosecond
+         -> (CryptPacket,EncryptionLevel,Int)
+         -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
-         (PacketIC cpkt@(CryptPacket (Initial peerVer dCID sCID token) _) lvl)
-         mysa peersa wildcard send bs0RTT bytes tim
+         mysa peersa wildcard send bytes tim
+         (cpkt@(CryptPacket (Initial peerVer dCID sCID token) _),lvl,siz)
   | bytes < defaultQUICPacketSize = do
         logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
   | peerVer `notElem` myVersions = do
@@ -221,9 +238,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
             | scRequireRetry -> sendRetry
             | otherwise      -> pushToAcceptFirst False
 #if defined(mingw32_HOST_OS)
-          Just conn          -> do
-              addRxBytes conn bytes
-              writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+          Just conn          -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 #else
           _                  -> return ()
 #endif
@@ -237,11 +252,9 @@ dispatch Dispatch{..} ServerConfig{..} logAction
             | otherwise -> do
                   mconn <- lookupConnectionDict dstTable dCID
                   case mconn of
-                    Nothing -> pushToAcceptFirst True
+                    Nothing   -> pushToAcceptFirst True
 #if defined(mingw32_HOST_OS)
-                    Just conn          -> do
-                        addRxBytes conn bytes
-                        writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+                    Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 #else
                     _       -> return ()
 #endif
@@ -251,13 +264,11 @@ dispatch Dispatch{..} ServerConfig{..} logAction
     pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
         mq <- lookupRecvQDict srcTable key
         case mq of
-          Just q -> do
-              -- addRxBytes conn bytes: fixme
-              writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
+          Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
           Nothing -> do
               q <- newRecvQ
               insertRecvQDict srcTable key q
-              writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
+              writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
               let reg = registerConnectionDict dstTable
                   unreg = unregisterConnectionDict dstTable
                   ent = Accept {
@@ -276,9 +287,6 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                     }
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
-              when (bs0RTT /= "") $ do
-                  (PacketIC cpktRTT0 lvl', _) <- decodePacket bs0RTT
-                  writeRecvQ q $ mkReceivedPacket cpktRTT0 tim bytes lvl'
     -- Initial: DCID=S1, SCID=C1 ->
     --                                     <- Initial: DCID=C1, SCID=S2
     --                               ...
@@ -340,29 +348,29 @@ dispatch Dispatch{..} ServerConfig{..} logAction
           Just newtoken -> do
               bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
               send bss
+----------------------------------------------------------------
 dispatch Dispatch{..} _ _
-         (PacketIC cpkt@(CryptPacket (RTT0 _ o _) _) lvl) _ _peersa _ _ _ bytes tim = do
+         _ _peersa _ _ _ tim
+         (cpkt@(CryptPacket (RTT0 _ o _) _), lvl, siz) = do
     mq <- lookupRecvQDict srcTable o
     case mq of
-      Just q  -> do
-          -- addRxBytes conn bytes: fixme
-          writeRecvQ q $ mkReceivedPacket cpkt tim bytes lvl
+      Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
       Nothing -> return ()
 #if defined(mingw32_HOST_OS)
+----------------------------------------------------------------
 dispatch Dispatch{..} _ logAction
-         (PacketIC cpkt@(CryptPacket hdr _crypt) lvl) _mysa peersa _wildcard _ _ bytes tim  = do
+         _mysa peersa _wildcard _ _ tim
+         (cpkt@(CryptPacket hdr _crypt),lvl,siz) = do
     let dCID = headerMyCID hdr
     mconn <- lookupConnectionDict dstTable dCID
     case mconn of
-      Nothing -> do
-          logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
-      Just conn -> do
-          -- fixme: migration
-          addRxBytes conn bytes
-          writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+      Nothing   -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
+      Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 #else
+----------------------------------------------------------------
 dispatch Dispatch{..} _ logAction
-         (PacketIC (CryptPacket hdr@(Short dCID) crypt) lvl) mysa peersa wildcard _ _ bytes tim  = do
+         mysa peersa wildcard _ _ tim
+         ((CryptPacket hdr@(Short dCID) crypt),lvl,siz)= do
     -- fixme: packets for closed connections also match here.
     mconn <- lookupConnectionDict dstTable dCID
     case mconn of
@@ -374,10 +382,10 @@ dispatch Dispatch{..} _ logAction
                 let miginfo = MigrationInfo mysa peersa dCID wildcard
                     crypt' = crypt { cryptMigraionInfo = Just miginfo }
                     cpkt = CryptPacket hdr crypt'
-                addRxBytes conn bytes
-                writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim bytes lvl
+                writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
+----------------------------------------------------------------
+dispatch _ _ _ _ _ _ _ _ _ _ = return ()
 #endif
-dispatch _ _ _ _ipkt _ _peersa _ _ _ _ _ = return ()
 
 ----------------------------------------------------------------
 
@@ -392,10 +400,8 @@ readerServer s conn = handleLogUnit logAction loop
           Nothing -> close s
           Just bs -> do
               now <- getTimeMicrosecond
-              let bytes = BS.length bs
-              addRxBytes conn bytes
               pkts <- decodeCryptPackets bs
-              mapM_ (\(p,l) -> writeRecvQ (connRecvQ conn) (mkReceivedPacket p now bytes l)) pkts
+              mapM_ (\(p,l,siz) -> writeRecvQ (connRecvQ conn) (mkReceivedPacket p now siz l)) pkts
               loop
     logAction msg = connDebugLog conn ("debug: readerServer: " <> msg)
 

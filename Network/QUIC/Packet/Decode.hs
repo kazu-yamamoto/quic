@@ -17,12 +17,13 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-decodeCryptPackets :: ByteString -> IO [(CryptPacket,EncryptionLevel)]
+-- Server uses this.
+decodeCryptPackets :: ByteString -> IO [(CryptPacket,EncryptionLevel,Int)]
 decodeCryptPackets bs0 = unwrap <$> decodePackets bs0
   where
-    unwrap (PacketIC c l:xs) = (c,l) : unwrap xs
-    unwrap (_:xs)            = unwrap xs
-    unwrap []                = []
+    unwrap (PacketIC c l s:xs) = (c,l,s) : unwrap xs
+    unwrap (_:xs)              = unwrap xs
+    unwrap []                  = []
 
 -- Client uses this.
 decodePackets :: ByteString -> IO [PacketI]
@@ -33,7 +34,6 @@ decodePackets bs0 = loop bs0 id
         (pkt, rest) <- decodePacket bs
         loop rest (build . (pkt :))
 
--- Server uses this.
 decodePacket :: ByteString -> IO (PacketI, ByteString)
 decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     save rbuf
@@ -47,7 +47,8 @@ decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     decode rbuf _proFlags True = do
         header <- Short . makeCID <$> extractShortByteString rbuf myCIDLength
         cpkt <- CryptPacket header <$> makeShortCrypt bs rbuf
-        return $ PacketIC cpkt RTT1Level
+        siz <- savingSize rbuf
+        return $ PacketIC cpkt RTT1Level siz
     decode rbuf proFlags False = do
         (ver, dCID, sCID) <- decodeLongHeader rbuf
         case ver of
@@ -59,17 +60,20 @@ decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
             RTT0PacketType      -> do
                 let header = RTT0 ver dCID sCID
                 cpkt <- CryptPacket header <$> makeLongCrypt bs rbuf
-                return $ PacketIC cpkt RTT0Level
+                siz <- savingSize rbuf
+                return $ PacketIC cpkt RTT0Level siz
             InitialPacketType   -> do
                 tokenLen <- fromIntegral <$> decodeInt' rbuf
                 token <- extractByteString rbuf tokenLen
                 let header = Initial ver dCID sCID token
                 cpkt <- CryptPacket header <$> makeLongCrypt bs rbuf
-                return $ PacketIC cpkt InitialLevel
+                siz <- savingSize rbuf
+                return $ PacketIC cpkt InitialLevel siz
             HandshakePacketType -> do
                 let header = Handshake ver dCID sCID
                 crypt <- CryptPacket header <$> makeLongCrypt bs rbuf
-                return $ PacketIC crypt HandshakeLevel
+                siz <- savingSize rbuf
+                return $ PacketIC crypt HandshakeLevel siz
     handler BufferOverrun = return (PacketIB BrokenPacket,"")
 
 makeShortCrypt :: ByteString -> ReadBuffer -> IO Crypt

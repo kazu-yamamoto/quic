@@ -68,7 +68,7 @@ extensionIDForTtransportParameter _        = 0xffa5
 
 data PacketI = PacketIV VersionNegotiationPacket
              | PacketIR RetryPacket
-             | PacketIC CryptPacket EncryptionLevel
+             | PacketIC CryptPacket EncryptionLevel Int
              | PacketIB BrokenPacket
              deriving (Eq, Show)
 

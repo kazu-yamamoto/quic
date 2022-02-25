@@ -132,7 +132,6 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"
-    addRxBytes conn accPacketSize
     when accAddressValidated $ setAddressValidated conn
     --
     let retried = isJust $ retrySrcCID accMyAuthCIDs

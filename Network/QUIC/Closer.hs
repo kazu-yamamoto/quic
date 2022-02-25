@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Closer (closure) where
@@ -54,7 +55,7 @@ closure' conn ldcc frame = do
                  Just sa -> NS.sendBufTo s sendBuf siz sa
     let hook = onCloseCompleted $ connHooks conn
     pto <- getPTO ldcc
-    void $ forkFinally (closer pto send recv hook) $ \_ -> do
+    void $ forkFinally (closer conn pto send recv hook) $ \_ -> do
         free sendBuf
         free recvBuf
         mapM_ NS.close socks
@@ -92,12 +93,17 @@ encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
           else
             return 0
 
-closer :: Microseconds -> IO Int -> IO Int -> IO () -> IO ()
-closer (Microseconds pto) send recv hook = loop (3 :: Int)
+closer :: Connection -> Microseconds -> IO Int -> IO Int -> IO () -> IO ()
+closer _conn (Microseconds pto) send recv hook
+#if defined(mingw32_HOST_OS)
+  | isServer _conn = void send
+#endif
+  | otherwise      = loop (3 :: Int)
   where
     loop 0 = return ()
     loop n = do
         _ <- send
+        return ()
         getTimeMicrosecond >>= skip (Microseconds pto)
         mx <- timeout (Microseconds (pto .>>. 1)) recv
         case mx of

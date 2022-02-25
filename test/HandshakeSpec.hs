@@ -112,6 +112,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = do
     runClient cc mode action = C.run cc $ \conn -> do
         void $ action conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+        threadDelay 10000
         getResumptionInfo conn
     client = do
         threadDelay 10000
