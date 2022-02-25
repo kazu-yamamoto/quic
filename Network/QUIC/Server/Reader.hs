@@ -157,7 +157,7 @@ dispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ()
 dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
   where
     body = do
-        recv <- mkRecv
+        recv <- mkRecv wildcard
         forever $ do
             (bs, mysa, peersa, cmsgs) <- safeRecv recv
             let bytes = BS.length bs
@@ -166,12 +166,20 @@ dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
               else do
                 now <- getTimeMicrosecond
                 cpckts <- decodeCryptPackets bs
-                let send b = void $ NSB.sendMsg s peersa [b] cmsgs 0
+                send <- mkSend wildcard peersa cmsgs
                 mapM_ (dispatch d conf logAction mysa peersa wildcard send now) cpckts
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
-    mkRecv = do
+
+    mkSend False peersa _     = return $ \b -> void $ NSB.sendTo s b peersa
+    mkSend True  peersa cmsgs = return $ \b ->
+      void $ NSB.sendMsg s peersa [b] cmsgs 0
+
+    mkRecv False  = return $ do
+        (bs, peersa) <- NSB.recvFrom s maximumUdpPayloadSize
+        return (bs, mysa0, peersa, [])
+    mkRecv True = do
         let (opt,cmsgid) = case mysa0 of
               SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
               SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
@@ -187,6 +195,7 @@ dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
                                             in SockAddrInet6 p f addr sc
                   _               -> error "dispatcher"
             return (bs, mysa, peersa, cmsgs)
+
     safeRecv recv = do
         ex <- E.tryAny $
 #if defined(mingw32_HOST_OS)
