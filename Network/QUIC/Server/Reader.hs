@@ -154,20 +154,17 @@ runDispatcher d conf ssa@(s,_,_) =
     forkFinally (dispatcher d conf ssa) $ \_ -> close s
 
 dispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ()
-dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
+dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction $ do
+    recv <- mkRecv wildcard
+    forever $ do
+        (bs, mysa, peersa, cmsgs) <- safeRecv recv
+        now <- getTimeMicrosecond
+        send <- mkSend wildcard peersa cmsgs
+        cpckts <- decodeCryptPackets bs
+        let bytes = BS.length bs
+            switch = dispatch d conf logAction mysa peersa wildcard send bytes now
+        mapM_ switch cpckts
   where
-    body = do
-        recv <- mkRecv wildcard
-        forever $ do
-            (bs, mysa, peersa, cmsgs) <- safeRecv recv
-            let bytes = BS.length bs
-            if bytes < defaultQUICPacketSize then
-                logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
-              else do
-                now <- getTimeMicrosecond
-                cpckts <- decodeCryptPackets bs
-                send <- mkSend wildcard peersa cmsgs
-                mapM_ (dispatch d conf logAction mysa peersa wildcard send bytes now) cpckts
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
@@ -226,6 +223,8 @@ dispatch :: Dispatch -> ServerConfig -> DebugLogger
 dispatch Dispatch{..} ServerConfig{..} logAction
          mysa peersa wildcard send bytes tim
          (cpkt@(CryptPacket (Initial peerVer dCID sCID token) _),lvl,siz)
+  | bytes < defaultQUICPacketSize = do
+        logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
   | peerVer `notElem` myVersions = do
         let offerVersions
                 | peerVer == GreasingVersion = GreasingVersion2 : myVersions
