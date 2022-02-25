@@ -167,7 +167,7 @@ dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
                 now <- getTimeMicrosecond
                 cpckts <- decodeCryptPackets bs
                 send <- mkSend wildcard peersa cmsgs
-                mapM_ (dispatch d conf logAction mysa peersa wildcard send now) cpckts
+                mapM_ (dispatch d conf logAction mysa peersa wildcard send bytes now) cpckts
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
@@ -220,11 +220,11 @@ dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction body
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
 dispatch :: Dispatch -> ServerConfig -> DebugLogger
-         -> SockAddr -> SockAddr -> Bool -> (ByteString -> IO ()) -> TimeMicrosecond
+         -> SockAddr -> SockAddr -> Bool -> (ByteString -> IO ()) -> Int -> TimeMicrosecond
          -> (CryptPacket,EncryptionLevel,Int)
          -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
-         mysa peersa wildcard send tim
+         mysa peersa wildcard send bytes tim
          (cpkt@(CryptPacket (Initial peerVer dCID sCID token) _),lvl,siz)
   | peerVer `notElem` myVersions = do
         let offerVersions
@@ -279,7 +279,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                     , accMySockAddr   = mysa
                     , accPeerSockAddr = peersa
                     , accRecvQ        = q
-                    , accPacketSize   = 1200 -- fixme
+                    , accPacketSize   = bytes
                     , accRegister     = reg
                     , accUnregister   = unreg
                     , accAddressValidated = addrValid
@@ -349,16 +349,18 @@ dispatch Dispatch{..} ServerConfig{..} logAction
           Just newtoken -> do
               bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
               send bss
+----------------------------------------------------------------
 dispatch Dispatch{..} _ _
-         _ _peersa _ _  tim
+         _ _peersa _ _ _ tim
          (cpkt@(CryptPacket (RTT0 _ o _) _), lvl, siz) = do
     mq <- lookupRecvQDict srcTable o
     case mq of
       Just q  -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
       Nothing -> return ()
 #if defined(mingw32_HOST_OS)
+----------------------------------------------------------------
 dispatch Dispatch{..} _ logAction
-         _mysa peersa _wildcard _ tim
+         _mysa peersa _wildcard _ _ tim
          (cpkt@(CryptPacket hdr _crypt),lvl,siz) = do
     let dCID = headerMyCID hdr
     mconn <- lookupConnectionDict dstTable dCID
@@ -366,8 +368,9 @@ dispatch Dispatch{..} _ logAction
       Nothing   -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
       Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 #else
+----------------------------------------------------------------
 dispatch Dispatch{..} _ logAction
-         mysa peersa wildcard _ tim
+         mysa peersa wildcard _ _ tim
          ((CryptPacket hdr@(Short dCID) crypt),lvl,siz)= do
     -- fixme: packets for closed connections also match here.
     mconn <- lookupConnectionDict dstTable dCID
@@ -381,7 +384,8 @@ dispatch Dispatch{..} _ logAction
                     crypt' = crypt { cryptMigraionInfo = Just miginfo }
                     cpkt = CryptPacket hdr crypt'
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
-dispatch _ _ _ _ _ _ _ _ _ = return ()
+----------------------------------------------------------------
+dispatch _ _ _ _ _ _ _ _ _ _ = return ()
 #endif
 
 ----------------------------------------------------------------
