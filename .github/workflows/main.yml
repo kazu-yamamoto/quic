@@ -31,8 +31,8 @@ jobs:
         - os: windows-latest
           ghc: "8.10"
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-haskell@v1
+    - uses: actions/checkout@v3
+    - uses: haskell/actions/setup@v2
       id: setup-haskell-cabal
       with:
         ghc-version: ${{ matrix.ghc }}
@@ -41,7 +41,7 @@ jobs:
       run: |
         cabal update
         cabal freeze
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       name: Cache cabal stuff
       with:
         path: |
