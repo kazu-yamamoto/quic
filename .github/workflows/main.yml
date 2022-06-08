@@ -9,56 +9,43 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macOS-10.15]
-        ghc: ['8.0', '8.2', '8.4', '8.6', '8.8', '8.10']
+        os: [ubuntu-latest, macOS-10.15, windows-latest]
+        ghc: ['8.10', '9.0', '9.2']
         exclude:
-        - os: macOS-10.15
-          ghc: "8.0"
-        - os: macOS-10.15
-          ghc: "8.2"
-        - os: windows-latest
-          ghc: "8.0"
-        - os: windows-latest
-          ghc: "8.2"
-        - os: windows-latest
-          ghc: "8.4"
-        - os: windows-latest
-          ghc: "8.6"
         - os: windows-latest
           ghc: "8.10"
+
     steps:
     - uses: actions/checkout@v3
+
     - uses: haskell/actions/setup@v2
-      id: setup-haskell-cabal
       with:
         ghc-version: ${{ matrix.ghc }}
-        cabal-version: '3.2'
-    - name: Update cabal package database
+        cabal-version: '3.6'
+
+    - name: Cache
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-cabal
+      with:
+        path: ~/.cabal
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.cache-name }}-
+          ${{ runner.os }}-build-
+          ${{ runner.os }}-
+
+    - name: Install dependencies
       run: |
         cabal update
-        cabal freeze
-    - uses: actions/cache@v3
-      name: Cache cabal stuff
-      with:
-        path: |
-          ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
-          dist-newstyle
-        key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.ghc }}-
+        cabal build --only-dependencies --enable-tests --disable-benchmarks
+
     - name: Build
-      run: |
-        cabal build --disable-tests --disable-benchmarks all
-    - name: Test
-      run: |
-        cabal test spec --test-show-details=streaming
-    - name: Haddock
-      run: |
-        cabal haddock
-    - name: SDist
-      run: |
-        cabal sdist all
+      run: cabal build --enable-tests --disable-benchmarks all
+
+    - name: Run tests
+      run: cabal test spec --test-show-details=streaming
