@@ -9,7 +9,9 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+
     timeout-minutes: 20
+
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +27,7 @@ jobs:
     - uses: haskell/actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
-        cabal-version: '3.2'
+        cabal-version: '3.6'
 
     - name: Cache
       uses: actions/cache@v3
@@ -48,4 +50,4 @@ jobs:
       run: cabal build --enable-tests --disable-benchmarks all
 
     - name: Run tests
-      run: cabal test all
+      run: cabal test spec --test-show-details=streaming
