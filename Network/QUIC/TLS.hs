@@ -9,6 +9,7 @@ module Network.QUIC.TLS (
 import Data.Default.Class
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
+import System.X509
 
 import Network.QUIC.Config
 import Network.QUIC.Parameters
@@ -29,11 +30,12 @@ clientHandshaker :: QUICCallbacks
                  -> SessionEstablish
                  -> Bool
                  -> IO ()
-clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
-    tlsQUICClient cparams callbacks
+clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = do
+    caStore <- if ccValidate then getSystemCertificateStore else return mempty
+    tlsQUICClient (cparams caStore) callbacks
   where
-    cparams = (defaultParamsClient ccServerName "") {
-        clientShared            = cshared
+    cparams caStore = (defaultParamsClient ccServerName "") {
+        clientShared            = cshared caStore
       , clientHooks             = hook
       , clientSupported         = supported
       , clientDebug             = debug
@@ -43,13 +45,12 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT =
     convTP = onTransportParametersCreated ccHooks
     params = convTP $ setCIDsToParameters myAuthCIDs ccParameters
     convExt = onTLSExtensionCreated ccHooks
-    cshared = def {
-        sharedValidationCache = if ccValidate then
-                                  def
-                                else
-                                  ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
+    skipValidation = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
+    cshared caStore = def {
+        sharedValidationCache = if ccValidate then def else skipValidation
+      , sharedCAStore         = caStore
       , sharedHelloExtensions = convExt $ parametersToExtensionRaw ver params
-      , sharedSessionManager = sessionManager establish
+      , sharedSessionManager  = sessionManager establish
       }
     hook = def {
         onSuggestALPN = ccALPN ver
