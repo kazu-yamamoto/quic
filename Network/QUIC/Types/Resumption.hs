@@ -21,7 +21,7 @@ data ResumptionInfo = ResumptionInfo {
 
 defaultResumptionInfo :: ResumptionInfo
 defaultResumptionInfo = ResumptionInfo {
-    resumptionVersion = chosenVersion defaultVersionInfo
+    resumptionVersion = Version1
   , resumptionSession = Nothing
   , resumptionToken   = emptyToken
   , resumptionRetry   = False

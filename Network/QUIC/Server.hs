@@ -12,6 +12,7 @@ module Network.QUIC.Server (
   , scUse0RTT
   , scCiphers
   , scGroups
+  , scVersions
 --   , scParameters
   , scCredentials
   , scSessionManager

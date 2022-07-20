@@ -168,7 +168,7 @@ main = do
                             protos | optHQ     = [hqX,h3X]
                                    | otherwise = [h3X,hqX]
                         in return $ Just protos
-        verInfo vers
+        gvers vers
           | optVerNego = GreasingVersion : vers
           | otherwise  = vers
         setTPQuantum params
@@ -183,7 +183,7 @@ main = do
           , ccValidate    = optValidate
           , ccPacketSize  = optPacketSize
           , ccDebugLog    = optDebugLog
-          , ccVersions    = verInfo $ ccVersions cc0
+          , ccVersions    = gvers $ ccVersions cc0
           , ccParameters  = setTPQuantum $ ccParameters cc0
           , ccKeyLog      = getLogger optKeyLogFile
           , ccGroups      = getGroups (ccGroups cc0) optGroups

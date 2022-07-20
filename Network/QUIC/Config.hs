@@ -66,9 +66,7 @@ defaultClientConfig = ClientConfig {
     ccVersions      = [Version2,Version1]
   , ccCiphers       = supportedCiphers defaultSupported
   , ccGroups        = supportedGroups defaultSupported
-  , ccParameters    = defaultParameters {
-        versionInformation = Just defaultVersionInfo
-      }
+  , ccParameters    = defaultParameters
   , ccKeyLog        = \_ -> return ()
   , ccQLog          = Nothing
   , ccCredentials   = mempty
