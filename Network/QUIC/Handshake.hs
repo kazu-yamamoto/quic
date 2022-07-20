@@ -242,6 +242,7 @@ setPeerParams conn _ctx peerExts = do
               Just vi0 -> vi0
         when (vi == brokenVersionInfo) sendCCParamError
         when (Negotiation `elem` otherVersions vi) sendCCParamError
+        -- Always False for servers
         isICVN <- getIncompatibleVN conn
         when isICVN $ do
             -- Validating Other Version fields.
