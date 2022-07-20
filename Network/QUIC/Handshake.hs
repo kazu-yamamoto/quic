@@ -127,6 +127,7 @@ handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
         putOutput conn $ OutHandshake [] -- for h3spec testing
         sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
     done _ctx = do
+        -- Validating Chosen Version
         mPeerVerInfo <- versionInformation <$> getPeerParameters conn
         case mPeerVerInfo of
           Nothing -> return ()
@@ -243,14 +244,14 @@ setPeerParams conn _ctx peerExts = do
         when (Negotiation `elem` otherVersions vi) sendCCParamError
         isICVN <- getIncompatibleVN conn
         when isICVN $ do
+            -- Validating Other Version fields.
             verInfo <- getVersionInfo conn
             let myVer  = chosenVersion verInfo
                 myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
-                peerVer = chosenVersion vi
                 peerVers = otherVersions vi
             case myVers `intersect` peerVers of
-              ver:_ | ver == myVer && ver == peerVer -> return ()
-              _                                      -> sendCCVNError
+              ver:_ | ver == myVer -> return ()
+              _                    -> sendCCVNError
 
 
     setParams params = do
