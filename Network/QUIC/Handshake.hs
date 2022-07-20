@@ -266,16 +266,16 @@ setPeerParams conn _ctx peerExts = do
     serverVersionNegotiation Nothing = return ()
     serverVersionNegotiation (Just peerVerInfo) = do
         myVerInfo <- getVersionInfo conn
-        let myVer    = chosenVersion myVerInfo
-            myVers0  = otherVersions myVerInfo
-            myVers   = filter (not . isGreasingVersion) myVers0
+        let clientVer = chosenVersion myVerInfo
+            myVers = filter (not . isGreasingVersion) $ otherVersions myVerInfo
             peerVers = otherVersions peerVerInfo
+        -- Server's preference should be preferred.
         case myVers `intersect` peerVers of
-          vers@(ver1:_:_)
-            | myVer /= ver1 -> do
-                setVersionInfo conn $ VersionInfo ver1 vers
+          vers@(serverVer:_)
+            | clientVer /= serverVer -> do
+                setVersionInfo conn $ VersionInfo serverVer vers
                 dcid <- getClientDstCID conn
-                initializeCoder conn InitialLevel $ initialSecrets ver1 dcid
+                initializeCoder conn InitialLevel $ initialSecrets serverVer dcid
           _ -> return ()
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()

@@ -191,7 +191,7 @@ data Connection = Connection {
   -- Info
   , roleInfo          :: IORef RoleInfo
   , quicVersionInfo   :: IORef VersionInfo
-  , origVersionInfo   :: VersionInfo
+  , origVersionInfo   :: VersionInfo -- chosenVersion is client's ver in Initial
   -- Mine
   , myParameters      :: Parameters
   , myCIDDB           :: IORef CIDDB
