@@ -31,7 +31,7 @@ spec = do
             q <- newRecvQ
             sref <- newIORef [s]
             let ver = Version1
-                verInfo = defaultVersionInfo { chosenVersion = ver }
+                verInfo = VersionInfo ver [ver]
             clientConn <- clientConnection clientConf verInfo clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref q undefined undefined
             initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
             serverConn <- serverConnection serverConf verInfo serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q undefined undefined

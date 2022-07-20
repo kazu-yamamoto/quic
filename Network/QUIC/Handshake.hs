@@ -127,6 +127,7 @@ handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
         putOutput conn $ OutHandshake [] -- for h3spec testing
         sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
     done _ctx = do
+        -- Validating Chosen Version
         mPeerVerInfo <- versionInformation <$> getPeerParameters conn
         case mPeerVerInfo of
           Nothing -> return ()
@@ -241,16 +242,17 @@ setPeerParams conn _ctx peerExts = do
               Just vi0 -> vi0
         when (vi == brokenVersionInfo) sendCCParamError
         when (Negotiation `elem` otherVersions vi) sendCCParamError
+        -- Always False for servers
         isICVN <- getIncompatibleVN conn
         when isICVN $ do
+            -- Validating Other Version fields.
             verInfo <- getVersionInfo conn
             let myVer  = chosenVersion verInfo
                 myVers = filter (not . isGreasingVersion) $ otherVersions verInfo
-                peerVer = chosenVersion vi
                 peerVers = otherVersions vi
             case myVers `intersect` peerVers of
-              ver:_ | ver == myVer && ver == peerVer -> return ()
-              _                                      -> sendCCVNError
+              ver:_ | ver == myVer -> return ()
+              _                    -> sendCCVNError
 
 
     setParams params = do
@@ -265,16 +267,16 @@ setPeerParams conn _ctx peerExts = do
     serverVersionNegotiation Nothing = return ()
     serverVersionNegotiation (Just peerVerInfo) = do
         myVerInfo <- getVersionInfo conn
-        let myVer    = chosenVersion myVerInfo
-            myVers0  = otherVersions myVerInfo
-            myVers   = filter (not . isGreasingVersion) myVers0
+        let clientVer = chosenVersion myVerInfo
+            myVers = filter (not . isGreasingVersion) $ otherVersions myVerInfo
             peerVers = otherVersions peerVerInfo
+        -- Server's preference should be preferred.
         case myVers `intersect` peerVers of
-          vers@(ver1:_:_)
-            | myVer /= ver1 -> do
-                setVersionInfo conn $ VersionInfo ver1 vers
+          vers@(serverVer:_)
+            | clientVer /= serverVer -> do
+                setVersionInfo conn $ VersionInfo serverVer vers
                 dcid <- getClientDstCID conn
-                initializeCoder conn InitialLevel $ initialSecrets ver1 dcid
+                initializeCoder conn InitialLevel $ initialSecrets serverVer dcid
           _ -> return ()
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()

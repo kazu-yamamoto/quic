@@ -260,7 +260,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
 #endif
           _ -> sendRetry
   where
-    myVersions = otherVersions scVersionInfo
+    myVersions = scVersions
     pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
         mq <- lookupRecvQDict srcTable key
         case mq of

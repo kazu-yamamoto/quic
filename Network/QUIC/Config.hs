@@ -40,7 +40,7 @@ defaultHooks = Hooks {
 
 -- | Client configuration.
 data ClientConfig = ClientConfig {
-    ccVersionInfo   :: VersionInfo -- ^ Versions in the preferred order.
+    ccVersions      :: [Version] -- ^ Compatible versions in the preferred order.
   , ccCiphers       :: [Cipher] -- ^ Cipher candidates defined in TLS 1.3.
   , ccGroups        :: [Group] -- ^ Key exchange group candidates defined in TLS 1.3.
   , ccParameters    :: Parameters
@@ -63,12 +63,10 @@ data ClientConfig = ClientConfig {
 -- | The default value for client configuration.
 defaultClientConfig :: ClientConfig
 defaultClientConfig = ClientConfig {
-    ccVersionInfo   = defaultVersionInfo
+    ccVersions      = [Version2,Version1]
   , ccCiphers       = supportedCiphers defaultSupported
   , ccGroups        = supportedGroups defaultSupported
-  , ccParameters    = defaultParameters {
-        versionInformation = Just defaultVersionInfo
-      }
+  , ccParameters    = defaultParameters
   , ccKeyLog        = \_ -> return ()
   , ccQLog          = Nothing
   , ccCredentials   = mempty
@@ -89,7 +87,7 @@ defaultClientConfig = ClientConfig {
 
 -- | Server configuration.
 data ServerConfig = ServerConfig {
-    scVersionInfo    :: VersionInfo -- ^ Versions in the preferred order.
+    scVersions       :: [Version] -- ^ Fully-Deployed Versions in the preferred order.
   , scCiphers        :: [Cipher] -- ^ Cipher candidates defined in TLS 1.3.
   , scGroups         :: [Group] -- ^ Key exchange group candidates defined in TLS 1.3.
   , scParameters     :: Parameters
@@ -109,12 +107,10 @@ data ServerConfig = ServerConfig {
 -- | The default value for server configuration.
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scVersionInfo    = defaultVersionInfo
+    scVersions       = [Version2,Version1]
   , scCiphers        = supportedCiphers defaultSupported
   , scGroups         = supportedGroups defaultSupported
-  , scParameters     = defaultParameters {
-        versionInformation = Just defaultVersionInfo
-      }
+  , scParameters     = defaultParameters
   , scKeyLog         = \_ -> return ()
   , scQLog           = Nothing
   , scCredentials    = mempty

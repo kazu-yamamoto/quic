@@ -14,6 +14,7 @@ module Network.QUIC.Client (
   , ccResumption
   , ccCiphers
   , ccGroups
+  , ccVersions
 --  , ccCredentials
   , ccValidate
   , ccAutoMigration
