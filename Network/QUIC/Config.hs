@@ -110,9 +110,7 @@ defaultServerConfig = ServerConfig {
     scVersions       = [Version2,Version1]
   , scCiphers        = supportedCiphers defaultSupported
   , scGroups         = supportedGroups defaultSupported
-  , scParameters     = defaultParameters {
-        versionInformation = Just defaultVersionInfo
-      }
+  , scParameters     = defaultParameters
   , scKeyLog         = \_ -> return ()
   , scQLog           = Nothing
   , scCredentials    = mempty
