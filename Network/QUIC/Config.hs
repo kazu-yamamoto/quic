@@ -89,7 +89,7 @@ defaultClientConfig = ClientConfig {
 
 -- | Server configuration.
 data ServerConfig = ServerConfig {
-    scVersionInfo    :: VersionInfo -- ^ Versions in the preferred order.
+    scVersions       :: [Version] -- ^ Fully-Deployed Versions in the preferred order.
   , scCiphers        :: [Cipher] -- ^ Cipher candidates defined in TLS 1.3.
   , scGroups         :: [Group] -- ^ Key exchange group candidates defined in TLS 1.3.
   , scParameters     :: Parameters
@@ -109,7 +109,7 @@ data ServerConfig = ServerConfig {
 -- | The default value for server configuration.
 defaultServerConfig :: ServerConfig
 defaultServerConfig = ServerConfig {
-    scVersionInfo    = defaultVersionInfo
+    scVersions       = [Version2,Version1]
   , scCiphers        = supportedCiphers defaultSupported
   , scGroups         = supportedGroups defaultSupported
   , scParameters     = defaultParameters {
