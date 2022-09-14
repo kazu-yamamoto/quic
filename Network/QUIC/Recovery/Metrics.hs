@@ -63,11 +63,11 @@ updateRTT ldcc@LDCC{..} lvl latestRTT0 ackDelay0 = metricsUpdated ldcc $ do
           | otherwise                       = latestRTT0
         -- rttvar_sample = abs(smoothed_rtt - adjusted_rtt)
         -- rttvar = 3/4 * rttvar + 1/4 * rttvar_sample
-        rttvar' = rttvar - (rttvar .>>. 2)
-                + (abs (smoothedRTT - adjustedRTT) .>>. 2)
+        rttvar' = rttvar - (rttvar !>>. 2)
+                + (abs (smoothedRTT - adjustedRTT) !>>. 2)
         -- smoothed_rtt = 7/8 * smoothed_rtt + 1/8 * adjusted_rtt
-        smoothedRTT' = smoothedRTT - (smoothedRTT .>>. 3)
-                     + (adjustedRTT .>>. 3)
+        smoothedRTT' = smoothedRTT - (smoothedRTT !>>. 3)
+                     + (adjustedRTT !>>. 3)
 
 updateCC :: LDCC -> Seq SentPacket -> Bool -> IO ()
 updateCC ldcc@LDCC{..} lostPackets isRecovery = do

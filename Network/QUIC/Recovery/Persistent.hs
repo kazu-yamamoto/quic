@@ -29,7 +29,7 @@ getMaxAckDelay (Just lvl) n
 -- Sec 6.2.1. Computing PTO
 -- PTO = smoothed_rtt + max(4*rttvar, kGranularity) + max_ack_delay
 calcPTO :: RTT -> Maybe EncryptionLevel -> Microseconds
-calcPTO RTT{..} mlvl = smoothedRTT + max (rttvar .<<. 2) kGranularity + dly
+calcPTO RTT{..} mlvl = smoothedRTT + max (rttvar !<<. 2) kGranularity + dly
   where
     dly = getMaxAckDelay mlvl maxAckDelay1RTT
 

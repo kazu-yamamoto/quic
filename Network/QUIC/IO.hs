@@ -166,7 +166,7 @@ recvStream s n = do
     window <- getRxStreamWindow s
     let sid = streamId s
         initialWindow = initialRxMaxStreamData conn sid
-    when (window <= (initialWindow .>>. 1)) $ do
+    when (window <= (initialWindow !>>. 1)) $ do
         newMax <- addRxMaxStreamData s initialWindow
         sendFrames conn RTT1Level [MaxStreamData sid newMax]
         fire conn (Microseconds 50000) $ do
@@ -174,7 +174,7 @@ recvStream s n = do
             sendFrames conn RTT1Level [MaxStreamData sid newMax']
     cwindow <- getRxDataWindow conn
     let cinitialWindow = initialMaxData $ getMyParameters conn
-    when (cwindow <= (cinitialWindow .>>. 1)) $ do
+    when (cwindow <= (cinitialWindow !>>. 1)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         sendFrames conn RTT1Level [MaxData newMax]
         fire conn (Microseconds 50000) $ do

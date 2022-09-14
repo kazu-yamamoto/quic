@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 module Network.QUIC.Imports (
     Bytes
   , ByteString(..)
@@ -18,7 +20,9 @@ module Network.QUIC.Imports (
   , module Numeric
   , module Network.ByteOrder
   , module Network.QUIC.Utils
-  , (.<<.), (.>>.)
+#if !MIN_VERSION_base(4,17,0)
+  , (!<<.), (!>>.)
+#endif
   , atomicModifyIORef''
   , copyBS
   ) where
@@ -48,13 +52,15 @@ import Numeric
 --   `ByteString` should be used for FFI related stuff.
 type Bytes = ShortByteString
 
-infixl 8 .<<.
-(.<<.) :: Bits a => a -> Int -> a
-(.<<.) = unsafeShiftL
+#if !MIN_VERSION_base(4,17,0)
+infixl 8 !<<.
+(!<<.) :: Bits a => a -> Int -> a
+(!<<.) = unsafeShiftL
 
-infixl 8 .>>.
-(.>>.) :: Bits a => a -> Int -> a
-(.>>.) = unsafeShiftR
+infixl 8 !>>.
+(!>>.) :: Bits a => a -> Int -> a
+(!>>.) = unsafeShiftR
+#endif
 
 atomicModifyIORef'' :: IORef a -> (a -> a) -> IO ()
 atomicModifyIORef'' ref f = atomicModifyIORef' ref $ \x -> (f x, ())

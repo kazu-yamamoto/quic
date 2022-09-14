@@ -55,31 +55,31 @@ encodeInt'2 wbuf i = go' tag n i' wbuf
   where
     tag = 0b01000000
     n = 2
-    i' = i .<<. 48
+    i' = i !<<. 48
 
 encodeInt'4 :: WriteBuffer -> Int64 -> IO ()
 encodeInt'4 wbuf i = go' tag n i' wbuf
   where
     tag = 0b10000000
     n = 4
-    i' = i .<<. 32
+    i' = i !<<. 32
 
 tagLen :: Int64 -> (Word8, Int, Int64)
-tagLen i | i <=         63 = (0b00000000, 1, i .<<. 56)
-         | i <=      16383 = (0b01000000, 2, i .<<. 48)
-         | i <= 1073741823 = (0b10000000, 4, i .<<. 32)
+tagLen i | i <=         63 = (0b00000000, 1, i !<<. 56)
+         | i <=      16383 = (0b01000000, 2, i !<<. 48)
+         | i <= 1073741823 = (0b10000000, 4, i !<<. 32)
          | otherwise       = (0b11000000, 8, i)
 {-# INLINE tagLen #-}
 
 msb8 :: Int64 -> Word8
-msb8 i = fromIntegral (i .>>. 56)
+msb8 i = fromIntegral (i !>>. 56)
 {-# INLINE msb8 #-}
 
 go :: Word8 -> Int -> Int64 -> Ptr Word8 -> IO ()
 go tag n0 i0 p0 = do
     poke p0 (tag .|. msb8 i0)
     let n' = n0 - 1
-        i' = i0 .<<. 8
+        i' = i0 !<<. 8
         p' = p0 `plusPtr` 1
     loop n' i' p'
   where
@@ -87,7 +87,7 @@ go tag n0 i0 p0 = do
     loop n i p = do
         poke p $ msb8 i
         let n' = n - 1
-            i' = i .<<. 8
+            i' = i !<<. 8
             p' = p `plusPtr` 1
         loop n' i' p'
 {-# INLINE go #-}
@@ -96,14 +96,14 @@ go' :: Word8 -> Int -> Int64 -> WriteBuffer -> IO ()
 go' tag n0 i0 wbuf = do
     write8 wbuf (tag .|. msb8 i0)
     let n' = n0 - 1
-        i' = i0 .<<. 8
+        i' = i0 !<<. 8
     loop n' i'
   where
     loop 0 _ = return ()
     loop n i = do
         write8 wbuf $ msb8 i
         let n' = n - 1
-            i' = i .<<. 8
+            i' = i !<<. 8
         loop n' i'
 {-# INLINE go' #-}
 
@@ -125,7 +125,7 @@ decodeInt bs = unsafeDupablePerformIO $ withReadBuffer bs decodeInt'
 decodeInt' :: ReadBuffer -> IO Int64
 decodeInt' rbuf = do
     b0 <- read8 rbuf
-    let flag = b0 .>>. 6
+    let flag = b0 !>>. 6
         b1 = fromIntegral (b0 .&. 0b00111111)
     case flag of
       0 -> return b1

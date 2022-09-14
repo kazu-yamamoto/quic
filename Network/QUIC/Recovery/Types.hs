@@ -127,7 +127,7 @@ initialRTT :: RTT
 initialRTT = RTT {
     latestRTT       = Microseconds 0
   , smoothedRTT     = kInitialRTT
-  , rttvar          = kInitialRTT .>>. 1
+  , rttvar          = kInitialRTT !>>. 1
   , minRTT          = Microseconds 0
   , maxAckDelay1RTT = Microseconds 0
   , ptoCount        = 0
