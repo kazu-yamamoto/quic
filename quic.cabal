@@ -20,7 +20,7 @@ extra-source-files:  test/serverkey.pem
 
 Source-Repository head
   Type:                 git
-  Location:             git://github.com/kazu-yamamoto/quic
+  Location:             https://github.com/kazu-yamamoto/quic
 
 Flag devel
   Description:          Development commands
