@@ -53,16 +53,6 @@ spec = do
                 chp = headerProtectionKey ver defaultCipher (Secret cis)
             ----------------------------------------------------------------
             -- payload encryption
-            let clientCRYPTOframe = dec16 $ BS.concat [
-                    "060040f1010000ed0303ebf8fa56f12939b9584a3896472ec40bb863cfd3e868"
-                  , "04fe3a47f06a2b69484c00000413011302010000c000000010000e00000b6578"
-                  , "616d706c652e636f6dff01000100000a00080006001d00170018001000070005"
-                  , "04616c706e000500050100000000003300260024001d00209370b2c9caa47fba"
-                  , "baf4559fedba753de171fa71f50f1ce15d43e994ec74d748002b000302030400"
-                  , "0d0010000e0403050306030203080408050806002d00020101001c0002400100"
-                  , "3900320408ffffffffffffffff05048000ffff07048000ffff08011001048000"
-                  , "75300901100f088394c8f03e51570806048000ffff"
-                  ]
             let clientPacketHeader = dec16 "c300000001088394c8f03e5157080000449e00000002"
             -- c3 00000001 08 8394c8f03e515708 00 00 449e 00000002
             -- c3 (11000011)    -- flags
@@ -104,12 +94,6 @@ spec = do
                 shp = headerProtectionKey ver defaultCipher (Secret sis)
             ----------------------------------------------------------------
             -- payload encryption
-            let serverCRYPTOframe = dec16 $ BS.concat [
-                    "02000000000600405a020000560303eefce7f7b37ba1d1632e96677825ddf739"
-                  , "88cfc79825df566dc5430b9a045a1200130100002e00330024001d00209d3c94"
-                  , "0d89690b84d08a60993c144eca684d1081287c834d5311bcf32bb9da1a002b00"
-                  , "020304"
-                  ]
             let serverPacketHeader = dec16 "c1000000010008f067a5502a4262b50040750001"
             -- c1 00000001 00 08 f067a5502a4262b5 00 4075 0001
             -- c1 (11000001)    -- flags
@@ -162,21 +146,21 @@ spec = do
             -- shared keys
             let dcID = makeCID (dec16s "8394c8f03e515708")
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret ver dcID
-            client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "9fe72e1452e91f551b770005054034e47575d4a0fb4c27b7c6cb303a338423ae")
+            client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "14ec9d6eb9fd7af83bf5a668bc17a7e283766aade7ecd0891f70f9ff7f4bf47b")
             let ckey = aeadKey ver defaultCipher (Secret cis)
-            ckey `shouldBe` Key (dec16 "95df2be2e8d549c82e996fc9339f4563")
+            ckey `shouldBe` Key (dec16 "8b1a0bc121284290a29e0971b5cd045d")
             let civ = initialVector ver defaultCipher (Secret cis)
-            civ `shouldBe` IV (dec16 "ea5e3c95f933db14b7020ad8")
+            civ `shouldBe` IV (dec16 "91f73e2351d8fa91660e909f")
             let chp = headerProtectionKey ver defaultCipher (Secret cis)
-            chp `shouldBe` Key (dec16 "091efb735702447d07908f6501845794")
+            chp `shouldBe` Key (dec16 "45b95e15235d6f45a6b19cbcb0294ba9")
             let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret ver dcID
-            server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "3c9bf6a9c1c8c71819876967bd8b979efd98ec665edf27f22c06e9845ba0ae2f")
+            server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "0263db1782731bf4588e7e4d93b7463907cb8cd8200b5da55a8bd488eafc37c1")
             let skey = aeadKey ver defaultCipher (Secret sis)
-            skey `shouldBe` Key (dec16 "15d5b4d9a2b8916aa39b1bfe574d2aad")
+            skey `shouldBe` Key (dec16 "82db637861d55e1d011f19ea71d5d2a7")
             let siv = initialVector ver defaultCipher (Secret sis)
-            siv `shouldBe` IV (dec16 "a85e7ac31cd275cbb095c626")
+            siv `shouldBe` IV (dec16 "dd13c276499c0249d3310652")
             let shp = headerProtectionKey ver defaultCipher (Secret sis)
-            shp `shouldBe` Key (dec16 "b13861cfadbb9d11ff942dd80c8fc33b")
+            shp `shouldBe` Key (dec16 "edf6d05c83121201b436e16877593c3a")
 
         it "describes the examples of Client Initial" $ do
             let dcID = makeCID (dec16s "8394c8f03e515708")
@@ -186,20 +170,10 @@ spec = do
                 chp = headerProtectionKey ver defaultCipher (Secret cis)
             ----------------------------------------------------------------
             -- payload encryption
-            let clientCRYPTOframe = dec16 $ BS.concat [
-                    "060040f1010000ed0303ebf8fa56f12939b9584a3896472ec40bb863cfd3e868"
-                  , "04fe3a47f06a2b69484c00000413011302010000c000000010000e00000b6578"
-                  , "616d706c652e636f6dff01000100000a00080006001d00170018001000070005"
-                  , "04616c706e000500050100000000003300260024001d00209370b2c9caa47fba"
-                  , "baf4559fedba753de171fa71f50f1ce15d43e994ec74d748002b000302030400"
-                  , "0d0010000e0403050306030203080408050806002d00020101001c0002400100"
-                  , "3900320408ffffffffffffffff05048000ffff07048000ffff08011001048000"
-                  , "75300901100f088394c8f03e51570806048000ffff"
-                  ]
-            let clientPacketHeader = dec16 "d3709a50c4088394c8f03e5157080000449e00000002"
-            -- d3 709a50c4 08 8394c8f03e515708 00 00 449e 00000002
+            let clientPacketHeader = dec16 "d36b3343cf088394c8f03e5157080000449e00000002"
+            -- d3 6b3343cf 08 8394c8f03e515708 00 00 449e 00000002
             -- d3 (11010011)    -- flags
-            -- 709a50c4         -- version 2
+            -- 6b3343cf         -- version 2
             -- 08               -- dcid len
             -- 8394c8f03e515708 -- dcid
             -- 00               -- scid len
@@ -225,9 +199,9 @@ spec = do
             ----------------------------------------------------------------
             -- header protection
             let sample = Sample (BS.take 16 ciphertext)
-            sample `shouldBe` Sample (dec16 "23b8e610589c83c92d0e97eb7a6e5003")
+            sample `shouldBe` Sample (dec16 "ffe67b6abcdb4298b485dd04de806071")
             let Mask mask = protectionMask defaultCipher chp sample
-            BS.take 5 mask `shouldBe` dec16 "8e4391d84a"
+            BS.take 5 mask `shouldBe` dec16 "94a0c95e80"
 
         it "describes the examples of Server Initial" $ do
             let dcID = makeCID (dec16s "8394c8f03e515708")
@@ -237,13 +211,7 @@ spec = do
                 shp = headerProtectionKey ver defaultCipher (Secret sis)
             ----------------------------------------------------------------
             -- payload encryption
-            let serverCRYPTOframe = dec16 $ BS.concat [
-                    "02000000000600405a020000560303eefce7f7b37ba1d1632e96677825ddf739"
-                  , "88cfc79825df566dc5430b9a045a1200130100002e00330024001d00209d3c94"
-                  , "0d89690b84d08a60993c144eca684d1081287c834d5311bcf32bb9da1a002b00"
-                  , "020304"
-                  ]
-            let serverPacketHeader = dec16 "d1709a50c40008f067a5502a4262b50040750001"
+            let serverPacketHeader = dec16 "d16b3343cf0008f067a5502a4262b50040750001"
             -- d1 709a50c4 00 08 f067a5502a4262b5 00 4075 0001
             -- d1 (11010001)    -- flags
             -- 709a50c4         -- version 2
@@ -271,12 +239,12 @@ spec = do
             ----------------------------------------------------------------
             -- header protection
             let sample = Sample (BS.take 16 $ BS.drop 2 ciphertext)
-            sample `shouldBe` Sample (dec16 "ebb7972fdce59d50e7e49ff2a7e8de76")
+            sample `shouldBe` Sample (dec16 "6f05d8a4398c47089698baeea26b91eb")
             let Mask mask = protectionMask defaultCipher shp sample
-            BS.take 5 mask `shouldBe` dec16 "41103f438e"
+            BS.take 5 mask `shouldBe` dec16 "4dd92e91ea"
 
         it "describes the examples of Retry" $ do
-            let wire0 = dec16 "cf709a50c40008f067a5502a4262b5746f6b656e1dc71130cd1ed39d6efcee5c85806501"
+            let wire0 = dec16 "cf6b3343cf0008f067a5502a4262b5746f6b656ec8646ce8bfe33952d955543665dcc7b6"
             (ipkt,rest) <- decodePacket wire0
             rest `shouldBe` ""
             case ipkt of
@@ -288,3 +256,23 @@ spec = do
                   r0 `shouldBe` r1
               _                 -> error "Retry version 2"
 
+
+serverCRYPTOframe :: BS.ByteString
+serverCRYPTOframe = dec16 $ BS.concat [
+    "02000000000600405a020000560303eefce7f7b37ba1d1632e96677825ddf739"
+  , "88cfc79825df566dc5430b9a045a1200130100002e00330024001d00209d3c94"
+  , "0d89690b84d08a60993c144eca684d1081287c834d5311bcf32bb9da1a002b00"
+  , "020304"
+  ]
+
+clientCRYPTOframe :: BS.ByteString
+clientCRYPTOframe = dec16 $ BS.concat [
+    "060040f1010000ed0303ebf8fa56f12939b9584a3896472ec40bb863cfd3e868"
+  , "04fe3a47f06a2b69484c00000413011302010000c000000010000e00000b6578"
+  , "616d706c652e636f6dff01000100000a00080006001d00170018001000070005"
+  , "04616c706e000500050100000000003300260024001d00209370b2c9caa47fba"
+  , "baf4559fedba753de171fa71f50f1ce15d43e994ec74d748002b000302030400"
+  , "0d0010000e0403050306030203080408050806002d00020101001c0002400100"
+  , "3900320408ffffffffffffffff05048000ffff07048000ffff08011001048000"
+  , "75300901100f088394c8f03e51570806048000ffff"
+  ]
