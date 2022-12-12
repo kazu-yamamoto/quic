@@ -184,11 +184,11 @@ dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction $ do
         setSocketOption s opt 1
         return $ do
             (peersa, bs, cmsgs, _) <- NSB.recvMsg s maximumUdpPayloadSize 64 0
-            let Just pktinfo = lookupCmsg cmsgid cmsgs
+            let pktinfo = fromJust $ lookupCmsg cmsgid cmsgs
             let mysa = case mysa0 of
-                  SockAddrInet p _  -> let Just (IPv4PktInfo _ _ addr) = decodeCmsg pktinfo
+                  SockAddrInet p _  -> let IPv4PktInfo _ _ addr = fromJust $ decodeCmsg pktinfo
                                        in SockAddrInet p addr
-                  SockAddrInet6 p f _ sc -> let Just (IPv6PktInfo _ addr) = decodeCmsg pktinfo
+                  SockAddrInet6 p f _ sc -> let IPv6PktInfo _ addr = fromJust $ decodeCmsg pktinfo
                                             in SockAddrInet6 p f addr sc
                   _               -> error "dispatcher"
             return (bs, mysa, peersa, cmsgs)

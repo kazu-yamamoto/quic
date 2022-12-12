@@ -380,7 +380,9 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
                   let sid  = streamId s
                       sid1 = streamId s1
                   if sid == sid1 then do
-                      let StreamF _ off dats _ = frame
+                      let (off,dats) = case frame of
+                            StreamF _ o d _ -> (o,d)
+                            _               -> error "sendStreamSmall"
                           frame1 = StreamF sid off (dats ++ dats1) fin1'
                           sb1 = if fin1 then (sb . (s1 :)) else sb
                       loop s1 frame1 total1 build sb1

@@ -70,7 +70,7 @@ getSockets Connection{..} = readIORef sockets
 
 addSocket :: Connection -> Socket -> IO Socket
 addSocket Connection{..} s1 = atomicModifyIORef' sockets $
-    \ss@(s0:_) -> (s1:ss,s0)
+    \ss -> (s1:ss, head ss)
 
 clearSockets :: Connection -> IO [Socket]
 clearSockets Connection{..} = atomicModifyIORef sockets ([],)

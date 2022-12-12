@@ -335,8 +335,8 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     initialRoleInfo
       | isclient  = defaultClientRoleInfo
       | otherwise = defaultServerRoleInfo
-    Just myCID   = initSrcCID myAuthCIDs
-    Just peerCID = initSrcCID peerAuthCIDs
+    myCID   = fromJust $ initSrcCID myAuthCIDs
+    peerCID = fromJust $ initSrcCID peerAuthCIDs
     peer | isclient  = Server
          | otherwise = Client
     peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)

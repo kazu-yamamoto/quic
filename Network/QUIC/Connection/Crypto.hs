@@ -213,7 +213,7 @@ genFusionCoder1RTT cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s)
     fctxr <- fusionNewContext
     fusionSetup cipher fctxt txPayloadKey txPayloadIV
     fusionSetup cipher fctxr rxPayloadKey rxPayloadIV
-    let Just supp = supplement oldcoder
+    let supp = fromJust $ supplement oldcoder
     let coder = Coder {
             encrypt    = fusionEncrypt fctxt supp
           , decrypt    = fusionDecrypt fctxr

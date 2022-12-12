@@ -43,7 +43,8 @@ run conf client = NS.withSocketsDo $ do
   let resInfo = ccResumption conf
       verInfo = case resumptionSession resInfo of
         Nothing | resumptionToken resInfo == emptyToken ->
-                  let vers@(ver:_) = ccVersions conf
+                  let vers = ccVersions conf
+                      ver = head vers
                   in VersionInfo ver vers
         _  -> let ver = resumptionVersion resInfo in VersionInfo ver [ver]
   ex <- E.try $ runClient conf client False verInfo

@@ -116,8 +116,8 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
             s:_ <- readIORef sref
             NS.sendBuf s buf siz
         recv = recvServer accRecvQ
-    let Just myCID = initSrcCID accMyAuthCIDs
-        Just ocid  = origDstCID accMyAuthCIDs
+    let myCID = fromJust $ initSrcCID accMyAuthCIDs
+        ocid  = fromJust $ origDstCID accMyAuthCIDs
     (qLog, qclean)     <- dirQLogger scQLog accTime ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     debugLog $ "Original CID: " <> bhow ocid

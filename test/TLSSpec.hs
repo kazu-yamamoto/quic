@@ -5,6 +5,7 @@ module TLSSpec where
 
 import Data.Bits
 import qualified Data.ByteString as BS
+import Data.Maybe
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -83,9 +84,9 @@ spec = do
             let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ $ dec16 "00000002"
             let add = AssDat clientPacketHeader
-            let Just (hdr,bdy) = niteEncrypt' defaultCipher ckey nonce plaintext add
+            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher ckey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
-            let Just plaintext' = niteDecrypt' defaultCipher ckey nonce ciphertext add
+            let plaintext' = fromJust $ niteDecrypt' defaultCipher ckey nonce ciphertext add
             plaintext' `shouldBe` plaintext
 
             ----------------------------------------------------------------
@@ -129,9 +130,9 @@ spec = do
             let plaintext = serverCRYPTOframePadded
             let nonce = makeNonce siv $ dec16 "0001"
             let add = AssDat serverPacketHeader
-            let Just (hdr,bdy) = niteEncrypt' defaultCipher skey nonce plaintext add
+            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher skey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
-            let Just plaintext' = niteDecrypt' defaultCipher skey nonce ciphertext add
+            let plaintext' = fromJust $ niteDecrypt' defaultCipher skey nonce ciphertext add
             plaintext' `shouldBe` plaintext
 
             ----------------------------------------------------------------
@@ -148,8 +149,8 @@ spec = do
             case ipkt of
               PacketIR retrypkt -> do
                   wire1 <- encodeRetryPacket retrypkt
-                  let Just (f0,r0) = BS.uncons wire0
-                      Just (f1,r1) = BS.uncons wire1
+                  let (f0,r0) = fromJust $ BS.uncons wire0
+                      (f1,r1) = fromJust $ BS.uncons wire1
                   f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
                   r0 `shouldBe` r1
               _                 -> error "Retry version 1"
@@ -216,9 +217,9 @@ spec = do
             let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ $ dec16 "00000002"
             let add = AssDat clientPacketHeader
-            let Just (hdr,bdy) = niteEncrypt' defaultCipher ckey nonce plaintext add
+            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher ckey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
-            let Just plaintext' = niteDecrypt' defaultCipher ckey nonce ciphertext add
+            let plaintext' = fromJust $ niteDecrypt' defaultCipher ckey nonce ciphertext add
             plaintext' `shouldBe` plaintext
 
             ----------------------------------------------------------------
@@ -262,9 +263,9 @@ spec = do
             let plaintext = serverCRYPTOframePadded
             let nonce = makeNonce siv $ dec16 "0001"
             let add = AssDat serverPacketHeader
-            let Just (hdr,bdy) = niteEncrypt' defaultCipher skey nonce plaintext add
+            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher skey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
-            let Just plaintext' = niteDecrypt' defaultCipher skey nonce ciphertext add
+            let plaintext' = fromJust $ niteDecrypt' defaultCipher skey nonce ciphertext add
             plaintext' `shouldBe` plaintext
 
             ----------------------------------------------------------------
@@ -281,8 +282,8 @@ spec = do
             case ipkt of
               PacketIR retrypkt -> do
                   wire1 <- encodeRetryPacket retrypkt
-                  let Just (f0,r0) = BS.uncons wire0
-                      Just (f1,r1) = BS.uncons wire1
+                  let (f0,r0) = fromJust $ BS.uncons wire0
+                      (f1,r1) = fromJust $ BS.uncons wire1
                   f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
                   r0 `shouldBe` r1
               _                 -> error "Retry version 2"

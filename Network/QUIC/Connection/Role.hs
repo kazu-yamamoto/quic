@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-incomplete-record-updates #-}
 
 module Network.QUIC.Connection.Role (
     setToken
