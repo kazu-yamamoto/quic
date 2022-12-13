@@ -18,15 +18,20 @@ spec = do
     serverConf <- runIO makeTestServerConfig
     describe "test vector" $ do
         it "describes example of Client Initial version 1" $ do
-            checkBinary serverConf Version1 clientInitialPacketBinaryV1
+            conns <- makeConnections serverConf Version1
+            checkBinary conns 2 clientInitialPacketBinaryV1
         it "describes example of Client Initial version 2" $ do
-            checkBinary serverConf Version2 clientInitialPacketBinaryV2
+            conns <- makeConnections serverConf Version2
+            checkBinary conns 2 clientInitialPacketBinaryV2
 
-checkBinary :: ServerConfig -> Version -> ByteString -> IO ()
-checkBinary conf v bin = do
+clientChosenCID :: CID
+clientChosenCID = toCID $ dec16 "8394c8f03e515708"
+
+makeConnections :: ServerConfig -> Version -> IO (Connection, Connection)
+makeConnections conf v = do
     let noLog _ = return ()
-    let serverCID = makeCID $ dec16s "8394c8f03e515708"
-        clientCID = makeCID ""
+    let serverCID = clientChosenCID
+        clientCID = toCID ""
         serverAuthCIDs = defaultAuthCIDs { initSrcCID = Just serverCID
                                          , origDstCID = Just serverCID
                                          }
@@ -38,17 +43,32 @@ checkBinary conf v bin = do
     sref <- newIORef [s]
     let ver = v
         verInfo = VersionInfo ver [ver]
+    ----
     clientConn <- clientConnection clientConf verInfo clientAuthCIDs serverAuthCIDs noLog noLog defaultHooks sref q undefined undefined
     initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
     serverConn <- serverConnection conf verInfo serverAuthCIDs clientAuthCIDs noLog noLog defaultHooks sref q undefined undefined
     initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
+    ----
+    return (clientConn, serverConn)
+
+checkBinary :: (Connection,Connection) -> PacketNumber -> ByteString -> IO ()
+checkBinary (senderConn,recverConn) pn bin = do
+    ---- Decoding by the receiver
     (PacketIC (CryptPacket header crypt) lvl _, _) <- decodePacket bin
-    Just plain <- decryptCrypt serverConn crypt lvl
+    ---- Cecrypting by the receiver
+    Just plain <- decryptCrypt recverConn crypt lvl
+    ---- Checking
+    headerMyCID header `shouldBe` clientChosenCID
+    plainPacketNumber plain `shouldBe` pn
+    ---- Encoding by the sender
     let ppkt = PlainPacket header plain
     bin' <- BS.createAndTrim 4096 $ \buf ->
-        fst <$> encodePlainPacket clientConn (SizedBuffer buf 2048) ppkt Nothing
+        fst <$> encodePlainPacket senderConn (SizedBuffer buf 2048) ppkt Nothing
+    ---- Decoding by the receiver again
     (PacketIC (CryptPacket header' crypt') lvl' _, _) <- decodePacket bin'
-    Just plain' <- decryptCrypt serverConn crypt' lvl'
+    ---- Cecrypting by the receiver again
+    Just plain' <- decryptCrypt recverConn crypt' lvl'
+    ---- Checking
     header' `shouldBe` header
     plainFrames plain' `shouldBe` plainFrames plain
 
