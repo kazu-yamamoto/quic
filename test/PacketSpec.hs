@@ -6,6 +6,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
 import Data.IORef
+import Data.Tuple (swap)
 import qualified Network.Socket as NS
 import Test.Hspec
 
@@ -20,9 +21,15 @@ spec = do
         it "describes example of Client Initial version 1" $ do
             conns <- makeConnections serverConf Version1
             checkBinary conns 2 clientInitialPacketBinaryV1
+        it "describes example of Server Initial version 1" $ do
+            conns <- swap <$> makeConnections serverConf Version1
+            checkBinary conns 1 serverInitialPacketBinaryV1
         it "describes example of Client Initial version 2" $ do
             conns <- makeConnections serverConf Version2
             checkBinary conns 2 clientInitialPacketBinaryV2
+        it "describes example of Server Initial version 2" $ do
+            conns <- swap <$> makeConnections serverConf Version2
+            checkBinary conns 1 serverInitialPacketBinaryV2
 
 clientChosenCID :: CID
 clientChosenCID = toCID $ dec16 "8394c8f03e515708"
@@ -51,14 +58,13 @@ makeConnections conf v = do
     ----
     return (clientConn, serverConn)
 
-checkBinary :: (Connection,Connection) -> PacketNumber -> ByteString -> IO ()
+checkBinary :: (Connection,Connection)-> PacketNumber -> ByteString -> IO ()
 checkBinary (senderConn,recverConn) pn bin = do
     ---- Decoding by the receiver
     (PacketIC (CryptPacket header crypt) lvl _, _) <- decodePacket bin
     ---- Cecrypting by the receiver
     Just plain <- decryptCrypt recverConn crypt lvl
     ---- Checking
-    headerMyCID header `shouldBe` clientChosenCID
     plainPacketNumber plain `shouldBe` pn
     ---- Encoding by the sender
     let ppkt = PlainPacket header plain
@@ -154,4 +160,22 @@ clientInitialPacketBinaryV2 = dec16 $ BS.concat [
   , "6f4c4938ae79324dc402894b44faf8afbab35282ab659d13c93f70412e85cb19"
   , "9a37ddec600545473cfb5a05e08d0b209973b2172b4d21fb69745a262ccde96b"
   , "a18b2faa745b6fe189cf772a9f84cbfc"
+  ]
+
+serverInitialPacketBinaryV1 :: ByteString
+serverInitialPacketBinaryV1 = dec16 $ BS.concat [
+    "cf000000010008f067a5502a4262b5004075c0d95a482cd0991cd25b0aac406a"
+  , "5816b6394100f37a1c69797554780bb38cc5a99f5ede4cf73c3ec2493a1839b3"
+  , "dbcba3f6ea46c5b7684df3548e7ddeb9c3bf9c73cc3f3bded74b562bfb19fb84"
+  , "022f8ef4cdd93795d77d06edbb7aaf2f58891850abbdca3d20398c276456cbc4"
+  , "2158407dd074ee"
+  ]
+
+serverInitialPacketBinaryV2 :: ByteString
+serverInitialPacketBinaryV2 = dec16 $ BS.concat [
+    "dc6b3343cf0008f067a5502a4262b5004075d92faaf16f05d8a4398c47089698"
+  , "baeea26b91eb761d9b89237bbf87263017915358230035f7fd3945d88965cf17"
+  , "f9af6e16886c61bfc703106fbaf3cb4cfa52382dd16a393e42757507698075b2"
+  , "c984c707f0a0812d8cd5a6881eaf21ceda98f4bd23f6fe1a3e2c43edd9ce7ca8"
+  , "4bed8521e2e140"
   ]
