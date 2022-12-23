@@ -93,7 +93,6 @@ library
                        Network.QUIC.Sender
                        Network.QUIC.Server.Reader
                        Network.QUIC.Server.Run
-                       Network.QUIC.Socket
                        Network.QUIC.Stream
                        Network.QUIC.Stream.Frag
                        Network.QUIC.Stream.Misc
@@ -131,6 +130,7 @@ library
                      , iproute >= 1.7.8
                      , memory
                      , network >= 3.1.2
+                     , network-udp
                      , network-byte-order >= 0.1.5
                      , psqueues
                      , random >= 1.2
@@ -179,6 +179,7 @@ test-suite spec
                       , cryptonite
                       , hspec
                       , network >= 3.1.2
+                      , network-udp
                       , quic
                       , tls
                       , unix-time

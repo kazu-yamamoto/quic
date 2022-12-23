@@ -10,8 +10,8 @@ module Network.QUIC.Client.Reader (
   ) where
 
 import Data.List (intersect)
-import Network.Socket (Socket, getSocketName, getPeerName, close)
-import qualified Network.Socket.ByteString as NSB
+import Network.Socket (getSocketName)
+import Network.UDP
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -24,17 +24,16 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
-import Network.QUIC.Socket
 import Network.QUIC.Types
 #if defined(mingw32_HOST_OS)
 import Network.QUIC.Windows
 #endif
 
 -- | readerClient dies when the socket is closed.
-readerClient :: Socket -> Connection -> IO ()
-readerClient s0 conn = handleLogUnit logAction $ do
+readerClient :: UDPSocket -> Connection -> IO ()
+readerClient cs0@(UDPSocket s0 _ _) conn = handleLogUnit logAction $ do
     wait
-    getServerAddr conn >>= loop
+    loop
   where
     wait = do
         bound <- E.handleAny (\_ -> return False) $ do
@@ -43,25 +42,20 @@ readerClient s0 conn = handleLogUnit logAction $ do
         unless bound $ do
             yield
             wait
-    loop msa0 = do
+    loop = do
         ito <- readMinIdleTimeout conn
         mbs <- timeout ito $
 #if defined(mingw32_HOST_OS)
           windowsThreadBlockHack $
 #endif
-            case msa0 of
-              Nothing  ->     NSB.recv     s0 maximumUdpPayloadSize
-              Just sa0 -> do
-                  (bs, sa) <- NSB.recvFrom s0 maximumUdpPayloadSize
-                  return $ if sa == sa0 then bs else ""
+            recv cs0
         case mbs of
-          Nothing -> close s0
-          Just "" -> loop msa0
+          Nothing -> close cs0
           Just bs -> do
             now <- getTimeMicrosecond
             pkts <- decodePackets bs
             mapM_ (putQ now) pkts
-            loop msa0
+            loop
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ (PacketIB BrokenPacket) = return ()
     putQ t (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
@@ -149,12 +143,13 @@ controlConnection' conn ActiveMigration = do
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
-    s0:_ <- getSockets conn
-    msa0 <- getServerAddr conn
-    s1 <- case msa0 of
-      Nothing  -> getPeerName s0 >>= udpNATRebindingConnectedSocket
-      Just sa0 -> udpNATRebindingSocket sa0
-    _ <- addSocket conn s1
-    let reader = readerClient s1 conn
-    forkIO reader >>= addReader conn
-    fire conn microseconds $ close s0
+    E.bracket setup teardown $ \cs -> do
+        let reader = readerClient cs conn
+        forkIO reader >>= addReader conn
+  where
+    setup = do
+        cs0 <- getSocket conn
+        cs <- natRebinding cs0
+        _ <- setSocket conn cs
+        return cs
+    teardown cs = fire conn microseconds $ close cs

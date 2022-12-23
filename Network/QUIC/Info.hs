@@ -6,9 +6,9 @@ module Network.QUIC.Info where
 import qualified Data.ByteString.Char8 as C8
 import qualified Network.Socket as NS
 import Network.TLS hiding (Version, HandshakeFailed)
+import Network.UDP (UDPSocket(..))
 
 import Network.QUIC.Connection
-import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -30,15 +30,8 @@ data ConnectionInfo = ConnectionInfo {
 -- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
-    s:_    <- getSockets conn
-    mysa   <- NS.getSocketName s
-    peersa <- if isClient conn then do
-                  msa <- getServerAddr conn
-                  case msa of
-                    Nothing -> NS.getPeerName s
-                    Just sa -> return sa
-                else
-                  NS.getPeerName s
+    UDPSocket{..} <- getSocket conn
+    mysa <- NS.getSocketName udpSocket
     mycid   <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
@@ -53,7 +46,7 @@ getConnectionInfo conn = do
       , handshakeMode = mode
       , retry = r
       , localSockAddr  = mysa
-      , remoteSockAddr = peersa
+      , remoteSockAddr = peerSockAddr
       , localCID  = mycid
       , remoteCID = peercid
       }

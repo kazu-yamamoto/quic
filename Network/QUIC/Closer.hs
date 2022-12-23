@@ -4,7 +4,7 @@
 module Network.QUIC.Closer (closure) where
 
 import Foreign.Marshal.Alloc
-import qualified Network.Socket as NS
+import qualified Network.UDP as UDP
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 import Foreign.Ptr
@@ -40,30 +40,21 @@ closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
     killReaders conn
     killTimeouter <- replaceKillTimeouter conn
-    socks@(s:_) <- clearSockets conn
     let bufsiz = maximumUdpPayloadSize
     sendBuf <- mallocBytes bufsiz
     recvBuf <- mallocBytes bufsiz
     siz <- encodeCC conn (SizedBuffer sendBuf bufsiz) frame
-    msa <- if isClient conn then getServerAddr conn else return Nothing
-    recv <- return $ case msa of
-          Nothing -> NS.recvBuf s recvBuf bufsiz
-          Just sa -> let action = NS.recvBufFrom s recvBuf bufsiz
-                     in loop sa action
-    send <- return $ case msa of
-                 Nothing -> NS.sendBuf   s sendBuf siz
-                 Just sa -> NS.sendBufTo s sendBuf siz sa
-    let hook = onCloseCompleted $ connHooks conn
+    us <- getSocket conn
+    let clos = UDP.close us
+        send = UDP.sendBuf us sendBuf siz
+        recv = UDP.recvBuf us recvBuf bufsiz
+        hook = onCloseCompleted $ connHooks conn
     pto <- getPTO ldcc
     void $ forkFinally (closer conn pto send recv hook) $ \_ -> do
         free sendBuf
         free recvBuf
-        mapM_ NS.close socks
+        clos
         killTimeouter
-  where
-    loop sa action = do
-        (len, sa') <- action
-        if sa == sa' then return len else loop sa action
 
 encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
 encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
@@ -93,10 +84,10 @@ encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
           else
             return 0
 
-closer :: Connection -> Microseconds -> IO Int -> IO Int -> IO () -> IO ()
+closer :: Connection -> Microseconds -> IO () -> IO Int -> IO () -> IO ()
 closer _conn (Microseconds pto) send recv hook
 #if defined(mingw32_HOST_OS)
-  | isServer _conn = void send
+  | isServer _conn = send
 #endif
   | otherwise      = loop (3 :: Int)
   where

@@ -15,8 +15,8 @@ import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
-import Network.Socket (Socket, SockAddr)
 import Network.TLS.QUIC
+import Network.UDP (UDPSocket)
 import UnliftIO.Concurrent
 import UnliftIO.STM
 
@@ -40,7 +40,6 @@ dummySecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 
 data RoleInfo = ClientInfo { clientInitialToken :: Token -- new or retry token
                            , resumptionInfo     :: ResumptionInfo
-                           , serverAddr         :: Maybe SockAddr
                            , incompatibleVN     :: Bool
                            }
               | ServerInfo { tokenManager    :: ~CT.TokenManager
@@ -55,7 +54,6 @@ defaultClientRoleInfo :: RoleInfo
 defaultClientRoleInfo = ClientInfo {
     clientInitialToken = emptyToken
   , resumptionInfo     = defaultResumptionInfo
-  , serverAddr         = Nothing
   , incompatibleVN     = False
   }
 
@@ -184,7 +182,7 @@ data Connection = Connection {
   , connRecv          :: ~Recv -- ~ for testing
   -- Manage
   , connRecvQ         :: RecvQ
-  , sockets           :: IORef [Socket]
+  , udpSocket         :: ~(IORef UDPSocket)
   , readers           :: IORef (IO ())
   , tmouter           :: IORef (IO ())
   , mainThreadId      :: ThreadId
@@ -265,7 +263,7 @@ newConnection :: Role
               -> Parameters
               -> VersionInfo -> AuthCIDs -> AuthCIDs
               -> DebugLogger -> QLogger -> Hooks
-              -> IORef [Socket]
+              -> IORef UDPSocket
               -> RecvQ
               -> Send
               -> Recv
@@ -349,7 +347,7 @@ defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
 clientConnection :: ClientConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
-                 -> IORef [Socket]
+                 -> IORef UDPSocket
                  -> RecvQ -> Send -> Recv
                  -> IO Connection
 clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
@@ -358,7 +356,7 @@ clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
 serverConnection :: ServerConfig
                  -> VersionInfo -> AuthCIDs -> AuthCIDs
                  -> DebugLogger -> QLogger -> Hooks
-                 -> IORef [Socket]
+                 -> IORef UDPSocket
                  -> RecvQ -> Send -> Recv
                  -> IO Connection
 serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =

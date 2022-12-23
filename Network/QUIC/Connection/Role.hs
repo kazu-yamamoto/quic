@@ -20,13 +20,10 @@ module Network.QUIC.Connection.Role (
   , getBaseThreadId
   , setCertificateChain
   , getCertificateChain
-  , setServerAddr
-  , getServerAddr
   ) where
 
 import qualified Crypto.Token as CT
 import Data.X509 (CertificateChain)
-import Network.Socket (SockAddr)
 import UnliftIO.Concurrent
 
 import Network.QUIC.Connection.Misc
@@ -142,12 +139,3 @@ setCertificateChain Connection{..} mcc = atomicModifyIORef'' roleInfo $
 
 getCertificateChain :: Connection -> IO (Maybe CertificateChain)
 getCertificateChain Connection{..} = certChain <$> readIORef roleInfo
-
-----------------------------------------------------------------
-
-setServerAddr :: Connection -> SockAddr -> IO ()
-setServerAddr Connection{..} sa = atomicModifyIORef'' roleInfo $
-    \si -> si { serverAddr = Just sa }
-
-getServerAddr :: Connection -> IO (Maybe SockAddr)
-getServerAddr Connection{..} = serverAddr <$> readIORef roleInfo

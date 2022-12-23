@@ -27,8 +27,8 @@ import Data.OrdPSQ (OrdPSQ)
 import qualified Data.OrdPSQ as PSQ
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
-import Network.Socket hiding (accept, Debug)
-import qualified Network.Socket.ByteString as NSB
+import Network.UDP (ListenSocket, UDPSocket, ClientSockAddr)
+import qualified Network.UDP as UDP
 import qualified System.IO.Error as E
 import System.Log.FastLogger
 import UnliftIO.Concurrent
@@ -43,7 +43,6 @@ import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
-import Network.QUIC.Socket
 import Network.QUIC.Types
 #if defined(mingw32_HOST_OS)
 import Network.QUIC.Windows
@@ -122,15 +121,14 @@ data Accept = Accept {
     accVersionInfo  :: VersionInfo
   , accMyAuthCIDs   :: AuthCIDs
   , accPeerAuthCIDs :: AuthCIDs
-  , accMySockAddr   :: SockAddr
-  , accPeerSockAddr :: SockAddr
+  , accMySocket     :: ListenSocket
+  , accPeerSockAddr :: ClientSockAddr
   , accRecvQ        :: RecvQ
   , accPacketSize   :: Int
   , accRegister     :: CID -> Connection -> IO ()
   , accUnregister   :: CID -> IO ()
   , accAddressValidated :: Bool
   , accTime         :: TimeMicrosecond
-  , accWildcard     :: Bool
   }
 
 newtype AcceptQ = AcceptQ (TQueue Accept)
@@ -149,63 +147,38 @@ accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
-runDispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ThreadId
-runDispatcher d conf ssa@(s,_,_) =
-    forkFinally (dispatcher d conf ssa) $ \_ -> close s
+runDispatcher :: Dispatch -> ServerConfig -> ListenSocket -> IO ThreadId
+runDispatcher d conf mysock =
+    forkFinally (dispatcher d conf mysock) $ \_ -> UDP.stop mysock
 
-dispatcher :: Dispatch -> ServerConfig -> (Socket,SockAddr,Bool) -> IO ()
-dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction $ do
-    recv <- mkRecv wildcard
+dispatcher :: Dispatch -> ServerConfig -> ListenSocket -> IO ()
+dispatcher d conf mysock = handleLogUnit logAction $ do
     forever $ do
-        (bs, mysa, peersa, cmsgs) <- safeRecv recv
+        (bs, peersa) <- safeRecv $ UDP.recvFrom mysock
         now <- getTimeMicrosecond
-        send <- mkSend wildcard peersa cmsgs
+        let send' b = UDP.sendTo mysock b peersa
         cpckts <- decodeCryptPackets bs
         let bytes = BS.length bs
-            switch = dispatch d conf logAction mysa peersa wildcard send bytes now
+            switch = dispatch d conf logAction mysock peersa send' bytes now
         mapM_ switch cpckts
   where
     doDebug = isJust $ scDebugLog conf
     logAction msg | doDebug   = stdoutLogger ("dispatch(er): " <> msg)
                   | otherwise = return ()
 
-    mkSend False peersa _     = return $ \b -> void $ NSB.sendTo s b peersa
-    mkSend True  peersa cmsgs = return $ \b ->
-      void $ NSB.sendMsg s peersa [b] cmsgs 0
-
-    mkRecv False  = return $ do
-        (bs, peersa) <- NSB.recvFrom s maximumUdpPayloadSize
-        return (bs, mysa0, peersa, [])
-    mkRecv True = do
-        let (opt,cmsgid) = case mysa0 of
-              SockAddrInet{}  -> (RecvIPv4PktInfo, CmsgIdIPv4PktInfo)
-              SockAddrInet6{} -> (RecvIPv6PktInfo, CmsgIdIPv6PktInfo)
-              _               -> error "dispatcher"
-        setSocketOption s opt 1
-        return $ do
-            (peersa, bs, cmsgs, _) <- NSB.recvMsg s maximumUdpPayloadSize 64 0
-            let pktinfo = fromJust $ lookupCmsg cmsgid cmsgs
-            let mysa = case mysa0 of
-                  SockAddrInet p _  -> let IPv4PktInfo _ _ addr = fromJust $ decodeCmsg pktinfo
-                                       in SockAddrInet p addr
-                  SockAddrInet6 p f _ sc -> let IPv6PktInfo _ addr = fromJust $ decodeCmsg pktinfo
-                                            in SockAddrInet6 p f addr sc
-                  _               -> error "dispatcher"
-            return (bs, mysa, peersa, cmsgs)
-
-    safeRecv recv = do
+    safeRecv rcv = do
         ex <- E.tryAny $
 #if defined(mingw32_HOST_OS)
                 windowsThreadBlockHack $
 #endif
-                  recv
+                  rcv
         case ex of
            Right x -> return x
            Left se -> case E.fromException se of
               Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
               _ -> do
                   logAction $ "recv again: " <> bhow se
-                  recv
+                  rcv
 
 ----------------------------------------------------------------
 
@@ -217,11 +190,11 @@ dispatcher d conf (s,mysa0,wildcard) = handleLogUnit logAction $ do
 -- For the other fragments, handshake will fail since its socket
 -- cannot be connected.
 dispatch :: Dispatch -> ServerConfig -> DebugLogger
-         -> SockAddr -> SockAddr -> Bool -> (ByteString -> IO ()) -> Int -> TimeMicrosecond
+         -> ListenSocket -> ClientSockAddr -> (ByteString -> IO ()) -> Int -> TimeMicrosecond
          -> (CryptPacket,EncryptionLevel,Int)
          -> IO ()
 dispatch Dispatch{..} ServerConfig{..} logAction
-         mysa peersa wildcard send bytes tim
+         mysock peersa send' bytes tim
          (cpkt@(CryptPacket (Initial peerVer dCID sCID token) _),lvl,siz)
   | bytes < defaultQUICPacketSize = do
         logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
@@ -230,7 +203,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                 | peerVer == GreasingVersion = GreasingVersion2 : myVersions
                 | otherwise                  = GreasingVersion  : myVersions
         bss <- encodeVersionNegotiationPacket $ VersionNegotiationPacket sCID dCID offerVersions
-        send bss
+        send' bss
   | token == "" = do
         mconn <- lookupConnectionDict dstTable dCID
         case mconn of
@@ -275,7 +248,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                       accVersionInfo  = VersionInfo peerVer myVersions
                     , accMyAuthCIDs   = myAuthCIDs
                     , accPeerAuthCIDs = peerAuthCIDs
-                    , accMySockAddr   = mysa
+                    , accMySocket     = mysock
                     , accPeerSockAddr = peersa
                     , accRecvQ        = q
                     , accPacketSize   = bytes
@@ -283,7 +256,6 @@ dispatch Dispatch{..} ServerConfig{..} logAction
                     , accUnregister   = unreg
                     , accAddressValidated = addrValid
                     , accTime         = tim
-                    , accWildcard     = wildcard
                     }
               -- fixme: check acceptQ length
               writeAcceptQ acceptQ ent
@@ -347,10 +319,10 @@ dispatch Dispatch{..} ServerConfig{..} logAction
           Nothing       -> logAction "retry token stacked"
           Just newtoken -> do
               bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
-              send bss
+              send' bss
 ----------------------------------------------------------------
 dispatch Dispatch{..} _ _
-         _ _peersa _ _ _ tim
+         _ _peersa _ _ tim
          (cpkt@(CryptPacket (RTT0 _ o _) _), lvl, siz) = do
     mq <- lookupRecvQDict srcTable o
     case mq of
@@ -359,7 +331,7 @@ dispatch Dispatch{..} _ _
 #if defined(mingw32_HOST_OS)
 ----------------------------------------------------------------
 dispatch Dispatch{..} _ logAction
-         _mysa peersa _wildcard _ _ tim
+         _mysock peersa _ _ tim
          (cpkt@(CryptPacket hdr _crypt),lvl,siz) = do
     let dCID = headerMyCID hdr
     mconn <- lookupConnectionDict dstTable dCID
@@ -369,7 +341,7 @@ dispatch Dispatch{..} _ logAction
 #else
 ----------------------------------------------------------------
 dispatch Dispatch{..} _ logAction
-         mysa peersa wildcard _ _ tim
+         mysock peersa _ _ tim
          ((CryptPacket hdr@(Short dCID) crypt),lvl,siz)= do
     -- fixme: packets for closed connections also match here.
     mconn <- lookupConnectionDict dstTable dCID
@@ -379,25 +351,25 @@ dispatch Dispatch{..} _ logAction
       Just conn -> do
             alive <- getAlive conn
             when alive $ do
-                let miginfo = MigrationInfo mysa peersa dCID wildcard
+                let miginfo = MigrationInfo mysock peersa dCID
                     crypt' = crypt { cryptMigraionInfo = Just miginfo }
                     cpkt = CryptPacket hdr crypt'
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 ----------------------------------------------------------------
-dispatch _ _ _ _ _ _ _ _ _ _ = return ()
+dispatch _ _ _ _ _ _ _ _ _ = return ()
 #endif
 
 ----------------------------------------------------------------
 
 -- | readerServer dies when the socket is closed.
-readerServer :: Socket -> Connection -> IO ()
-readerServer s conn = handleLogUnit logAction loop
+readerServer :: UDPSocket -> Connection -> IO ()
+readerServer us conn = handleLogUnit logAction loop
   where
     loop = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito $ NSB.recv s maximumUdpPayloadSize
+        mbs <- timeout ito $ UDP.recv us
         case mbs of
-          Nothing -> close s
+          Nothing -> UDP.close us
           Just bs -> do
               now <- getTimeMicrosecond
               pkts <- decodeCryptPackets bs
@@ -411,7 +383,7 @@ recvServer = readRecvQ
 ----------------------------------------------------------------
 
 runNewServerReader :: Connection -> MigrationInfo -> IO ()
-runNewServerReader conn (MigrationInfo mysa peersa dCID wildcard) = handleLogUnit logAction $ do
+runNewServerReader conn (MigrationInfo mysock peersa dCID) = handleLogUnit logAction $ do
     migrating <- isPathValidating conn -- fixme: test and set
     unless migrating $ do
         setMigrationStarted conn
@@ -420,8 +392,8 @@ runNewServerReader conn (MigrationInfo mysa peersa dCID wildcard) = handleLogUni
         let msg = "Migration: " <> bhow peersa <> " (" <> bhow dCID <> ")"
         qlogDebug conn $ Debug $ toLogStr msg
         connDebugLog conn $ "debug: runNewServerReader: " <> msg
-        E.bracketOnError setup close $ \s1 ->
-            E.bracket (addSocket conn s1) close $ \_ -> do
+        E.bracketOnError setup UDP.close $ \s1 ->
+            E.bracket (setSocket conn s1) UDP.close $ \_ -> do
                 void $ forkIO $ readerServer s1 conn
                 -- fixme: if cannot set
                 setMyCID conn dCID
@@ -429,5 +401,5 @@ runNewServerReader conn (MigrationInfo mysa peersa dCID wildcard) = handleLogUni
                 -- holding the old socket for a while
                 delay $ Microseconds 20000
   where
-    setup = udpServerConnectedSocket mysa peersa wildcard
+    setup = UDP.accept mysock peersa
     logAction msg = connDebugLog conn ("debug: runNewServerReader: " <> msg)

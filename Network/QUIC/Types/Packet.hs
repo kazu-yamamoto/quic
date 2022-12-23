@@ -4,7 +4,7 @@
 module Network.QUIC.Types.Packet where
 
 import Data.Ix
-import Network.Socket (SockAddr)
+import Network.UDP
 import Network.TLS.QUIC (extensionID_QuicTransportParameters, ExtensionID)
 import Text.Printf
 
@@ -144,7 +144,7 @@ isNoPaddings = (`testBit` 8)
 is4bytesPN :: Int -> Bool
 is4bytesPN = (`testBit` 9)
 
-data MigrationInfo = MigrationInfo SockAddr SockAddr CID Bool deriving (Eq, Show)
+data MigrationInfo = MigrationInfo ListenSocket ClientSockAddr CID deriving (Eq, Show)
 
 data Crypt = Crypt {
     cryptPktNumOffset :: Int

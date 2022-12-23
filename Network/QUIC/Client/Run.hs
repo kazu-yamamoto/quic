@@ -8,6 +8,8 @@ module Network.QUIC.Client.Run (
   ) where
 
 import qualified Network.Socket as NS
+import Network.UDP (UDPSocket(..))
+import qualified Network.UDP as UDP
 import UnliftIO.Async
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
@@ -26,7 +28,6 @@ import Network.QUIC.QLogger
 import Network.QUIC.Receiver
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
-import Network.QUIC.Socket
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -93,24 +94,17 @@ runClient conf client0 isICVN verInfo = do
         setDead conn
         freeResources conn
         killReaders conn
-        socks <- getSockets conn
-        mapM_ NS.close socks
+        getSocket conn >>= UDP.close
         join $ replaceKillTimeouter conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
-    (s0,sa0) <- if ccAutoMigration then
-                  udpClientSocket ccServerName ccPortName
-                else
-                  udpClientConnectedSocket ccServerName ccPortName
+    us@(UDPSocket _ sa _) <- UDP.clientSocket ccServerName ccPortName (not ccAutoMigration)
     q <- newRecvQ
-    sref <- newIORef [s0]
-    let send buf siz = do
-            s:_ <- readIORef sref
-            if ccAutoMigration then
-                void $ NS.sendBufTo s buf siz sa0
-              else
-                void $ NS.sendBuf s buf siz
+    sref <- newIORef us
+    let send = \buf siz -> do
+            cs <- readIORef sref
+            UDP.sendBuf cs buf siz
         recv = recvClient q
     myCID   <- newCID
     peerCID <- newCID
@@ -127,12 +121,11 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz0 = fromMaybe 0 ccPacketSize
-        pktSiz = (defaultPacketSize sa0 `max` pktSiz0) `min` maximumPacketSize sa0
+        pktSiz = (defaultPacketSize sa `max` pktSiz0) `min` maximumPacketSize sa
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
-    when ccAutoMigration $ setServerAddr conn sa0
-    let reader = readerClient s0 conn -- dies when s0 is closed.
+    let reader = readerClient us conn -- dies when s0 is closed.
     return $ ConnRes conn myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation
