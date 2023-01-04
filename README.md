@@ -16,8 +16,8 @@ This package covers:
 
 The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/http3):
 
-- [draft-ietf-quic-http](https://tools.ietf.org/html/draft-ietf-quic-http)
-- [draft-ietf-quic-qpack](https://tools.ietf.org/html/draft-ietf-quic-qpack)
+- [HTTP/3](https://tools.ietf.org/html/rfc9114)
+- [QPACK: Field Compression for HTTP/3](https://tools.ietf.org/html/rfc9204)
 
 Blog articles:
 
