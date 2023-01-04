@@ -1,6 +1,8 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 -- | This main module provides APIs for QUIC.
+--
+-- The -threaded option must be specified to GHC to use this library.
 module Network.QUIC (
   -- * Connection
     Connection
