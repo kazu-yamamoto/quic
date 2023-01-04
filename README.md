@@ -21,7 +21,7 @@ The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/htt
 
 Technical/blog articles:
 
-- [Implementing QUIC in Haskell](https://www.iij.ad.jp/en/dev/iir/pdf/iir_vol52_focus2_EN.pdf)
+- [Implementing QUIC in Haskell](https://www.iij.ad.jp/en/dev/iir/pdf/iir_vol52_focus2_EN.pdf) (2021/11)
 - [Testing QUIC servers with h3spec](https://kazu-yamamoto.hatenablog.jp/entry/2020/11/19/160606) (2020/11/19)
 - [The Current Plan for Haskell QUIC](https://kazu-yamamoto.hatenablog.jp/entry/2020/10/23/141648) (2020/10/23)
 - [Improving QUIC APIs of the TLS library in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/16/150801) (2020/09/16)
