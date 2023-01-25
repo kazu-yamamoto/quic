@@ -93,8 +93,7 @@ closer _conn (Microseconds pto) send recv hook
   where
     loop 0 = return ()
     loop n = do
-        _ <- send
-        return ()
+        send
         getTimeMicrosecond >>= skip (Microseconds pto)
         mx <- timeout (Microseconds (pto !>>. 1)) recv
         case mx of

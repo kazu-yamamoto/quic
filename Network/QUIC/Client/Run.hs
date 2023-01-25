@@ -94,7 +94,6 @@ runClient conf client0 isICVN verInfo = do
         setDead conn
         freeResources conn
         killReaders conn
-        getSocket conn >>= UDP.close
         join $ replaceKillTimeouter conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
