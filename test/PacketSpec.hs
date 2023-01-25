@@ -7,7 +7,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
 import Data.IORef
 import Data.Tuple (swap)
-import qualified Network.Socket as NS
+import Network.UDP
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -45,9 +45,9 @@ makeConnections conf v = do
         clientAuthCIDs = defaultAuthCIDs { initSrcCID = Just clientCID }
         -- dummy
     let clientConf = testClientConfig
-    s <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
+    us <- clientSocket "127.0.0.1" "2000" False
     q <- newRecvQ
-    sref <- newIORef [s]
+    sref <- newIORef us
     let ver = v
         verInfo = VersionInfo ver [ver]
     ----

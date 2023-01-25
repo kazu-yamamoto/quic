@@ -7,9 +7,9 @@ module Network.QUIC.Connection.Misc (
   , setVersion
   , getVersion
   , getOriginalVersion
-  , getSockets
-  , addSocket
-  , clearSockets
+  , getSocket
+  , setSocket
+  , clearSocket
   , getPeerAuthCIDs
   , setPeerAuthCIDs
   , getClientDstCID
@@ -32,7 +32,7 @@ module Network.QUIC.Connection.Misc (
   , abortConnection
   ) where
 
-import Network.Socket
+import Network.UDP
 import System.Mem.Weak
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
@@ -65,15 +65,15 @@ getOriginalVersion = chosenVersion . origVersionInfo
 
 ----------------------------------------------------------------
 
-getSockets :: Connection -> IO [Socket]
-getSockets Connection{..} = readIORef sockets
+getSocket :: Connection -> IO UDPSocket
+getSocket Connection{..} = readIORef udpSocket
 
-addSocket :: Connection -> Socket -> IO Socket
-addSocket Connection{..} s1 = atomicModifyIORef' sockets $
-    \ss -> (s1:ss, head ss)
+setSocket :: Connection -> UDPSocket -> IO UDPSocket
+setSocket Connection{..} sock = atomicModifyIORef' udpSocket $
+    \sock0 -> (sock, sock0)
 
-clearSockets :: Connection -> IO [Socket]
-clearSockets Connection{..} = atomicModifyIORef sockets ([],)
+clearSocket :: Connection -> IO UDPSocket
+clearSocket Connection{..} = atomicModifyIORef' udpSocket (undefined,)
 
 ----------------------------------------------------------------
 

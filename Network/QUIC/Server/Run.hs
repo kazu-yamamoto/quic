@@ -9,6 +9,8 @@ module Network.QUIC.Server.Run (
   ) where
 
 import qualified Network.Socket as NS
+import Network.UDP (UDPSocket(..), ListenSocket(..))
+import qualified Network.UDP as UDP
 import System.Log.FastLogger
 import UnliftIO.Async
 import UnliftIO.Concurrent
@@ -31,7 +33,6 @@ import Network.QUIC.Receiver
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Server.Reader
-import Network.QUIC.Socket
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -52,7 +53,7 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     setup = do
         dispatch <- newDispatch
         -- fixme: the case where sockets cannot be created.
-        ssas <- mapM  udpServerListenSocket $ scAddresses conf
+        ssas <- mapM UDP.serverSocket $ scAddresses conf
         tids <- mapM (runDispatcher dispatch conf) ssas
         ttid <- forkIO timeouter -- fixme
         return (dispatch, ttid:tids)
@@ -101,8 +102,7 @@ runServer conf server0 dispatch baseThreadId acc =
 #if !defined(mingw32_HOST_OS)
         killReaders conn
 #endif
-        socks <- getSockets conn
-        mapM_ NS.close socks
+        getSocket conn >>= UDP.close
     debugLog conn msg = do
         connDebugLog conn ("runServer: " <> msg)
         qlogDebug conn $ Debug $ toLogStr msg
@@ -110,11 +110,12 @@ runServer conf server0 dispatch baseThreadId acc =
 createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
                        -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
-    s0 <- udpServerConnectedSocket accMySockAddr accPeerSockAddr accWildcard
-    sref <- newIORef [s0]
+    us <- UDP.accept accMySocket accPeerSockAddr
+    let ListenSocket _ mysa _ = accMySocket
+    sref <- newIORef us
     let send buf siz = void $ do
-            s:_ <- readIORef sref
-            NS.sendBuf s buf siz
+            UDPSocket{..} <- readIORef sref
+            NS.sendBuf udpSocket buf siz
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs
         ocid  = fromJust $ origDstCID accMyAuthCIDs
@@ -128,7 +129,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
         ver = chosenVersion accVersionInfo
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz = (defaultPacketSize accMySockAddr `max` accPacketSize) `min` maximumPacketSize accMySockAddr
+    let pktSiz = (defaultPacketSize mysa `max` accPacketSize) `min` maximumPacketSize mysa
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"
@@ -153,7 +154,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
 #if defined(mingw32_HOST_OS)
     return $ ConnRes conn accMyAuthCIDs undefined
 #else
-    let reader = readerServer s0 conn -- dies when s0 is closed.
+    let reader = readerServer us conn -- dies when us is closed.
     return $ ConnRes conn accMyAuthCIDs reader
 #endif
 
