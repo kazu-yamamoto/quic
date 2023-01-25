@@ -161,7 +161,8 @@ main = do
     cmvar <- newEmptyMVar
     let path | ipslen == 3 = ips !! 2
              | otherwise   = "/"
-        addr:port:_ = ips
+        addr = head ips
+        port = head $ tail ips
         ccalpn ver
           | optPerformance /= 0 = return $ Just ["perf"]
           | otherwise = let (h3X, hqX) = makeProtos ver
