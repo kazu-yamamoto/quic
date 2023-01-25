@@ -66,12 +66,12 @@ pattern InitialSourceConnectionId       :: Key
 pattern InitialSourceConnectionId        = Key 0x0f
 pattern RetrySourceConnectionId         :: Key
 pattern RetrySourceConnectionId          = Key 0x10
+pattern VersionInformation              :: Key
+pattern VersionInformation               = Key 0x11
 pattern Grease                          :: Key
 pattern Grease                           = Key 0xff
 pattern GreaseQuicBit                   :: Key
 pattern GreaseQuicBit                    = Key 0x2ab2
-pattern VersionInformation              :: Key
-pattern VersionInformation               = Key 0xff73db
 
 
 -- | QUIC transport parameters.

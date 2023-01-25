@@ -61,7 +61,7 @@ pattern NoViablePath            :: TransportError
 pattern NoViablePath             = TransportError 0x10
 
 pattern VersionNegotiationError :: TransportError
-pattern VersionNegotiationError  = TransportError 0x53f8
+pattern VersionNegotiationError  = TransportError 0x11
 
 instance Show TransportError where
     show (TransportError    0x0) = "NoError"
@@ -81,7 +81,7 @@ instance Show TransportError where
     show (TransportError    0xe) = "KeyUpdateError"
     show (TransportError    0xf) = "AeadLimitReached"
     show (TransportError   0x10) = "NoViablePath"
-    show (TransportError 0x53f8) = "VersionNegotiationError"
+    show (TransportError   0x11) = "VersionNegotiationError"
     show (TransportError      x)
       | 0x100 <= x && x <= 0x01ff = case toAlertDescription $ fromIntegral (x - 0x100) of
           Just e  -> "TLS " ++ show e
