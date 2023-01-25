@@ -143,13 +143,10 @@ controlConnection' conn ActiveMigration = do
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
-    E.bracket setup teardown $ \cs -> do
-        let reader = readerClient cs conn
-        forkIO reader >>= addReader conn
-  where
-    setup = do
-        cs0 <- getSocket conn
-        cs <- natRebinding cs0
-        _ <- setSocket conn cs
-        return cs
-    teardown cs = fire conn microseconds $ close cs
+    cs0 <- getSocket conn
+    cs <- natRebinding cs0
+    cs0' <- setSocket conn cs
+    let reader = readerClient cs conn
+    forkIO reader >>= addReader conn
+    -- Using cs0' just in case.
+    fire conn microseconds $ close cs0'
