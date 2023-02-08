@@ -113,11 +113,11 @@ setPeerParameters Connection{..} params = writeIORef peerParameters params
 
 delayedAck :: Connection -> IO ()
 delayedAck conn@Connection{..} = do
-    (oldcnt,send) <- atomicModifyIORef' delayedAckCount check
+    (oldcnt,send_) <- atomicModifyIORef' delayedAckCount check
     when (oldcnt == 0) $ do
         new <- cfire conn (Microseconds 20000) sendAck
         join $ atomicModifyIORef' delayedAckCancel (new,)
-    when send $ do
+    when send_ $ do
         let new = return ()
         join $ atomicModifyIORef' delayedAckCancel (new,)
         sendAck
