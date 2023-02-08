@@ -1,5 +1,5 @@
 name:                quic
-version:             0.0.1
+version:             0.1.0
 synopsis:            QUIC
 description:         Library for QUIC: A UDP-Based Multiplexed and Secure Transport
 license:             BSD3
