@@ -13,6 +13,9 @@ This package covers:
 - [QUIC: A UDP-Based Multiplexed and Secure Transport](https://tools.ietf.org/html/rfc9000)
 - [Using TLS to Secure QUIC](https://tools.ietf.org/html/rfc9001)
 - [QUIC Loss Detection and Congestion Control](https://tools.ietf.org/html/rfc9002)
+- [Greasing the QUIC Bit](https://tools.ietf.org/html/rfc9287)
+- QUIC Version 2
+- Compatible Version Negotiation for QUIC
 
 The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/http3):
 
@@ -21,7 +24,11 @@ The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/htt
 
 Technical/blog articles:
 
+- [Accepting UDP connections](https://kazu-yamamoto.hatenablog.jp/entry/2022/02/25/153122)
+- [Integrating Fusion and cryptonite in Haskell quic](https://kazu-yamamoto.hatenablog.jp/entry/2021/12/20/152921) (2021/12)
 - [Implementing QUIC in Haskell](https://www.iij.ad.jp/en/dev/iir/pdf/iir_vol52_focus2_EN.pdf) (2021/11)
+- [Releasing QUIC and HTTP/3 libraries](https://kazu-yamamoto.hatenablog.jp/entry/2021/10/04/153546) (2021/10)
+- [Migration API for QUIC clients](https://kazu-yamamoto.hatenablog.jp/entry/2021/06/29/134930) (2021/06)
 - [Testing QUIC servers with h3spec](https://kazu-yamamoto.hatenablog.jp/entry/2020/11/19/160606) (2020/11/19)
 - [The Current Plan for Haskell QUIC](https://kazu-yamamoto.hatenablog.jp/entry/2020/10/23/141648) (2020/10/23)
 - [Improving QUIC APIs of the TLS library in Haskell](https://kazu-yamamoto.hatenablog.jp/entry/2020/09/16/150801) (2020/09/16)
