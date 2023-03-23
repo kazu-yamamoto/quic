@@ -24,7 +24,7 @@ The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/htt
 
 Technical/blog articles:
 
-- [Developing network related libraries in Haskell in 2022FY](https://kazu-yamamoto.hatenablog.jp/entry/2023/03/23/134317)
+- [Developing network related libraries in Haskell in 2022FY](https://kazu-yamamoto.hatenablog.jp/entry/2023/03/23/134317) (2023/03/23 blog)
 - [Accepting UDP connections](https://kazu-yamamoto.hatenablog.jp/entry/2022/02/25/153122) (2022/02/25 blog)
 - [Integrating Fusion and cryptonite in Haskell quic](https://kazu-yamamoto.hatenablog.jp/entry/2021/12/20/152921) (2021/12/20 blog)
 - [Implementing QUIC in Haskell](https://www.iij.ad.jp/en/dev/iir/pdf/iir_vol52_focus2_EN.pdf) (2021/11 technical article)
