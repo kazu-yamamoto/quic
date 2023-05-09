@@ -26,6 +26,11 @@ Flag devel
   Description:          Development commands
   Default:              False
 
+Flag fusion
+  Description:          Use fusion AES-GCM engine from picotls
+  Default:              True
+  Manual:               True
+
 ----------------------------------------------------------------
 
 library
@@ -147,7 +152,7 @@ library
   default-extensions:  Strict StrictData
   if os(windows)
     cc-options:        -D_WINDOWS
-  if arch(x86_64)
+  if flag(fusion) && arch(x86_64)
     cpp-options:       -DUSE_FUSION
     cc-options:        -mavx2 -maes -mpclmul
     c-sources:         cbits/fusion.c cbits/picotls.c
