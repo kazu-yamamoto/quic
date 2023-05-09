@@ -69,6 +69,75 @@ spec = do
             withPipe (DropClientPacket [10]) $ testSendRecv cc sc 20
         it "can exchange data on client 11" $ do
             withPipe (DropClientPacket [11]) $ testSendRecv cc sc 20
+    describe "recvStream" $ do
+        it "don't block if client stop sending first" $ do
+            withPipe (Randomly 20) $ testRecvStreamClientStopFirst cc sc
+        it "don't block if server stop sending first" $ do
+            withPipe (Randomly 20) $ testRecvStreamServerStopFirst cc sc
+
+consumeBytes :: Stream -> Int -> IO ()
+consumeBytes _ 0 = return ()
+consumeBytes strm left = do
+    bs <- recvStream strm 1024
+    when (BS.null bs) $ expectationFailure "no enough bytes received"
+    let len = BS.length bs
+    when (len > left) $ expectationFailure "extra bytes received"
+    consumeBytes strm (left - len)
+
+assertEndOfStream :: Stream -> IO ()
+assertEndOfStream strm = recvStream strm 1024 `shouldReturn` ""
+
+testRecvStreamClientStopFirst :: C.ClientConfig -> ServerConfig -> IO ()
+testRecvStreamClientStopFirst cc sc = do
+    mvar <- newEmptyMVar
+    void $ concurrently (client mvar) (server mvar)
+    threadDelay 10000
+  where
+    aerr = ApplicationProtocolError 0
+
+    client mvar = do
+        threadDelay 10000
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm (BS.replicate 10000 0)
+            takeMVar mvar `shouldReturn` ()
+            stopStream strm aerr
+            resetStream strm aerr
+            takeMVar mvar `shouldReturn` ()
+    server mvar = run sc $ \conn -> do
+        strm <- acceptStream conn
+        consumeBytes strm 10000 `shouldReturn` ()
+        -- notify client to stop stream after all bytes are received.
+        putMVar mvar ()
+        -- verify that client has stopped sending.
+        assertEndOfStream strm
+        putMVar mvar ()
+        stop conn
+
+testRecvStreamServerStopFirst :: C.ClientConfig -> ServerConfig -> IO ()
+testRecvStreamServerStopFirst cc sc = do
+    mvar <- newEmptyMVar
+    void $ concurrently (client mvar) (server mvar)
+    threadDelay 10000
+  where
+    aerr = ApplicationProtocolError 0
+
+    client mvar = do
+        threadDelay 10000
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm (BS.replicate 10000 0)
+            takeMVar mvar `shouldReturn` ()
+    server mvar = run sc $ \conn -> do
+        strm <- acceptStream conn
+        consumeBytes strm 10000 `shouldReturn` ()
+        -- ask client to stop sending.
+        stopStream strm aerr
+        -- verify that client has stopped sending.
+        assertEndOfStream strm
+        resetStream strm aerr
+        putMVar mvar ()
+        stop conn
 
 testSendRecv :: C.ClientConfig -> ServerConfig -> Int -> IO ()
 testSendRecv cc sc times = do
@@ -86,16 +155,7 @@ testSendRecv cc sc times = do
             takeMVar mvar `shouldReturn` ()
     server mvar = run sc $ \conn -> do
         strm <- acceptStream conn
-        bs <- recvStream strm 1024
-        let len = BS.length bs
-        n <- loop strm bs len
-        n `shouldBe` (10000 * times)
+        consumeBytes strm (10000 * times)
+        assertEndOfStream strm
         putMVar mvar ()
         stop conn
-      where
-        loop _    "" n = return n
-        loop strm _  n = do
-            bs <- recvStream strm 1024
-            let len = BS.length bs
-                n' = n + len
-            loop strm bs n'
