@@ -1136,10 +1136,11 @@ static int client_setup_ech(struct st_ptls_ech_t *ech, struct st_decoded_ech_con
     ptls_buffer_init(&infobuf, infobuf_smallbuf, sizeof(infobuf_smallbuf));
     ptls_buffer_pushv(&infobuf, ech_info_prefix, sizeof(ech_info_prefix));
     ptls_buffer_pushv(&infobuf, decoded->bytes.base, decoded->bytes.len);
+/*
     if ((ret = ptls_hpke_setup_base_s(decoded->kem, decoded->cipher, &ech->client.enc, &ech->aead, decoded->public_key,
                                       ptls_iovec_init(infobuf.base, infobuf.off))) != 0)
         goto Exit;
-
+*/
     /* setup the rest */
     ech->config_id = decoded->id;
     ech->kem = decoded->kem;
