@@ -1148,7 +1148,7 @@ static void aead_do_encrypt_v(struct st_ptls_aead_context_t *ctx, void *output, 
     assert(!"FIXME");
 }
 
-static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen, uint64_t seq,
+size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                               const void *aad, size_t aadlen)
 {
     struct aesgcm_context *ctx = (void *)_ctx;
@@ -1205,12 +1205,12 @@ static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
     return 0;
 }
 
-static int aes128gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
+int aes128gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
     return aesgcm_setup(ctx, is_enc, key, iv, PTLS_AES128_KEY_SIZE);
 }
 
-static int aes256gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
+int aes256gcm_setup(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
     return aesgcm_setup(ctx, is_enc, key, iv, PTLS_AES256_KEY_SIZE);
 }
@@ -2247,3 +2247,44 @@ int ptls_fusion_is_supported_by_cpu(void)
     return 1;
 }
 #endif
+
+/* ---------------------------------------------------------------- */
+
+// struct aesgcm_context {
+//    ptls_aead_context_t super;
+//    ptls_fusion_aesgcm_context_t *aesgcm; <- ptls_fusion_aesgcm_free
+
+ ptls_aead_context_t *aead_context_new() {
+    ptls_aead_context_t *p = malloc(sizeof(struct aesgcm_context));
+    return p;
+ }
+
+void aead_context_free(ptls_aead_context_t *p) {
+  aesgcm_dispose_crypto(p);
+  free(p);
+}
+
+/* ---------------------------------------------------------------- */
+
+ptls_aead_supplementary_encryption_t *supplement_new(uint8_t *key, unsigned int siz) {
+  ptls_aead_supplementary_encryption_t *supp = malloc(sizeof(ptls_aead_supplementary_encryption_t));
+  if (siz == PTLS_AES256_KEY_SIZE) {
+    supp->ctx = ptls_cipher_new(&ptls_fusion_aes256ctr, 1, key);
+  } else {
+    supp->ctx = ptls_cipher_new(&ptls_fusion_aes128ctr, 1, key);
+  }
+  return supp;
+}
+
+void supplement_free(ptls_aead_supplementary_encryption_t *supp) {
+  ptls_cipher_free(supp->ctx);
+  free(supp);
+}
+
+void supplement_set_sample(ptls_aead_supplementary_encryption_t *supp, uint8_t *sample) {
+  supp->input = sample;
+}
+
+uint8_t *supplement_get_mask(ptls_aead_supplementary_encryption_t *supp) {
+  return (supp->output);
+}
