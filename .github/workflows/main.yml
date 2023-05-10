@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:  [ 'ubuntu-latest', 'macOS-10.15', 'windows-latest' ]
+        os:  [ 'ubuntu-latest', 'macOS-latest', 'windows-latest' ]
         ghc: [ '8.10', '9.0', '9.2' ]
         exclude:
         - os: windows-latest
@@ -25,7 +25,7 @@ jobs:
     - uses: haskell/actions/setup@v2
       with:
         ghc-version: ${{ matrix.ghc }}
-        cabal-version: '3.8'
+        cabal-version: latest
 
     - name: Cache
       uses: actions/cache@v3
