@@ -1,3 +1,12 @@
+## 0.1.1
+
+- Fix recvStream hanging
+  [#54](https://github.com/kazu-yamamoto/quic/pull/54)
+- Don't use the fusion crypto on Intel if the CPU does not
+  provides enough features.
+- Add cabal flag for fusion support
+  [#53](https://github.com/kazu-yamamoto/quic/pull/53)
+
 ## 0.1.0
 
 - Supporting QUICv2 and version negotiation.
