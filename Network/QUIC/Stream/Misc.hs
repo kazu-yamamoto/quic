@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Misc (
@@ -22,6 +23,7 @@ module Network.QUIC.Stream.Misc (
 import UnliftIO.STM
 
 import Network.QUIC.Imports
+import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Types
 
 ----------------------------------------------------------------
@@ -54,7 +56,9 @@ isRxStreamClosed Stream{..} = do
     return fin
 
 setRxStreamClosed :: Stream -> IO ()
-setRxStreamClosed Stream{..} = atomicModifyIORef'' streamStateRx set
+setRxStreamClosed strm@Stream{..} = do
+    atomicModifyIORef'' streamStateRx set
+    putRecvStreamQ strm ""
   where
     set (StreamState off _) = StreamState off True
 
