@@ -84,10 +84,10 @@ onE h b = E.onException b h
 testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
 testHandshake cc sc mode = do
     concurrently_ server client
-    threadDelay 10000
+    threadDelay 50000
   where
     client = do
-        threadDelay 10000
+        threadDelay 50000
         C.run cc $ \conn -> do
             waitEstablished conn
             handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
@@ -107,17 +107,17 @@ query content conn = do
 testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
 testHandshake2 cc1 sc (mode1, mode2) use0RTT = do
     concurrently_ server client
-    threadDelay 10000
+    threadDelay 50000
   where
     runClient cc mode action = C.run cc $ \conn -> do
         void $ action conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-        threadDelay 10000
+        threadDelay 50000
         getResumptionInfo conn
     client = do
         threadDelay 10000
         res <- runClient cc1 mode1 $ query "first"
-        threadDelay 10000
+        threadDelay 50000
         let cc2 = cc1 { ccResumption = res
                       , ccUse0RTT    = use0RTT
                       }
@@ -134,10 +134,10 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = do
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc selector = do
     concurrently_ server client
-    threadDelay 10000
+    threadDelay 50000
   where
     client = do
-        threadDelay 10000
+        threadDelay 50000
         C.run cc1 (query "first")  `shouldThrow` selector
         C.run cc2 (query "second") `shouldReturn` ()
     server = S.run sc $ \conn -> do
