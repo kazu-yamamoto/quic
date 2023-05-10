@@ -20,7 +20,7 @@
  * IN THE SOFTWARE.
  */
 #ifdef _WINDOWS
-#include "wincompat.h"
+#include "winsock.h"
 #endif
 #include <assert.h>
 #include <stddef.h>
