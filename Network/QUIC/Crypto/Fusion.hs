@@ -10,6 +10,7 @@ module Network.QUIC.Crypto.Fusion (
   , fusionSetupSupplement
   , fusionSetSample
   , fusionGetMask
+  , isFusionAvailable
   ) where
 
 #ifdef USE_FUSION
@@ -97,6 +98,11 @@ fusionSetSample (SP fsupp) p = withForeignPtr fsupp $ \psupp ->
 fusionGetMask :: Supplement -> IO Buffer
 fusionGetMask (SP fsupp) = withForeignPtr fsupp c_supplement_get_mask
 
+isFusionAvailable :: IO Bool
+isFusionAvailable = do
+    n <- c_ptls_fusion_is_supported_by_cpu
+    return $ not (n == 0)
+
 ----------------------------------------------------------------
 
 foreign import ccall unsafe "aead_context_new"
@@ -155,6 +161,10 @@ foreign import ccall unsafe "supplement_set_sample"
 
 foreign import ccall unsafe "supplement_get_mask"
     c_supplement_get_mask :: Ptr SupplementOpaque -> IO (Ptr Word8)
+
+foreign import ccall unsafe "ptls_fusion_is_supported_by_cpu"
+    c_ptls_fusion_is_supported_by_cpu :: IO Int
+
 #else
 import Network.QUIC.Crypto.Types
 import Network.QUIC.Imports
@@ -186,4 +196,7 @@ fusionSetSample = undefined
 
 fusionGetMask :: Supplement -> IO Buffer
 fusionGetMask = undefined
+
+isFusionAvailable :: IO Bool
+isFusionAvailable = return False
 #endif

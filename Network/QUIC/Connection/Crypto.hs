@@ -105,8 +105,9 @@ initializeCoder conn lvl sec = do
            else
              getVersion conn
     cipher <- getCipher conn lvl
+    avail <- isFusionAvailable
     (coder, protector) <-
-        if useFusion then
+        if useFusion && avail then
             genFusionCoder (isClient conn) ver cipher sec
           else
             genNiteCoder (isClient conn) ver cipher sec
@@ -117,8 +118,9 @@ initializeCoder1RTT :: Connection -> TrafficSecrets ApplicationSecret -> IO ()
 initializeCoder1RTT conn sec = do
     ver <- getVersion conn
     cipher <- getCipher conn RTT1Level
+    avail <- isFusionAvailable
     (coder, protector) <-
-        if useFusion then
+        if useFusion && avail then
             genFusionCoder (isClient conn) ver cipher sec
           else
             genNiteCoder (isClient conn) ver cipher sec
@@ -133,7 +135,8 @@ updateCoder1RTT conn nextPhase = do
     cipher <- getCipher conn RTT1Level
     Coder1RTT coder secN <- readArray (coders1RTT conn) (not nextPhase)
     let secN1 = updateSecret ver cipher secN
-    coderN1 <- if useFusion then
+    avail <- isFusionAvailable
+    coderN1 <- if useFusion && avail then
                    genFusionCoder1RTT (isClient conn) ver cipher secN1 coder
                  else
                    genNiteCoder1RTT (isClient conn) ver cipher secN1 coder
