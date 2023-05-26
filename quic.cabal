@@ -1,245 +1,262 @@
-name:                quic
-version:             0.1.1
-synopsis:            QUIC
-description:         Library for QUIC: A UDP-Based Multiplexed and Secure Transport
-license:             BSD3
-license-file:        LICENSE
-author:              Kazu Yamamoto
-maintainer:          kazu@iij.ad.jp
--- copyright:
-category:            Web
-build-type:          Simple
-cabal-version:       >= 1.10
-extra-source-files:  ChangeLog.md
-extra-source-files:  cbits/*.h
-extra-source-files:  cbits/picotls/*.h
-extra-source-files:  test/servercert.pem
-extra-source-files:  test/serverkey.pem
+cabal-version:      >=1.10
+name:               quic
+version:            0.1.1
+license:            BSD3
+license-file:       LICENSE
+maintainer:         kazu@iij.ad.jp
+author:             Kazu Yamamoto
+synopsis:           QUIC
+description:
+    Library for QUIC: A UDP-Based Multiplexed and Secure Transport
 
-----------------------------------------------------------------
+category:           Web
+build-type:         Simple
+extra-source-files:
+    ChangeLog.md
+    cbits/*.h
+    cbits/picotls/*.h
+    test/servercert.pem
+    test/serverkey.pem
 
-Source-Repository head
-  Type:                 git
-  Location:             https://github.com/kazu-yamamoto/quic
+source-repository head
+    type:     git
+    location: https://github.com/kazu-yamamoto/quic
 
-Flag devel
-  Description:          Development commands
-  Default:              False
+flag devel
+    description: Development commands
+    default:     False
 
-Flag fusion
-  Description:          Use fusion AES-GCM engine from picotls
-  Default:              True
-  Manual:               True
-
-----------------------------------------------------------------
+flag fusion
+    description: Use fusion AES-GCM engine from picotls
+    manual:      True
 
 library
-  exposed-modules:     Network.QUIC
-                       Network.QUIC.Client
-                       Network.QUIC.Internal
-                       Network.QUIC.Server
-  other-modules:
-                       Network.QUIC.Client.Reader
-                       Network.QUIC.Client.Run
-                       Network.QUIC.Closer
-                       Network.QUIC.Common
-                       Network.QUIC.Config
-                       Network.QUIC.Connection
-                       Network.QUIC.Connection.Crypto
-                       Network.QUIC.Connection.Migration
-                       Network.QUIC.Connection.Misc
-                       Network.QUIC.Connection.PacketNumber
-                       Network.QUIC.Connection.Queue
-                       Network.QUIC.Connection.Role
-                       Network.QUIC.Connection.State
-                       Network.QUIC.Connection.Stream
-                       Network.QUIC.Connection.StreamTable
-                       Network.QUIC.Connection.Timeout
-                       Network.QUIC.Connection.Types
-                       Network.QUIC.Connector
-                       Network.QUIC.Crypto
-                       Network.QUIC.Crypto.Fusion
-                       Network.QUIC.Crypto.Keys
-                       Network.QUIC.Crypto.Nite
-                       Network.QUIC.Crypto.Types
-                       Network.QUIC.Crypto.Utils
-                       Network.QUIC.Event
-                       Network.QUIC.Exception
-                       Network.QUIC.Handshake
-                       Network.QUIC.IO
-                       Network.QUIC.Imports
-                       Network.QUIC.Info
-                       Network.QUIC.Logger
-                       Network.QUIC.Packet
-                       Network.QUIC.Packet.Decode
-                       Network.QUIC.Packet.Decrypt
-                       Network.QUIC.Packet.Encode
-                       Network.QUIC.Packet.Frame
-                       Network.QUIC.Packet.Header
-                       Network.QUIC.Packet.Number
-                       Network.QUIC.Packet.Token
-                       Network.QUIC.Parameters
-                       Network.QUIC.QLogger
-                       Network.QUIC.Qlog
-                       Network.QUIC.Receiver
-                       Network.QUIC.Recovery
-                       Network.QUIC.Recovery.Constants
-                       Network.QUIC.Recovery.Detect
-                       Network.QUIC.Recovery.Interface
-                       Network.QUIC.Recovery.LossRecovery
-                       Network.QUIC.Recovery.Metrics
-                       Network.QUIC.Recovery.Misc
-                       Network.QUIC.Recovery.PeerPacketNumbers
-                       Network.QUIC.Recovery.Persistent
-                       Network.QUIC.Recovery.Release
-                       Network.QUIC.Recovery.Timer
-                       Network.QUIC.Recovery.Types
-                       Network.QUIC.Recovery.Utils
-                       Network.QUIC.Sender
-                       Network.QUIC.Server.Reader
-                       Network.QUIC.Server.Run
-                       Network.QUIC.Stream
-                       Network.QUIC.Stream.Frag
-                       Network.QUIC.Stream.Misc
-                       Network.QUIC.Stream.Queue
-                       Network.QUIC.Stream.Reass
-                       Network.QUIC.Stream.Skew
-                       Network.QUIC.Stream.Table
-                       Network.QUIC.Stream.Types
-                       Network.QUIC.TLS
-                       Network.QUIC.Types
-                       Network.QUIC.Types.Ack
-                       Network.QUIC.Types.CID
-                       Network.QUIC.Types.Constants
-                       Network.QUIC.Types.Error
-                       Network.QUIC.Types.Exception
-                       Network.QUIC.Types.Frame
-                       Network.QUIC.Types.Integer
-                       Network.QUIC.Types.Packet
-                       Network.QUIC.Types.Queue
-                       Network.QUIC.Types.Resumption
-                       Network.QUIC.Types.Time
-                       Network.QUIC.Utils
-                       Network.QUIC.Windows
-  -- other-extensions:
-  build-depends:       base >= 4.9 && < 5
-                     , array
-                     , base16-bytestring >= 1.0
-                     , bytestring
-                     , containers
-                     , crypto-token
-                     , cryptonite
-                     , data-default-class
-                     , fast-logger >= 3.0.4
-                     , filepath
-                     , iproute >= 1.7.8
-                     , memory
-                     , network >= 3.1.2
-                     , network-udp
-                     , network-byte-order >= 0.1.5
-                     , psqueues
-                     , random >= 1.2
-                     , stm
-                     , tls >= 1.5.6
-                     , unix-time
-                     , unliftio >= 0.2.18
-                     , unliftio-core
-                     , x509
-                     , x509-system
-  -- hs-source-dirs:
-  default-language:    Haskell2010
-  ghc-options:         -Wall -Wcompat
-  default-extensions:  Strict StrictData
-  if os(windows)
-    cc-options:        -D_WINDOWS
-  if flag(fusion) && arch(x86_64)
-    cpp-options:       -DUSE_FUSION
-    cc-options:        -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq
-    c-sources:         cbits/fusion.c cbits/picotls.c
+    exposed-modules:
+        Network.QUIC
+        Network.QUIC.Client
+        Network.QUIC.Internal
+        Network.QUIC.Server
 
-test-suite spec
-  Type:                 exitcode-stdio-1.0
-  default-language:     Haskell2010
-  hs-source-dirs:       test
-  ghc-options:          -Wall -threaded -rtsopts
-  if os(windows)
-    ghc-options:       -with-rtsopts=--io-manager=native
-  main-is:              Spec.hs
-  other-modules:        Config
-                        ErrorSpec
-                        FrameSpec
-                        HandshakeSpec
-                        IOSpec
-                        PacketSpec
-                        RecoverySpec
-                        TLSSpec
-                        TransportError
-                        TypesSpec
-  build-depends:        base >= 4.9 && < 5
-                      , QuickCheck
-                      , async
-                      , base16-bytestring >= 1.0
-                      , bytestring
-                      , containers
-                      , cryptonite
-                      , hspec
-                      , network >= 3.1.2
-                      , network-udp
-                      , quic
-                      , tls
-                      , unix-time
-                      , unliftio
-  default-extensions:  Strict StrictData
-  build-tool-depends: hspec-discover:hspec-discover
+    other-modules:
+        Network.QUIC.Client.Reader
+        Network.QUIC.Client.Run
+        Network.QUIC.Closer
+        Network.QUIC.Common
+        Network.QUIC.Config
+        Network.QUIC.Connection
+        Network.QUIC.Connection.Crypto
+        Network.QUIC.Connection.Migration
+        Network.QUIC.Connection.Misc
+        Network.QUIC.Connection.PacketNumber
+        Network.QUIC.Connection.Queue
+        Network.QUIC.Connection.Role
+        Network.QUIC.Connection.State
+        Network.QUIC.Connection.Stream
+        Network.QUIC.Connection.StreamTable
+        Network.QUIC.Connection.Timeout
+        Network.QUIC.Connection.Types
+        Network.QUIC.Connector
+        Network.QUIC.Crypto
+        Network.QUIC.Crypto.Fusion
+        Network.QUIC.Crypto.Keys
+        Network.QUIC.Crypto.Nite
+        Network.QUIC.Crypto.Types
+        Network.QUIC.Crypto.Utils
+        Network.QUIC.Event
+        Network.QUIC.Exception
+        Network.QUIC.Handshake
+        Network.QUIC.IO
+        Network.QUIC.Imports
+        Network.QUIC.Info
+        Network.QUIC.Logger
+        Network.QUIC.Packet
+        Network.QUIC.Packet.Decode
+        Network.QUIC.Packet.Decrypt
+        Network.QUIC.Packet.Encode
+        Network.QUIC.Packet.Frame
+        Network.QUIC.Packet.Header
+        Network.QUIC.Packet.Number
+        Network.QUIC.Packet.Token
+        Network.QUIC.Parameters
+        Network.QUIC.QLogger
+        Network.QUIC.Qlog
+        Network.QUIC.Receiver
+        Network.QUIC.Recovery
+        Network.QUIC.Recovery.Constants
+        Network.QUIC.Recovery.Detect
+        Network.QUIC.Recovery.Interface
+        Network.QUIC.Recovery.LossRecovery
+        Network.QUIC.Recovery.Metrics
+        Network.QUIC.Recovery.Misc
+        Network.QUIC.Recovery.PeerPacketNumbers
+        Network.QUIC.Recovery.Persistent
+        Network.QUIC.Recovery.Release
+        Network.QUIC.Recovery.Timer
+        Network.QUIC.Recovery.Types
+        Network.QUIC.Recovery.Utils
+        Network.QUIC.Sender
+        Network.QUIC.Server.Reader
+        Network.QUIC.Server.Run
+        Network.QUIC.Stream
+        Network.QUIC.Stream.Frag
+        Network.QUIC.Stream.Misc
+        Network.QUIC.Stream.Queue
+        Network.QUIC.Stream.Reass
+        Network.QUIC.Stream.Skew
+        Network.QUIC.Stream.Table
+        Network.QUIC.Stream.Types
+        Network.QUIC.TLS
+        Network.QUIC.Types
+        Network.QUIC.Types.Ack
+        Network.QUIC.Types.CID
+        Network.QUIC.Types.Constants
+        Network.QUIC.Types.Error
+        Network.QUIC.Types.Exception
+        Network.QUIC.Types.Frame
+        Network.QUIC.Types.Integer
+        Network.QUIC.Types.Packet
+        Network.QUIC.Types.Queue
+        Network.QUIC.Types.Resumption
+        Network.QUIC.Types.Time
+        Network.QUIC.Utils
+        Network.QUIC.Windows
+
+    default-language:   Haskell2010
+    default-extensions: Strict StrictData
+    ghc-options:        -Wall -Wcompat
+    build-depends:
+        base >=4.9 && <5,
+        array,
+        base16-bytestring >=1.0,
+        bytestring,
+        containers,
+        crypto-token,
+        cryptonite,
+        data-default-class,
+        fast-logger >=3.0.4,
+        filepath,
+        iproute >=1.7.8,
+        memory,
+        network >=3.1.2,
+        network-udp,
+        network-byte-order >=0.1.5,
+        psqueues,
+        random >=1.2,
+        stm,
+        tls >=1.5.6,
+        unix-time,
+        unliftio >=0.2.18,
+        unliftio-core,
+        x509,
+        x509-system
+
+    if os(windows)
+        cc-options: -D_WINDOWS
+
+    if (flag(fusion) && arch(x86_64))
+        cpp-options: -DUSE_FUSION
+        cc-options:  -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq
+        c-sources:
+            cbits/fusion.c
+            cbits/picotls.c
 
 executable server
-  if flag(devel)
-    buildable:          True
-  else
-    buildable:          False
-  default-language:     Haskell2010
-  hs-source-dirs:       util
-  main-is:              server.hs
-  other-modules:        H3
-                        Common
-                        ServerX
-  ghc-options:          -Wall -threaded -rtsopts
-  if os(windows)
-    ghc-options:       -with-rtsopts=--io-manager=native
-  build-depends:        base >= 4.9 && < 5
-                      , base16-bytestring
-                      , bytestring
-                      , filepath
-                      , http2
-                      , network-byte-order
-                      , quic
-                      , tls
-                      , tls-session-manager
-                      , unliftio
-  default-extensions:  Strict StrictData
+    main-is:            server.hs
+    hs-source-dirs:     util
+    other-modules:
+        H3
+        Common
+        ServerX
+
+    default-language:   Haskell2010
+    default-extensions: Strict StrictData
+    ghc-options:        -Wall -threaded -rtsopts
+    build-depends:
+        base >=4.9 && <5,
+        base16-bytestring,
+        bytestring,
+        filepath,
+        http2,
+        network-byte-order,
+        quic,
+        tls,
+        tls-session-manager,
+        unliftio
+
+    if flag(devel)
+
+    else
+        buildable: False
+
+    if os(windows)
+        ghc-options: -with-rtsopts=--io-manager=native
 
 executable client
-  if flag(devel)
-    buildable:          True
-  else
-    buildable:          False
-  default-language:     Haskell2010
-  hs-source-dirs:       util
-  main-is:              client.hs
-  other-modules:        H3
-                        ClientX
-                        Common
-  ghc-options:          -Wall -threaded -rtsopts
-  if os(windows)
-    ghc-options:       -with-rtsopts=--io-manager=native
-  build-depends:        base >= 4.9 && < 5
-                      , base16-bytestring
-                      , bytestring
-                      , filepath
-                      , http2
-                      , network-byte-order
-                      , quic
-                      , tls
-                      , unix-time
-                      , unliftio
-  default-extensions:  Strict StrictData
+    main-is:            client.hs
+    hs-source-dirs:     util
+    other-modules:
+        H3
+        ClientX
+        Common
+
+    default-language:   Haskell2010
+    default-extensions: Strict StrictData
+    ghc-options:        -Wall -threaded -rtsopts
+    build-depends:
+        base >=4.9 && <5,
+        base16-bytestring,
+        bytestring,
+        filepath,
+        http2,
+        network-byte-order,
+        quic,
+        tls,
+        unix-time,
+        unliftio
+
+    if flag(devel)
+
+    else
+        buildable: False
+
+    if os(windows)
+        ghc-options: -with-rtsopts=--io-manager=native
+
+test-suite spec
+    type:               exitcode-stdio-1.0
+    main-is:            Spec.hs
+    build-tool-depends: hspec-discover:hspec-discover
+    hs-source-dirs:     test
+    other-modules:
+        Config
+        ErrorSpec
+        FrameSpec
+        HandshakeSpec
+        IOSpec
+        PacketSpec
+        RecoverySpec
+        TLSSpec
+        TransportError
+        TypesSpec
+
+    default-language:   Haskell2010
+    default-extensions: Strict StrictData
+    ghc-options:        -Wall -threaded -rtsopts
+    build-depends:
+        base >=4.9 && <5,
+        QuickCheck,
+        async,
+        base16-bytestring >=1.0,
+        bytestring,
+        containers,
+        cryptonite,
+        hspec,
+        network >=3.1.2,
+        network-udp,
+        quic,
+        tls,
+        unix-time,
+        unliftio
+
+    if os(windows)
+        ghc-options: -with-rtsopts=--io-manager=native
