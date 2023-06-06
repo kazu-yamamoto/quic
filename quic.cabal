@@ -131,7 +131,7 @@ library
         bytestring,
         containers,
         crypto-token,
-        cryptonite,
+        crypton,
         data-default-class,
         fast-logger >=3.0.4,
         filepath,
@@ -147,8 +147,8 @@ library
         unix-time,
         unliftio >=0.2.18,
         unliftio-core,
-        x509,
-        x509-system
+        crypton-x509,
+        crypton-x509-system
 
     if os(windows)
         cc-options: -D_WINDOWS
@@ -249,7 +249,7 @@ test-suite spec
         base16-bytestring >=1.0,
         bytestring,
         containers,
-        cryptonite,
+        crypton,
         hspec,
         network >=3.1.2,
         network-udp,
