@@ -307,8 +307,10 @@ sendCCTLSAlert :: TLS.AlertDescription -> ReasonPhrase -> IO ()
 sendCCTLSAlert a msg = closeConnection (cryptoError a) msg
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
-getErrorCause (TLS.HandshakeFailed e) = e
-getErrorCause (TLS.Terminated _ _ e)  = e
+getErrorCause (TLS.Terminated _ _ e)   = e
+getErrorCause (TLS.HandshakeFailed e)  = e
+getErrorCause (TLS.PostHandshake e)    = e
+getErrorCause (TLS.Uncontextualized e) = e
 getErrorCause e =
     let msg = "unexpected TLS exception: " ++ show e
      in TLS.Error_Protocol (msg, True, TLS.InternalError)
