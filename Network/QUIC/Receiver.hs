@@ -37,7 +37,12 @@ receiver conn = handleLogT logAction body
         ito <- readMinIdleTimeout conn
         mx <- timeout ito $ connRecv conn -- fixme: taking minimum with peer's one
         case mx of
-          Nothing -> E.throwIO ConnectionIsTimeout
+          Nothing -> do
+              st <- getConnectionState conn
+              let msg0 | isClient conn = "Client"
+                       | otherwise     = "Server"
+                  msg = msg0 ++ " " ++ show st
+              E.throwIO $ ConnectionIsTimeout msg
           Just x  -> return x
     loopHandshake = do
         rpkt <- recvTimeout

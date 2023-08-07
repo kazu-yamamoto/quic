@@ -94,7 +94,23 @@ testHandshake cc sc mode = do
     server = S.run sc $ \conn -> do
         waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
+        delayedStop conn
+
+-- When "server" finished, "sender" is killed by "race".
+-- In some cases, HANDSHAKE_DONE does not go out to the network
+-- even it is queued.
+-- "client" throws the "ConnectionIsTimeout" error.
+-- So, "server" should wait for enough time to send the packet.
+-- But "threadDelay" in "server" causes dead lock --
+-- "stop conn" is never called, so "forever" is not terminated.
+-- I don't understand why this dead lock happens.
+-- To avoid this, a dedicated thread is spawn.
+delayedStop :: Connection -> IO ()
+delayedStop conn = do
+    _ <- forkIO $ do -- avoid dead lock
+        threadDelay 10000
         stop conn
+    threadDelay 1000 -- wait for enough time
 
 query :: BS.ByteString -> Connection -> IO ()
 query content conn = do
@@ -129,7 +145,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = do
             bs <- recvStream s 1024
             sendStream s "bye"
             closeStream s
-            when (bs == "second") $ stop conn
+            when (bs == "second") $ delayedStop conn
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc selector = do
@@ -145,4 +161,4 @@ testHandshake3 cc1 cc2 sc selector = do
         recvStream s 1024 `shouldReturn` "second"
         sendStream s "bye"
         closeStream s
-        stop conn
+        delayedStop conn

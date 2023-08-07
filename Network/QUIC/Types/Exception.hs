@@ -15,7 +15,7 @@ data QUICException =
   | TransportErrorIsSent     TransportError ReasonPhrase
   | ApplicationProtocolErrorIsReceived ApplicationProtocolError ReasonPhrase
   | ApplicationProtocolErrorIsSent     ApplicationProtocolError ReasonPhrase
-  | ConnectionIsTimeout
+  | ConnectionIsTimeout String
   | ConnectionIsReset
   | StreamIsClosed
   | HandshakeFailed TLS.AlertDescription -- failed in my side
