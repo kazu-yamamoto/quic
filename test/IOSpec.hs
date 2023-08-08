@@ -112,7 +112,7 @@ testRecvStreamClientStopFirst cc sc = do
         -- verify that client has stopped sending.
         assertEndOfStream strm
         putMVar mvar ()
-        delayedStop conn
+        stop conn
 
 testRecvStreamServerStopFirst :: C.ClientConfig -> ServerConfig -> IO ()
 testRecvStreamServerStopFirst cc sc = do
@@ -137,7 +137,7 @@ testRecvStreamServerStopFirst cc sc = do
         assertEndOfStream strm
         resetStream strm aerr
         putMVar mvar ()
-        delayedStop conn
+        stop conn
 
 testSendRecv :: C.ClientConfig -> ServerConfig -> Int -> IO ()
 testSendRecv cc sc times = do
@@ -158,11 +158,4 @@ testSendRecv cc sc times = do
         consumeBytes strm (10000 * times)
         assertEndOfStream strm
         putMVar mvar ()
-        delayedStop conn
-
-delayedStop :: Connection -> IO ()
-delayedStop conn = do
-    _ <- forkIO $ do
-        threadDelay 10000
         stop conn
-    threadDelay 1000

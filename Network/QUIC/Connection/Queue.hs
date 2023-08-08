@@ -21,6 +21,9 @@ putCrypto conn inp = atomically $ writeTQueue (cryptoQ conn) inp
 takeOutputSTM :: Connection -> STM Output
 takeOutputSTM conn = readTQueue (outputQ conn)
 
+tryTakeOutput :: Connection -> IO (Maybe Output)
+tryTakeOutput conn = atomically $ tryReadTQueue (outputQ conn)
+
 tryPeekOutput :: Connection -> IO (Maybe Output)
 tryPeekOutput conn = atomically $ tryPeekTQueue (outputQ conn)
 

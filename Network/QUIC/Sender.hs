@@ -206,9 +206,9 @@ data Switch = SwPing EncryptionLevel
             | SwStrm TxStreamData
 
 sender :: Connection -> IO ()
-sender conn = handleLogT logAction body
+sender conn = handleLogUnit logAction $ forever sendP
   where
-    body = forever $ do
+    sendP = do
         x <- atomically ((SwPing <$> takePingSTM (connLDCC conn))
                 `orElse` (SwOut  <$> takeOutputSTM conn)
                 `orElse` (SwStrm <$> takeSendStreamQSTM conn))
@@ -216,7 +216,16 @@ sender conn = handleLogT logAction body
           SwPing lvl -> sendPingPacket   conn lvl
           SwOut  out -> sendOutput       conn out
           SwStrm tx  -> sendTxStreamData conn tx
-    logAction msg = connDebugLog conn ("debug: sender: " <> msg)
+    logAction msg = do
+        loop (30 :: Int)
+        connDebugLog conn ("debug: sender: " <> msg)
+      where
+        loop 0 = return ()
+        loop n = do
+            mx <- timeout (Microseconds 10) sendP
+            case mx of
+              Nothing -> return ()
+              Just () -> loop (n - 1)
 
 ----------------------------------------------------------------
 
