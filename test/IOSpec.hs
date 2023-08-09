@@ -8,72 +8,79 @@ import Test.Hspec
 import UnliftIO.Async
 import UnliftIO.Concurrent
 
-import qualified Network.QUIC.Client as C
 import Network.QUIC
+import qualified Network.QUIC.Client as C
+import Network.QUIC.Internal
 import Network.QUIC.Server
 
 import Config
 
 spec :: Spec
 spec = do
-    sc <- runIO makeTestServerConfigR
+    sc0 <- runIO makeTestServerConfigR
+    var <- runIO newEmptyMVar
+    let sc = sc0 { scHooks = (scHooks sc0) {
+                         onServerReady = putMVar var ()
+                       }
+                   }
     let cc = testClientConfigR
+    let waitS = takeMVar var :: IO ()
     describe "send & recv" $ do
         it "can exchange data on random dropping" $ do
-            withPipe (Randomly 20) $ testSendRecv cc sc 1000
+            withPipe (Randomly 20) $ testSendRecv cc sc waitS 1000
         it "can exchange data on server 0" $ do
-            withPipe (DropServerPacket [0]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [0]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 1" $ do
-            withPipe (DropServerPacket [1]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [1]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 2" $ do
-            withPipe (DropServerPacket [2]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [2]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 3" $ do
-            withPipe (DropServerPacket [3]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [3]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 4" $ do
-            withPipe (DropServerPacket [4]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [4]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 5" $ do
-            withPipe (DropServerPacket [5]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [5]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 6" $ do
-            withPipe (DropServerPacket [6]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [6]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 7" $ do
-            withPipe (DropServerPacket [7]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [7]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 8" $ do
-            withPipe (DropServerPacket [8]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [8]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 9" $ do
-            withPipe (DropServerPacket [9]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [9]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 10" $ do
-            withPipe (DropServerPacket [10]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [10]) $ testSendRecv cc sc waitS 20
         it "can exchange data on server 11" $ do
-            withPipe (DropServerPacket [11]) $ testSendRecv cc sc 20
+            withPipe (DropServerPacket [11]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 0" $ do
-            withPipe (DropClientPacket [0]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [0]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 1" $ do
-            withPipe (DropClientPacket [1]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [1]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 2" $ do
-            withPipe (DropClientPacket [2]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [2]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 3" $ do
-            withPipe (DropClientPacket [3]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [3]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 4" $ do
-            withPipe (DropClientPacket [4]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [4]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 5" $ do
-            withPipe (DropClientPacket [5]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [5]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 6" $ do
-            withPipe (DropClientPacket [6]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [6]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 7" $ do
-            withPipe (DropClientPacket [7]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [7]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 8" $ do
-            withPipe (DropClientPacket [8]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [8]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 9" $ do
-            withPipe (DropClientPacket [9]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [9]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 10" $ do
-            withPipe (DropClientPacket [10]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [10]) $ testSendRecv cc sc waitS 20
         it "can exchange data on client 11" $ do
-            withPipe (DropClientPacket [11]) $ testSendRecv cc sc 20
+            withPipe (DropClientPacket [11]) $ testSendRecv cc sc waitS 20
     describe "recvStream" $ do
         it "don't block if client stop sending first" $ do
-            withPipe (Randomly 20) $ testRecvStreamClientStopFirst cc sc
+            withPipe (Randomly 20) $ testRecvStreamClientStopFirst cc sc waitS
         it "don't block if server stop sending first" $ do
-            withPipe (Randomly 20) $ testRecvStreamServerStopFirst cc sc
+            withPipe (Randomly 20) $ testRecvStreamServerStopFirst cc sc waitS
 
 consumeBytes :: Stream -> Int -> IO ()
 consumeBytes _ 0 = return ()
@@ -87,17 +94,15 @@ consumeBytes strm left = do
 assertEndOfStream :: Stream -> IO ()
 assertEndOfStream strm = recvStream strm 1024 `shouldReturn` ""
 
-testRecvStreamClientStopFirst :: C.ClientConfig -> ServerConfig -> IO ()
-testRecvStreamClientStopFirst cc sc = do
-    threadDelay 10000
+testRecvStreamClientStopFirst :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testRecvStreamClientStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
-    threadDelay 10000
   where
     aerr = ApplicationProtocolError 0
 
     client mvar = do
-        threadDelay 50000
+        waitS
         C.run cc $ \conn -> do
             strm <- stream conn
             sendStream strm (BS.replicate 10000 0)
@@ -115,17 +120,15 @@ testRecvStreamClientStopFirst cc sc = do
         putMVar mvar ()
         stop conn
 
-testRecvStreamServerStopFirst :: C.ClientConfig -> ServerConfig -> IO ()
-testRecvStreamServerStopFirst cc sc = do
-    threadDelay 10000
+testRecvStreamServerStopFirst :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testRecvStreamServerStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
-    threadDelay 10000
   where
     aerr = ApplicationProtocolError 0
 
     client mvar = do
-        threadDelay 50000
+        waitS
         C.run cc $ \conn -> do
             strm <- stream conn
             sendStream strm (BS.replicate 10000 0)
@@ -141,15 +144,13 @@ testRecvStreamServerStopFirst cc sc = do
         putMVar mvar ()
         stop conn
 
-testSendRecv :: C.ClientConfig -> ServerConfig -> Int -> IO ()
-testSendRecv cc sc times = do
-    threadDelay 10000
+testSendRecv :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
+testSendRecv cc sc waitS times = do
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
-    threadDelay 10000
   where
     client mvar = do
-        threadDelay 50000
+        waitS
         C.run cc $ \conn -> do
             strm <- stream conn
             let bs = BS.replicate 10000 0

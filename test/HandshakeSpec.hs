@@ -90,7 +90,6 @@ onE h b = E.onException b h
 testHandshake :: ClientConfig -> ServerConfig -> IO () -> HandshakeMode13 -> IO ()
 testHandshake cc sc waitS mode = do
     concurrently_ server client
-    threadDelay 10000
   where
     client = do
         waitS
@@ -113,7 +112,6 @@ query content conn = do
 testHandshake2 :: ClientConfig -> ServerConfig -> IO () -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
 testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
     concurrently_ server client
-    threadDelay 10000
   where
     runClient cc mode action = C.run cc $ \conn -> do
         void $ action conn
@@ -140,7 +138,6 @@ testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> IO () -> (QUICException -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc waitS selector = do
     concurrently_ server client
-    threadDelay 10000
   where
     client = do
         waitS
