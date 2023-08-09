@@ -22,28 +22,34 @@ spec :: Spec
 spec = do
     sc0' <- runIO makeTestServerConfig
     smgr <- runIO newSessionManager
-    let sc0 = sc0' { scSessionManager = smgr }
+    var <- runIO newEmptyMVar
+    let sc0 = sc0' { scSessionManager = smgr
+                   , scHooks = (scHooks sc0') {
+                         onServerReady = putMVar var ()
+                       }
+                   }
+    let waitS = takeMVar var :: IO ()
     describe "handshake" $ do
         it "can handshake in the normal case" $ do
             let cc = testClientConfig
                 sc = sc0
-            testHandshake cc sc FullHandshake
+            testHandshake cc sc waitS FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
             let cc = testClientConfig
                 sc = sc0 { scGroups = [P256] }
-            testHandshake cc sc HelloRetryRequest
+            testHandshake cc sc waitS HelloRetryRequest
         it "can handshake in the case of QUIC retry" $ do
             let cc = testClientConfig
                 sc = sc0 { scRequireRetry = True }
-            testHandshake cc sc FullHandshake
+            testHandshake cc sc waitS FullHandshake
         it "can handshake in the case of resumption" $ do
             let cc = testClientConfig
                 sc = sc0
-            testHandshake2 cc sc (FullHandshake, PreSharedKey) False
+            testHandshake2 cc sc waitS (FullHandshake, PreSharedKey) False
         it "can handshake in the case of 0-RTT" $ do
             let cc = testClientConfig
                 sc = sc0 { scUse0RTT = True }
-            testHandshake2 cc sc (FullHandshake, RTT0) True
+            testHandshake2 cc sc waitS (FullHandshake, RTT0) True
         it "fails with unknown server certificate" $ do
             let cc1 = testClientConfig {
                         ccValidate = True  -- ouch, default should be reversed
@@ -53,7 +59,7 @@ spec = do
                 certificateRejected e
                     | TransportErrorIsSent te@(TransportError _) _ <- e = te == cryptoError TLS.CertificateUnknown
                     | otherwise = False
-            testHandshake3 cc1 cc2 sc certificateRejected
+            testHandshake3 cc1 cc2 sc waitS certificateRejected
         it "fails with no group in common" $ do
             let cc1 = testClientConfig { ccGroups = [X25519] }
                 cc2 = testClientConfig { ccGroups = [P256] }
@@ -61,7 +67,7 @@ spec = do
                 handshakeFailure e
                     | TransportErrorIsReceived te@(TransportError _) _ <- e = te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
-            testHandshake3 cc1 cc2 sc handshakeFailure
+            testHandshake3 cc1 cc2 sc waitS handshakeFailure
         it "can handshake with large HE from a client" $ do
             let cc0 = testClientConfig
                 params = (ccParameters cc0) {
@@ -69,25 +75,25 @@ spec = do
                     }
                 cc = cc0 { ccParameters = params }
                 sc = sc0
-            testHandshake cc sc FullHandshake
+            testHandshake cc sc waitS FullHandshake
         it "can handshake with large EE from a server (3-times rule)" $ do
             let cc = testClientConfig
                 params = (scParameters sc0) {
                       grease = Just (BS.pack (replicate 3800 0))
                     }
                 sc = sc0 { scParameters = params }
-            testHandshake cc sc FullHandshake
+            testHandshake cc sc waitS FullHandshake
 
 onE :: IO b -> IO a -> IO a
 onE h b = E.onException b h
 
-testHandshake :: ClientConfig -> ServerConfig -> HandshakeMode13 -> IO ()
-testHandshake cc sc mode = do
+testHandshake :: ClientConfig -> ServerConfig -> IO () -> HandshakeMode13 -> IO ()
+testHandshake cc sc waitS mode = do
     concurrently_ server client
-    threadDelay 50000
+    threadDelay 10000
   where
     client = do
-        threadDelay 50000
+        waitS
         C.run cc $ \conn -> do
             waitEstablished conn
             handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
@@ -104,10 +110,10 @@ query content conn = do
     shutdownStream s
     void $ recvStream s 1024
 
-testHandshake2 :: ClientConfig -> ServerConfig -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
-testHandshake2 cc1 sc (mode1, mode2) use0RTT = do
+testHandshake2 :: ClientConfig -> ServerConfig -> IO () -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
+testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
     concurrently_ server client
-    threadDelay 50000
+    threadDelay 10000
   where
     runClient cc mode action = C.run cc $ \conn -> do
         void $ action conn
@@ -115,7 +121,7 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = do
         threadDelay 50000
         getResumptionInfo conn
     client = do
-        threadDelay 10000
+        waitS
         res <- runClient cc1 mode1 $ query "first"
         threadDelay 50000
         let cc2 = cc1 { ccResumption = res
@@ -131,13 +137,13 @@ testHandshake2 cc1 sc (mode1, mode2) use0RTT = do
             closeStream s
             when (bs == "second") $ stop conn
 
-testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> (QUICException -> Bool) -> IO ()
-testHandshake3 cc1 cc2 sc selector = do
+testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> IO () -> (QUICException -> Bool) -> IO ()
+testHandshake3 cc1 cc2 sc waitS selector = do
     concurrently_ server client
-    threadDelay 50000
+    threadDelay 10000
   where
     client = do
-        threadDelay 50000
+        waitS
         C.run cc1 (query "first")  `shouldThrow` selector
         C.run cc2 (query "second") `shouldReturn` ()
     server = S.run sc $ \conn -> do

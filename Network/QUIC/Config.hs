@@ -23,6 +23,7 @@ data Hooks = Hooks {
   , onTLSExtensionCreated :: [ExtensionRaw] -> [ExtensionRaw]
   , onTLSHandshakeCreated :: [(EncryptionLevel,CryptoData)] -> ([(EncryptionLevel,CryptoData)],Bool)
   , onResetStreamReceived :: Stream -> ApplicationProtocolError -> IO ()
+  , onServerReady :: IO ()
   }
 
 -- | Default hooks.
@@ -34,6 +35,7 @@ defaultHooks = Hooks {
   , onTLSExtensionCreated = id
   , onTLSHandshakeCreated = (, False)
   , onResetStreamReceived = \_ _ -> return ()
+  , onServerReady = return ()
   }
 
 ----------------------------------------------------------------

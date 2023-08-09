@@ -43,9 +43,11 @@ import Network.QUIC.Types
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     baseThreadId <- myThreadId
-    E.bracket setup teardown $ \(dispatch,_) -> forever $ do
-        acc <- accept dispatch
-        void $ forkIO (runServer conf server dispatch baseThreadId acc)
+    E.bracket setup teardown $ \(dispatch,_) -> do
+        onServerReady $ scHooks conf
+        forever $ do
+            acc <- accept dispatch
+            void $ forkIO (runServer conf server dispatch baseThreadId acc)
   where
     doDebug = isJust $ scDebugLog conf
     debugLog msg | doDebug   = stdoutLogger ("run: " <> msg)

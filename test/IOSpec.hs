@@ -89,6 +89,7 @@ assertEndOfStream strm = recvStream strm 1024 `shouldReturn` ""
 
 testRecvStreamClientStopFirst :: C.ClientConfig -> ServerConfig -> IO ()
 testRecvStreamClientStopFirst cc sc = do
+    threadDelay 10000
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
     threadDelay 10000
@@ -96,7 +97,7 @@ testRecvStreamClientStopFirst cc sc = do
     aerr = ApplicationProtocolError 0
 
     client mvar = do
-        threadDelay 10000
+        threadDelay 50000
         C.run cc $ \conn -> do
             strm <- stream conn
             sendStream strm (BS.replicate 10000 0)
@@ -116,6 +117,7 @@ testRecvStreamClientStopFirst cc sc = do
 
 testRecvStreamServerStopFirst :: C.ClientConfig -> ServerConfig -> IO ()
 testRecvStreamServerStopFirst cc sc = do
+    threadDelay 10000
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
     threadDelay 10000
@@ -123,7 +125,7 @@ testRecvStreamServerStopFirst cc sc = do
     aerr = ApplicationProtocolError 0
 
     client mvar = do
-        threadDelay 10000
+        threadDelay 50000
         C.run cc $ \conn -> do
             strm <- stream conn
             sendStream strm (BS.replicate 10000 0)
@@ -141,12 +143,13 @@ testRecvStreamServerStopFirst cc sc = do
 
 testSendRecv :: C.ClientConfig -> ServerConfig -> Int -> IO ()
 testSendRecv cc sc times = do
+    threadDelay 10000
     mvar <- newEmptyMVar
     void $ concurrently (client mvar) (server mvar)
     threadDelay 10000
   where
     client mvar = do
-        threadDelay 10000
+        threadDelay 50000
         C.run cc $ \conn -> do
             strm <- stream conn
             let bs = BS.replicate 10000 0
