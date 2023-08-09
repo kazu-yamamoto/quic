@@ -94,7 +94,9 @@ runServer conf server0 dispatch baseThreadId acc =
                     case er of
                       Left () -> E.throwIO MustNotReached
                       Right r -> return r
-            E.trySyncOrAsync runThreads >>= closure conn ldcc
+            ex <- E.trySyncOrAsync runThreads
+            sendFinal conn
+            closure conn ldcc ex
   where
     open = createServerConnection conf dispatch acc baseThreadId
     clse connRes = do

@@ -3,6 +3,7 @@
 module Network.QUIC.Sender (
     sender
   , mkHeader
+  , sendFinal
   ) where
 
 import qualified Data.ByteString as BS
@@ -206,26 +207,30 @@ data Switch = SwPing EncryptionLevel
             | SwStrm TxStreamData
 
 sender :: Connection -> IO ()
-sender conn = handleLogUnit logAction $ forever sendP
+sender conn = handleLogT logAction $ forever $ sendP conn
   where
-    sendP = do
-        x <- atomically ((SwPing <$> takePingSTM (connLDCC conn))
-                `orElse` (SwOut  <$> takeOutputSTM conn)
-                `orElse` (SwStrm <$> takeSendStreamQSTM conn))
-        case x of
-          SwPing lvl -> sendPingPacket   conn lvl
-          SwOut  out -> sendOutput       conn out
-          SwStrm tx  -> sendTxStreamData conn tx
-    logAction msg = do
-        loop (30 :: Int)
-        connDebugLog conn ("debug: sender: " <> msg)
-      where
-        loop 0 = return ()
-        loop n = do
-            mx <- timeout (Microseconds 10) sendP
-            case mx of
-              Nothing -> return ()
-              Just () -> loop (n - 1)
+    logAction msg = connDebugLog conn ("debug: sender: " <> msg)
+
+sendP :: Connection -> IO ()
+sendP conn = do
+    x <- atomically ((SwPing <$> takePingSTM (connLDCC conn))
+            `orElse` (SwOut  <$> takeOutputSTM conn)
+            `orElse` (SwStrm <$> takeSendStreamQSTM conn))
+    case x of
+      SwPing lvl -> sendPingPacket   conn lvl
+      SwOut  out -> sendOutput       conn out
+      SwStrm tx  -> sendTxStreamData conn tx
+
+sendFinal :: Connection -> IO ()
+sendFinal conn = loop 30
+  where
+    loop :: Int -> IO ()
+    loop 0 = return ()
+    loop n = do
+        mx <- timeout (Microseconds 10) $ sendP conn
+        case mx of
+          Nothing -> return ()
+          Just () -> loop (n - 1)
 
 ----------------------------------------------------------------
 

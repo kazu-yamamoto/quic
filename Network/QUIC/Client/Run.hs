@@ -86,7 +86,9 @@ runClient conf client0 isICVN verInfo = do
                 case er of
                   Left () -> E.throwIO MustNotReached
                   Right r -> return r
-        E.trySyncOrAsync runThreads >>= closure conn ldcc
+        ex <- E.trySyncOrAsync runThreads
+        sendFinal conn
+        closure conn ldcc ex
   where
     open = createClientConnection conf verInfo
     clse connRes = do
