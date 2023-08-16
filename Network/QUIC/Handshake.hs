@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -309,8 +310,10 @@ sendCCTLSAlert a msg = closeConnection (cryptoError a) msg
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.Terminated _ _ e)   = e
 getErrorCause (TLS.HandshakeFailed e)  = e
+#if MIN_VERSION_tls(1,8,0)
 getErrorCause (TLS.PostHandshake e)    = e
 getErrorCause (TLS.Uncontextualized e) = e
+#endif
 getErrorCause e =
     let msg = "unexpected TLS exception: " ++ show e
      in TLS.Error_Protocol (msg, True, TLS.InternalError)
