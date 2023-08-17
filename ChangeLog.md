@@ -1,3 +1,7 @@
+## 0.1.3
+
+- Supporting `tls` v1.8.0.
+
 ## 0.1.2
 
 - Using "crypton" instead of "cryptonite".
