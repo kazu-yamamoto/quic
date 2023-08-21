@@ -13,6 +13,7 @@ import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Imports
+import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
@@ -50,7 +51,10 @@ closure' conn ldcc frame = do
         recv = UDP.recvBuf us recvBuf bufsiz
         hook = onCloseCompleted $ connHooks conn
     pto <- getPTO ldcc
-    void $ forkFinally (closer conn pto send recv hook) $ \_ -> do
+    void $ forkFinally (closer conn pto send recv hook) $ \e -> do
+        case e of
+          Left e' ->  connDebugLog conn $ "closure' " <> bhow e'
+          Right _ -> return ()
         free sendBuf
         free recvBuf
         clos
