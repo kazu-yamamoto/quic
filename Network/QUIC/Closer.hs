@@ -46,7 +46,11 @@ closure' conn ldcc frame = do
     recvBuf <- mallocBytes bufsiz
     siz <- encodeCC conn (SizedBuffer sendBuf bufsiz) frame
     us <- getSocket conn
-    let clos = UDP.close us
+    let clos = do
+            UDP.close us
+            -- This is just in case.
+            -- UDP.close never throw exceptions.
+            getSocket conn >>= UDP.close
         send = UDP.sendBuf us sendBuf siz
         recv = UDP.recvBuf us recvBuf bufsiz
         hook = onCloseCompleted $ connHooks conn

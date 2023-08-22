@@ -106,7 +106,6 @@ runServer conf server0 dispatch baseThreadId acc =
 #if !defined(mingw32_HOST_OS)
         killReaders conn
 #endif
-        getSocket conn >>= UDP.close
     debugLog conn msg = do
         connDebugLog conn ("runServer: " <> msg)
         qlogDebug conn $ Debug $ toLogStr msg
