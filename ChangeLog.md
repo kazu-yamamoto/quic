@@ -1,3 +1,7 @@
+## 0.1.4
+
+- Fixing the race of socket closure.
+
 ## 0.1.3
 
 - Supporting `tls` v1.8.0.
