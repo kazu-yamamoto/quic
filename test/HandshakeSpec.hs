@@ -7,7 +7,6 @@ import qualified Data.ByteString as BS
 import Network.TLS (HandshakeMode13(..), Group(..))
 import qualified Network.TLS as TLS
 import Test.Hspec
-import UnliftIO.Async
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -89,26 +88,19 @@ onE h b = E.onException b h
 
 testHandshake :: ClientConfig -> ServerConfig -> IO () -> HandshakeMode13 -> IO ()
 testHandshake cc sc waitS mode = do
-    concurrently_ server client
+    mvar <- newEmptyMVar
+    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
-    client = do
+    client mvar = do
         waitS
         C.run cc $ \conn -> do
             waitEstablished conn
             handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-    server = S.run sc $ \conn -> do
+            takeMVar mvar
+    server mvar = S.run sc $ \conn -> do
         waitEstablished conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
-        delayedStop conn
-
-delayedStop :: Connection -> IO ()
-delayedStop conn = do
-    var <- newEmptyMVar
-    _ <- forkIO $ do
-        threadDelay 100
-        putMVar var ()
-    takeMVar var
-    stop conn
+        putMVar mvar ()
 
 query :: BS.ByteString -> Connection -> IO ()
 query content conn = do
@@ -120,14 +112,15 @@ query content conn = do
 
 testHandshake2 :: ClientConfig -> ServerConfig -> IO () -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
 testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
-    concurrently_ server client
+    mvar <- newEmptyMVar
+    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
     runClient cc mode action = C.run cc $ \conn -> do
         void $ action conn
         handshakeMode <$> getConnectionInfo conn `shouldReturn` mode
         threadDelay 50000
         getResumptionInfo conn
-    client = do
+    client mvar = do
         waitS
         res <- runClient cc1 mode1 $ query "first"
         threadDelay 50000
@@ -135,27 +128,29 @@ testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
                       , ccUse0RTT    = use0RTT
                       }
         void $ runClient cc2 mode2 $ query "second"
-    server = S.run sc serv
+        takeMVar mvar
+    server mvar = S.run sc serv
       where
         serv conn = do
             s <- acceptStream conn
             bs <- recvStream s 1024
             sendStream s "bye"
             closeStream s
-            when (bs == "second") $ do
-                delayedStop conn
+            when (bs == "second") $  putMVar mvar ()
 
 testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> IO () -> (QUICException -> Bool) -> IO ()
 testHandshake3 cc1 cc2 sc waitS selector = do
-    concurrently_ server client
+    mvar <- newEmptyMVar
+    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
-    client = do
+    client mvar = do
         waitS
         C.run cc1 (query "first")  `shouldThrow` selector
         C.run cc2 (query "second") `shouldReturn` ()
-    server = S.run sc $ \conn -> do
+        takeMVar mvar
+    server mvar = S.run sc $ \conn -> do
         s <- acceptStream conn
         recvStream s 1024 `shouldReturn` "second"
         sendStream s "bye"
         closeStream s
-        delayedStop conn
+        putMVar mvar ()

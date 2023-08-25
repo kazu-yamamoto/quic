@@ -5,8 +5,8 @@ module IOSpec where
 import Control.Monad
 import qualified Data.ByteString as BS
 import Test.Hspec
-import UnliftIO.Async
 import UnliftIO.Concurrent
+import qualified UnliftIO.Exception as E
 
 import Network.QUIC
 import qualified Network.QUIC.Client as C
@@ -97,7 +97,7 @@ assertEndOfStream strm = recvStream strm 1024 `shouldReturn` ""
 testRecvStreamClientStopFirst :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testRecvStreamClientStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
-    void $ concurrently (client mvar) (server mvar)
+    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
     aerr = ApplicationProtocolError 0
 
@@ -118,12 +118,11 @@ testRecvStreamClientStopFirst cc sc waitS = do
         -- verify that client has stopped sending.
         assertEndOfStream strm
         putMVar mvar ()
-        stop conn
 
 testRecvStreamServerStopFirst :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testRecvStreamServerStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
-    void $ concurrently (client mvar) (server mvar)
+    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
     aerr = ApplicationProtocolError 0
 
@@ -142,12 +141,11 @@ testRecvStreamServerStopFirst cc sc waitS = do
         assertEndOfStream strm
         resetStream strm aerr
         putMVar mvar ()
-        stop conn
 
 testSendRecv :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
 testSendRecv cc sc waitS times = do
     mvar <- newEmptyMVar
-    void $ concurrently (client mvar) (server mvar)
+    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
     client mvar = do
         waitS
@@ -162,4 +160,3 @@ testSendRecv cc sc waitS times = do
         consumeBytes strm (10000 * times)
         assertEndOfStream strm
         putMVar mvar ()
-        stop conn
