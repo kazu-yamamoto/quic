@@ -86,8 +86,11 @@ sendTLS conn hsr x = do
     convertLevel (CryptApplicationSecret, bs) = return (RTT1Level, bs)
 
 internalError :: String -> TLS.TLSError
+#if MIN_VERSION_tls(1,9,0)
+internalError msg     = TLS.Error_Protocol msg TLS.InternalError
+#else
 internalError msg     = TLS.Error_Protocol (msg, True, TLS.InternalError)
--- unexpectedMessage msg = TLS.Error_Protocol (msg, True, TLS.UnexpectedMessage)
+#endif
 
 ----------------------------------------------------------------
 
@@ -316,4 +319,8 @@ getErrorCause (TLS.Uncontextualized e) = e
 #endif
 getErrorCause e =
     let msg = "unexpected TLS exception: " ++ show e
+#if MIN_VERSION_tls(1,9,0)
+     in TLS.Error_Protocol msg TLS.InternalError
+#else
      in TLS.Error_Protocol (msg, True, TLS.InternalError)
+#endif
