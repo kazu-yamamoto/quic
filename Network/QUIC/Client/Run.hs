@@ -66,13 +66,13 @@ runClient conf client0 isICVN verInfo = do
                     }
               }
         setIncompatibleVN conn isICVN -- must be before handshaker
+        setToken conn $ resumptionToken $ ccResumption conf
         handshaker <- handshakeClient conf' conn myAuthCIDs
         let client = do
                 if ccUse0RTT conf then
                     wait0RTTReady conn
                   else
                     wait1RTTReady conn
-                setToken conn $ resumptionToken $ ccResumption conf
                 client0 conn
             ldcc = connLDCC conn
             supporters = foldr1 concurrently_ [handshaker
