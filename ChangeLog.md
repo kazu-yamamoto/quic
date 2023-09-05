@@ -1,3 +1,8 @@
+## 0.1.5
+
+- Catching up "tls" v1.9.0.
+- Fixing the timing to set resumption tokens.
+
 ## 0.1.4
 
 - Fixing the race of socket closure.
