@@ -77,6 +77,7 @@ spec = do
         it "can exchange data on client 11" $ do
             withPipe (DropClientPacket [11]) $ testSendRecv cc sc waitS 20
     describe "recvStream" $ do
+        -- https://github.com/kazu-yamamoto/quic/pull/54
         it "don't block if client stop sending first" $ do
             withPipe (Randomly 20) $ testRecvStreamClientStopFirst cc sc waitS
         it "don't block if server stop sending first" $ do
@@ -115,7 +116,7 @@ testRecvStreamClientStopFirst cc sc waitS = do
         consumeBytes strm 10000 `shouldReturn` ()
         -- notify client to stop stream after all bytes are received.
         putMVar mvar ()
-        -- verify that client has stopped sending.
+        -- verify that recvStream does not block
         assertEndOfStream strm
         putMVar mvar ()
 
@@ -137,7 +138,7 @@ testRecvStreamServerStopFirst cc sc waitS = do
         consumeBytes strm 10000 `shouldReturn` ()
         -- ask client to stop sending.
         stopStream strm aerr
-        -- verify that client has stopped sending.
+        -- verify that recvStream does not block
         assertEndOfStream strm
         resetStream strm aerr
         putMVar mvar ()

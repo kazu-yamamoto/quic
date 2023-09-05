@@ -58,6 +58,8 @@ isRxStreamClosed Stream{..} = do
 setRxStreamClosed :: Stream -> IO ()
 setRxStreamClosed strm@Stream{..} = do
     atomicModifyIORef'' streamStateRx set
+    -- Sending a pseudo FIN so that recvStream doesn't block.
+    -- See https://github.com/kazu-yamamoto/quic/pull/54
     putRecvStreamQ strm ""
   where
     set (StreamState off _) = StreamState off True
