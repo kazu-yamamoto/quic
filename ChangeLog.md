@@ -1,3 +1,7 @@
+## 0.1.6
+
+- Fixing the race condition of `timeout`.
+
 ## 0.1.5
 
 - Catching up "tls" v1.9.0.
