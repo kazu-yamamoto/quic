@@ -184,7 +184,6 @@ data Connection = Connection {
   , connRecvQ         :: RecvQ
   , udpSocket         :: ~(IORef UDPSocket)
   , readers           :: IORef (IO ())
-  , tmouter           :: IORef (IO ())
   , mainThreadId      :: ThreadId
   -- Info
   , roleInfo          :: IORef RoleInfo
@@ -278,7 +277,6 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     dcrptBuf <- mallocBytes bufsiz
     Connection connstate debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
-        <*> newIORef (return ())
         <*> myThreadId
         -- Info
         <*> newIORef initialRoleInfo

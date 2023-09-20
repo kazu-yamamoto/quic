@@ -58,8 +58,7 @@ run conf client = NS.withSocketsDo $ do
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
 runClient conf client0 isICVN verInfo = do
     E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) -> do
-        forkIO reader    >>= addReader conn
-        forkIO timeouter >>= addTimeouter conn
+        forkIO reader >>= addReader conn
         let conf' = conf {
                 ccParameters = (ccParameters conf) {
                       versionInformation = Just verInfo
@@ -96,7 +95,6 @@ runClient conf client0 isICVN verInfo = do
         setDead conn
         freeResources conn
         killReaders conn
-        join $ replaceKillTimeouter conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do

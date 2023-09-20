@@ -1,8 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Network.QUIC.Connection.Timeout (
-    timeouter
-  , timeout
+    timeout
   , fire
   , cfire
   , delay
@@ -10,10 +9,8 @@ module Network.QUIC.Connection.Timeout (
 
 import Data.Typeable
 import Network.QUIC.Event
-import System.IO.Unsafe (unsafePerformIO)
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
-import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
@@ -26,20 +23,12 @@ instance E.Exception TimeoutException where
   fromException = E.asyncExceptionFromException
   toException = E.asyncExceptionToException
 
-globalTimeoutQ :: TQueue (IO ())
-globalTimeoutQ = unsafePerformIO newTQueueIO
-{-# NOINLINE globalTimeoutQ #-}
-
-timeouter :: IO ()
-timeouter = forever $ join $ atomically (readTQueue globalTimeoutQ)
-
 timeout :: Microseconds -> String -> IO a -> IO (Maybe a)
 timeout (Microseconds ms) dmsg action = do
     tid <- myThreadId
     timmgr <- getSystemTimerManager
     let killMe = E.throwTo tid $ TimeoutException dmsg
-        onTimeout = atomically $ writeTQueue globalTimeoutQ killMe
-        setup = registerTimeout timmgr ms onTimeout
+        setup = registerTimeout timmgr ms killMe
         cleanup key = unregisterTimeout timmgr key
     E.handleSyncOrAsync (\(TimeoutException _) -> return Nothing) $
         E.bracket setup cleanup $ \_ -> Just <$> action

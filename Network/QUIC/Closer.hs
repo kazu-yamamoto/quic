@@ -40,7 +40,6 @@ closure conn ldcc (Left se)
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
     killReaders conn
-    killTimeouter <- replaceKillTimeouter conn
     let bufsiz = maximumUdpPayloadSize
     sendBuf <- mallocBytes bufsiz
     recvBuf <- mallocBytes bufsiz
@@ -62,7 +61,6 @@ closure' conn ldcc frame = do
         free sendBuf
         free recvBuf
         clos
-        killTimeouter
 
 encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
 encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
