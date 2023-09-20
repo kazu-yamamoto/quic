@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Network.QUIC.Connection.Timeout (
@@ -27,7 +28,11 @@ timeout :: Microseconds -> String -> IO a -> IO (Maybe a)
 timeout (Microseconds ms) dmsg action = do
     tid <- myThreadId
     timmgr <- getSystemTimerManager
+#if defined(mingw32_HOST_OS)
+    let killMe = void $ forkIO $ E.throwTo tid $ TimeoutException dmsg
+#else
     let killMe = E.throwTo tid $ TimeoutException dmsg
+#endif
         setup = registerTimeout timmgr ms killMe
         cleanup key = unregisterTimeout timmgr key
     E.handleSyncOrAsync (\(TimeoutException _) -> return Nothing) $
