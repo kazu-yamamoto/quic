@@ -314,7 +314,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
     sendRetry = do
         newdCID <- newCID
         retryToken <- generateRetryToken peerVer newdCID sCID dCID
-        mnewtoken <- timeout (Microseconds 100000) $ encryptToken tokenMgr retryToken
+        mnewtoken <- timeout (Microseconds 100000) "sendRetry" $ encryptToken tokenMgr retryToken
         case mnewtoken of
           Nothing       -> logAction "retry token stacked"
           Just newtoken -> do
@@ -367,7 +367,7 @@ readerServer us conn = handleLogUnit logAction loop
   where
     loop = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito $ UDP.recv us
+        mbs <- timeout ito "readerServer" $ UDP.recv us
         case mbs of
           Nothing -> UDP.close us
           Just bs -> do
@@ -388,7 +388,7 @@ runNewServerReader conn (MigrationInfo mysock peersa dCID) = handleLogUnit logAc
     unless migrating $ do
         setMigrationStarted conn
         -- fixme: should not block
-        mcidinfo <- timeout (Microseconds 100000) $ waitPeerCID conn
+        mcidinfo <- timeout (Microseconds 100000) "runNewServerReader" $ waitPeerCID conn
         let msg = "Migration: " <> bhow peersa <> " (" <> bhow dCID <> ")"
         qlogDebug conn $ Debug $ toLogStr msg
         connDebugLog conn $ "debug: runNewServerReader: " <> msg

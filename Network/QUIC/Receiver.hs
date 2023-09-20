@@ -35,7 +35,7 @@ receiver conn = handleLogT logAction body
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
         ito <- readMinIdleTimeout conn
-        mx <- timeout ito $ connRecv conn -- fixme: taking minimum with peer's one
+        mx <- timeout ito "recvTimeout" $ connRecv conn -- fixme: taking minimum with peer's one
         case mx of
           Nothing -> do
               st <- getConnectionState conn
@@ -77,7 +77,8 @@ processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn rpkt = do
     let CryptPacket hdr _ = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
-    mx <- timeout (Microseconds 10000) $ waitEncryptionLevel conn lvl
+        msg = "processReceivedPacketHandshake " ++ if isServer conn then "Server" else "Client"
+    mx <- timeout (Microseconds 10000) msg $ waitEncryptionLevel conn lvl
     case mx of
       Nothing -> do
           putOffCrypto conn lvl rpkt

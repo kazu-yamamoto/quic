@@ -224,10 +224,11 @@ sendP conn = do
 sendFinal :: Connection -> IO ()
 sendFinal conn = loop 30
   where
+    msg = "sendFinal " ++ if isServer conn then "Server" else "Client"
     loop :: Int -> IO ()
     loop 0 = return ()
     loop n = do
-        mx <- timeout (Microseconds 10) $ sendP conn
+        mx <- timeout (Microseconds 10) msg $ sendP conn
         case mx of
           Nothing -> return ()
           Just () -> loop (n - 1)

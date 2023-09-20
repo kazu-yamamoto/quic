@@ -103,13 +103,13 @@ closer _conn (Microseconds pto) send recv hook
     loop n = do
         send
         getTimeMicrosecond >>= skip (Microseconds pto)
-        mx <- timeout (Microseconds (pto !>>. 1)) recv
+        mx <- timeout (Microseconds (pto !>>. 1)) "closer 1" recv
         case mx of
           Nothing -> hook
           Just 0  -> return ()
           Just _  -> loop (n - 1)
     skip tmo@(Microseconds duration) base = do
-        mx <- timeout tmo recv
+        mx <- timeout tmo "closer 2" recv
         case mx of
           Nothing -> return ()
           Just 0  -> return ()

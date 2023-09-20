@@ -44,7 +44,7 @@ readerClient cs0@(UDPSocket s0 _ _) conn = handleLogUnit logAction $ do
             wait
     loop = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito $
+        mbs <- timeout ito "readeClient" $
 #if defined(mingw32_HOST_OS)
           windowsThreadBlockHack $
 #endif
@@ -118,7 +118,7 @@ controlConnection conn typ
 
 controlConnection' :: Connection -> ConnectionControl -> IO Bool
 controlConnection' conn ChangeServerCID = do
-    mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
+    mn <- timeout (Microseconds 1000000) "controlConnection' 1" $ waitPeerCID conn -- fixme
     case mn of
       Nothing              -> return False
       Just (CIDInfo n _ _) -> do
@@ -133,7 +133,7 @@ controlConnection' conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
 controlConnection' conn ActiveMigration = do
-    mn <- timeout (Microseconds 1000000) $ waitPeerCID conn -- fixme
+    mn <- timeout (Microseconds 1000000) "controlConnection' 2" $ waitPeerCID conn -- fixme
     case mn of
       Nothing  -> return False
       mcidinfo -> do
