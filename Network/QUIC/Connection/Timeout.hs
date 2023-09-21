@@ -24,6 +24,8 @@ instance E.Exception TimeoutException where
   fromException = E.asyncExceptionFromException
   toException = E.asyncExceptionToException
 
+-- action MUST not include FFI.
+-- If so, the thread of getSystemTimerManager would be blocked.
 timeout :: Microseconds -> String -> IO a -> IO (Maybe a)
 timeout (Microseconds ms) dmsg action = do
     tid <- myThreadId
