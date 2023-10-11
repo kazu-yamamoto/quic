@@ -1,3 +1,7 @@
+## 0.1.7
+
+- Using System.Timeout.timeout.
+
 ## 0.1.6
 
 - Fixing the race condition of `timeout`.
