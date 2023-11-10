@@ -213,8 +213,8 @@ data Connection = Connection {
   , flowRx            :: IORef Flow
   , migrationState    :: TVar MigrationState
   , minIdleTimeout    :: IORef Microseconds
-  , bytesTx           :: TVar Int
-  , bytesRx           :: TVar Int
+  , bytesTx           :: TVar Int -- TVar for anti amplification
+  , bytesRx           :: TVar Int -- TVar for anti amplification
   , addressValidated  :: TVar Bool
   -- TLS
   , pendingQ          :: Array   EncryptionLevel (TVar [ReceivedPacket])
