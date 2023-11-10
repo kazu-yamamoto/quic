@@ -4,6 +4,7 @@
 module Network.QUIC.Stream.Reass (
     takeRecvStreamQwithSize
   , putRxStreamData
+  , FlowCntl(..)
   , tryReassemble
   ) where
 
@@ -87,14 +88,16 @@ takeRecvStreamQwithSize strm siz0 = do
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
-putRxStreamData :: Stream -> RxStreamData -> IO Bool
+data FlowCntl = OverLimit | Duplicated | Reassembled
+
+putRxStreamData :: Stream -> RxStreamData -> IO FlowCntl
 putRxStreamData s rx@(RxStreamData _ off len _) = do
     lim <- getRxMaxStreamData s
     if len + off > lim then
-        return False
+        return OverLimit
       else do
-        _ <- tryReassemble s rx put putFin
-        return True
+        dup <- tryReassemble s rx put putFin
+        return $ if dup then Duplicated else Reassembled
   where
     put "" = return ()
     put d  = putRecvStreamQ s d
