@@ -146,7 +146,7 @@ closeStream s = do
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
         n <- getPeerMaxStreams conn
-        putOutput conn $ OutControl RTT1Level [MaxStreams Unidirectional n] $ return ()
+        putOutput conn $ OutControl RTT1Level [MaxStreams Bidirectional n] $ return ()
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream
