@@ -1,9 +1,8 @@
 module FrameSpec where
 
-import Control.Monad
-import Data.ByteString.Internal (memset)
 import Data.Word
 import Foreign.Marshal.Alloc
+import Foreign.Marshal.Utils (fillBytes)
 import Foreign.Ptr
 import Foreign.Storable
 import Test.Hspec
@@ -19,7 +18,7 @@ spec = do
             E.bracket (mallocBytes siz) free $ \beg -> do
                 let (+.) = plusPtr
                     end  = beg +. siz
-                void $ memset beg 0 $ fromIntegral siz
+                fillBytes beg 0 $ fromIntegral siz
                 countZero beg end `shouldReturn` siz
                 countZero (beg +. 1) end `shouldReturn` (siz - 1)
                 countZero (beg +. 2) end `shouldReturn` (siz - 2)

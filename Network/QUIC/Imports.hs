@@ -33,7 +33,7 @@ import Data.Array
 import Data.Array.IO
 import Data.Bits
 import Data.ByteString.Builder (Builder)
-import Data.ByteString.Internal (ByteString(..), memcpy)
+import Data.ByteString.Internal (ByteString(..))
 import Data.ByteString.Short.Internal (ShortByteString(..))
 import Data.Foldable
 import Data.IORef
@@ -43,6 +43,7 @@ import Data.Monoid
 import Data.Ord
 import Data.Word
 import Foreign.ForeignPtr
+import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr
 import Network.ByteOrder
 import Network.QUIC.Utils
@@ -68,5 +69,5 @@ atomicModifyIORef'' ref f = atomicModifyIORef' ref $ \x -> (f x, ())
 copyBS :: Buffer -> ByteString -> IO Int
 copyBS dst (PS fptr off len) = withForeignPtr fptr $ \src0 -> do
     let src = src0 `plusPtr` off
-    memcpy dst src len
+    copyBytes dst src len
     return len

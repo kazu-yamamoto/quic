@@ -22,6 +22,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
 import Foreign.ForeignPtr (withForeignPtr, newForeignPtr_)
 import Foreign.Marshal.Alloc (mallocBytes)
+import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, plusPtr, nullPtr)
 import Foreign.Storable (peek, poke)
 import Network.TLS hiding (Version)
@@ -118,7 +119,7 @@ bsXORpad (PS fp0 off0 len0) (PS fp1 off1 len1)
         let src0 = p0 `plusPtr` off0
         let src1 = p1 `plusPtr` off1
         let diff = len0 - len1
-        BS.memcpy dst src0 diff
+        copyBytes dst src0 diff
         loop (dst `plusPtr` diff) (src0 `plusPtr` diff) src1 len1
   where
     loop :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> Int -> IO ()
