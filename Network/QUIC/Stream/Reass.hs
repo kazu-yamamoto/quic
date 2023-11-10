@@ -88,9 +88,9 @@ takeRecvStreamQwithSize strm siz0 = do
 ----------------------------------------------------------------
 
 putRxStreamData :: Stream -> RxStreamData -> IO Bool
-putRxStreamData s rx@(RxStreamData dat off _ _) = do
+putRxStreamData s rx@(RxStreamData _ off len _) = do
     lim <- getRxMaxStreamData s
-    if BS.length dat + off > lim then
+    if len + off > lim then
         return False
       else do
         _ <- tryReassemble s rx put putFin
