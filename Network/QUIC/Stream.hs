@@ -33,6 +33,7 @@ module Network.QUIC.Stream (
   -- * Reass
   , takeRecvStreamQwithSize
   , putRxStreamData
+  , FlowCntl(..)
   , tryReassemble
   -- * Table
   , StreamTable

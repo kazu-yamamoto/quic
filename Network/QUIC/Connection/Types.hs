@@ -211,10 +211,11 @@ data Connection = Connection {
   , peerStreamId      :: IORef Concurrency
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
+  , flowBytesRx       :: IORef Int
   , migrationState    :: TVar MigrationState
   , minIdleTimeout    :: IORef Microseconds
-  , bytesTx           :: TVar Int
-  , bytesRx           :: TVar Int
+  , bytesTx           :: TVar Int -- TVar for anti amplification
+  , bytesRx           :: TVar Int -- TVar for anti amplification
   , addressValidated  :: TVar Bool
   -- TLS
   , pendingQ          :: Array   EncryptionLevel (TVar [ReceivedPacket])
@@ -304,6 +305,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newIORef  peerConcurrency
         <*> newTVarIO defaultFlow
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
+        <*> newIORef 0
         <*> newTVarIO NonMigration
         <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
         <*> newTVarIO 0

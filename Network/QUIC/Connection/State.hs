@@ -19,6 +19,7 @@ module Network.QUIC.Connection.State (
   , addRxMaxData
   , getRxMaxData
   , getRxDataWindow
+  , checkRxMaxData
   , addTxBytes
   , getTxBytes
   , addRxBytes
@@ -128,6 +129,18 @@ getRxMaxData Connection{..} = flowMaxData <$> readIORef flowRx
 
 getRxDataWindow :: Connection -> IO Int
 getRxDataWindow Connection{..} = flowWindow <$> readIORef flowRx
+
+----------------------------------------------------------------
+
+checkRxMaxData :: Connection -> Int -> IO Bool
+checkRxMaxData Connection{..} len = do
+    received <- readIORef flowBytesRx
+    maxData <- flowMaxData <$> readIORef flowRx
+    if received + len < maxData then do
+        modifyIORef' flowBytesRx (+ len)
+        return True
+      else
+        return False
 
 ----------------------------------------------------------------
 

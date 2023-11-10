@@ -258,8 +258,13 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
-    ok <- putRxStreamData strm rx
-    unless ok $ closeConnection FlowControlError "Flow control error in 0-RTT"
+    fc <- putRxStreamData strm rx
+    case fc of
+      OverLimit -> closeConnection FlowControlError "Flow control error for stream in 0-RTT"
+      Duplicated -> return ()
+      Reassembled -> do
+          ok <- checkRxMaxData conn len
+          unless ok $ closeConnection FlowControlError "Flow control error for connection in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     maxSid <- readPeerMaxStreams conn
     when (sid >= maxSid) $
@@ -279,8 +284,13 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     strm <- maybe (createStream conn sid) return mstrm
     let len = BS.length dat
         rx = RxStreamData dat off len fin
-    ok <- putRxStreamData strm rx
-    unless ok $ closeConnection FlowControlError "Flow control error in 1-RTT"
+    fc <- putRxStreamData strm rx
+    case fc of
+      OverLimit -> closeConnection FlowControlError "Flow control error for stream in 1-RTT"
+      Duplicated -> return ()
+      Reassembled -> do
+          ok <- checkRxMaxData conn len
+          unless ok $ closeConnection FlowControlError "Flow control error for connection in 1-RTT"
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "MAX_DATA in Initial or Handshake"
