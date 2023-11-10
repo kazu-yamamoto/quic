@@ -43,6 +43,9 @@ transportErrorSpec cc0 ms = do
         it "MUST send FLOW_CONTROL_ERROR if a STREAM frame with a large offset is received [Transport 4.1]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated largeOffset
             runCnoOp cc ms `shouldThrow` transportErrorsIn [FlowControlError]
+        it "MUST send STREAM_LIMIT_ERROR if a stream ID exceeding the limit" $ \_ -> do
+            let cc = addHook cc0 $ setOnPlainCreated largeStreamId
+            runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamLimitError]
         it "MUST send TRANSPORT_PARAMETER_ERROR if initial_source_connection_id is missing [Transport 7.3]" $ \_ -> do
             let cc = addHook cc0 $ setOnTransportParametersCreated dropInitialSourceConnectionId
             runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
@@ -228,6 +231,13 @@ largeOffset lvl plain
   | otherwise        = plain
   where
     fake = StreamF 0 100000000 ["GET /\r\n"] True
+
+largeStreamId :: EncryptionLevel -> Plain -> Plain
+largeStreamId lvl plain
+  | lvl == RTT1Level = plain { plainFrames = fake : plainFrames plain }
+  | otherwise        = plain
+  where
+    fake = StreamF 1000000000 0 ["GET /\r\n"] True
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain

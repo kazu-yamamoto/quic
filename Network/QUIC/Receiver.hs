@@ -248,6 +248,9 @@ processFrame conn lvl (NewToken token) = do
         closeConnection ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
+    maxSid <- readPeerMaxStreams conn
+    when (sid >= maxSid) $
+        closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
@@ -258,11 +261,17 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     ok <- putRxStreamData strm rx
     unless ok $ closeConnection FlowControlError "Flow control error in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
+    maxSid <- readPeerMaxStreams conn
+    when (sid >= maxSid) $
+        closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
+    maxSid <- readPeerMaxStreams conn
+    when (sid >= maxSid) $
+        closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid

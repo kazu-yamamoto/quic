@@ -9,11 +9,13 @@ module Network.QUIC.Connection.Stream (
   , setMyUniMaxStreams
   , getPeerMaxStreams
   , setPeerMaxStreams
+  , readPeerMaxStreams
   ) where
 
 import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -48,6 +50,14 @@ set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = mx }
 setPeerMaxStreams :: Connection -> Int -> IO ()
 setPeerMaxStreams Connection{..} n =
     atomicModifyIORef'' peerStreamId $ \c -> c { maxStreams = n }
+
+readPeerMaxStreams :: Connection -> IO Int
+readPeerMaxStreams conn@Connection{..} = do
+    n <- maxStreams <$> readIORef peerStreamId
+    return $ n * 4 + iniType
+  where
+    iniType | isClient conn = 1 -- peer is server
+            | otherwise     = 0
 
 getPeerMaxStreams :: Connection -> IO Int
 getPeerMaxStreams Connection{..} = atomicModifyIORef' peerStreamId inc
