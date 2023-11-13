@@ -151,13 +151,16 @@ initialNegotiated = Negotiated {
 
 ----------------------------------------------------------------
 
+newtype StreamIdBase = StreamIdBase { fromStreamIdBase :: Int }
+    deriving (Eq, Show)
+
 data Concurrency = Concurrency {
-    currentStream :: Int
-  , maxStreams    :: Int
+    currentStream :: StreamId
+  , maxStreams    :: StreamIdBase
   }
 
 newConcurrency :: Role -> Direction -> Int -> Concurrency
-newConcurrency rl dir n = Concurrency ini n
+newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
  where
    bidi = dir == Bidirectional
    ini | rl == Client = if bidi then 0 else 2

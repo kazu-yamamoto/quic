@@ -9,18 +9,15 @@ module Network.QUIC.Connection.Stream (
   , setTxMaxStreams
   , setTxUniMaxStreams
   , readRxMaxStreams
-  , getRxMaxStreams
-  , getRxMaxUniStreams
-  , addRxMaxStreams
-  , addRxMaxUniStreams
-  , getRxCurrentStream
-  , getRxCurrentUniStream
+  , checkStreamIdRoom
   ) where
 
 import UnliftIO.STM
 
+import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 getMyStreamId :: Connection -> IO Int
@@ -38,7 +35,8 @@ get :: TVar Concurrency -> IO Int
 get tvar = atomically $ do
     conc@Concurrency{..} <- readTVar tvar
     let streamType = currentStream .&. 0b11
-    checkSTM (currentStream < maxStreams * 4 + streamType)
+        StreamIdBase base = maxStreams
+    checkSTM (currentStream < base * 4 + streamType)
     let currentStream' = currentStream + 4
     writeTVar tvar conc { currentStream = currentStream' }
     return currentStream
@@ -52,35 +50,28 @@ setTxUniMaxStreams :: Connection -> Int -> IO ()
 setTxUniMaxStreams Connection{..} = set myUniStreamId
 
 set :: TVar Concurrency -> Int -> IO ()
-set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = mx }
+set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = StreamIdBase mx }
 
 readRxMaxStreams :: Connection -> StreamId -> IO Int
 readRxMaxStreams Connection{..} sid = do
-    n <- maxStreams <$> readIORef peerStreamId
-    return $ n * 4 + streamType
+    Concurrency{..} <- readIORef peerStreamId
+    let StreamIdBase base = maxStreams
+    return $ base * 4 + streamType
   where
     streamType = sid .&. 0b11
 
-getRxMaxStreams :: Connection -> IO Int
-getRxMaxStreams Connection{..} = maxStreams <$> readIORef peerStreamId
-
-getRxMaxUniStreams :: Connection -> IO Int
-getRxMaxUniStreams Connection{..} = maxStreams <$> readIORef peerUniStreamId
-
-addRxMaxStreams :: Connection -> Int -> IO Int
-addRxMaxStreams Connection{..} n =
-    atomicModifyIORef' peerStreamId $ \c ->
-       let max' = maxStreams c + n
-       in (c { maxStreams = max' }, max')
-
-addRxMaxUniStreams :: Connection -> Int -> IO Int
-addRxMaxUniStreams Connection{..} n =
-    atomicModifyIORef' peerUniStreamId $ \c ->
-       let max' = maxStreams c + n
-       in (c { maxStreams = max' }, max')
-
-getRxCurrentStream :: Connection -> IO Int
-getRxCurrentStream Connection{..} = currentStream <$> readIORef peerStreamId
-
-getRxCurrentUniStream :: Connection -> IO Int
-getRxCurrentUniStream Connection{..} = currentStream <$> readIORef peerUniStreamId
+checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int)
+checkStreamIdRoom conn dir = do
+    let ref | dir == Bidirectional = peerStreamId conn
+            | otherwise            = peerUniStreamId conn
+    atomicModifyIORef' ref check
+  where
+    check conc@Concurrency{..} =
+        let StreamIdBase base = maxStreams
+            initialStreams = initialMaxStreamsBidi $ getMyParameters conn
+            cbase = currentStream !>>. 2
+        in if (base - cbase < (initialStreams !>>. 1)) then
+           (conc, Nothing)
+          else
+           let base' = base + initialStreams
+           in (conc { maxStreams = StreamIdBase base' }, Just base')
