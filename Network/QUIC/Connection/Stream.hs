@@ -5,11 +5,11 @@ module Network.QUIC.Connection.Stream (
     getMyStreamId
   , waitMyNewStreamId
   , waitMyNewUniStreamId
-  , setMyMaxStreams
-  , setMyUniMaxStreams
-  , getPeerMaxStreams
-  , setPeerMaxStreams
-  , readPeerMaxStreams
+  , setTxMaxStreams
+  , setTxUniMaxStreams
+  , getRxMaxStreams
+  , setRxMaxStreams
+  , readRxMaxStreams
   ) where
 
 import UnliftIO.STM
@@ -38,29 +38,31 @@ get tvar = atomically $ do
     writeTVar tvar conc { currentStream = currentStream' }
     return currentStream
 
-setMyMaxStreams :: Connection -> Int -> IO ()
-setMyMaxStreams Connection{..} = set myStreamId
+-- From "Peer", but set it to "My".
+-- So, using "Tx".
+setTxMaxStreams :: Connection -> Int -> IO ()
+setTxMaxStreams Connection{..} = set myStreamId
 
-setMyUniMaxStreams :: Connection -> Int -> IO ()
-setMyUniMaxStreams Connection{..} = set myUniStreamId
+setTxUniMaxStreams :: Connection -> Int -> IO ()
+setTxUniMaxStreams Connection{..} = set myUniStreamId
 
 set :: TVar Concurrency -> Int -> IO ()
 set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = mx }
 
-setPeerMaxStreams :: Connection -> Int -> IO ()
-setPeerMaxStreams Connection{..} n =
+setRxMaxStreams :: Connection -> Int -> IO ()
+setRxMaxStreams Connection{..} n =
     atomicModifyIORef'' peerStreamId $ \c -> c { maxStreams = n }
 
-readPeerMaxStreams :: Connection -> IO Int
-readPeerMaxStreams conn@Connection{..} = do
+readRxMaxStreams :: Connection -> IO Int
+readRxMaxStreams conn@Connection{..} = do
     n <- maxStreams <$> readIORef peerStreamId
     return $ n * 4 + iniType
   where
     iniType | isClient conn = 1 -- peer is server
             | otherwise     = 0
 
-getPeerMaxStreams :: Connection -> IO Int
-getPeerMaxStreams Connection{..} = atomicModifyIORef' peerStreamId inc
+getRxMaxStreams :: Connection -> IO Int
+getRxMaxStreams Connection{..} = atomicModifyIORef' peerStreamId inc
   where
     inc c = (c { maxStreams = next}, next)
       where

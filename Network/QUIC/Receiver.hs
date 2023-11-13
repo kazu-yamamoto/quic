@@ -249,7 +249,7 @@ processFrame conn lvl (NewToken token) = do
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readPeerMaxStreams conn
+    maxSid <- readRxMaxStreams conn
     when (sid >= maxSid) $
         closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
@@ -269,7 +269,8 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
           -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
           unless ok $ closeConnection FlowControlError "Flow control error for connection in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
-    maxSid <- readPeerMaxStreams conn
+    -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
+    maxSid <- readRxMaxStreams conn
     when (sid >= maxSid) $
         closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
@@ -278,7 +279,7 @@ processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readPeerMaxStreams conn
+    maxSid <- readRxMaxStreams conn
     when (sid >= maxSid) $
         closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
@@ -318,9 +319,9 @@ processFrame conn lvl (MaxStreams dir n) = do
     when (n > 2^(60 :: Int)) $
         closeConnection FrameEncodingError "Too large MAX_STREAMS"
     if dir == Bidirectional then
-        setMyMaxStreams conn n
+        setTxMaxStreams conn n
       else
-        setMyUniMaxStreams conn n
+        setTxUniMaxStreams conn n
 processFrame _conn _lvl DataBlocked{} = return ()
 processFrame _conn _lvl (StreamDataBlocked _sid _) = return ()
 processFrame _conn lvl (StreamsBlocked _dir n) = do

@@ -150,7 +150,7 @@ closeStream s = do
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
         -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
-        n <- getPeerMaxStreams conn
+        n <- getRxMaxStreams conn
         putOutput conn $ OutControl RTT1Level [MaxStreams Bidirectional n] $ return ()
 
 -- | Accepting a stream initiated by the peer.

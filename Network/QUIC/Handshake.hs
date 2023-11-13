@@ -265,8 +265,8 @@ setPeerParams conn _ctx peerExts = do
         setTxMaxData conn $ initialMaxData params
         setMinIdleTimeout conn $ milliToMicro $ maxIdleTimeout params
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
-        setMyMaxStreams conn $ initialMaxStreamsBidi params
-        setMyUniMaxStreams conn $ initialMaxStreamsUni params
+        setTxMaxStreams conn $ initialMaxStreamsBidi params
+        setTxUniMaxStreams conn $ initialMaxStreamsUni params
 
     serverVersionNegotiation Nothing = return ()
     serverVersionNegotiation (Just peerVerInfo) = do
