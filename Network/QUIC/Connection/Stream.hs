@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -36,6 +37,7 @@ waitMyNewUniStreamId Connection{..} = get myUniStreamId
 get :: TVar Concurrency -> IO Int
 get tvar = atomically $ do
     conc@Concurrency{..} <- readTVar tvar
+    let streamType = currentStream .&. 0b11
     checkSTM (currentStream < maxStreams * 4 + streamType)
     let currentStream' = currentStream + 4
     writeTVar tvar conc { currentStream = currentStream' }
@@ -55,9 +57,9 @@ set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = mx }
 readRxMaxStreams :: Connection -> StreamId -> IO Int
 readRxMaxStreams Connection{..} sid = do
     n <- maxStreams <$> readIORef peerStreamId
-    return $ n * 4 + iniType
+    return $ n * 4 + streamType
   where
-    iniType = sid .&. 0x3
+    streamType = sid .&. 0b11
 
 getRxMaxStreams :: Connection -> IO Int
 getRxMaxStreams Connection{..} = maxStreams <$> readIORef peerStreamId

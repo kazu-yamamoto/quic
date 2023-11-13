@@ -153,15 +153,14 @@ initialNegotiated = Negotiated {
 
 data Concurrency = Concurrency {
     currentStream :: Int
-  , streamType    :: Int
   , maxStreams    :: Int
   }
 
 newConcurrency :: Role -> Direction -> Int -> Concurrency
-newConcurrency rl dir n = Concurrency typ typ n
+newConcurrency rl dir n = Concurrency ini n
  where
    bidi = dir == Bidirectional
-   typ | rl == Client = if bidi then 0 else 2
+   ini | rl == Client = if bidi then 0 else 2
        | otherwise    = if bidi then 1 else 3
 
 ----------------------------------------------------------------
