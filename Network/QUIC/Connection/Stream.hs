@@ -8,7 +8,7 @@ module Network.QUIC.Connection.Stream (
   , waitMyNewUniStreamId
   , setTxMaxStreams
   , setTxUniMaxStreams
-  , readRxMaxStreams
+  , checkRxMaxStreams
   , checkStreamIdRoom
   ) where
 
@@ -16,6 +16,7 @@ import UnliftIO.STM
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Types
@@ -52,13 +53,26 @@ setTxUniMaxStreams Connection{..} = set myUniStreamId
 set :: TVar Concurrency -> Int -> IO ()
 set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = StreamIdBase mx }
 
-readRxMaxStreams :: Connection -> StreamId -> IO Int
-readRxMaxStreams Connection{..} sid = do
-    Concurrency{..} <- readIORef peerStreamId
+checkRxMaxStreams :: Connection -> StreamId -> IO Bool
+checkRxMaxStreams conn@Connection{..} sid = do
+    Concurrency{..} <- if isClient conn then readForClient else readForServer
     let StreamIdBase base = maxStreams
-    return $ base * 4 + streamType
+        ok = sid < base * 4 + streamType
+    return ok
   where
     streamType = sid .&. 0b11
+    readForClient = case streamType of
+      0 -> readTVarIO myStreamId
+      1 -> readIORef  peerStreamId
+      2 -> readTVarIO myUniStreamId
+      3 -> readIORef  peerUniStreamId
+      _ -> error "never reach"
+    readForServer = case streamType of
+      0 -> readIORef  peerStreamId
+      1 -> readTVarIO myStreamId
+      2 -> readIORef  peerUniStreamId
+      3 -> readTVarIO myUniStreamId
+      _ -> error "never reach"
 
 checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int)
 checkStreamIdRoom conn dir = do

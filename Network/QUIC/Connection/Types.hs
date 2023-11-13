@@ -208,10 +208,10 @@ data Connection = Connection {
   -- State
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , streamTable       :: IORef StreamTable
-  , myStreamId        :: TVar Concurrency
-  , myUniStreamId     :: TVar Concurrency
-  , peerStreamId      :: IORef Concurrency
-  , peerUniStreamId   :: IORef Concurrency
+  , myStreamId        :: TVar Concurrency  -- C:0 S:1
+  , myUniStreamId     :: TVar Concurrency  -- C:2 S:3
+  , peerStreamId      :: IORef Concurrency -- C:1 S:0
+  , peerUniStreamId   :: IORef Concurrency -- C:3 S:2
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
   , flowBytesRx       :: IORef Int
@@ -303,10 +303,10 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- State
         <*> newIORef 0
         <*> newIORef emptyStreamTable
-        <*> newTVarIO (newConcurrency rl Bidirectional  0) -- C:0 S:1
-        <*> newTVarIO (newConcurrency rl Unidirectional 0) -- C:2 S:3
-        <*> newIORef  peerConcurrency                      -- C:1 S:0
-        <*> newIORef  peerUniConcurrency                   -- C:3 S:2
+        <*> newTVarIO (newConcurrency rl Bidirectional  0)
+        <*> newTVarIO (newConcurrency rl Unidirectional 0)
+        <*> newIORef  peerConcurrency
+        <*> newIORef  peerUniConcurrency
         <*> newTVarIO defaultFlow
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newIORef 0
