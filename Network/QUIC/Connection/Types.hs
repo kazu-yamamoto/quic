@@ -151,17 +151,19 @@ initialNegotiated = Negotiated {
 
 ----------------------------------------------------------------
 
+newtype StreamIdBase = StreamIdBase { fromStreamIdBase :: Int }
+    deriving (Eq, Show)
+
 data Concurrency = Concurrency {
-    currentStream :: Int
-  , streamType    :: Int
-  , maxStreams    :: Int
+    currentStream :: StreamId
+  , maxStreams    :: StreamIdBase
   }
 
 newConcurrency :: Role -> Direction -> Int -> Concurrency
-newConcurrency rl dir n = Concurrency typ typ n
+newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
  where
    bidi = dir == Bidirectional
-   typ | rl == Client = if bidi then 0 else 2
+   ini | rl == Client = if bidi then 0 else 2
        | otherwise    = if bidi then 1 else 3
 
 ----------------------------------------------------------------
@@ -206,9 +208,10 @@ data Connection = Connection {
   -- State
   , peerPacketNumber  :: IORef PacketNumber      -- for RTT1
   , streamTable       :: IORef StreamTable
-  , myStreamId        :: TVar Concurrency
-  , myUniStreamId     :: TVar Concurrency
-  , peerStreamId      :: IORef Concurrency
+  , myStreamId        :: TVar Concurrency  -- C:0 S:1
+  , myUniStreamId     :: TVar Concurrency  -- C:2 S:3
+  , peerStreamId      :: IORef Concurrency -- C:1 S:0
+  , peerUniStreamId   :: IORef Concurrency -- C:3 S:2
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
   , flowBytesRx       :: IORef Int
@@ -303,6 +306,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newTVarIO (newConcurrency rl Bidirectional  0)
         <*> newTVarIO (newConcurrency rl Unidirectional 0)
         <*> newIORef  peerConcurrency
+        <*> newIORef  peerUniConcurrency
         <*> newTVarIO defaultFlow
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newIORef 0
@@ -338,6 +342,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     peer | isclient  = Server
          | otherwise = Client
     peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)
+    peerUniConcurrency = newConcurrency peer Unidirectional (initialMaxStreamsUni myparams)
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")

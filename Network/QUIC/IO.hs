@@ -150,8 +150,20 @@ closeStream s = do
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
         -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
-        n <- getRxMaxStreams conn
-        putOutput conn $ OutControl RTT1Level [MaxStreams Bidirectional n] $ return ()
+        checkMaxStreams conn Bidirectional
+    when ((isClient conn && isServerInitiatedUnidirectional sid)
+       || (isServer conn && isClientInitiatedUnidirectional sid)) $ do
+        -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
+        checkMaxStreams conn Unidirectional
+  where
+    checkMaxStreams conn dir = do
+        mx <- checkStreamIdRoom conn dir
+        case mx of
+          Nothing -> return ()
+          Just nms -> do
+            sendFrames conn RTT1Level [MaxStreams dir nms]
+            fire conn (Microseconds 50000) $
+                sendFrames conn RTT1Level [MaxStreams dir nms]
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream
@@ -175,18 +187,16 @@ recvStream s n = do
     when (window <= (initialWindow !>>. 1)) $ do
         newMax <- addRxMaxStreamData s initialWindow
         sendFrames conn RTT1Level [MaxStreamData sid newMax]
-        fire conn (Microseconds 50000) $ do
-            newMax' <- getRxMaxStreamData s
-            sendFrames conn RTT1Level [MaxStreamData sid newMax']
+        fire conn (Microseconds 50000) $
+            sendFrames conn RTT1Level [MaxStreamData sid newMax]
     -- FLOW CONTROL: MAX_DATA: recv: announcing my limit properly
     cwindow <- getRxDataWindow conn
     let cinitialWindow = initialMaxData $ getMyParameters conn
     when (cwindow <= (cinitialWindow !>>. 1)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         sendFrames conn RTT1Level [MaxData newMax]
-        fire conn (Microseconds 50000) $ do
-            newMax' <- getRxMaxData conn
-            sendFrames conn RTT1Level [MaxData newMax']
+        fire conn (Microseconds 50000) $
+            sendFrames conn RTT1Level [MaxData newMax]
     return bs
 
 -- | Closing a stream with an error code.

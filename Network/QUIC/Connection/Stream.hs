@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -7,16 +8,17 @@ module Network.QUIC.Connection.Stream (
   , waitMyNewUniStreamId
   , setTxMaxStreams
   , setTxUniMaxStreams
-  , getRxMaxStreams
-  , setRxMaxStreams
-  , readRxMaxStreams
+  , checkRxMaxStreams
+  , checkStreamIdRoom
   ) where
 
 import UnliftIO.STM
 
+import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 getMyStreamId :: Connection -> IO Int
@@ -33,7 +35,9 @@ waitMyNewUniStreamId Connection{..} = get myUniStreamId
 get :: TVar Concurrency -> IO Int
 get tvar = atomically $ do
     conc@Concurrency{..} <- readTVar tvar
-    checkSTM (currentStream < maxStreams * 4 + streamType)
+    let streamType = currentStream .&. 0b11
+        StreamIdBase base = maxStreams
+    checkSTM (currentStream < base * 4 + streamType)
     let currentStream' = currentStream + 4
     writeTVar tvar conc { currentStream = currentStream' }
     return currentStream
@@ -47,23 +51,41 @@ setTxUniMaxStreams :: Connection -> Int -> IO ()
 setTxUniMaxStreams Connection{..} = set myUniStreamId
 
 set :: TVar Concurrency -> Int -> IO ()
-set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = mx }
+set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = StreamIdBase mx }
 
-setRxMaxStreams :: Connection -> Int -> IO ()
-setRxMaxStreams Connection{..} n =
-    atomicModifyIORef'' peerStreamId $ \c -> c { maxStreams = n }
-
-readRxMaxStreams :: Connection -> IO Int
-readRxMaxStreams conn@Connection{..} = do
-    n <- maxStreams <$> readIORef peerStreamId
-    return $ n * 4 + iniType
+checkRxMaxStreams :: Connection -> StreamId -> IO Bool
+checkRxMaxStreams conn@Connection{..} sid = do
+    Concurrency{..} <- if isClient conn then readForClient else readForServer
+    let StreamIdBase base = maxStreams
+        ok = sid < base * 4 + streamType
+    return ok
   where
-    iniType | isClient conn = 1 -- peer is server
-            | otherwise     = 0
+    streamType = sid .&. 0b11
+    readForClient = case streamType of
+      0 -> readTVarIO myStreamId
+      1 -> readIORef  peerStreamId
+      2 -> readTVarIO myUniStreamId
+      3 -> readIORef  peerUniStreamId
+      _ -> error "never reach"
+    readForServer = case streamType of
+      0 -> readIORef  peerStreamId
+      1 -> readTVarIO myStreamId
+      2 -> readIORef  peerUniStreamId
+      3 -> readTVarIO myUniStreamId
+      _ -> error "never reach"
 
-getRxMaxStreams :: Connection -> IO Int
-getRxMaxStreams Connection{..} = atomicModifyIORef' peerStreamId inc
+checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int)
+checkStreamIdRoom conn dir = do
+    let ref | dir == Bidirectional = peerStreamId conn
+            | otherwise            = peerUniStreamId conn
+    atomicModifyIORef' ref check
   where
-    inc c = (c { maxStreams = next}, next)
-      where
-        next = maxStreams c + 1
+    check conc@Concurrency{..} =
+        let StreamIdBase base = maxStreams
+            initialStreams = initialMaxStreamsBidi $ getMyParameters conn
+            cbase = currentStream !>>. 2
+        in if (base - cbase < (initialStreams !>>. 1)) then
+           (conc, Nothing)
+          else
+           let base' = base + initialStreams
+           in (conc { maxStreams = StreamIdBase base' }, Just base')

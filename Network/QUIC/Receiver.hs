@@ -249,9 +249,8 @@ processFrame conn lvl (NewToken token) = do
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readRxMaxStreams conn
-    when (sid >= maxSid) $
-        closeConnection StreamLimitError "stream id is too large"
+    ok <- checkRxMaxStreams conn sid
+    unless ok $ closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
@@ -265,23 +264,21 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
       OverLimit -> closeConnection FlowControlError "Flow control error for stream in 0-RTT"
       Duplicated -> return ()
       Reassembled -> do
-          ok <- checkRxMaxData conn len
+          ok' <- checkRxMaxData conn len
           -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-          unless ok $ closeConnection FlowControlError "Flow control error for connection in 0-RTT"
+          unless ok' $ closeConnection FlowControlError "Flow control error for connection in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readRxMaxStreams conn
-    when (sid >= maxSid) $
-        closeConnection StreamLimitError "stream id is too large"
+    ok <- checkRxMaxStreams conn sid
+    unless ok $ closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readRxMaxStreams conn
-    when (sid >= maxSid) $
-        closeConnection StreamLimitError "stream id is too large"
+    ok <- checkRxMaxStreams conn sid
+    unless ok $ closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
@@ -295,9 +292,9 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
       OverLimit -> closeConnection FlowControlError "Flow control error for stream in 1-RTT"
       Duplicated -> return ()
       Reassembled -> do
-          ok <- checkRxMaxData conn len
+          ok' <- checkRxMaxData conn len
           -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-          unless ok $ closeConnection FlowControlError "Flow control error for connection in 1-RTT"
+          unless ok' $ closeConnection FlowControlError "Flow control error for connection in 1-RTT"
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "MAX_DATA in Initial or Handshake"
