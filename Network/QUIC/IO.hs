@@ -16,12 +16,14 @@ import Network.QUIC.Types
 -- | Creating a bidirectional stream.
 stream :: Connection -> IO Stream
 stream conn = do
+    -- FLOW CONTROL: MAX_STREAMS: send: respecting peer's limit
     sid <- waitMyNewStreamId conn
     addStream conn sid
 
 -- | Creating a unidirectional stream.
 unidirectionalStream :: Connection -> IO Stream
 unidirectionalStream conn = do
+    -- FLOW CONTROL: MAX_STREAMS: send: respecting peer's limit
     sid <- waitMyNewUniStreamId conn
     addStream conn sid
 
@@ -60,6 +62,8 @@ sendStreamMany s dats0 = do
     conn = streamConnection s
     flowControl dats len wait = do
         -- 1-RTT
+        -- FLOW CONTROL: MAX_STREAM_DATA: send: respecting peer's limit
+        -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
         eblocked <- checkBlocked s len wait
         case eblocked of
           Right n
@@ -145,6 +149,7 @@ closeStream s = do
     delStream conn s
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
+        -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
         n <- getPeerMaxStreams conn
         putOutput conn $ OutControl RTT1Level [MaxStreams Bidirectional n] $ return ()
 
@@ -166,12 +171,14 @@ recvStream s n = do
     window <- getRxStreamWindow s
     let sid = streamId s
         initialWindow = initialRxMaxStreamData conn sid
+    -- FLOW CONTROL: MAX_STREAM_DATA: recv: announcing my limit properly
     when (window <= (initialWindow !>>. 1)) $ do
         newMax <- addRxMaxStreamData s initialWindow
         sendFrames conn RTT1Level [MaxStreamData sid newMax]
         fire conn (Microseconds 50000) $ do
             newMax' <- getRxMaxStreamData s
             sendFrames conn RTT1Level [MaxStreamData sid newMax']
+    -- FLOW CONTROL: MAX_DATA: recv: announcing my limit properly
     cwindow <- getRxDataWindow conn
     let cinitialWindow = initialMaxData $ getMyParameters conn
     when (cwindow <= (cinitialWindow !>>. 1)) $ do
