@@ -7,15 +7,15 @@ module Network.QUIC.Connection.Stream (
   , waitMyNewUniStreamId
   , setTxMaxStreams
   , setTxUniMaxStreams
-  , getRxMaxStreams
-  , setRxMaxStreams
   , readRxMaxStreams
+  , getRxMaxStreams
+  , addRxMaxStreams
+  , getRxCurrentStream
   ) where
 
 import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
-import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -49,21 +49,21 @@ setTxUniMaxStreams Connection{..} = set myUniStreamId
 set :: TVar Concurrency -> Int -> IO ()
 set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = mx }
 
-setRxMaxStreams :: Connection -> Int -> IO ()
-setRxMaxStreams Connection{..} n =
-    atomicModifyIORef'' peerStreamId $ \c -> c { maxStreams = n }
-
-readRxMaxStreams :: Connection -> IO Int
-readRxMaxStreams conn@Connection{..} = do
+readRxMaxStreams :: Connection -> StreamId -> IO Int
+readRxMaxStreams Connection{..} sid = do
     n <- maxStreams <$> readIORef peerStreamId
     return $ n * 4 + iniType
   where
-    iniType | isClient conn = 1 -- peer is server
-            | otherwise     = 0
+    iniType = sid .&. 0x3
 
 getRxMaxStreams :: Connection -> IO Int
-getRxMaxStreams Connection{..} = atomicModifyIORef' peerStreamId inc
-  where
-    inc c = (c { maxStreams = next}, next)
-      where
-        next = maxStreams c + 1
+getRxMaxStreams Connection{..} = maxStreams <$> readIORef peerStreamId
+
+addRxMaxStreams :: Connection -> Int -> IO Int
+addRxMaxStreams Connection{..} n =
+    atomicModifyIORef' peerStreamId $ \c ->
+       let max' = maxStreams c + n
+       in (c { maxStreams = max' }, max')
+
+getRxCurrentStream :: Connection -> IO Int
+getRxCurrentStream Connection{..} = currentStream <$> readIORef peerStreamId

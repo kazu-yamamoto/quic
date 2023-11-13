@@ -249,7 +249,7 @@ processFrame conn lvl (NewToken token) = do
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readRxMaxStreams conn
+    maxSid <- readRxMaxStreams conn sid
     when (sid >= maxSid) $
         closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
@@ -270,7 +270,7 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
           unless ok $ closeConnection FlowControlError "Flow control error for connection in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readRxMaxStreams conn
+    maxSid <- readRxMaxStreams conn sid
     when (sid >= maxSid) $
         closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
@@ -279,7 +279,7 @@ processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
-    maxSid <- readRxMaxStreams conn
+    maxSid <- readRxMaxStreams conn sid
     when (sid >= maxSid) $
         closeConnection StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $

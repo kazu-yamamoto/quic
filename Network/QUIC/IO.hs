@@ -150,8 +150,14 @@ closeStream s = do
     when ((isClient conn && isServerInitiatedBidirectional sid)
        || (isServer conn && isClientInitiatedBidirectional sid)) $ do
         -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
-        n <- getRxMaxStreams conn
-        putOutput conn $ OutControl RTT1Level [MaxStreams Bidirectional n] $ return ()
+        streams <- getRxCurrentStream conn
+        maxStrms <- getRxMaxStreams conn
+        let initialStreams = initialMaxStreamsBidi $ getMyParameters conn
+        when (maxStrms - streams < (initialStreams !>>. 1)) $ do
+            newStreams <- addRxMaxStreams conn initialStreams
+            sendFrames conn RTT1Level [MaxStreams Bidirectional newStreams]
+            fire conn (Microseconds 50000) $
+                sendFrames conn RTT1Level [MaxStreams Bidirectional newStreams]
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream
@@ -175,18 +181,16 @@ recvStream s n = do
     when (window <= (initialWindow !>>. 1)) $ do
         newMax <- addRxMaxStreamData s initialWindow
         sendFrames conn RTT1Level [MaxStreamData sid newMax]
-        fire conn (Microseconds 50000) $ do
-            newMax' <- getRxMaxStreamData s
-            sendFrames conn RTT1Level [MaxStreamData sid newMax']
+        fire conn (Microseconds 50000) $
+            sendFrames conn RTT1Level [MaxStreamData sid newMax]
     -- FLOW CONTROL: MAX_DATA: recv: announcing my limit properly
     cwindow <- getRxDataWindow conn
     let cinitialWindow = initialMaxData $ getMyParameters conn
     when (cwindow <= (cinitialWindow !>>. 1)) $ do
         newMax <- addRxMaxData conn cinitialWindow
         sendFrames conn RTT1Level [MaxData newMax]
-        fire conn (Microseconds 50000) $ do
-            newMax' <- getRxMaxData conn
-            sendFrames conn RTT1Level [MaxData newMax']
+        fire conn (Microseconds 50000) $
+            sendFrames conn RTT1Level [MaxData newMax]
     return bs
 
 -- | Closing a stream with an error code.
