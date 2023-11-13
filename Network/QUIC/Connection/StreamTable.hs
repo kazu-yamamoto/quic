@@ -32,12 +32,16 @@ findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
 addStream :: Connection -> StreamId -> IO Stream
 addStream conn@Connection{..} sid = do
     strm <- newStream conn sid
-    peerParams <- getPeerParameters conn
-    let txMaxStreamData | isClient conn = clientInitial sid peerParams
-                        | otherwise     = serverInitial sid peerParams
-    setTxMaxStreamData strm txMaxStreamData
-    let rxMaxStreamData = initialRxMaxStreamData conn sid
-    setRxMaxStreamData strm rxMaxStreamData
+    if isClient conn then do
+         let clientParams = getMyParameters conn
+         setRxMaxStreamData strm $ clientInitial sid clientParams
+         serverParams <- getPeerParameters conn
+         setTxMaxStreamData strm $ serverInitial sid serverParams
+      else do
+         let serverParams = getMyParameters conn
+         setRxMaxStreamData strm $ serverInitial sid serverParams
+         clientParams <- getPeerParameters conn
+         setTxMaxStreamData strm $ clientInitial sid clientParams
     atomicModifyIORef'' streamTable $ insertStream sid strm
     return strm
 
@@ -56,13 +60,14 @@ clientInitial :: StreamId -> Parameters -> Int
 clientInitial sid params
   | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal  params
   | isServerInitiatedBidirectional  sid = initialMaxStreamDataBidiRemote params
-  -- intentionally not using isClientInitiatedUnidirectional
+  -- intentionally not using isServerInitiatedUnidirectional
   | otherwise                           = initialMaxStreamDataUni        params
 
 serverInitial :: StreamId -> Parameters -> Int
 serverInitial sid params
   | isServerInitiatedBidirectional  sid = initialMaxStreamDataBidiLocal  params
   | isClientInitiatedBidirectional  sid = initialMaxStreamDataBidiRemote params
+  -- intentionally not using isClientInitiatedUnidirectional
   | otherwise                           = initialMaxStreamDataUni        params
 
 ----------------------------------------------------------------
