@@ -209,6 +209,7 @@ data Connection = Connection {
   , myStreamId        :: TVar Concurrency
   , myUniStreamId     :: TVar Concurrency
   , peerStreamId      :: IORef Concurrency
+  , peerUniStreamId   :: IORef Concurrency
   , flowTx            :: TVar Flow
   , flowRx            :: IORef Flow
   , flowBytesRx       :: IORef Int
@@ -300,9 +301,10 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- State
         <*> newIORef 0
         <*> newIORef emptyStreamTable
-        <*> newTVarIO (newConcurrency rl Bidirectional  0)
-        <*> newTVarIO (newConcurrency rl Unidirectional 0)
-        <*> newIORef  peerConcurrency
+        <*> newTVarIO (newConcurrency rl Bidirectional  0) -- C:0 S:1
+        <*> newTVarIO (newConcurrency rl Unidirectional 0) -- C:2 S:3
+        <*> newIORef  peerConcurrency                      -- C:1 S:0
+        <*> newIORef  peerUniConcurrency                   -- C:3 S:2
         <*> newTVarIO defaultFlow
         <*> newIORef defaultFlow { flowMaxData = initialMaxData myparams }
         <*> newIORef 0
@@ -338,6 +340,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     peer | isclient  = Server
          | otherwise = Client
     peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)
+    peerUniConcurrency = newConcurrency peer Unidirectional (initialMaxStreamsUni myparams)
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")

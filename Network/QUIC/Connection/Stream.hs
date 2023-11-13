@@ -9,8 +9,11 @@ module Network.QUIC.Connection.Stream (
   , setTxUniMaxStreams
   , readRxMaxStreams
   , getRxMaxStreams
+  , getRxMaxUniStreams
   , addRxMaxStreams
+  , addRxMaxUniStreams
   , getRxCurrentStream
+  , getRxCurrentUniStream
   ) where
 
 import UnliftIO.STM
@@ -59,11 +62,23 @@ readRxMaxStreams Connection{..} sid = do
 getRxMaxStreams :: Connection -> IO Int
 getRxMaxStreams Connection{..} = maxStreams <$> readIORef peerStreamId
 
+getRxMaxUniStreams :: Connection -> IO Int
+getRxMaxUniStreams Connection{..} = maxStreams <$> readIORef peerUniStreamId
+
 addRxMaxStreams :: Connection -> Int -> IO Int
 addRxMaxStreams Connection{..} n =
     atomicModifyIORef' peerStreamId $ \c ->
        let max' = maxStreams c + n
        in (c { maxStreams = max' }, max')
 
+addRxMaxUniStreams :: Connection -> Int -> IO Int
+addRxMaxUniStreams Connection{..} n =
+    atomicModifyIORef' peerUniStreamId $ \c ->
+       let max' = maxStreams c + n
+       in (c { maxStreams = max' }, max')
+
 getRxCurrentStream :: Connection -> IO Int
 getRxCurrentStream Connection{..} = currentStream <$> readIORef peerStreamId
+
+getRxCurrentUniStream :: Connection -> IO Int
+getRxCurrentUniStream Connection{..} = currentStream <$> readIORef peerUniStreamId

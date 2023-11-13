@@ -158,6 +158,17 @@ closeStream s = do
             sendFrames conn RTT1Level [MaxStreams Bidirectional newStreams]
             fire conn (Microseconds 50000) $
                 sendFrames conn RTT1Level [MaxStreams Bidirectional newStreams]
+    when ((isClient conn && isServerInitiatedUnidirectional sid)
+       || (isServer conn && isClientInitiatedUnidirectional sid)) $ do
+        -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
+        streams <- getRxCurrentUniStream conn
+        maxStrms <- getRxMaxUniStreams conn
+        let initialStreams = initialMaxStreamsUni $ getMyParameters conn
+        when (maxStrms - streams < (initialStreams !>>. 1)) $ do
+            newStreams <- addRxMaxUniStreams conn initialStreams
+            sendFrames conn RTT1Level [MaxStreams Unidirectional newStreams]
+            fire conn (Microseconds 50000) $
+                sendFrames conn RTT1Level [MaxStreams Unidirectional newStreams]
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream
