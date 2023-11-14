@@ -1,20 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Stream.Table (
-    StreamTable
-  , emptyStreamTable
-  , lookupStream
-  , insertStream
-  , deleteStream
-  , insertCryptoStreams
-  , deleteCryptoStream
-  , lookupCryptoStream
-  ) where
+    StreamTable,
+    emptyStreamTable,
+    lookupStream,
+    insertStream,
+    deleteStream,
+    insertCryptoStreams,
+    deleteCryptoStream,
+    lookupCryptoStream,
+) where
 
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as Map
 
-import {-# Source #-} Network.QUIC.Connection.Types
+import {-# SOURCE #-} Network.QUIC.Connection.Types
 import Network.QUIC.Stream.Types
 import Network.QUIC.Types
 
@@ -38,17 +38,17 @@ deleteStream sid (StreamTable tbl) = StreamTable $ Map.delete sid tbl
 
 ----------------------------------------------------------------
 
-initialCryptoStreamId,handshakeCryptoStreamId,rtt1CryptoStreamId :: StreamId
-initialCryptoStreamId   = -1
+initialCryptoStreamId, handshakeCryptoStreamId, rtt1CryptoStreamId :: StreamId
+initialCryptoStreamId = -1
 handshakeCryptoStreamId = -2
-rtt1CryptoStreamId      = -3
+rtt1CryptoStreamId = -3
 
 toCryptoStreamId :: EncryptionLevel -> StreamId
-toCryptoStreamId InitialLevel   = initialCryptoStreamId
+toCryptoStreamId InitialLevel = initialCryptoStreamId
 -- This is to generate an error packet of CRYPTO in 0-RTT
-toCryptoStreamId RTT0Level      = rtt1CryptoStreamId
+toCryptoStreamId RTT0Level = rtt1CryptoStreamId
 toCryptoStreamId HandshakeLevel = handshakeCryptoStreamId
-toCryptoStreamId RTT1Level      = rtt1CryptoStreamId
+toCryptoStreamId RTT1Level = rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 
@@ -57,15 +57,16 @@ insertCryptoStreams conn stbl = do
     strm1 <- newStream conn initialCryptoStreamId
     strm2 <- newStream conn handshakeCryptoStreamId
     strm3 <- newStream conn rtt1CryptoStreamId
-    return $ insertStream initialCryptoStreamId   strm1
-           $ insertStream handshakeCryptoStreamId strm2
-           $ insertStream rtt1CryptoStreamId      strm3 stbl
+    return $
+        insertStream initialCryptoStreamId strm1 $
+            insertStream handshakeCryptoStreamId strm2 $
+                insertStream rtt1CryptoStreamId strm3 stbl
 
 deleteCryptoStream :: EncryptionLevel -> StreamTable -> StreamTable
-deleteCryptoStream InitialLevel   = deleteStream initialCryptoStreamId
-deleteCryptoStream RTT0Level      = deleteStream rtt1CryptoStreamId
+deleteCryptoStream InitialLevel = deleteStream initialCryptoStreamId
+deleteCryptoStream RTT0Level = deleteStream rtt1CryptoStreamId
 deleteCryptoStream HandshakeLevel = deleteStream handshakeCryptoStreamId
-deleteCryptoStream RTT1Level      = deleteStream rtt1CryptoStreamId
+deleteCryptoStream RTT1Level = deleteStream rtt1CryptoStreamId
 
 ----------------------------------------------------------------
 
