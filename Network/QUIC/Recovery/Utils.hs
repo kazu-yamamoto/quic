@@ -2,17 +2,17 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Recovery.Utils (
-    retransmit
-  , sendPing
-  , mergeLostCandidates
-  , mergeLostCandidatesAndClear
-  , peerCompletedAddressValidation
-  , countAckEli
-  , inCongestionRecovery
-  , delay
-  ) where
+    retransmit,
+    sendPing,
+    mergeLostCandidates,
+    mergeLostCandidatesAndClear,
+    peerCompletedAddressValidation,
+    countAckEli,
+    inCongestionRecovery,
+    delay,
+) where
 
-import Data.Sequence (Seq, (<|), ViewL(..))
+import Data.Sequence (Seq, ViewL (..), (<|))
 import qualified Data.Sequence as Seq
 import UnliftIO.Concurrent
 import UnliftIO.STM
@@ -26,8 +26,8 @@ import Network.QUIC.Types
 
 retransmit :: LDCC -> Seq SentPacket -> IO ()
 retransmit ldcc lostPackets
-  | null packetsToBeResent = getEncryptionLevel ldcc >>= sendPing ldcc
-  | otherwise              = mapM_ put packetsToBeResent
+    | null packetsToBeResent = getEncryptionLevel ldcc >>= sendPing ldcc
+    | otherwise = mapM_ put packetsToBeResent
   where
     packetsToBeResent = Seq.filter spAckEliciting lostPackets
     put = putRetrans ldcc . spPlainPacket
@@ -37,9 +37,10 @@ retransmit ldcc lostPackets
 sendPing :: LDCC -> EncryptionLevel -> IO ()
 sendPing LDCC{..} lvl = do
     now <- getTimeMicrosecond
-    atomicModifyIORef'' (lossDetection ! lvl) $ \ld -> ld {
-        timeOfLastAckElicitingPacket = now
-      }
+    atomicModifyIORef'' (lossDetection ! lvl) $ \ld ->
+        ld
+            { timeOfLastAckElicitingPacket = now
+            }
     atomically $ writeTVar ptoPing $ Just lvl
 
 ----------------------------------------------------------------
@@ -58,12 +59,12 @@ mergeLostCandidatesAndClear LDCC{..} lostPackets = atomically $ do
 
 merge :: Seq SentPacket -> Seq SentPacket -> Seq SentPacket
 merge s1 s2 = case Seq.viewl s1 of
-  EmptyL   -> s2
-  x :< s1' -> case Seq.viewl s2 of
-    EmptyL  -> s1
-    y :< s2'
-      | spPacketNumber x < spPacketNumber y -> x <| merge s1' s2
-      | otherwise                           -> y <| merge s1 s2'
+    EmptyL -> s2
+    x :< s1' -> case Seq.viewl s2 of
+        EmptyL -> s1
+        y :< s2'
+            | spPacketNumber x < spPacketNumber y -> x <| merge s1' s2
+            | otherwise -> y <| merge s1 s2'
 
 ----------------------------------------------------------------
 
@@ -75,7 +76,7 @@ merge s1 s2 = case Seq.viewl s1 of
 peerCompletedAddressValidation :: LDCC -> IO Bool
 -- For servers: assume clients validate the server's address implicitly.
 peerCompletedAddressValidation ldcc
-  | isServer ldcc = return True
+    | isServer ldcc = return True
 -- For clients: servers complete address validation when a protected
 -- packet is received.
 peerCompletedAddressValidation ldcc = isConnectionEstablished ldcc
@@ -84,8 +85,8 @@ peerCompletedAddressValidation ldcc = isConnectionEstablished ldcc
 
 countAckEli :: SentPacket -> Int
 countAckEli sentPacket
-  | spAckEliciting sentPacket = 1
-  | otherwise                 = 0
+    | spAckEliciting sentPacket = 1
+    | otherwise = 0
 
 ----------------------------------------------------------------
 

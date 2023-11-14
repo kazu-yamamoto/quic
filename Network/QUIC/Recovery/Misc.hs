@@ -2,14 +2,14 @@
 {-# LANGUAGE TupleSections #-}
 
 module Network.QUIC.Recovery.Misc (
-    getPktNumPersistent
-  , setPktNumPersistent
-  , setSpeedingUp
-  , getSpeedingUp
-  , getPacketNumberSpaceDiscarded
-  , getAndSetPacketNumberSpaceDiscarded
-  , setMaxAckDaley
-  ) where
+    getPktNumPersistent,
+    setPktNumPersistent,
+    setSpeedingUp,
+    getSpeedingUp,
+    getPacketNumberSpaceDiscarded,
+    getAndSetPacketNumberSpaceDiscarded,
+    setMaxAckDaley,
+) where
 
 import Data.IORef
 
@@ -50,4 +50,4 @@ getAndSetPacketNumberSpaceDiscarded LDCC{..} lvl =
 
 setMaxAckDaley :: LDCC -> Microseconds -> IO ()
 setMaxAckDaley LDCC{..} delay0 =
-    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { maxAckDelay1RTT = delay0 }
+    atomicModifyIORef'' recoveryRTT $ \rtt -> rtt{maxAckDelay1RTT = delay0}
