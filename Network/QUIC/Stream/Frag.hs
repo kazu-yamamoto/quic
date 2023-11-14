@@ -1,6 +1,14 @@
 module Network.QUIC.Stream.Frag where
 
-import Data.Sequence (Seq, ViewL (..), ViewR (..), dropWhileL, viewl, viewr, (<|))
+import Data.Sequence (
+    Seq,
+    ViewL (..),
+    ViewR (..),
+    dropWhileL,
+    viewl,
+    viewr,
+    (<|),
+ )
 
 class Frag a where
     currOff :: a -> Int
