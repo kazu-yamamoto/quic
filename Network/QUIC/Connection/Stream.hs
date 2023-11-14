@@ -9,6 +9,7 @@ module Network.QUIC.Connection.Stream (
   , setTxMaxStreams
   , setTxUniMaxStreams
   , checkRxMaxStreams
+  , updatePeerStreamId
   , checkStreamIdRoom
   ) where
 
@@ -53,6 +54,19 @@ setTxUniMaxStreams Connection{..} = set myUniStreamId
 set :: TVar Concurrency -> Int -> IO ()
 set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = StreamIdBase mx }
 
+updatePeerStreamId :: Connection -> StreamId -> IO ()
+updatePeerStreamId conn sid = do
+    when ((isClient conn && isServerInitiatedBidirectional sid)
+       || (isServer conn && isClientInitiatedBidirectional sid)) $ do
+        atomicModifyIORef'' (peerStreamId conn) check
+    when ((isClient conn && isServerInitiatedUnidirectional sid)
+       || (isServer conn && isClientInitiatedUnidirectional sid)) $ do
+        atomicModifyIORef'' (peerUniStreamId conn) check
+  where
+    check conc@Concurrency{..}
+      | currentStream < sid = conc { currentStream = sid }
+      | otherwise           = conc
+
 checkRxMaxStreams :: Connection -> StreamId -> IO Bool
 checkRxMaxStreams conn@Connection{..} sid = do
     Concurrency{..} <- if isClient conn then readForClient else readForServer
@@ -84,8 +98,8 @@ checkStreamIdRoom conn dir = do
         let StreamIdBase base = maxStreams
             initialStreams = initialMaxStreamsBidi $ getMyParameters conn
             cbase = currentStream !>>. 2
-        in if (base - cbase < (initialStreams !>>. 1)) then
-           (conc, Nothing)
-          else
-           let base' = base + initialStreams
-           in (conc { maxStreams = StreamIdBase base' }, Just base')
+        in if (base - cbase < (initialStreams !>>. 3)) then
+               let base' = base + initialStreams
+               in (conc { maxStreams = StreamIdBase base' }, Just base')
+           else
+               (conc, Nothing)

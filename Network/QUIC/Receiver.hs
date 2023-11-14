@@ -248,6 +248,7 @@ processFrame conn lvl (NewToken token) = do
         closeConnection ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
+    when (off == 0) $ updatePeerStreamId conn sid
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
     unless ok $ closeConnection StreamLimitError "stream id is too large"
@@ -276,6 +277,7 @@ processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
+    when (off == 0) $ updatePeerStreamId conn sid
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
     unless ok $ closeConnection StreamLimitError "stream id is too large"
