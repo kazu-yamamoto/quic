@@ -14,8 +14,8 @@ This package covers:
 - [Using TLS to Secure QUIC](https://tools.ietf.org/html/rfc9001)
 - [QUIC Loss Detection and Congestion Control](https://tools.ietf.org/html/rfc9002)
 - [Greasing the QUIC Bit](https://tools.ietf.org/html/rfc9287)
-- QUIC Version 2
-- Compatible Version Negotiation for QUIC
+- [QUIC Version 2](https://tools.ietf.org/html/rfc9369)
+- [Compatible Version Negotiation for QUIC](https://tools.ietf.org/html/rfc9368)
 
 The followings are implemented in [`http3`](https://github.com/kazu-yamamoto/http3):
 
