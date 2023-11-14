@@ -218,6 +218,7 @@ data Connection = Connection
       inputQ :: InputQ
     , cryptoQ :: CryptoQ
     , outputQ :: OutputQ
+    , outputQ1 :: OutputQ1
     , migrationQ :: MigrationQ
     , shared :: Shared
     , delayedAckCount :: IORef Int
@@ -318,6 +319,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newTQueueIO
         <*> newTQueueIO
         <*> return outQ
+        <*> newTBQueueIO 1
         <*> newTQueueIO
         <*> newShared
         <*> newIORef 0
@@ -416,6 +418,7 @@ data Output
 type InputQ = TQueue Input
 type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
+type OutputQ1 = TBQueue Output
 type MigrationQ = TQueue ReceivedPacket
 
 ----------------------------------------------------------------
