@@ -1,7 +1,7 @@
 module Network.QUIC.Packet.Number (
-    encodePacketNumber
-  , decodePacketNumber
-  ) where
+    encodePacketNumber,
+    decodePacketNumber,
+) where
 
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -16,6 +16,7 @@ import Network.QUIC.Types
 -- True
 -- >>> encodePacketNumber 0xabe8bc 0xace8fe == (0xace8fe, 3)
 -- True
+{- FOURMOLU_DISABLE -}
 encodePacketNumber :: PacketNumber -> PacketNumber -> (EncodedPacketNumber, Int)
 encodePacketNumber largestPN pn = (diff, bytes)
   where
@@ -26,6 +27,7 @@ encodePacketNumber largestPN pn = (diff, bytes)
       | enoughRange < 16777216 = (0x00ffffff, 3)
       | otherwise              = (0xffffffff, 4)
     diff = fromIntegral (pn .&. pnMask)
+{- FOURMOLU_ENABLE -}
 
 ----------------------------------------------------------------
 
@@ -37,6 +39,7 @@ encodePacketNumber largestPN pn = (diff, bytes)
 -- True
 -- >>> decodePacketNumber 0xabe8bc 0xace8fe 3 == 0xace8fe
 -- True
+{- FOURMOLU_DISABLE -}
 decodePacketNumber :: PacketNumber -> EncodedPacketNumber -> Int -> PacketNumber
 decodePacketNumber largestPN truncatedPN bytes
   | candidatePN <= expectedPN - pnHwin
@@ -53,3 +56,4 @@ decodePacketNumber largestPN truncatedPN bytes
     pnMask = pnWin - 1
     candidatePN = (expectedPN .&. complement pnMask)
               .|. fromIntegral truncatedPN
+{- FOURMOLU_ENABLE -}
