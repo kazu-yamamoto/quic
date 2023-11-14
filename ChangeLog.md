@@ -1,3 +1,8 @@
+## 0.1.8
+
+- Announcing MaxStreams properly.
+- Terminating a connection if the peer violates flow controls.
+
 ## 0.1.7
 
 - Using System.Timeout.timeout.
