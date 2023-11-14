@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.QLogger (
-    QLogger
-  , dirQLogger
-  ) where
+    QLogger,
+    dirQLogger,
+) where
 
 import System.FilePath
 import System.Log.FastLogger
@@ -12,7 +12,8 @@ import Network.QUIC.Imports
 import Network.QUIC.Qlog
 import Network.QUIC.Types
 
-dirQLogger :: Maybe FilePath -> TimeMicrosecond -> CID -> ByteString -> IO (QLogger, IO ())
+dirQLogger
+    :: Maybe FilePath -> TimeMicrosecond -> CID -> ByteString -> IO (QLogger, IO ())
 dirQLogger Nothing _ _ _ = do
     let qLog ~_ = return ()
         clean = return ()

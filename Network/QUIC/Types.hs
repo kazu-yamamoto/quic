@@ -1,20 +1,20 @@
 module Network.QUIC.Types (
-    Bytes
-  , Close
-  , Direction(..)
-  , SizedBuffer(..)
-  , module Network.QUIC.Types.Ack
-  , module Network.QUIC.Types.CID
-  , module Network.QUIC.Types.Constants
-  , module Network.QUIC.Types.Error
-  , module Network.QUIC.Types.Exception
-  , module Network.QUIC.Types.Frame
-  , module Network.QUIC.Types.Integer
-  , module Network.QUIC.Types.Packet
-  , module Network.QUIC.Types.Queue
-  , module Network.QUIC.Types.Resumption
-  , module Network.QUIC.Types.Time
-  ) where
+    Bytes,
+    Close,
+    Direction (..),
+    SizedBuffer (..),
+    module Network.QUIC.Types.Ack,
+    module Network.QUIC.Types.CID,
+    module Network.QUIC.Types.Constants,
+    module Network.QUIC.Types.Error,
+    module Network.QUIC.Types.Exception,
+    module Network.QUIC.Types.Frame,
+    module Network.QUIC.Types.Integer,
+    module Network.QUIC.Types.Packet,
+    module Network.QUIC.Types.Queue,
+    module Network.QUIC.Types.Resumption,
+    module Network.QUIC.Types.Time,
+) where
 
 import Network.QUIC.Imports
 import Network.QUIC.Types.Ack

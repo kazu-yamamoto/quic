@@ -6,7 +6,7 @@ import Control.Monad (replicateM)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base16
 import qualified Data.ByteString.Char8 as C8
-import Data.ByteString.Internal (ByteString(..))
+import Data.ByteString.Internal (ByteString (..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
 import Data.Char (chr)
@@ -20,7 +20,7 @@ import UnliftIO.Exception
 -- GHC 8.0 does not provide fromRight.
 fromRight :: b -> Either a b -> b
 fromRight _ (Right b) = b
-fromRight b _         = b
+fromRight b _ = b
 
 dec16 :: ByteString -> ByteString
 dec16 = fromRight "" . decode
@@ -52,7 +52,7 @@ sum' = foldl' (+) 0
 
 withByteString :: ByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteString (PS fptr off _) f = withForeignPtr fptr $ \ptr ->
-  f (ptr `plusPtr` off)
+    f (ptr `plusPtr` off)
 
 shortpack :: String -> ShortByteString
 shortpack = Short.toShort . C8.pack

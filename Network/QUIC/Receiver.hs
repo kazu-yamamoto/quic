@@ -2,11 +2,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Receiver (
-    receiver
-  ) where
+    receiver,
+) where
 
 import qualified Data.ByteString as BS
-import Network.TLS (AlertDescription(..))
+import Network.TLS (AlertDescription (..))
 import UnliftIO.Concurrent (forkIO)
 import qualified UnliftIO.Exception as E
 
@@ -37,13 +37,14 @@ receiver conn = handleLogT logAction body
         ito <- readMinIdleTimeout conn
         mx <- timeout ito "recvTimeout" $ connRecv conn -- fixme: taking minimum with peer's one
         case mx of
-          Nothing -> do
-              st <- getConnectionState conn
-              let msg0 | isClient conn = "Client"
-                       | otherwise     = "Server"
-                  msg = msg0 ++ " " ++ show st
-              E.throwIO $ ConnectionIsTimeout msg
-          Just x  -> return x
+            Nothing -> do
+                st <- getConnectionState conn
+                let msg0
+                        | isClient conn = "Client"
+                        | otherwise = "Server"
+                    msg = msg0 ++ " " ++ show st
+                E.throwIO $ ConnectionIsTimeout msg
+            Just x -> return x
     loopHandshake = do
         rpkt <- recvTimeout
         processReceivedPacketHandshake conn rpkt
@@ -55,69 +56,76 @@ receiver conn = handleLogT logAction body
             cid = headerMyCID hdr
         included <- myCIDsInclude conn cid
         case included of
-          Just nseq -> do
-            shouldUpdate <- shouldUpdateMyCID conn nseq
-            when shouldUpdate $ do
-                setMyCID conn cid
-                cidInfo <- getNewMyCID conn
-                when (isServer conn) $ do
-                    register <- getRegister conn
-                    register (cidInfoCID cidInfo) conn
-                sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
-            processReceivedPacket conn rpkt
-            shouldUpdatePeer <- if shouldUpdate then shouldUpdatePeerCID conn
-                                                else return False
-            when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
-          _ -> do
-            qlogDropped conn hdr
-            connDebugLog conn $ bhow cid <> " is unknown"
+            Just nseq -> do
+                shouldUpdate <- shouldUpdateMyCID conn nseq
+                when shouldUpdate $ do
+                    setMyCID conn cid
+                    cidInfo <- getNewMyCID conn
+                    when (isServer conn) $ do
+                        register <- getRegister conn
+                        register (cidInfoCID cidInfo) conn
+                    sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
+                processReceivedPacket conn rpkt
+                shouldUpdatePeer <-
+                    if shouldUpdate
+                        then shouldUpdatePeerCID conn
+                        else return False
+                when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
+            _ -> do
+                qlogDropped conn hdr
+                connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("debug: receiver: " <> msg)
 
 processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn rpkt = do
     let CryptPacket hdr _ = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
-        msg = "processReceivedPacketHandshake " ++ if isServer conn then "Server" else "Client"
+        msg =
+            "processReceivedPacketHandshake "
+                ++ if isServer conn then "Server" else "Client"
     mx <- timeout (Microseconds 10000) msg $ waitEncryptionLevel conn lvl
     case mx of
-      Nothing -> do
-          putOffCrypto conn lvl rpkt
-          when (isClient conn) $ do
-              lvl' <- getEncryptionLevel conn
-              speedup (connLDCC conn) lvl' "not decryptable"
-      Just ()
-        | isClient conn -> do
-              when (lvl == InitialLevel) $ do
-                  peercid <- getPeerCID conn
-                  let newPeerCID = headerPeerCID hdr
-                  when (peercid /= headerPeerCID hdr) $
-                      resetPeerCID conn newPeerCID
-                  setPeerAuthCIDs conn $ \auth ->
-                      auth { initSrcCID = Just newPeerCID }
-              case hdr of
-                Initial peerVer _ _ _ -> do
-                    myVer <- getVersion conn
-                    let myOrigiVer = getOriginalVersion conn
-                        firstTime = myVer == myOrigiVer
-                    when (firstTime && myVer /= peerVer) $ do
-                        setVersion conn peerVer
-                        dcid <- getClientDstCID conn
-                        initializeCoder conn InitialLevel $ initialSecrets peerVer dcid
-                _ -> return ()
-              processReceivedPacket conn rpkt
-        | otherwise -> do
-              mycid <- getMyCID conn
-              when (lvl == HandshakeLevel
-                    || (lvl == InitialLevel && mycid == headerMyCID hdr)) $ do
-                  setAddressValidated conn
-              when (lvl == HandshakeLevel) $ do
-                  let ldcc = connLDCC conn
-                  discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
-                  unless discarded $ fire conn (Microseconds 100000) $ do
-                      dropSecrets conn InitialLevel
-                      clearCryptoStream conn InitialLevel
-                      onPacketNumberSpaceDiscarded ldcc InitialLevel
-              processReceivedPacket conn rpkt
+        Nothing -> do
+            putOffCrypto conn lvl rpkt
+            when (isClient conn) $ do
+                lvl' <- getEncryptionLevel conn
+                speedup (connLDCC conn) lvl' "not decryptable"
+        Just ()
+            | isClient conn -> do
+                when (lvl == InitialLevel) $ do
+                    peercid <- getPeerCID conn
+                    let newPeerCID = headerPeerCID hdr
+                    when (peercid /= headerPeerCID hdr) $
+                        resetPeerCID conn newPeerCID
+                    setPeerAuthCIDs conn $ \auth ->
+                        auth{initSrcCID = Just newPeerCID}
+                case hdr of
+                    Initial peerVer _ _ _ -> do
+                        myVer <- getVersion conn
+                        let myOrigiVer = getOriginalVersion conn
+                            firstTime = myVer == myOrigiVer
+                        when (firstTime && myVer /= peerVer) $ do
+                            setVersion conn peerVer
+                            dcid <- getClientDstCID conn
+                            initializeCoder conn InitialLevel $ initialSecrets peerVer dcid
+                    _ -> return ()
+                processReceivedPacket conn rpkt
+            | otherwise -> do
+                mycid <- getMyCID conn
+                when
+                    ( lvl == HandshakeLevel
+                        || (lvl == InitialLevel && mycid == headerMyCID hdr)
+                    )
+                    $ do
+                        setAddressValidated conn
+                when (lvl == HandshakeLevel) $ do
+                    let ldcc = connLDCC conn
+                    discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
+                    unless discarded $ fire conn (Microseconds 100000) $ do
+                        dropSecrets conn InitialLevel
+                        clearCryptoStream conn InitialLevel
+                        onPacketNumberSpaceDiscarded ldcc InitialLevel
+                processReceivedPacket conn rpkt
 
 processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacket conn rpkt = do
@@ -126,69 +134,77 @@ processReceivedPacket conn rpkt = do
         tim = rpTimeRecevied rpkt
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
-      Just plain@Plain{..} -> do
-          addRxBytes conn $ rpReceivedBytes rpkt
-          when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
-              closeConnection ProtocolViolation "Non 0 RR bits or no frames"
-          when (isUnknownFrame plainMarks) $
-              closeConnection FrameEncodingError "Unknown frame"
-          -- For Ping, record PPN first, then send an ACK.
-          onPacketReceived (connLDCC conn) lvl plainPacketNumber
-          when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
-          qlogReceived conn (PlainPacket hdr plain) tim
-          let ackEli   = any ackEliciting   plainFrames
-          case cryptMigraionInfo crypt of
-            Nothing -> return ()
-            Just miginfo ->
-                void . forkIO $ runNewServerReader conn miginfo
-          (ckp,cpn) <- getCurrentKeyPhase conn
-          let Flags flags = plainFlags
-              nkp = flags `testBit` 2
-          when (nkp /= ckp && plainPacketNumber > cpn) $ do
-              setCurrentKeyPhase conn nkp plainPacketNumber
-              updateCoder1RTT conn ckp -- ckp is now next
-          mapM_ (processFrame conn lvl) plainFrames
-          when ackEli $ do
-              case lvl of
-                RTT0Level -> return ()
-                RTT1Level -> delayedAck conn
-                _         -> do
-                    sup <- getSpeedingUp (connLDCC conn)
-                    when sup $ do
-                        qlogDebug conn $ Debug "ping for speedup"
-                        sendFrames conn lvl [Ping]
-      Nothing -> do
-          statelessReset <- isStatelessReset conn hdr crypt
-          if statelessReset then do
-              qlogReceived conn StatelessReset tim
-              connDebugLog conn "debug: connection is reset statelessly"
-              E.throwIO ConnectionIsReset
-            else do
-              qlogDropped conn hdr
-              connDebugLog conn $ "debug: cannot decrypt: " <> bhow lvl <> " size = " <> bhow (BS.length $ cryptPacket crypt)
-              -- fixme: sending statelss reset
+        Just plain@Plain{..} -> do
+            addRxBytes conn $ rpReceivedBytes rpkt
+            when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
+                closeConnection ProtocolViolation "Non 0 RR bits or no frames"
+            when (isUnknownFrame plainMarks) $
+                closeConnection FrameEncodingError "Unknown frame"
+            -- For Ping, record PPN first, then send an ACK.
+            onPacketReceived (connLDCC conn) lvl plainPacketNumber
+            when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
+            qlogReceived conn (PlainPacket hdr plain) tim
+            let ackEli = any ackEliciting plainFrames
+            case cryptMigraionInfo crypt of
+                Nothing -> return ()
+                Just miginfo ->
+                    void . forkIO $ runNewServerReader conn miginfo
+            (ckp, cpn) <- getCurrentKeyPhase conn
+            let Flags flags = plainFlags
+                nkp = flags `testBit` 2
+            when (nkp /= ckp && plainPacketNumber > cpn) $ do
+                setCurrentKeyPhase conn nkp plainPacketNumber
+                updateCoder1RTT conn ckp -- ckp is now next
+            mapM_ (processFrame conn lvl) plainFrames
+            when ackEli $ do
+                case lvl of
+                    RTT0Level -> return ()
+                    RTT1Level -> delayedAck conn
+                    _ -> do
+                        sup <- getSpeedingUp (connLDCC conn)
+                        when sup $ do
+                            qlogDebug conn $ Debug "ping for speedup"
+                            sendFrames conn lvl [Ping]
+        Nothing -> do
+            statelessReset <- isStatelessReset conn hdr crypt
+            if statelessReset
+                then do
+                    qlogReceived conn StatelessReset tim
+                    connDebugLog conn "debug: connection is reset statelessly"
+                    E.throwIO ConnectionIsReset
+                else do
+                    qlogDropped conn hdr
+                    connDebugLog conn $
+                        "debug: cannot decrypt: "
+                            <> bhow lvl
+                            <> " size = "
+                            <> bhow (BS.length $ cryptPacket crypt)
+
+-- fixme: sending statelss reset
 
 isSendOnly :: Connection -> StreamId -> Bool
 isSendOnly conn sid
-  | isClient conn = isClientInitiatedUnidirectional sid
-  | otherwise     = isServerInitiatedUnidirectional sid
+    | isClient conn = isClientInitiatedUnidirectional sid
+    | otherwise = isServerInitiatedUnidirectional sid
 
 isReceiveOnly :: Connection -> StreamId -> Bool
 isReceiveOnly conn sid
-  | isClient conn = isServerInitiatedUnidirectional sid
-  | otherwise     = isClientInitiatedUnidirectional sid
+    | isClient conn = isServerInitiatedUnidirectional sid
+    | otherwise = isClientInitiatedUnidirectional sid
 
 isInitiated :: Connection -> StreamId -> Bool
 isInitiated conn sid
-  | isClient conn = isClientInitiated sid
-  | otherwise     = isServerInitiated sid
+    | isClient conn = isClientInitiated sid
+    | otherwise = isServerInitiated sid
 
 guardStream :: Connection -> StreamId -> Maybe Stream -> IO ()
 guardStream conn sid Nothing
-  | isInitiated conn sid = do
+    | isInitiated conn sid = do
         curSid <- getMyStreamId conn
         when (sid > curSid) $
-            closeConnection StreamStateError "a locally-initiated stream that has not yet been created"
+            closeConnection
+                StreamStateError
+                "a locally-initiated stream that has not yet been created"
 guardStream _ _ _ = return ()
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
@@ -206,12 +222,12 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
         closeConnection StreamStateError "Received in a send-only stream"
     mstrm <- findStream conn sid
     case mstrm of
-      Nothing   -> return ()
-      Just strm -> do
-          onResetStreamReceived (connHooks conn) strm aerr
-          setTxStreamClosed strm
-          setRxStreamClosed strm
-          delStream conn strm
+        Nothing -> return ()
+        Just strm -> do
+            onResetStreamReceived (connHooks conn) strm aerr
+            setTxStreamClosed strm
+            setRxStreamClosed strm
+            delStream conn strm
 processFrame conn lvl (StopSending sid err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "STOP_SENDING"
@@ -219,10 +235,10 @@ processFrame conn lvl (StopSending sid err) = do
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
-      Nothing   -> do
-          when (isInitiated conn sid) $
-              closeConnection StreamStateError "No such stream for STOP_SENDING"
-      Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
+        Nothing -> do
+            when (isInitiated conn sid) $
+                closeConnection StreamStateError "No such stream for STOP_SENDING"
+        Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $
@@ -230,24 +246,24 @@ processFrame conn lvl (CryptoF off cdat) = do
     let len = BS.length cdat
         rx = RxStreamData cdat off len False
     case lvl of
-      InitialLevel   -> do
-          dup <- putRxCrypto conn lvl rx
-          when dup $ speedup (connLDCC conn) lvl "duplicated"
-      RTT0Level -> do
-          connDebugLog conn $ "processFrame: invalid packet type " <> bhow lvl
-      HandshakeLevel -> do
-          dup <- putRxCrypto conn lvl rx
-          when dup $ speedup (connLDCC conn) lvl "duplicated"
-      RTT1Level
-        | isClient conn ->
-              void $ putRxCrypto conn lvl rx
-        | otherwise ->
-              closeConnection (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT"
+        InitialLevel -> do
+            dup <- putRxCrypto conn lvl rx
+            when dup $ speedup (connLDCC conn) lvl "duplicated"
+        RTT0Level -> do
+            connDebugLog conn $ "processFrame: invalid packet type " <> bhow lvl
+        HandshakeLevel -> do
+            dup <- putRxCrypto conn lvl rx
+            when dup $ speedup (connLDCC conn) lvl "duplicated"
+        RTT1Level
+            | isClient conn ->
+                void $ putRxCrypto conn lvl rx
+            | otherwise ->
+                closeConnection (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT"
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         closeConnection ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
     when (isClient conn) $ setNewToken conn token
-processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
+processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
     when (off == 0) $ updatePeerStreamId conn sid
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
@@ -261,13 +277,14 @@ processFrame conn RTT0Level (StreamF sid off (dat:_) fin) = do
         rx = RxStreamData dat off len fin
     fc <- putRxStreamData strm rx
     case fc of
-      -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-      OverLimit -> closeConnection FlowControlError "Flow control error for stream in 0-RTT"
-      Duplicated -> return ()
-      Reassembled -> do
-          ok' <- checkRxMaxData conn len
-          -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-          unless ok' $ closeConnection FlowControlError "Flow control error for connection in 0-RTT"
+        -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
+        OverLimit -> closeConnection FlowControlError "Flow control error for stream in 0-RTT"
+        Duplicated -> return ()
+        Reassembled -> do
+            ok' <- checkRxMaxData conn len
+            -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
+            unless ok' $
+                closeConnection FlowControlError "Flow control error for connection in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
@@ -276,7 +293,7 @@ processFrame conn RTT1Level (StreamF sid _ [""] False) = do
         closeConnection StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
-processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
+processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
     when (off == 0) $ updatePeerStreamId conn sid
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
@@ -290,13 +307,14 @@ processFrame conn RTT1Level (StreamF sid off (dat:_) fin) = do
         rx = RxStreamData dat off len fin
     fc <- putRxStreamData strm rx
     case fc of
-      -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-      OverLimit -> closeConnection FlowControlError "Flow control error for stream in 1-RTT"
-      Duplicated -> return ()
-      Reassembled -> do
-          ok' <- checkRxMaxData conn len
-          -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-          unless ok' $ closeConnection FlowControlError "Flow control error for connection in 1-RTT"
+        -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
+        OverLimit -> closeConnection FlowControlError "Flow control error for stream in 1-RTT"
+        Duplicated -> return ()
+        Reassembled -> do
+            ok' <- checkRxMaxData conn len
+            -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
+            unless ok' $
+                closeConnection FlowControlError "Flow control error for connection in 1-RTT"
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "MAX_DATA in Initial or Handshake"
@@ -308,25 +326,24 @@ processFrame conn lvl (MaxStreamData sid n) = do
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
-      Nothing   -> do
-          when (isInitiated conn sid) $
-              closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
-      Just strm -> setTxMaxStreamData strm n
+        Nothing -> do
+            when (isInitiated conn sid) $
+                closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
+        Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "MAX_STREAMS in Initial or Handshake"
-    when (n > 2^(60 :: Int)) $
+    when (n > 2 ^ (60 :: Int)) $
         closeConnection FrameEncodingError "Too large MAX_STREAMS"
-    if dir == Bidirectional then
-        setTxMaxStreams conn n
-      else
-        setTxUniMaxStreams conn n
+    if dir == Bidirectional
+        then setTxMaxStreams conn n
+        else setTxUniMaxStreams conn n
 processFrame _conn _lvl DataBlocked{} = return ()
 processFrame _conn _lvl (StreamDataBlocked _sid _) = return ()
 processFrame _conn lvl (StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake"
-    when (n > 2^(60 :: Int)) $
+    when (n > 2 ^ (60 :: Int)) $
         closeConnection FrameEncodingError "Too large STREAMS_BLOCKED"
 processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
@@ -341,11 +358,11 @@ processFrame conn lvl (NewConnectionID cidInfo rpt) = do
 processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     case mcidInfo of
-      Nothing -> return ()
-      Just (CIDInfo _ cid _) -> do
-          when (isServer conn) $ do
-              unregister <- getUnregister conn
-              unregister cid
+        Nothing -> return ()
+        Just (CIDInfo _ cid _) -> do
+            when (isServer conn) $ do
+                unregister <- getUnregister conn
+                unregister cid
 processFrame conn RTT1Level (PathChallenge dat) =
     sendFrames conn RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
@@ -384,21 +401,21 @@ isStatelessReset conn hdr Crypt{..} = do
     let cid = headerMyCID hdr
     included <- myCIDsInclude conn cid
     case included of
-      Just _ -> return False
-      _      -> case decodeStatelessResetToken cryptPacket of
-             Nothing    -> return False
-             Just token -> isStatelessRestTokenValid conn cid token
+        Just _ -> return False
+        _ -> case decodeStatelessResetToken cryptPacket of
+            Nothing -> return False
+            Just token -> isStatelessRestTokenValid conn cid token
 
 -- Return value indicates duplication.
 putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO Bool
 putRxCrypto conn lvl rx = do
     mstrm <- getCryptoStream conn lvl
     case mstrm of
-      Nothing   -> return False
-      Just strm -> do
-          let put = putCrypto conn . InpHandshake lvl
-              putFin = return ()
-          tryReassemble strm rx put putFin
+        Nothing -> return False
+        Just strm -> do
+            let put = putCrypto conn . InpHandshake lvl
+                putFin = return ()
+            tryReassemble strm rx put putFin
 
 killHandshaker :: Connection -> EncryptionLevel -> IO ()
 killHandshaker conn lvl = putCrypto conn $ InpHandshake lvl ""

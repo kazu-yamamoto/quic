@@ -1,6 +1,6 @@
 module Network.QUIC.Windows (
-    windowsThreadBlockHack
-  ) where
+    windowsThreadBlockHack,
+) where
 
 import Control.Concurrent
 import qualified Control.Exception as CE
@@ -13,5 +13,5 @@ windowsThreadBlockHack act = do
     void . forkIO $ CE.try act >>= putMVar var
     res <- takeMVar var
     case res of
-      Left  e -> print e >> CE.throwIO e
-      Right r -> return r
+        Left e -> print e >> CE.throwIO e
+        Right r -> return r

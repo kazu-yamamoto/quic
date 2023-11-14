@@ -3,23 +3,23 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Qlog (
-    QLogger
-  , newQlogger
-  , Qlog(..)
-  , KeepQlog(..)
-  , QlogMsg(..)
-  , qlogReceived
-  , qlogDropped
-  , qlogRecvInitial
-  , qlogSentRetry
-  , qlogParamsSet
-  , qlogDebug
-  , qlogCIDUpdate
-  , Debug(..)
-  , LR(..)
-  , packetType
-  , sw
-  ) where
+    QLogger,
+    newQlogger,
+    Qlog (..),
+    KeepQlog (..),
+    QlogMsg (..),
+    qlogReceived,
+    qlogDropped,
+    qlogRecvInitial,
+    qlogSentRetry,
+    qlogParamsSet,
+    qlogDebug,
+    qlogCIDUpdate,
+    Debug (..),
+    LR (..),
+    packetType,
+    sw,
+) where
 
 import qualified Data.ByteString as BS
 
@@ -44,14 +44,15 @@ instance Qlog Debug where
     qlog (Debug msg) = "{\"message\":\"" <> msg <> "\"}"
 
 instance Qlog LR where
-    qlog (Local  cid) = "{\"owner\":\"local\",\"new\":\"" <> sw cid <> "\"}"
+    qlog (Local cid) = "{\"owner\":\"local\",\"new\":\"" <> sw cid <> "\"}"
     qlog (Remote cid) = "{\"owner\":\"remote\",\"new\":\"" <> sw cid <> "\"}"
 
 instance Qlog RetryPacket where
     qlog RetryPacket{} = "{\"header\":{\"packet_type\":\"retry\",\"packet_number\":\"\"}}"
 
 instance Qlog VersionNegotiationPacket where
-    qlog VersionNegotiationPacket{} = "{\"header\":{\"packet_type\":\"version_negotiation\",\"packet_number\":\"\"}}"
+    qlog VersionNegotiationPacket{} =
+        "{\"header\":{\"packet_type\":\"version_negotiation\",\"packet_number\":\"\"}}"
 
 instance Qlog Header where
     qlog hdr = "{\"header\":{\"packet_type\":\"" <> packetType hdr <> "\"}}"
@@ -60,90 +61,126 @@ instance Qlog CryptPacket where
     qlog (CryptPacket hdr _) = qlog hdr
 
 instance Qlog PlainPacket where
-    qlog (PlainPacket hdr Plain{..}) = "{\"header\":{\"packet_type\":\"" <> toLogStr (packetType hdr) <> "\",\"packet_number\":\"" <> sw plainPacketNumber <> "\",\"dcid\":\"" <> sw (headerMyCID hdr) <> "\"},\"frames\":[" <> foldr (<>) "" (intersperse "," (map qlog plainFrames)) <> "]}"
+    qlog (PlainPacket hdr Plain{..}) =
+        "{\"header\":{\"packet_type\":\""
+            <> toLogStr (packetType hdr)
+            <> "\",\"packet_number\":\""
+            <> sw plainPacketNumber
+            <> "\",\"dcid\":\""
+            <> sw (headerMyCID hdr)
+            <> "\"},\"frames\":["
+            <> foldr (<>) "" (intersperse "," (map qlog plainFrames))
+            <> "]}"
 
 instance Qlog StatelessReset where
     qlog StatelessReset = "{\"header\":{\"packet_type\":\"stateless_reset\",\"packet_number\":\"\"}}"
 
 packetType :: Header -> LogStr
-packetType Initial{}   = "initial"
-packetType RTT0{}      = "0RTT"
+packetType Initial{} = "initial"
+packetType RTT0{} = "0RTT"
 packetType Handshake{} = "handshake"
-packetType Short{}     = "1RTT"
+packetType Short{} = "1RTT"
 
 instance Qlog Frame where
     qlog frame = "{\"frame_type\":\"" <> frameType frame <> "\"" <> frameExtra frame <> "}"
 
 frameType :: Frame -> LogStr
-frameType Padding{}             = "padding"
-frameType Ping                  = "ping"
-frameType Ack{}                 = "ack"
-frameType ResetStream{}         = "reset_stream"
-frameType StopSending{}         = "stop_sending"
-frameType CryptoF{}             = "crypto"
-frameType NewToken{}            = "new_token"
-frameType StreamF{}             = "stream"
-frameType MaxData{}             = "max_data"
-frameType MaxStreamData{}       = "max_stream_data"
-frameType MaxStreams{}          = "max_streams"
-frameType DataBlocked{}         = "data_blocked"
-frameType StreamDataBlocked{}   = "stream_data_blocked"
-frameType StreamsBlocked{}      = "streams_blocked"
-frameType NewConnectionID{}     = "new_connection_id"
-frameType RetireConnectionID{}  = "retire_connection_id"
-frameType PathChallenge{}       = "path_challenge"
-frameType PathResponse{}        = "path_response"
-frameType ConnectionClose{}     = "connection_close"
-frameType ConnectionCloseApp{}  = "connection_close"
-frameType HandshakeDone{}       = "handshake_done"
-frameType UnknownFrame{}        = "unknown"
+frameType Padding{} = "padding"
+frameType Ping = "ping"
+frameType Ack{} = "ack"
+frameType ResetStream{} = "reset_stream"
+frameType StopSending{} = "stop_sending"
+frameType CryptoF{} = "crypto"
+frameType NewToken{} = "new_token"
+frameType StreamF{} = "stream"
+frameType MaxData{} = "max_data"
+frameType MaxStreamData{} = "max_stream_data"
+frameType MaxStreams{} = "max_streams"
+frameType DataBlocked{} = "data_blocked"
+frameType StreamDataBlocked{} = "stream_data_blocked"
+frameType StreamsBlocked{} = "streams_blocked"
+frameType NewConnectionID{} = "new_connection_id"
+frameType RetireConnectionID{} = "retire_connection_id"
+frameType PathChallenge{} = "path_challenge"
+frameType PathResponse{} = "path_response"
+frameType ConnectionClose{} = "connection_close"
+frameType ConnectionCloseApp{} = "connection_close"
+frameType HandshakeDone{} = "handshake_done"
+frameType UnknownFrame{} = "unknown"
 
 {-# INLINE frameExtra #-}
 frameExtra :: Frame -> LogStr
 frameExtra (Padding n) = ",\"payload_length\":" <> sw n
-frameExtra  Ping = ""
+frameExtra Ping = ""
 frameExtra (Ack ai _Delay) = ",\"acked_ranges\":" <> ack ai
 frameExtra ResetStream{} = ""
 frameExtra (StopSending _StreamId _ApplicationError) = ""
-frameExtra (CryptoF off dat) =  ",\"offset\":\"" <> sw off <> "\",\"length\":" <> sw (BS.length dat)
+frameExtra (CryptoF off dat) = ",\"offset\":\"" <> sw off <> "\",\"length\":" <> sw (BS.length dat)
 frameExtra (NewToken _Token) = ""
-frameExtra (StreamF sid off dat fin) = ",\"stream_id\":\"" <> sw sid <> "\",\"offset\":\"" <> sw off <> "\",\"length\":" <> sw (sum' $ map BS.length dat) <> ",\"fin\":" <> if fin then "true" else "false"
+frameExtra (StreamF sid off dat fin) =
+    ",\"stream_id\":\""
+        <> sw sid
+        <> "\",\"offset\":\""
+        <> sw off
+        <> "\",\"length\":"
+        <> sw (sum' $ map BS.length dat)
+        <> ",\"fin\":"
+        <> if fin then "true" else "false"
 frameExtra (MaxData mx) = ",\"maximum\":\"" <> sw mx <> "\""
 frameExtra (MaxStreamData sid mx) = ",\"stream_id\":\"" <> sw sid <> "\",\"maximum\":\"" <> sw mx <> "\""
 frameExtra (MaxStreams _Direction ms) = ",\"maximum\":\"" <> sw ms <> "\""
 frameExtra DataBlocked{} = ""
 frameExtra StreamDataBlocked{} = ""
 frameExtra StreamsBlocked{} = ""
-frameExtra (NewConnectionID (CIDInfo sn cid _) rpt) = ",\"sequence_number\":\"" <> sw sn <> "\",\"connection_id:\":\"" <> sw cid <> "\",\"retire_prior_to\":\"" <> sw rpt <> "\""
+frameExtra (NewConnectionID (CIDInfo sn cid _) rpt) =
+    ",\"sequence_number\":\""
+        <> sw sn
+        <> "\",\"connection_id:\":\""
+        <> sw cid
+        <> "\",\"retire_prior_to\":\""
+        <> sw rpt
+        <> "\""
 frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" <> sw sn <> "\""
 frameExtra (PathChallenge _PathData) = ""
 frameExtra (PathResponse _PathData) = ""
-frameExtra (ConnectionClose err _FrameType reason) = ",\"error_space\":\"transport\",\"error_code\":\"" <> transportError err <> "\",\"raw_error_code\":" <> transportError' err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\""
-frameExtra (ConnectionCloseApp err reason) =  ",\"error_space\":\"application\",\"error_code\":" <> applicationProtoclError err <> ",\"reason\":\"" <> toLogStr (Short.fromShort reason) <> "\"" -- fixme
+frameExtra (ConnectionClose err _FrameType reason) =
+    ",\"error_space\":\"transport\",\"error_code\":\""
+        <> transportError err
+        <> "\",\"raw_error_code\":"
+        <> transportError' err
+        <> ",\"reason\":\""
+        <> toLogStr (Short.fromShort reason)
+        <> "\""
+frameExtra (ConnectionCloseApp err reason) =
+    ",\"error_space\":\"application\",\"error_code\":"
+        <> applicationProtoclError err
+        <> ",\"reason\":\""
+        <> toLogStr (Short.fromShort reason)
+        <> "\"" -- fixme
 frameExtra HandshakeDone{} = ""
 frameExtra (UnknownFrame _Int) = ""
 
 transportError :: TransportError -> LogStr
-transportError NoError                 = "no_error"
-transportError InternalError           = "internal_error"
-transportError ConnectionRefused       = "connection_refused"
-transportError FlowControlError        = "flow_control_error"
-transportError StreamLimitError        = "stream_limit_error"
-transportError StreamStateError        = "stream_state_error"
-transportError FinalSizeError          = "final_size_error"
-transportError FrameEncodingError      = "frame_encoding_error"
+transportError NoError = "no_error"
+transportError InternalError = "internal_error"
+transportError ConnectionRefused = "connection_refused"
+transportError FlowControlError = "flow_control_error"
+transportError StreamLimitError = "stream_limit_error"
+transportError StreamStateError = "stream_state_error"
+transportError FinalSizeError = "final_size_error"
+transportError FrameEncodingError = "frame_encoding_error"
 transportError TransportParameterError = "transport_parameter_err"
-transportError ConnectionIdLimitError  = "connection_id_limit_error"
-transportError ProtocolViolation       = "protocol_violation"
-transportError InvalidToken            = "invalid_migration"
-transportError CryptoBufferExceeded    = "crypto_buffer_exceeded"
-transportError KeyUpdateError          = "key_update_error"
-transportError AeadLimitReached        = "aead_limit_reached"
-transportError NoViablePath            = "no_viablpath"
-transportError (TransportError n)      = sw n
+transportError ConnectionIdLimitError = "connection_id_limit_error"
+transportError ProtocolViolation = "protocol_violation"
+transportError InvalidToken = "invalid_migration"
+transportError CryptoBufferExceeded = "crypto_buffer_exceeded"
+transportError KeyUpdateError = "key_update_error"
+transportError AeadLimitReached = "aead_limit_reached"
+transportError NoViablePath = "no_viablpath"
+transportError (TransportError n) = sw n
 
 transportError' :: TransportError -> LogStr
-transportError' (TransportError n)     = sw n
+transportError' (TransportError n) = sw n
 
 applicationProtoclError :: ApplicationProtocolError -> LogStr
 applicationProtoclError (ApplicationProtocolError n) = sw n
@@ -153,12 +190,13 @@ ack :: AckInfo -> LogStr
 ack (AckInfo lpn r rs) = "[" <> ack1 fr fpn rs <> "]"
   where
     fpn = fromIntegral lpn - r
-    fr | r == 0    = "[" <> sw lpn <> "]"
-       | otherwise = "[" <> sw fpn <> "," <> sw lpn <> "]"
+    fr
+        | r == 0 = "[" <> sw lpn <> "]"
+        | otherwise = "[" <> sw fpn <> "," <> sw lpn <> "]"
 
 ack1 :: LogStr -> Range -> [(Gap, Range)] -> LogStr
-ack1 ret _ []   = ret
-ack1 ret fpn ((g,r):grs) = ack1 ret' f grs
+ack1 ret _ [] = ret
+ack1 ret fpn ((g, r) : grs) = ack1 ret' f grs
   where
     ret' = "[" <> sw f <> "," <> sw l <> "]," <> ret
     l = fpn - g - 2
@@ -166,29 +204,35 @@ ack1 ret fpn ((g,r):grs) = ack1 ret' f grs
 
 ----------------------------------------------------------------
 
-instance Qlog (Parameters,String) where
-    qlog (Parameters{..},owner) =
-               "{\"owner\":\"" <> toLogStr owner
-          <> "\",\"initial_max_data\":\"" <> sw initialMaxData
-          <> "\",\"initial_max_stream_data_bidi_local\":\"" <> sw initialMaxStreamDataBidiLocal
-          <> "\",\"initial_max_stream_data_bidi_remote\":\"" <> sw initialMaxStreamDataBidiRemote
-          <> "\",\"initial_max_stream_data_uni\":\"" <> sw initialMaxStreamDataUni
-          <> "\"}"
+instance Qlog (Parameters, String) where
+    qlog (Parameters{..}, owner) =
+        "{\"owner\":\""
+            <> toLogStr owner
+            <> "\",\"initial_max_data\":\""
+            <> sw initialMaxData
+            <> "\",\"initial_max_stream_data_bidi_local\":\""
+            <> sw initialMaxStreamDataBidiLocal
+            <> "\",\"initial_max_stream_data_bidi_remote\":\""
+            <> sw initialMaxStreamDataBidiRemote
+            <> "\",\"initial_max_stream_data_uni\":\""
+            <> sw initialMaxStreamDataUni
+            <> "\"}"
 
 ----------------------------------------------------------------
 
-data QlogMsg = QRecvInitial
-             | QSentRetry
-             | QSent LogStr TimeMicrosecond
-             | QReceived LogStr TimeMicrosecond
-             | QDropped LogStr TimeMicrosecond
-             | QMetricsUpdated LogStr TimeMicrosecond
-             | QPacketLost LogStr TimeMicrosecond
-             | QCongestionStateUpdated LogStr TimeMicrosecond
-             | QLossTimerUpdated LogStr TimeMicrosecond
-             | QDebug LogStr TimeMicrosecond
-             | QParamsSet LogStr TimeMicrosecond
-             | QCIDUpdate LogStr TimeMicrosecond
+data QlogMsg
+    = QRecvInitial
+    | QSentRetry
+    | QSent LogStr TimeMicrosecond
+    | QReceived LogStr TimeMicrosecond
+    | QDropped LogStr TimeMicrosecond
+    | QMetricsUpdated LogStr TimeMicrosecond
+    | QPacketLost LogStr TimeMicrosecond
+    | QCongestionStateUpdated LogStr TimeMicrosecond
+    | QLossTimerUpdated LogStr TimeMicrosecond
+    | QDebug LogStr TimeMicrosecond
+    | QParamsSet LogStr TimeMicrosecond
+    | QCIDUpdate LogStr TimeMicrosecond
 
 {-# INLINE toLogStrTime #-}
 toLogStrTime :: QlogMsg -> TimeMicrosecond -> LogStr
@@ -197,25 +241,65 @@ toLogStrTime QRecvInitial _ =
 toLogStrTime QSentRetry _ =
     "{\"time\":0,\"name\":\"transport:packet_sent\",\"data\":{\"header\":{\"packet_type\":\"retry\",\"packet_number\":\"\"}}}\n"
 toLogStrTime (QReceived msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"transport:packet_received\",\"data\":" <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"transport:packet_received\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QSent msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"transport:packet_sent\",\"data\":"     <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"transport:packet_sent\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QDropped msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"transport:packet_dropped\",\"data\":"  <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"transport:packet_dropped\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QParamsSet msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"transport:parameters_set\",\"data\":"  <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"transport:parameters_set\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QMetricsUpdated msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"recovery:metrics_updated\",\"data\":"  <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"recovery:metrics_updated\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QPacketLost msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"recovery:packet_lost\",\"data\":"      <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"recovery:packet_lost\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QCongestionStateUpdated msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"recovery:congestion_state_updated\",\"data\":" <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"recovery:congestion_state_updated\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QLossTimerUpdated msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"recovery:loss_timer_updated\",\"data\":" <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"recovery:loss_timer_updated\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QDebug msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"debug\",\"data\":" <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"debug\",\"data\":"
+        <> msg
+        <> "}\n"
 toLogStrTime (QCIDUpdate msg tim) base =
-    "{\"time\":" <> swtim tim base <> ",\"name\":\"connectivity:connection_id_updated\",\"data\":" <> msg <> "}\n"
+    "{\"time\":"
+        <> swtim tim base
+        <> ",\"name\":\"connectivity:connection_id_updated\",\"data\":"
+        <> msg
+        <> "}\n"
 
 ----------------------------------------------------------------
 
@@ -228,7 +312,7 @@ swtim :: TimeMicrosecond -> TimeMicrosecond -> LogStr
 swtim tim base = toLogStr (show m ++ "." ++ show u)
   where
     Microseconds x = elapsedTimeMicrosecond tim base
-    (m,u) = x `divMod` 1000
+    (m, u) = x `divMod` 1000
 
 ----------------------------------------------------------------
 
@@ -237,7 +321,16 @@ type QLogger = QlogMsg -> IO ()
 newQlogger :: TimeMicrosecond -> ByteString -> CID -> FastLogger -> IO QLogger
 newQlogger base rl ocid fastLogger = do
     let ocid' = toLogStr $ enc16 $ fromCID ocid
-    fastLogger $ "{\"qlog_format\":\"NDJSON\",\"qlog_version\":\"draft-02\",\"title\":\"Haskell quic qlog\",\"trace\":{\"vantage_point\":{\"type\":\"" <> toLogStr rl <> "\"},\"common_fields\":{\"ODCID\":\"" <> ocid' <> "\",\"group_id\":\"" <> ocid' <> "\",\"reference_time\":" <> swtim base timeMicrosecond0 <>  "}}}\n"
+    fastLogger $
+        "{\"qlog_format\":\"NDJSON\",\"qlog_version\":\"draft-02\",\"title\":\"Haskell quic qlog\",\"trace\":{\"vantage_point\":{\"type\":\""
+            <> toLogStr rl
+            <> "\"},\"common_fields\":{\"ODCID\":\""
+            <> ocid'
+            <> "\",\"group_id\":\""
+            <> ocid'
+            <> "\",\"reference_time\":"
+            <> swtim base timeMicrosecond0
+            <> "}}}\n"
     let qlogger qmsg = do
             let msg = toLogStrTime qmsg base
             fastLogger msg
@@ -262,7 +355,7 @@ qlogRecvInitial q = keepQlog q QRecvInitial
 qlogSentRetry :: KeepQlog q => q -> IO ()
 qlogSentRetry q = keepQlog q QSentRetry
 
-qlogParamsSet :: KeepQlog q => q -> (Parameters,String) -> IO ()
+qlogParamsSet :: KeepQlog q => q -> (Parameters, String) -> IO ()
 qlogParamsSet q params = do
     tim <- getTimeMicrosecond
     keepQlog q $ QParamsSet (qlog params) tim

@@ -1,18 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Logger (
-    Builder
-  , DebugLogger
-  , bhow
-  , stdoutLogger
-  , dirDebugLogger
-  ) where
+    Builder,
+    DebugLogger,
+    bhow,
+    stdoutLogger,
+    dirDebugLogger,
+) where
 
-import System.FilePath
-import System.Log.FastLogger
 import Data.ByteString.Builder (byteString, toLazyByteString)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy.Char8 as BL
+import System.FilePath
+import System.Log.FastLogger
 
 import Network.QUIC.Imports
 import Network.QUIC.Types
