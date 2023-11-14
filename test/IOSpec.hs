@@ -19,10 +19,13 @@ spec :: Spec
 spec = do
     sc0 <- runIO makeTestServerConfigR
     var <- runIO newEmptyMVar
-    let sc = sc0 { scHooks = (scHooks sc0) {
-                         onServerReady = putMVar var ()
-                       }
-                   }
+    let sc =
+            sc0
+                { scHooks =
+                    (scHooks sc0)
+                        { onServerReady = putMVar var ()
+                        }
+                }
     let cc = testClientConfigR
     let waitS = takeMVar var :: IO ()
     describe "send & recv" $ do
@@ -95,7 +98,8 @@ consumeBytes strm left = do
 assertEndOfStream :: Stream -> IO ()
 assertEndOfStream strm = recvStream strm 1024 `shouldReturn` ""
 
-testRecvStreamClientStopFirst :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testRecvStreamClientStopFirst
+    :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testRecvStreamClientStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
     E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
@@ -120,7 +124,8 @@ testRecvStreamClientStopFirst cc sc waitS = do
         assertEndOfStream strm
         putMVar mvar ()
 
-testRecvStreamServerStopFirst :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testRecvStreamServerStopFirst
+    :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testRecvStreamServerStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
     E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar

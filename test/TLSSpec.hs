@@ -29,7 +29,9 @@ spec = do
             -- shared keys
             let dcID = makeCID (dec16s "8394c8f03e515708")
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret ver dcID
-            client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "c00cf151ca5be075ed0ebfb5c80323c42d6b7db67881289af4008f1f6c357aea")
+            client_initial_secret
+                `shouldBe` ClientTrafficSecret
+                    (dec16 "c00cf151ca5be075ed0ebfb5c80323c42d6b7db67881289af4008f1f6c357aea")
             let ckey = aeadKey ver defaultCipher (Secret cis)
             ckey `shouldBe` Key (dec16 "1f369613dd76d5467730efcbe3b1a22d")
             let civ = initialVector ver defaultCipher (Secret cis)
@@ -37,7 +39,9 @@ spec = do
             let chp = headerProtectionKey ver defaultCipher (Secret cis)
             chp `shouldBe` Key (dec16 "9f50449e04a0e810283a1e9933adedd2")
             let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret ver dcID
-            server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b")
+            server_initial_secret
+                `shouldBe` ServerTrafficSecret
+                    (dec16 "3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b")
             let skey = aeadKey ver defaultCipher (Secret sis)
             skey `shouldBe` Key (dec16 "cf3a5331653c364c88f0f379b6067e37")
             let siv = initialVector ver defaultCipher (Secret sis)
@@ -62,19 +66,20 @@ spec = do
             -- 00               -- scid len
             -- 00               -- token length
             -- 449e             -- length: decodeInt (dec16 "449e")
-                                -- 1182 = 4 + 1162 + 16 (fixme)
+            -- 1182 = 4 + 1162 + 16 (fixme)
             -- 00000002         -- encoded packet number
 
             let bodyLen = fromIntegral $ decodeInt (dec16 "449e")
-            let padLen = bodyLen
-                       - 4  -- packet number length
-                       - 16 -- GCM encrypt expansion
-                       - BS.length clientCRYPTOframe
+            let padLen =
+                    bodyLen
+                        - 4 -- packet number length
+                        - 16 -- GCM encrypt expansion
+                        - BS.length clientCRYPTOframe
                 clientCRYPTOframePadded = clientCRYPTOframe `BS.append` BS.pack (replicate padLen 0)
             let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ $ dec16 "00000002"
             let add = AssDat clientPacketHeader
-            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher ckey nonce plaintext add
+            let (hdr, bdy) = fromJust $ niteEncrypt' defaultCipher ckey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
             let plaintext' = fromJust $ niteDecrypt' defaultCipher ckey nonce ciphertext add
             plaintext' `shouldBe` plaintext
@@ -106,15 +111,16 @@ spec = do
             -- 0001             -- encoded packet number
 
             let bodyLen = fromIntegral $ decodeInt (dec16 "4075")
-            let padLen = bodyLen
-                       - 2  -- packet number length
-                       - 16 -- GCM encrypt expansion
-                       - BS.length serverCRYPTOframe
+            let padLen =
+                    bodyLen
+                        - 2 -- packet number length
+                        - 16 -- GCM encrypt expansion
+                        - BS.length serverCRYPTOframe
                 serverCRYPTOframePadded = serverCRYPTOframe `BS.append` BS.pack (replicate padLen 0)
             let plaintext = serverCRYPTOframePadded
             let nonce = makeNonce siv $ dec16 "0001"
             let add = AssDat serverPacketHeader
-            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher skey nonce plaintext add
+            let (hdr, bdy) = fromJust $ niteEncrypt' defaultCipher skey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
             let plaintext' = fromJust $ niteDecrypt' defaultCipher skey nonce ciphertext add
             plaintext' `shouldBe` plaintext
@@ -127,17 +133,18 @@ spec = do
             BS.take 5 mask `shouldBe` dec16 "2ec0d8356a"
 
         it "describes the examples of Retry" $ do
-            let wire0 = dec16 "ff000000010008f067a5502a4262b5746f6b656e04a265ba2eff4d829058fb3f0f2496ba"
-            (ipkt,rest) <- decodePacket wire0
+            let wire0 =
+                    dec16 "ff000000010008f067a5502a4262b5746f6b656e04a265ba2eff4d829058fb3f0f2496ba"
+            (ipkt, rest) <- decodePacket wire0
             rest `shouldBe` ""
             case ipkt of
-              PacketIR retrypkt -> do
-                  wire1 <- encodeRetryPacket retrypkt
-                  let (f0,r0) = fromJust $ BS.uncons wire0
-                      (f1,r1) = fromJust $ BS.uncons wire1
-                  f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
-                  r0 `shouldBe` r1
-              _                 -> error "Retry version 1"
+                PacketIR retrypkt -> do
+                    wire1 <- encodeRetryPacket retrypkt
+                    let (f0, r0) = fromJust $ BS.uncons wire0
+                        (f1, r1) = fromJust $ BS.uncons wire1
+                    f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
+                    r0 `shouldBe` r1
+                _ -> error "Retry version 1"
 
     describe "test vector for version 2" $ do
         let ver = Version2
@@ -146,7 +153,9 @@ spec = do
             -- shared keys
             let dcID = makeCID (dec16s "8394c8f03e515708")
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret ver dcID
-            client_initial_secret `shouldBe` ClientTrafficSecret (dec16 "14ec9d6eb9fd7af83bf5a668bc17a7e283766aade7ecd0891f70f9ff7f4bf47b")
+            client_initial_secret
+                `shouldBe` ClientTrafficSecret
+                    (dec16 "14ec9d6eb9fd7af83bf5a668bc17a7e283766aade7ecd0891f70f9ff7f4bf47b")
             let ckey = aeadKey ver defaultCipher (Secret cis)
             ckey `shouldBe` Key (dec16 "8b1a0bc121284290a29e0971b5cd045d")
             let civ = initialVector ver defaultCipher (Secret cis)
@@ -154,7 +163,9 @@ spec = do
             let chp = headerProtectionKey ver defaultCipher (Secret cis)
             chp `shouldBe` Key (dec16 "45b95e15235d6f45a6b19cbcb0294ba9")
             let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret ver dcID
-            server_initial_secret `shouldBe` ServerTrafficSecret (dec16 "0263db1782731bf4588e7e4d93b7463907cb8cd8200b5da55a8bd488eafc37c1")
+            server_initial_secret
+                `shouldBe` ServerTrafficSecret
+                    (dec16 "0263db1782731bf4588e7e4d93b7463907cb8cd8200b5da55a8bd488eafc37c1")
             let skey = aeadKey ver defaultCipher (Secret sis)
             skey `shouldBe` Key (dec16 "82db637861d55e1d011f19ea71d5d2a7")
             let siv = initialVector ver defaultCipher (Secret sis)
@@ -179,19 +190,20 @@ spec = do
             -- 00               -- scid len
             -- 00               -- token length
             -- 449e             -- length: decodeInt (dec16 "449e")
-                                -- 1182 = 4 + 1162 + 16 (fixme)
+            -- 1182 = 4 + 1162 + 16 (fixme)
             -- 00000002         -- encoded packet number
 
             let bodyLen = fromIntegral $ decodeInt (dec16 "449e")
-            let padLen = bodyLen
-                       - 4  -- packet number length
-                       - 16 -- GCM encrypt expansion
-                       - BS.length clientCRYPTOframe
+            let padLen =
+                    bodyLen
+                        - 4 -- packet number length
+                        - 16 -- GCM encrypt expansion
+                        - BS.length clientCRYPTOframe
                 clientCRYPTOframePadded = clientCRYPTOframe `BS.append` BS.pack (replicate padLen 0)
             let plaintext = clientCRYPTOframePadded
             let nonce = makeNonce civ $ dec16 "00000002"
             let add = AssDat clientPacketHeader
-            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher ckey nonce plaintext add
+            let (hdr, bdy) = fromJust $ niteEncrypt' defaultCipher ckey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
             let plaintext' = fromJust $ niteDecrypt' defaultCipher ckey nonce ciphertext add
             plaintext' `shouldBe` plaintext
@@ -223,15 +235,16 @@ spec = do
             -- 0001             -- encoded packet number
 
             let bodyLen = fromIntegral $ decodeInt (dec16 "4075")
-            let padLen = bodyLen
-                       - 2  -- packet number length
-                       - 16 -- GCM encrypt expansion
-                       - BS.length serverCRYPTOframe
+            let padLen =
+                    bodyLen
+                        - 2 -- packet number length
+                        - 16 -- GCM encrypt expansion
+                        - BS.length serverCRYPTOframe
                 serverCRYPTOframePadded = serverCRYPTOframe `BS.append` BS.pack (replicate padLen 0)
             let plaintext = serverCRYPTOframePadded
             let nonce = makeNonce siv $ dec16 "0001"
             let add = AssDat serverPacketHeader
-            let (hdr,bdy) = fromJust $ niteEncrypt' defaultCipher skey nonce plaintext add
+            let (hdr, bdy) = fromJust $ niteEncrypt' defaultCipher skey nonce plaintext add
                 ciphertext = hdr `BS.append` bdy
             let plaintext' = fromJust $ niteDecrypt' defaultCipher skey nonce ciphertext add
             plaintext' `shouldBe` plaintext
@@ -244,35 +257,39 @@ spec = do
             BS.take 5 mask `shouldBe` dec16 "4dd92e91ea"
 
         it "describes the examples of Retry" $ do
-            let wire0 = dec16 "cf6b3343cf0008f067a5502a4262b5746f6b656ec8646ce8bfe33952d955543665dcc7b6"
-            (ipkt,rest) <- decodePacket wire0
+            let wire0 =
+                    dec16 "cf6b3343cf0008f067a5502a4262b5746f6b656ec8646ce8bfe33952d955543665dcc7b6"
+            (ipkt, rest) <- decodePacket wire0
             rest `shouldBe` ""
             case ipkt of
-              PacketIR retrypkt -> do
-                  wire1 <- encodeRetryPacket retrypkt
-                  let (f0,r0) = fromJust $ BS.uncons wire0
-                      (f1,r1) = fromJust $ BS.uncons wire1
-                  f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
-                  r0 `shouldBe` r1
-              _                 -> error "Retry version 2"
-
+                PacketIR retrypkt -> do
+                    wire1 <- encodeRetryPacket retrypkt
+                    let (f0, r0) = fromJust $ BS.uncons wire0
+                        (f1, r1) = fromJust $ BS.uncons wire1
+                    f0 .&. 0xf0 `shouldBe` f1 .&. 0xf0
+                    r0 `shouldBe` r1
+                _ -> error "Retry version 2"
 
 serverCRYPTOframe :: BS.ByteString
-serverCRYPTOframe = dec16 $ BS.concat [
-    "02000000000600405a020000560303eefce7f7b37ba1d1632e96677825ddf739"
-  , "88cfc79825df566dc5430b9a045a1200130100002e00330024001d00209d3c94"
-  , "0d89690b84d08a60993c144eca684d1081287c834d5311bcf32bb9da1a002b00"
-  , "020304"
-  ]
+serverCRYPTOframe =
+    dec16 $
+        BS.concat
+            [ "02000000000600405a020000560303eefce7f7b37ba1d1632e96677825ddf739"
+            , "88cfc79825df566dc5430b9a045a1200130100002e00330024001d00209d3c94"
+            , "0d89690b84d08a60993c144eca684d1081287c834d5311bcf32bb9da1a002b00"
+            , "020304"
+            ]
 
 clientCRYPTOframe :: BS.ByteString
-clientCRYPTOframe = dec16 $ BS.concat [
-    "060040f1010000ed0303ebf8fa56f12939b9584a3896472ec40bb863cfd3e868"
-  , "04fe3a47f06a2b69484c00000413011302010000c000000010000e00000b6578"
-  , "616d706c652e636f6dff01000100000a00080006001d00170018001000070005"
-  , "04616c706e000500050100000000003300260024001d00209370b2c9caa47fba"
-  , "baf4559fedba753de171fa71f50f1ce15d43e994ec74d748002b000302030400"
-  , "0d0010000e0403050306030203080408050806002d00020101001c0002400100"
-  , "3900320408ffffffffffffffff05048000ffff07048000ffff08011001048000"
-  , "75300901100f088394c8f03e51570806048000ffff"
-  ]
+clientCRYPTOframe =
+    dec16 $
+        BS.concat
+            [ "060040f1010000ed0303ebf8fa56f12939b9584a3896472ec40bb863cfd3e868"
+            , "04fe3a47f06a2b69484c00000413011302010000c000000010000e00000b6578"
+            , "616d706c652e636f6dff01000100000a00080006001d00170018001000070005"
+            , "04616c706e000500050100000000003300260024001d00209370b2c9caa47fba"
+            , "baf4559fedba753de171fa71f50f1ce15d43e994ec74d748002b000302030400"
+            , "0d0010000e0403050306030203080408050806002d00020101001c0002400100"
+            , "3900320408ffffffffffffffff05048000ffff07048000ffff08011001048000"
+            , "75300901100f088394c8f03e51570806048000ffff"
+            ]
