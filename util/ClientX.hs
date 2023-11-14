@@ -34,7 +34,7 @@ clientHQ n0 aux@Aux{..} conn = loop n0
     loop n = do
         auxDebug "GET"
         get
-        threadDelay 1000000
+        threadDelay 100000
         loop (n - 1)
     get = do
         s <- stream conn
@@ -63,7 +63,7 @@ clientH3 n0 aux@Aux{..} conn = do
     loop n hdrblk = do
         auxDebug "GET"
         get hdrblk
-        threadDelay 1000000
+        threadDelay 100000
         loop (n - 1) hdrblk
     get hdrblk = do
         s <- stream conn
