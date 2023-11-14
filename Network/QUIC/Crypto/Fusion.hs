@@ -1,17 +1,17 @@
 {-# LANGUAGE CPP #-}
 
 module Network.QUIC.Crypto.Fusion (
-    FusionContext
-  , fusionNewContext
-  , fusionSetup
-  , fusionEncrypt
-  , fusionDecrypt
-  , Supplement
-  , fusionSetupSupplement
-  , fusionSetSample
-  , fusionGetMask
-  , isFusionAvailable
-  ) where
+    FusionContext,
+    fusionNewContext,
+    fusionSetup,
+    fusionEncrypt,
+    fusionDecrypt,
+    Supplement,
+    fusionSetupSupplement,
+    fusionSetSample,
+    fusionGetMask,
+    isFusionAvailable,
+) where
 
 #ifdef USE_FUSION
 import qualified Data.ByteString as BS
