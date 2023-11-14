@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE Strict #-}
@@ -293,99 +294,92 @@ runClient cc opts@Options{..} aux@Aux{..} = do
         r <- getResumptionInfo conn
         printThroughput t1 t2 stats
         return (i1, i2, r, m, client)
-    if optVerNego
-        then do
+    if
+        | optVerNego -> do
             putStrLn "Result: (V) version negotiation ... OK"
             exitSuccess
-        else
-            if optQuantum
+        | optQuantum -> do
+            putStrLn "Result: (Q) quantum ... OK"
+            exitSuccess
+        | optResumption -> do
+            if isResumptionPossible res
                 then do
-                    putStrLn "Result: (Q) quantum ... OK"
-                    exitSuccess
-                else
-                    if optResumption
+                    info3 <- runClient2 cc opts aux res client'
+                    if handshakeMode info3 == PreSharedKey
                         then do
-                            if isResumptionPossible res
-                                then do
-                                    info3 <- runClient2 cc opts aux res client'
-                                    if handshakeMode info3 == PreSharedKey
-                                        then do
-                                            putStrLn "Result: (R) TLS resumption ... OK"
-                                            exitSuccess
-                                        else do
-                                            putStrLn "Result: (R) TLS resumption ... NG"
-                                            exitFailure
-                                else do
-                                    putStrLn "Result: (R) TLS resumption ... NG"
-                                    exitFailure
-                        else
-                            if opt0RTT
-                                then do
-                                    if is0RTTPossible res
-                                        then do
-                                            info3 <- runClient2 cc opts aux res client'
-                                            if handshakeMode info3 == RTT0
-                                                then do
-                                                    putStrLn "Result: (Z) 0-RTT ... OK"
-                                                    exitSuccess
-                                                else do
-                                                    putStrLn "Result: (Z) 0-RTT ... NG"
-                                                    exitFailure
-                                        else do
-                                            putStrLn "Result: (Z) 0-RTT ... NG"
-                                            exitFailure
-                                else
-                                    if optRetry
-                                        then do
-                                            if retry info1
-                                                then do
-                                                    putStrLn "Result: (S) retry ... OK"
-                                                    exitSuccess
-                                                else do
-                                                    putStrLn "Result: (S) retry ... NG"
-                                                    exitFailure
-                                        else case optMigration of
-                                            Just ChangeServerCID -> do
-                                                let changed = remoteCID info1 /= remoteCID info2
-                                                if mig && remoteCID info1 /= remoteCID info2
-                                                    then do
-                                                        putStrLn "Result: (M) change server CID ... OK"
-                                                        exitSuccess
-                                                    else do
-                                                        putStrLn $ "Result: (M) change server CID ... NG " ++ show (mig, changed)
-                                                        exitFailure
-                                            Just ChangeClientCID -> do
-                                                let changed = localCID info1 /= localCID info2
-                                                if mig && changed
-                                                    then do
-                                                        putStrLn "Result: (N) change client CID ... OK"
-                                                        exitSuccess
-                                                    else do
-                                                        putStrLn $ "Result: (N) change client CID ... NG " ++ show (mig, changed)
-                                                        exitFailure
-                                            Just NATRebinding -> do
-                                                putStrLn "Result: (B) NAT rebinding ... OK"
-                                                exitSuccess
-                                            Just ActiveMigration -> do
-                                                let changed = remoteCID info1 /= remoteCID info2
-                                                if mig && changed
-                                                    then do
-                                                        putStrLn "Result: (A) address mobility ... OK"
-                                                        exitSuccess
-                                                    else do
-                                                        putStrLn $ "Result: (A) address mobility ... NG " ++ show (mig, changed)
-                                                        exitFailure
-                                            Nothing -> do
-                                                putStrLn "Result: (H) handshake ... OK"
-                                                putStrLn "Result: (D) stream data ... OK"
-                                                closeCompleted <- auxCheckClose
-                                                when closeCompleted $ putStrLn "Result: (C) close completed ... OK"
-                                                case alpn info1 of
-                                                    Nothing -> return ()
-                                                    Just alpn ->
-                                                        when ("h3" `BS.isPrefixOf` alpn) $
-                                                            putStrLn "Result: (3) H3 transaction ... OK"
-                                                exitSuccess
+                            putStrLn "Result: (R) TLS resumption ... OK"
+                            exitSuccess
+                        else do
+                            putStrLn "Result: (R) TLS resumption ... NG"
+                            exitFailure
+                else do
+                    putStrLn "Result: (R) TLS resumption ... NG"
+                    exitFailure
+        | opt0RTT -> do
+            if is0RTTPossible res
+                then do
+                    info3 <- runClient2 cc opts aux res client'
+                    if handshakeMode info3 == RTT0
+                        then do
+                            putStrLn "Result: (Z) 0-RTT ... OK"
+                            exitSuccess
+                        else do
+                            putStrLn "Result: (Z) 0-RTT ... NG"
+                            exitFailure
+                else do
+                    putStrLn "Result: (Z) 0-RTT ... NG"
+                    exitFailure
+        | optRetry -> do
+            if retry info1
+                then do
+                    putStrLn "Result: (S) retry ... OK"
+                    exitSuccess
+                else do
+                    putStrLn "Result: (S) retry ... NG"
+                    exitFailure
+        | otherwise ->
+            case optMigration of
+                Just ChangeServerCID -> do
+                    let changed = remoteCID info1 /= remoteCID info2
+                    if mig && remoteCID info1 /= remoteCID info2
+                        then do
+                            putStrLn "Result: (M) change server CID ... OK"
+                            exitSuccess
+                        else do
+                            putStrLn $ "Result: (M) change server CID ... NG " ++ show (mig, changed)
+                            exitFailure
+                Just ChangeClientCID -> do
+                    let changed = localCID info1 /= localCID info2
+                    if mig && changed
+                        then do
+                            putStrLn "Result: (N) change client CID ... OK"
+                            exitSuccess
+                        else do
+                            putStrLn $ "Result: (N) change client CID ... NG " ++ show (mig, changed)
+                            exitFailure
+                Just NATRebinding -> do
+                    putStrLn "Result: (B) NAT rebinding ... OK"
+                    exitSuccess
+                Just ActiveMigration -> do
+                    let changed = remoteCID info1 /= remoteCID info2
+                    if mig && changed
+                        then do
+                            putStrLn "Result: (A) address mobility ... OK"
+                            exitSuccess
+                        else do
+                            putStrLn $ "Result: (A) address mobility ... NG " ++ show (mig, changed)
+                            exitFailure
+                Nothing -> do
+                    putStrLn "Result: (H) handshake ... OK"
+                    putStrLn "Result: (D) stream data ... OK"
+                    closeCompleted <- auxCheckClose
+                    when closeCompleted $ putStrLn "Result: (C) close completed ... OK"
+                    case alpn info1 of
+                        Nothing -> return ()
+                        Just alpn ->
+                            when ("h3" `BS.isPrefixOf` alpn) $
+                                putStrLn "Result: (3) H3 transaction ... OK"
+                    exitSuccess
 
 runClient2
     :: ClientConfig
