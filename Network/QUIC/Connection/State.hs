@@ -1,33 +1,33 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.State (
-    setConnection0RTTReady
-  , isConnection1RTTReady
-  , setConnection1RTTReady
-  , isConnectionEstablished
-  , setConnectionEstablished
-  , wait0RTTReady
-  , wait1RTTReady
-  , waitEstablished
-  , readConnectionFlowTx
-  , addTxData
-  , getTxData
-  , setTxMaxData
-  , getTxMaxData
-  , addRxData
-  , getRxData
-  , addRxMaxData
-  , getRxMaxData
-  , getRxDataWindow
-  , checkRxMaxData
-  , addTxBytes
-  , getTxBytes
-  , addRxBytes
-  , getRxBytes
-  , setAddressValidated
-  , waitAntiAmplificationFree
-  , checkAntiAmplificationFree
-  ) where
+    setConnection0RTTReady,
+    isConnection1RTTReady,
+    setConnection1RTTReady,
+    isConnectionEstablished,
+    setConnectionEstablished,
+    wait0RTTReady,
+    wait1RTTReady,
+    waitEstablished,
+    readConnectionFlowTx,
+    addTxData,
+    getTxData,
+    setTxMaxData,
+    getTxMaxData,
+    addRxData,
+    getRxData,
+    addRxMaxData,
+    getRxMaxData,
+    getRxDataWindow,
+    checkRxMaxData,
+    addTxBytes,
+    getTxBytes,
+    addRxBytes,
+    getRxBytes,
+    setAddressValidated,
+    waitAntiAmplificationFree,
+    checkAntiAmplificationFree,
+) where
 
 import UnliftIO.STM
 
@@ -92,7 +92,7 @@ readConnectionFlowTx Connection{..} = readTVar flowTx
 addTxData :: Connection -> Int -> STM ()
 addTxData Connection{..} n = modifyTVar' flowTx add
   where
-    add flow = flow { flowData = flowData flow + n }
+    add flow = flow{flowData = flowData flow + n}
 
 getTxData :: Connection -> IO Int
 getTxData Connection{..} = atomically $ flowData <$> readTVar flowTx
@@ -101,8 +101,8 @@ setTxMaxData :: Connection -> Int -> IO ()
 setTxMaxData Connection{..} n = atomically $ modifyTVar' flowTx set
   where
     set flow
-      | flowMaxData flow < n = flow { flowMaxData = n }
-      | otherwise            = flow
+        | flowMaxData flow < n = flow{flowMaxData = n}
+        | otherwise = flow
 
 getTxMaxData :: Connection -> STM Int
 getTxMaxData Connection{..} = flowMaxData <$> readTVar flowTx
@@ -112,7 +112,7 @@ getTxMaxData Connection{..} = flowMaxData <$> readTVar flowTx
 addRxData :: Connection -> Int -> IO ()
 addRxData Connection{..} n = atomicModifyIORef'' flowRx add
   where
-    add flow = flow { flowData = flowData flow + n }
+    add flow = flow{flowData = flowData flow + n}
 
 getRxData :: Connection -> IO Int
 getRxData Connection{..} = flowData <$> readIORef flowRx
@@ -120,7 +120,7 @@ getRxData Connection{..} = flowData <$> readIORef flowRx
 addRxMaxData :: Connection -> Int -> IO Int
 addRxMaxData Connection{..} n = atomicModifyIORef' flowRx add
   where
-    add flow = (flow { flowMaxData = m }, m)
+    add flow = (flow{flowMaxData = m}, m)
       where
         m = flowMaxData flow + n
 
@@ -136,11 +136,11 @@ checkRxMaxData :: Connection -> Int -> IO Bool
 checkRxMaxData Connection{..} len = do
     received <- readIORef flowBytesRx
     maxData <- flowMaxData <$> readIORef flowRx
-    if received + len < maxData then do
-        modifyIORef' flowBytesRx (+ len)
-        return True
-      else
-        return False
+    if received + len < maxData
+        then do
+            modifyIORef' flowBytesRx (+ len)
+            return True
+        else return False
 
 ----------------------------------------------------------------
 
@@ -168,17 +168,18 @@ waitAntiAmplificationFree conn@Connection{..} siz = do
     unless ok $ do
         beforeAntiAmp connLDCC
         atomically (checkAntiAmplificationFreeSTM conn siz >>= checkSTM)
-        -- setLossDetectionTimer is called eventually.
+
+-- setLossDetectionTimer is called eventually.
 
 checkAntiAmplificationFreeSTM :: Connection -> Int -> STM Bool
 checkAntiAmplificationFreeSTM Connection{..} siz = do
     validated <- readTVar addressValidated
-    if validated then
-        return True
-      else do
-        tx <- readTVar bytesTx
-        rx <- readTVar bytesRx
-        return (tx + siz <= 3 * rx)
+    if validated
+        then return True
+        else do
+            tx <- readTVar bytesTx
+            rx <- readTVar bytesRx
+            return (tx + siz <= 3 * rx)
 
 checkAntiAmplificationFree :: Connection -> Int -> IO Bool
 checkAntiAmplificationFree conn siz =

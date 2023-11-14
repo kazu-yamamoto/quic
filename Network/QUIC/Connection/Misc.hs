@@ -2,33 +2,33 @@
 {-# LANGUAGE TupleSections #-}
 
 module Network.QUIC.Connection.Misc (
-    setVersionInfo
-  , getVersionInfo
-  , setVersion
-  , getVersion
-  , getOriginalVersion
-  , getSocket
-  , setSocket
-  , clearSocket
-  , getPeerAuthCIDs
-  , setPeerAuthCIDs
-  , getClientDstCID
-  , getMyParameters
-  , getPeerParameters
-  , setPeerParameters
-  , delayedAck
-  , resetDealyedAck
-  , setMaxPacketSize
-  , addReader
-  , killReaders
-  , addResource
-  , freeResources
-  , readMinIdleTimeout
-  , setMinIdleTimeout
-  , sendFrames
-  , closeConnection
-  , abortConnection
-  ) where
+    setVersionInfo,
+    getVersionInfo,
+    setVersion,
+    getVersion,
+    getOriginalVersion,
+    getSocket,
+    setSocket,
+    clearSocket,
+    getPeerAuthCIDs,
+    setPeerAuthCIDs,
+    getClientDstCID,
+    getMyParameters,
+    getPeerParameters,
+    setPeerParameters,
+    delayedAck,
+    resetDealyedAck,
+    setMaxPacketSize,
+    addReader,
+    killReaders,
+    addResource,
+    freeResources,
+    readMinIdleTimeout,
+    setMinIdleTimeout,
+    sendFrames,
+    closeConnection,
+    abortConnection,
+) where
 
 import Network.UDP
 import System.Mem.Weak
@@ -53,7 +53,7 @@ getVersionInfo Connection{..} = readIORef quicVersionInfo
 
 setVersion :: Connection -> Version -> IO ()
 setVersion Connection{..} ver = atomicModifyIORef'' quicVersionInfo $ \vi ->
-  vi { chosenVersion = ver }
+    vi{chosenVersion = ver}
 
 getVersion :: Connection -> IO Version
 getVersion conn = chosenVersion <$> getVersionInfo conn
@@ -86,13 +86,13 @@ setPeerAuthCIDs Connection{..} f = atomicModifyIORef'' connPeerAuthCIDs f
 
 getClientDstCID :: Connection -> IO CID
 getClientDstCID conn = do
-    cids <- if isClient conn then
-              getPeerAuthCIDs conn
-            else
-              getMyAuthCIDs conn
+    cids <-
+        if isClient conn
+            then getPeerAuthCIDs conn
+            else getMyAuthCIDs conn
     return $ case retrySrcCID cids of
-      Nothing   -> fromJust $ origDstCID cids
-      Just dcid -> dcid
+        Nothing -> fromJust $ origDstCID cids
+        Just dcid -> dcid
 
 ----------------------------------------------------------------
 
@@ -111,7 +111,7 @@ setPeerParameters Connection{..} params = writeIORef peerParameters params
 
 delayedAck :: Connection -> IO ()
 delayedAck conn@Connection{..} = do
-    (oldcnt,send_) <- atomicModifyIORef' delayedAckCount check
+    (oldcnt, send_) <- atomicModifyIORef' delayedAckCount check
     when (oldcnt == 0) $ do
         new <- cfire conn (Microseconds 20000) sendAck
         join $ atomicModifyIORef' delayedAckCancel (new,)
@@ -121,8 +121,8 @@ delayedAck conn@Connection{..} = do
         sendAck
   where
     sendAck = putOutput conn $ OutControl RTT1Level [] $ return ()
-    check 1 = (0,   (1,  True))
-    check n = (n+1, (n, False))
+    check 1 = (0, (1, True))
+    check n = (n + 1, (n, False))
 
 resetDealyedAck :: Connection -> IO ()
 resetDealyedAck Connection{..} = do
@@ -165,8 +165,8 @@ readMinIdleTimeout Connection{..} = readIORef minIdleTimeout
 
 setMinIdleTimeout :: Connection -> Microseconds -> IO ()
 setMinIdleTimeout Connection{..} us
-  | us == Microseconds 0 = return ()
-  | otherwise            = atomicModifyIORef'' minIdleTimeout modify
+    | us == Microseconds 0 = return ()
+    | otherwise = atomicModifyIORef'' minIdleTimeout modify
   where
     modify us0 = min us us0
 
@@ -183,5 +183,6 @@ closeConnection err desc = E.throwIO quicexc
     quicexc = TransportErrorIsSent err desc
 
 -- | Closing a connection with an application protocol error.
-abortConnection :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
+abortConnection
+    :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
 abortConnection conn err desc = E.throwTo (mainThreadId conn) $ Abort err desc
