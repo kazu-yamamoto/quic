@@ -337,49 +337,48 @@ runClient cc opts@Options{..} aux@Aux{..} = do
                 else do
                     putStrLn "Result: (S) retry ... NG"
                     exitFailure
-        | otherwise ->
-            case optMigration of
-                Just ChangeServerCID -> do
-                    let changed = remoteCID info1 /= remoteCID info2
-                    if mig && remoteCID info1 /= remoteCID info2
-                        then do
-                            putStrLn "Result: (M) change server CID ... OK"
-                            exitSuccess
-                        else do
-                            putStrLn $ "Result: (M) change server CID ... NG " ++ show (mig, changed)
-                            exitFailure
-                Just ChangeClientCID -> do
-                    let changed = localCID info1 /= localCID info2
-                    if mig && changed
-                        then do
-                            putStrLn "Result: (N) change client CID ... OK"
-                            exitSuccess
-                        else do
-                            putStrLn $ "Result: (N) change client CID ... NG " ++ show (mig, changed)
-                            exitFailure
-                Just NATRebinding -> do
-                    putStrLn "Result: (B) NAT rebinding ... OK"
-                    exitSuccess
-                Just ActiveMigration -> do
-                    let changed = remoteCID info1 /= remoteCID info2
-                    if mig && changed
-                        then do
-                            putStrLn "Result: (A) address mobility ... OK"
-                            exitSuccess
-                        else do
-                            putStrLn $ "Result: (A) address mobility ... NG " ++ show (mig, changed)
-                            exitFailure
-                Nothing -> do
-                    putStrLn "Result: (H) handshake ... OK"
-                    putStrLn "Result: (D) stream data ... OK"
-                    closeCompleted <- auxCheckClose
-                    when closeCompleted $ putStrLn "Result: (C) close completed ... OK"
-                    case alpn info1 of
-                        Nothing -> return ()
-                        Just alpn ->
-                            when ("h3" `BS.isPrefixOf` alpn) $
-                                putStrLn "Result: (3) H3 transaction ... OK"
-                    exitSuccess
+        | otherwise -> case optMigration of
+            Just ChangeServerCID -> do
+                let changed = remoteCID info1 /= remoteCID info2
+                if mig && remoteCID info1 /= remoteCID info2
+                    then do
+                        putStrLn "Result: (M) change server CID ... OK"
+                        exitSuccess
+                    else do
+                        putStrLn $ "Result: (M) change server CID ... NG " ++ show (mig, changed)
+                        exitFailure
+            Just ChangeClientCID -> do
+                let changed = localCID info1 /= localCID info2
+                if mig && changed
+                    then do
+                        putStrLn "Result: (N) change client CID ... OK"
+                        exitSuccess
+                    else do
+                        putStrLn $ "Result: (N) change client CID ... NG " ++ show (mig, changed)
+                        exitFailure
+            Just NATRebinding -> do
+                putStrLn "Result: (B) NAT rebinding ... OK"
+                exitSuccess
+            Just ActiveMigration -> do
+                let changed = remoteCID info1 /= remoteCID info2
+                if mig && changed
+                    then do
+                        putStrLn "Result: (A) address mobility ... OK"
+                        exitSuccess
+                    else do
+                        putStrLn $ "Result: (A) address mobility ... NG " ++ show (mig, changed)
+                        exitFailure
+            Nothing -> do
+                putStrLn "Result: (H) handshake ... OK"
+                putStrLn "Result: (D) stream data ... OK"
+                closeCompleted <- auxCheckClose
+                when closeCompleted $ putStrLn "Result: (C) close completed ... OK"
+                case alpn info1 of
+                    Nothing -> return ()
+                    Just alpn ->
+                        when ("h3" `BS.isPrefixOf` alpn) $
+                            putStrLn "Result: (3) H3 transaction ... OK"
+                exitSuccess
 
 runClient2
     :: ClientConfig
