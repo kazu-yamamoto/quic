@@ -1,17 +1,17 @@
 module Network.QUIC.Types.CID (
-    CID(..)
-  , myCIDLength
-  , newCID
-  , fromCID
-  , toCID
-  , makeCID
-  , unpackCID
-  , StatelessResetToken(..)
-  , newStatelessResetToken
-  , PathData(..)
-  , newPathData
-  , CIDInfo(..)
-  ) where
+    CID (..),
+    myCIDLength,
+    newCID,
+    fromCID,
+    toCID,
+    makeCID,
+    unpackCID,
+    StatelessResetToken (..),
+    newStatelessResetToken,
+    PathData (..),
+    newPathData,
+    CIDInfo (..),
+) where
 
 import qualified Data.ByteString.Short as Short
 
@@ -45,19 +45,20 @@ unpackCID (CID sbs) = (sbs, len)
     len = fromIntegral $ Short.length sbs
 
 -- 16 bytes
-newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq,Ord,Show)
+newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq, Ord, Show)
 
 newStatelessResetToken :: IO StatelessResetToken
 newStatelessResetToken = StatelessResetToken <$> getRandomBytes 16
 
 -- 8 bytes
-newtype PathData = PathData Bytes deriving (Eq,Show)
+newtype PathData = PathData Bytes deriving (Eq, Show)
 
 newPathData :: IO PathData
 newPathData = PathData <$> getRandomBytes 8
 
-data CIDInfo = CIDInfo {
-    cidInfoSeq :: Int
-  , cidInfoCID :: CID
-  , cidInfoSRT :: StatelessResetToken
-  } deriving (Eq, Ord, Show)
+data CIDInfo = CIDInfo
+    { cidInfoSeq :: Int
+    , cidInfoCID :: CID
+    , cidInfoSRT :: StatelessResetToken
+    }
+    deriving (Eq, Ord, Show)

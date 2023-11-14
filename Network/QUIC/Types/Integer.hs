@@ -1,14 +1,14 @@
 {-# LANGUAGE BinaryLiterals #-}
 
 module Network.QUIC.Types.Integer (
-    encodeInt
-  , encodeInt8
-  , encodeInt'
-  , encodeInt'2
-  , encodeInt'4
-  , decodeInt
-  , decodeInt'
-  ) where
+    encodeInt,
+    encodeInt8,
+    encodeInt',
+    encodeInt'2,
+    encodeInt'4,
+    decodeInt,
+    decodeInt',
+) where
 
 import Data.ByteString.Internal (unsafeCreate)
 import Foreign.Ptr
@@ -32,13 +32,13 @@ import Network.QUIC.Imports
 -- "7bbd"
 -- >>> enc16 $ encodeInt 37
 -- "25"
-encodeInt :: Int64  -> ByteString
+encodeInt :: Int64 -> ByteString
 encodeInt i = unsafeCreate n $ go tag n i'
   where
-    (tag,n,i') = tagLen i
+    (tag, n, i') = tagLen i
 {-# NOINLINE encodeInt #-}
 
-encodeInt8 :: Int64  -> ByteString
+encodeInt8 :: Int64 -> ByteString
 encodeInt8 i = unsafeCreate n $ go tag n i
   where
     n = 8
@@ -48,7 +48,7 @@ encodeInt8 i = unsafeCreate n $ go tag n i
 encodeInt' :: WriteBuffer -> Int64 -> IO ()
 encodeInt' wbuf i = go' tag n i' wbuf
   where
-    (tag,n,i') = tagLen i
+    (tag, n, i') = tagLen i
 
 encodeInt'2 :: WriteBuffer -> Int64 -> IO ()
 encodeInt'2 wbuf i = go' tag n i' wbuf
@@ -65,10 +65,11 @@ encodeInt'4 wbuf i = go' tag n i' wbuf
     i' = i !<<. 32
 
 tagLen :: Int64 -> (Word8, Int, Int64)
-tagLen i | i <=         63 = (0b00000000, 1, i !<<. 56)
-         | i <=      16383 = (0b01000000, 2, i !<<. 48)
-         | i <= 1073741823 = (0b10000000, 4, i !<<. 32)
-         | otherwise       = (0b11000000, 8, i)
+tagLen i
+    | i <= 63 = (0b00000000, 1, i !<<. 56)
+    | i <= 16383 = (0b01000000, 2, i !<<. 48)
+    | i <= 1073741823 = (0b10000000, 4, i !<<. 32)
+    | otherwise = (0b11000000, 8, i)
 {-# INLINE tagLen #-}
 
 msb8 :: Int64 -> Word8
@@ -128,13 +129,13 @@ decodeInt' rbuf = do
     let flag = b0 !>>. 6
         b1 = fromIntegral (b0 .&. 0b00111111)
     case flag of
-      0 -> return b1
-      1 -> loop b1 1
-      2 -> loop b1 3
-      _ -> loop b1 7
+        0 -> return b1
+        1 -> loop b1 1
+        2 -> loop b1 3
+        _ -> loop b1 7
   where
     loop :: Int64 -> Int -> IO Int64
     loop r 0 = return r
     loop r n = do
         b <- fromIntegral <$> read8 rbuf
-        loop (r*256 + b) (n - 1)
+        loop (r * 256 + b) (n - 1)
