@@ -30,17 +30,19 @@ server mvar = do
 
 client :: Channel -> IO ()
 client mvar = do
-    let conf = defaultClientConfig {
-            ccVersion    = Draft22
-          , ccServerName = "www.mew.org"
-          }
-    (cctx, cparams) <- tlsClientContext (ccServerName conf) (ccCiphers conf) (ccALPN conf)
+    let conf =
+            defaultClientConfig
+                { ccVersion = Draft22
+                , ccServerName = "www.mew.org"
+                }
+    (cctx, cparams) <-
+        tlsClientContext (ccServerName conf) (ccCiphers conf) (ccALPN conf)
     --------------------
     putStrLn "---- CLIENT ---- CH"
     (ch, chRaw) <- makeClientHello13 cparams cctx []
     --------------------
     putMVar mvar [chRaw]
-    shRaw:sRaws <- takeMVar mvar
+    shRaw : sRaws <- takeMVar mvar
     --------------------
     putStrLn "---- CLIENT ---- CF"
     (_cipher, handSecret, resuming) <- handleServerHello13 cparams cctx ch shRaw

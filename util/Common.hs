@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Common (
-    getGroups
-  , getLogger
-  , makeProtos
-  ) where
+    getGroups,
+    getLogger,
+    makeProtos,
+) where
 
 import Data.Bits
 import Data.ByteString (ByteString)
@@ -22,32 +22,32 @@ namedGroups =
     , ("ffdhe4096", FFDHE4096)
     , ("ffdhe6144", FFDHE6144)
     , ("ffdhe8192", FFDHE8192)
-    , ("p256",      P256)
-    , ("p384",      P384)
-    , ("p521",      P521)
-    , ("x25519",    X25519)
-    , ("x448",      X448)
+    , ("p256", P256)
+    , ("p384", P384)
+    , ("p521", P521)
+    , ("x25519", X25519)
+    , ("x448", X448)
     ]
 
 getGroups :: [Group] -> Maybe String -> [Group]
-getGroups grps Nothing   = grps
-getGroups _    (Just gs) = mapMaybe (`lookup` namedGroups) $ split ',' gs
+getGroups grps Nothing = grps
+getGroups _ (Just gs) = mapMaybe (`lookup` namedGroups) $ split ',' gs
 
 split :: Char -> String -> [String]
 split _ "" = []
-split c s = case break (c==) s of
-    ("",r)  -> split c (tail r)
-    (s',"") -> [s']
-    (s',r)  -> s' : split c (tail r)
+split c s = case break (c ==) s of
+    ("", r) -> split c (tail r)
+    (s', "") -> [s']
+    (s', r) -> s' : split c (tail r)
 
 getLogger :: Maybe FilePath -> (String -> IO ())
-getLogger Nothing     = \_ -> return ()
+getLogger Nothing = \_ -> return ()
 getLogger (Just file) = \msg -> appendFile file (msg ++ "\n")
 
 makeProtos :: Version -> (ByteString, ByteString)
-makeProtos Version1 = ("h3","hq-interop")
-makeProtos Version2 = ("h3","hq-interop")
-makeProtos ver = (h3X,hqX)
+makeProtos Version1 = ("h3", "hq-interop")
+makeProtos Version2 = ("h3", "hq-interop")
+makeProtos ver = (h3X, hqX)
   where
     verbs = C8.pack $ show $ fromVersion ver
     h3X = "h3-" `BS.append` verbs
