@@ -3,12 +3,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Client.Run (
-    run
-  , migrate
-  ) where
+    run,
+    migrate,
+) where
 
 import qualified Network.Socket as NS
-import Network.UDP (UDPSocket(..))
+import Network.UDP (UDPSocket (..))
 import qualified Network.UDP as UDP
 import UnliftIO.Async
 import UnliftIO.Concurrent
@@ -41,50 +41,55 @@ import Network.QUIC.Types
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = NS.withSocketsDo $ do
-  let resInfo = ccResumption conf
-      verInfo = case resumptionSession resInfo of
-        Nothing | resumptionToken resInfo == emptyToken ->
-                  let vers = ccVersions conf
-                      ver = head vers
-                  in VersionInfo ver vers
-        _  -> let ver = resumptionVersion resInfo in VersionInfo ver [ver]
-  ex <- E.try $ runClient conf client False verInfo
-  case ex of
-    Right v                     -> return v
-    Left (NextVersion nextVerInfo)
-      | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
-      | otherwise                    -> runClient conf client True nextVerInfo
+    let resInfo = ccResumption conf
+        verInfo = case resumptionSession resInfo of
+            Nothing
+                | resumptionToken resInfo == emptyToken ->
+                    let vers = ccVersions conf
+                        ver = head vers
+                     in VersionInfo ver vers
+            _ -> let ver = resumptionVersion resInfo in VersionInfo ver [ver]
+    ex <- E.try $ runClient conf client False verInfo
+    case ex of
+        Right v -> return v
+        Left (NextVersion nextVerInfo)
+            | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
+            | otherwise -> runClient conf client True nextVerInfo
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
 runClient conf client0 isICVN verInfo = do
     E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) -> do
         forkIO reader >>= addReader conn
-        let conf' = conf {
-                ccParameters = (ccParameters conf) {
-                      versionInformation = Just verInfo
+        let conf' =
+                conf
+                    { ccParameters =
+                        (ccParameters conf)
+                            { versionInformation = Just verInfo
+                            }
                     }
-              }
         setIncompatibleVN conn isICVN -- must be before handshaker
         setToken conn $ resumptionToken $ ccResumption conf
         handshaker <- handshakeClient conf' conn myAuthCIDs
         let client = do
-                if ccUse0RTT conf then
-                    wait0RTTReady conn
-                  else
-                    wait1RTTReady conn
+                if ccUse0RTT conf
+                    then wait0RTTReady conn
+                    else wait1RTTReady conn
                 client0 conn
             ldcc = connLDCC conn
-            supporters = foldr1 concurrently_ [handshaker
-                                              ,sender   conn
-                                              ,receiver conn
-                                              ,resender  ldcc
-                                              ,ldccTimer ldcc
-                                              ]
+            supporters =
+                foldr1
+                    concurrently_
+                    [ handshaker
+                    , sender conn
+                    , receiver conn
+                    , resender ldcc
+                    , ldccTimer ldcc
+                    ]
             runThreads = do
                 er <- race supporters client
                 case er of
-                  Left () -> E.throwIO MustNotReached
-                  Right r -> return r
+                    Left () -> E.throwIO MustNotReached
+                    Right r -> return r
         ex <- E.trySyncOrAsync runThreads
         sendFinal conn
         closure conn ldcc ex
@@ -98,23 +103,37 @@ runClient conf client0 isICVN verInfo = do
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
-    us@(UDPSocket _ sa _) <- UDP.clientSocket ccServerName ccPortName (not ccAutoMigration)
+    us@(UDPSocket _ sa _) <-
+        UDP.clientSocket ccServerName ccPortName (not ccAutoMigration)
     q <- newRecvQ
     sref <- newIORef us
     let send = \buf siz -> do
             cs <- readIORef sref
             UDP.sendBuf cs buf siz
         recv = recvClient q
-    myCID   <- newCID
+    myCID <- newCID
     peerCID <- newCID
     now <- getTimeMicrosecond
     (qLog, qclean) <- dirQLogger ccQLog now peerCID "client"
-    let debugLog msg | ccDebugLog = stdoutLogger msg
-                     | otherwise  = return ()
+    let debugLog msg
+            | ccDebugLog = stdoutLogger msg
+            | otherwise = return ()
     debugLog $ "Original CID: " <> bhow peerCID
-    let myAuthCIDs   = defaultAuthCIDs { initSrcCID = Just myCID }
-        peerAuthCIDs = defaultAuthCIDs { initSrcCID = Just peerCID, origDstCID = Just peerCID }
-    conn <- clientConnection conf verInfo myAuthCIDs peerAuthCIDs debugLog qLog ccHooks sref q send recv
+    let myAuthCIDs = defaultAuthCIDs{initSrcCID = Just myCID}
+        peerAuthCIDs = defaultAuthCIDs{initSrcCID = Just peerCID, origDstCID = Just peerCID}
+    conn <-
+        clientConnection
+            conf
+            verInfo
+            myAuthCIDs
+            peerAuthCIDs
+            debugLog
+            qLog
+            ccHooks
+            sref
+            q
+            send
+            recv
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
