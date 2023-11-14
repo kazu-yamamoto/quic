@@ -1,14 +1,14 @@
 module Network.QUIC.Connection.Timeout (
-    timeout
-  , fire
-  , cfire
-  , delay
-  ) where
+    timeout,
+    fire,
+    cfire,
+    delay,
+) where
 
 import Network.QUIC.Event
+import qualified System.Timeout as ST
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
-import qualified System.Timeout as ST
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector

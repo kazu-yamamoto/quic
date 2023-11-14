@@ -1,23 +1,23 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Network.QUIC.Types.Time (
-    Milliseconds(..)
-  , Microseconds(..)
-  , milliToMicro
-  , microToMilli
-  , TimeMicrosecond
-  , timeMicrosecond0
-  , getTimeMicrosecond
-  , getElapsedTimeMicrosecond
-  , elapsedTimeMicrosecond
-  , getTimeoutInMicrosecond
-  , getPastTimeMicrosecond
-  , getFutureTimeMicrosecond
-  , addMicroseconds
-  ) where
+    Milliseconds (..),
+    Microseconds (..),
+    milliToMicro,
+    microToMilli,
+    TimeMicrosecond,
+    timeMicrosecond0,
+    getTimeMicrosecond,
+    getElapsedTimeMicrosecond,
+    elapsedTimeMicrosecond,
+    getTimeoutInMicrosecond,
+    getPastTimeMicrosecond,
+    getFutureTimeMicrosecond,
+    addMicroseconds,
+) where
 
 import Data.UnixTime
-import Foreign.C.Types (CTime(..))
+import Foreign.C.Types (CTime (..))
 
 import Network.QUIC.Imports
 
@@ -27,10 +27,10 @@ newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Num, Bits)
 newtype Microseconds = Microseconds Int deriving (Eq, Ord, Num, Bits)
 
 instance Show Milliseconds where
-  show (Milliseconds n) = show n
+    show (Milliseconds n) = show n
 
 instance Show Microseconds where
-  show (Microseconds n) = show n
+    show (Microseconds n) = show n
 
 {-# INLINE milliToMicro #-}
 milliToMicro :: Milliseconds -> Microseconds

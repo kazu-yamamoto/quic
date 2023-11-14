@@ -18,29 +18,30 @@ data Direction = Unidirectional | Bidirectional deriving (Eq, Show)
 type ReasonPhrase = ShortByteString
 type SeqNum = Int
 
-data Frame = Padding Int
-           | Ping
-           | Ack AckInfo Delay
-           | ResetStream StreamId ApplicationProtocolError Int
-           | StopSending StreamId ApplicationProtocolError
-           | CryptoF Offset CryptoData
-           | NewToken Token
-           | StreamF StreamId Offset [StreamData] Fin
-           | MaxData Int
-           | MaxStreamData StreamId Int
-           | MaxStreams Direction Int
-           | DataBlocked Int
-           | StreamDataBlocked StreamId Int
-           | StreamsBlocked Direction Int
-           | NewConnectionID CIDInfo SeqNum -- retire prior to
-           | RetireConnectionID SeqNum
-           | PathChallenge PathData
-           | PathResponse PathData
-           | ConnectionClose     TransportError FrameType ReasonPhrase
-           | ConnectionCloseApp  ApplicationProtocolError ReasonPhrase
-           | HandshakeDone
-           | UnknownFrame Int
-           deriving (Eq,Show)
+data Frame
+    = Padding Int
+    | Ping
+    | Ack AckInfo Delay
+    | ResetStream StreamId ApplicationProtocolError Int
+    | StopSending StreamId ApplicationProtocolError
+    | CryptoF Offset CryptoData
+    | NewToken Token
+    | StreamF StreamId Offset [StreamData] Fin
+    | MaxData Int
+    | MaxStreamData StreamId Int
+    | MaxStreams Direction Int
+    | DataBlocked Int
+    | StreamDataBlocked StreamId Int
+    | StreamsBlocked Direction Int
+    | NewConnectionID CIDInfo SeqNum -- retire prior to
+    | RetireConnectionID SeqNum
+    | PathChallenge PathData
+    | PathResponse PathData
+    | ConnectionClose TransportError FrameType ReasonPhrase
+    | ConnectionCloseApp ApplicationProtocolError ReasonPhrase
+    | HandshakeDone
+    | UnknownFrame Int
+    deriving (Eq, Show)
 
 -- | Stream identifier.
 --   This should be 62-bit interger.
@@ -49,11 +50,11 @@ type StreamId = Int
 
 -- | Checking if a stream is client-initiated bidirectional.
 isClientInitiatedBidirectional :: StreamId -> Bool
-isClientInitiatedBidirectional  sid = (0b11 .&. sid) == 0
+isClientInitiatedBidirectional sid = (0b11 .&. sid) == 0
 
 -- | Checking if a stream is server-initiated bidirectional.
 isServerInitiatedBidirectional :: StreamId -> Bool
-isServerInitiatedBidirectional  sid = (0b11 .&. sid) == 1
+isServerInitiatedBidirectional sid = (0b11 .&. sid) == 1
 
 -- | Checking if a stream is client-initiated unidirectional.
 isClientInitiatedUnidirectional :: StreamId -> Bool
@@ -86,6 +87,7 @@ type Token = ByteString -- to be decrypted
 emptyToken :: Token
 emptyToken = ""
 
+{- FOURMOLU_DISABLE -}
 ackEliciting :: Frame -> Bool
 ackEliciting Padding{}            = False
 ackEliciting Ack{}                = False
@@ -103,3 +105,4 @@ inFlight Ack{}                = False
 inFlight ConnectionClose{}    = False
 inFlight ConnectionCloseApp{} = False
 inFlight _                    = True
+{- FOURMOLU_ENABLE -}

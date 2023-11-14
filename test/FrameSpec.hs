@@ -17,7 +17,7 @@ spec = do
             let siz = 512
             E.bracket (mallocBytes siz) free $ \beg -> do
                 let (+.) = plusPtr
-                    end  = beg +. siz
+                    end = beg +. siz
                 fillBytes beg 0 $ fromIntegral siz
                 countZero beg end `shouldReturn` siz
                 countZero (beg +. 1) end `shouldReturn` (siz - 1)

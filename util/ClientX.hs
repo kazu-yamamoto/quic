@@ -13,13 +13,13 @@ import Network.ByteOrder
 import H3
 import Network.QUIC
 
-data Aux = Aux {
-    auxPath       :: String
-  , auxAuthority  :: String
-  , auxDebug      :: String -> IO ()
-  , auxShow       :: ByteString -> IO ()
-  , auxCheckClose :: IO Bool
-  }
+data Aux = Aux
+    { auxPath :: String
+    , auxAuthority :: String
+    , auxDebug :: String -> IO ()
+    , auxShow :: ByteString -> IO ()
+    , auxCheckClose :: IO Bool
+    }
 
 type Cli = Aux -> Connection -> IO ()
 
@@ -49,13 +49,13 @@ clientH3 n0 aux@Aux{..} conn = do
     s6 <- unidirectionalStream conn
     s10 <- unidirectionalStream conn
     -- 0: control, 4 settings
-    sendStream s2 (BS.pack [0,4,8,1,80,0,6,128,0,128,0])
+    sendStream s2 (BS.pack [0, 4, 8, 1, 80, 0, 6, 128, 0, 128, 0])
     -- 2: from encoder to decoder
     sendStream s6 (BS.pack [2])
     -- 3: from decoder to encoder
     sendStream s10 (BS.pack [3])
     loop n0 hdrblk
- where
+  where
     loop 0 _ = auxDebug "Connection finished"
     loop 1 hdrblk = do
         auxDebug "GET"
@@ -74,13 +74,14 @@ clientH3 n0 aux@Aux{..} conn = do
 consume :: Aux -> Stream -> IO ()
 consume aux@Aux{..} s = do
     bs <- recvStream s 1024
-    if bs == "" then do
-        auxDebug "Fin received"
-        closeStream s
-      else do
-        auxShow bs
-        auxDebug $ show (BS.length bs) ++ " bytes received"
-        consume aux s
+    if bs == ""
+        then do
+            auxDebug "Fin received"
+            closeStream s
+        else do
+            auxShow bs
+            auxDebug $ show (BS.length bs) ++ " bytes received"
+            consume aux s
 
 clientPF :: Word64 -> Cli
 clientPF n Aux{..} conn = do
@@ -92,9 +93,10 @@ clientPF n Aux{..} conn = do
   where
     loop s = do
         bs <- recvStream s 1024
-        if bs == "" then do
-            auxDebug "Connection finished"
-            closeStream s
-          else do
-            auxShow bs
-            loop s
+        if bs == ""
+            then do
+                auxDebug "Connection finished"
+                closeStream s
+            else do
+                auxShow bs
+                loop s

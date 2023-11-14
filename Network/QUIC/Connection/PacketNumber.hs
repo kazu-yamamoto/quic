@@ -1,10 +1,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.PacketNumber (
-    nextPacketNumber
-  , setPeerPacketNumber
-  , getPeerPacketNumber
-  ) where
+    nextPacketNumber,
+    setPeerPacketNumber,
+    getPeerPacketNumber,
+) where
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector

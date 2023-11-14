@@ -2,13 +2,13 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Recovery.Release (
-    releaseByRetry
-  , releaseOldest
-  , discard
-  , onPacketsLost
-  ) where
+    releaseByRetry,
+    releaseOldest,
+    discard,
+    onPacketsLost,
+) where
 
-import Data.Sequence (Seq, (><), ViewL(..), ViewR(..))
+import Data.Sequence (Seq, ViewL (..), ViewR (..), (><))
 import qualified Data.Sequence as Seq
 import UnliftIO.STM
 
@@ -27,7 +27,8 @@ discard ldcc@LDCC{..} lvl = do
     decreaseCC ldcc packets
     writeIORef (lossDetection ! lvl) initialLossDetection
     metricsUpdated ldcc $
-        atomicModifyIORef'' recoveryRTT $ \rtt -> rtt { ptoCount = 0 }
+        atomicModifyIORef'' recoveryRTT $
+            \rtt -> rtt{ptoCount = 0}
     return packets
 
 releaseByClear :: LDCC -> EncryptionLevel -> IO (Seq SentPacket)
@@ -48,16 +49,17 @@ releaseOldest :: LDCC -> EncryptionLevel -> IO (Maybe SentPacket)
 releaseOldest ldcc@LDCC{..} lvl = do
     mr <- atomicModifyIORef' (sentPackets ! lvl) oldest
     case mr of
-      Nothing   -> return ()
-      Just spkt -> do
-          delPeerPacketNumbers ldcc lvl $ spPacketNumber spkt
-          decreaseCC ldcc [spkt]
+        Nothing -> return ()
+        Just spkt -> do
+            delPeerPacketNumbers ldcc lvl $ spPacketNumber spkt
+            decreaseCC ldcc [spkt]
     return mr
   where
     oldest (SentPackets db) = case Seq.viewl db2 of
-      x :< db2' -> let db' = db1 >< db2'
-                   in (SentPackets db', Just x)
-      _         ->    (SentPackets db, Nothing)
+        x :< db2' ->
+            let db' = db1 >< db2'
+             in (SentPackets db', Just x)
+        _ -> (SentPackets db, Nothing)
       where
         (db1, db2) = Seq.breakl spAckEliciting db
 
@@ -65,12 +67,14 @@ releaseOldest ldcc@LDCC{..} lvl = do
 
 onPacketsLost :: LDCC -> Seq SentPacket -> IO ()
 onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of
-  EmptyR -> return ()
-  _ :> lastPkt -> do
-    decreaseCC ldcc lostPackets
-    isRecovery <- inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime <$> readTVarIO recoveryCC
-    onCongestionEvent ldcc lostPackets isRecovery
-    mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
+    EmptyR -> return ()
+    _ :> lastPkt -> do
+        decreaseCC ldcc lostPackets
+        isRecovery <-
+            inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime
+                <$> readTVarIO recoveryCC
+        onCongestionEvent ldcc lostPackets isRecovery
+        mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
   where
     onCongestionEvent = updateCC
 
@@ -81,9 +85,9 @@ decreaseCC ldcc@LDCC{..} packets = do
     let sentBytes = sum' (spSentBytes <$> packets)
         num = sum' (countAckEli <$> packets)
     metricsUpdated ldcc $
-        atomically $ modifyTVar' recoveryCC $ \cc ->
-          cc {
-            bytesInFlight = bytesInFlight cc - sentBytes
-
-            , numOfAckEliciting = numOfAckEliciting cc - num
-          }
+        atomically $
+            modifyTVar' recoveryCC $ \cc ->
+                cc
+                    { bytesInFlight = bytesInFlight cc - sentBytes
+                    , numOfAckEliciting = numOfAckEliciting cc - num
+                    }

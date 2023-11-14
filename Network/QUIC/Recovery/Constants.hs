@@ -15,7 +15,6 @@ kPacketThreshold = 3
 
 -- | Maximum reordering in time before time threshold loss detection
 --   considers a packet lost.  Specified as an RTT multiplier.
-
 kTimeThreshold :: Microseconds -> Microseconds
 kTimeThreshold x = x + (x !>>. 3) -- 9/8
 
@@ -26,7 +25,7 @@ kGranularity = timerGranularity * 2
 
 -- | Default limit on the initial bytes in flight.
 kInitialWindow :: Int -> Int
---kInitialWindow pktSiz = min 14720 (10 * pktSiz)
+-- kInitialWindow pktSiz = min 14720 (10 * pktSiz)
 kInitialWindow pktSiz = pktSiz !<<. 2 --  !<<. 1 is not good enough
 
 -- | Minimum congestion window in bytes.

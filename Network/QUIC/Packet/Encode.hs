@@ -1,11 +1,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Packet.Encode (
---    encodePacket
-    encodeVersionNegotiationPacket
-  , encodeRetryPacket
-  , encodePlainPacket
-  ) where
+    --    encodePacket
+    encodeVersionNegotiationPacket,
+    encodeRetryPacket,
+    encodePlainPacket,
+) where
 
 import qualified Data.ByteString as BS
 import Foreign.ForeignPtr
@@ -24,6 +24,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 -- | This is not used internally.
+
 {-
 encodePacket :: Connection -> PacketO -> IO [ByteString]
 encodePacket _    (PacketOV pkt) = (:[]) <$> encodeVersionNegotiationPacket pkt
@@ -42,6 +43,7 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
     -- vers
     mapM_ (\(Version ver) -> write32 wbuf ver) vers
     -- no header protection
+    return ()
 
 ----------------------------------------------------------------
 
@@ -57,8 +59,9 @@ encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuff
     let tag = calculateIntegrityTag ver odCID pseudo0
     copyByteString wbuf tag
     -- no header protection
+    return ()
 -- only for testing
-encodeRetryPacket (RetryPacket ver dCID sCID token (Right (_,tag))) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
+encodeRetryPacket (RetryPacket ver dCID sCID token (Right (_, tag))) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
     save wbuf
     Flags flags <- retryPacketType ver
     write8 wbuf flags
@@ -66,64 +69,112 @@ encodeRetryPacket (RetryPacket ver dCID sCID token (Right (_,tag))) = withWriteB
     copyByteString wbuf token
     copyByteString wbuf tag
     -- no header protection
+    return ()
 
 ----------------------------------------------------------------
 
 -- WriteBuffer: protect(header) + encrypt(plain_frames)
 -- encodeBuf:   plain_frames
 
-encodePlainPacket :: Connection -> SizedBuffer -> PlainPacket -> Maybe Int -> IO (Int,Int)
+encodePlainPacket
+    :: Connection -> SizedBuffer -> PlainPacket -> Maybe Int -> IO (Int, Int)
 encodePlainPacket conn (SizedBuffer buf bufsiz) ppkt@(PlainPacket _ plain) mlen = do
-    let mlen' | isNoPaddings (plainMarks plain) = Nothing
-              | otherwise                       = mlen
+    let mlen'
+            | isNoPaddings (plainMarks plain) = Nothing
+            | otherwise = mlen
     wbuf <- newWriteBuffer buf bufsiz
     encodePlainPacket' conn wbuf ppkt mlen'
 
-encodePlainPacket' :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO (Int,Int)
+encodePlainPacket'
+    :: Connection -> WriteBuffer -> PlainPacket -> Maybe Int -> IO (Int, Int)
 encodePlainPacket' conn wbuf (PlainPacket (Initial ver dCID sCID token) (Plain flags pn frames _)) mlen = do
     headerBeg <- currentOffset wbuf
     -- flag ... sCID
-    (epn, epnLen) <- encodeLongHeaderPP conn wbuf InitialPacketType ver dCID sCID flags pn
+    (epn, epnLen) <-
+        encodeLongHeaderPP conn wbuf InitialPacketType ver dCID sCID flags pn
     -- token
     encodeInt' wbuf $ fromIntegral $ BS.length token
     copyByteString wbuf token
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen InitialLevel False
-
+    protectPayloadHeader
+        conn
+        wbuf
+        frames
+        pn
+        epn
+        epnLen
+        headerBeg
+        mlen
+        InitialLevel
+        False
 encodePlainPacket' conn wbuf (PlainPacket (RTT0 ver dCID sCID) (Plain flags pn frames _)) mlen = do
     headerBeg <- currentOffset wbuf
     -- flag ... sCID
-    (epn, epnLen) <- encodeLongHeaderPP conn wbuf RTT0PacketType ver dCID sCID flags pn
+    (epn, epnLen) <-
+        encodeLongHeaderPP conn wbuf RTT0PacketType ver dCID sCID flags pn
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT0Level False
-
+    protectPayloadHeader
+        conn
+        wbuf
+        frames
+        pn
+        epn
+        epnLen
+        headerBeg
+        mlen
+        RTT0Level
+        False
 encodePlainPacket' conn wbuf (PlainPacket (Handshake ver dCID sCID) (Plain flags pn frames _)) mlen = do
     headerBeg <- currentOffset wbuf
     -- flag ... sCID
-    (epn, epnLen) <- encodeLongHeaderPP conn wbuf HandshakePacketType ver dCID sCID flags pn
+    (epn, epnLen) <-
+        encodeLongHeaderPP conn wbuf HandshakePacketType ver dCID sCID flags pn
     -- length .. payload
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen HandshakeLevel False
-
+    protectPayloadHeader
+        conn
+        wbuf
+        frames
+        pn
+        epn
+        epnLen
+        headerBeg
+        mlen
+        HandshakeLevel
+        False
 encodePlainPacket' conn wbuf (PlainPacket (Short dCID) (Plain flags pn frames marks)) mlen = do
     headerBeg <- currentOffset wbuf
     -- flag
-    let (epn, epnLen) | is4bytesPN marks = (fromIntegral pn, 4)
-                      | otherwise        = encodePacketNumber 0 {- dummy -} pn
+    let (epn, epnLen)
+            | is4bytesPN marks = (fromIntegral pn, 4)
+            | otherwise = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength epnLen
     quicBit <- greaseQuicBit <$> getPeerParameters conn
-    (keyPhase,_) <- getCurrentKeyPhase conn
+    (keyPhase, _) <- getCurrentKeyPhase conn
     Flags flags' <- encodeShortHeaderFlags flags pp quicBit keyPhase
     write8 wbuf flags'
     -- dCID
     let (dcid, _) = unpackCID dCID
     copyShortByteString wbuf dcid
-    protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen RTT1Level keyPhase
+    protectPayloadHeader
+        conn
+        wbuf
+        frames
+        pn
+        epn
+        epnLen
+        headerBeg
+        mlen
+        RTT1Level
+        keyPhase
 
 ----------------------------------------------------------------
 
-encodeLongHeader :: WriteBuffer
-                 -> Version -> CID -> CID
-                 -> IO ()
+encodeLongHeader
+    :: WriteBuffer
+    -> Version
+    -> CID
+    -> CID
+    -> IO ()
 encodeLongHeader wbuf (Version ver) dCID sCID = do
     write32 wbuf ver
     let (dcid, dcidlen) = unpackCID dCID
@@ -135,11 +186,16 @@ encodeLongHeader wbuf (Version ver) dCID sCID = do
 
 ----------------------------------------------------------------
 
-encodeLongHeaderPP :: Connection -> WriteBuffer
-                   -> LongHeaderPacketType -> Version -> CID -> CID
-                   -> Flags Raw
-                   -> PacketNumber
-                   -> IO (EncodedPacketNumber, Int)
+encodeLongHeaderPP
+    :: Connection
+    -> WriteBuffer
+    -> LongHeaderPacketType
+    -> Version
+    -> CID
+    -> CID
+    -> Flags Raw
+    -> PacketNumber
+    -> IO (EncodedPacketNumber, Int)
 encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
     let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength pnLen
@@ -151,17 +207,28 @@ encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
 
 ----------------------------------------------------------------
 
-protectPayloadHeader :: Connection -> WriteBuffer -> [Frame] -> PacketNumber -> EncodedPacketNumber -> Int -> Buffer -> Maybe Int -> EncryptionLevel -> Bool -> IO (Int,Int)
+protectPayloadHeader
+    :: Connection
+    -> WriteBuffer
+    -> [Frame]
+    -> PacketNumber
+    -> EncodedPacketNumber
+    -> Int
+    -> Buffer
+    -> Maybe Int
+    -> EncryptionLevel
+    -> Bool
+    -> IO (Int, Int)
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase = do
     -- Real size is maximumUdpPayloadSize. But smaller is better.
-    let encBuf    = encodeBuf conn
+    let encBuf = encodeBuf conn
         encBufLen = 1500 - 20 - 8
     payloadWithoutPaddingSiz <- encodeFramesWithPadding encBuf encBufLen frames
     cipher <- getCipher conn lvl
     -- before length or packer number
     lengthOrPNBeg <- currentOffset wbuf
-    (packetLen, headerLen, plainLen, tagLen, padLen)
-        <- calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
+    (packetLen, headerLen, plainLen, tagLen, padLen) <-
+        calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
     when (lvl /= RTT1Level) $ writeLen (epnLen + plainLen + tagLen)
     pnBeg <- currentOffset wbuf
     writeEpn epnLen
@@ -177,28 +244,29 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
     maskBeg <- getMask protector
     --
-    if len < 0 || maskBeg == nullPtr then
-         return (-1, -1)
-       else do
-          -- protecting header
-          protectHeader headerBeg pnBeg epnLen maskBeg
-          return (packetLen, padLen)
+    if len < 0 || maskBeg == nullPtr
+        then return (-1, -1)
+        else do
+            -- protecting header
+            protectHeader headerBeg pnBeg epnLen maskBeg
+            return (packetLen, padLen)
   where
     calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz = do
-        let headerLen = (lengthOrPNBeg `minusPtr` headerBeg)
-                      -- length: assuming 2byte length
-                      + (if lvl /= RTT1Level then 2 else 0)
-                      + epnLen
+        let headerLen =
+                (lengthOrPNBeg `minusPtr` headerBeg)
+                    -- length: assuming 2byte length
+                    + (if lvl /= RTT1Level then 2 else 0)
+                    + epnLen
         let tagLen = tagLength cipher
             plainLen = case mlen of
-                Nothing          -> payloadWithoutPaddingSiz
+                Nothing -> payloadWithoutPaddingSiz
                 Just expectedLen -> expectedLen - headerLen - tagLen
             packetLen = headerLen + plainLen + tagLen
             padLen = plainLen - payloadWithoutPaddingSiz
         return (packetLen, headerLen, plainLen, tagLen, padLen)
     -- length: assuming 2byte length
     writeLen len = encodeInt'2 wbuf $ fromIntegral len
-    writeEpn 1 = write8  wbuf $ fromIntegral epn
+    writeEpn 1 = write8 wbuf $ fromIntegral epn
     writeEpn 2 = write16 wbuf $ fromIntegral epn
     writeEpn 3 = write24 wbuf epn
     writeEpn _ = write32 wbuf epn

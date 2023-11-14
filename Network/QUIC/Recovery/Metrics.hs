@@ -1,13 +1,13 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 module Network.QUIC.Recovery.Metrics (
-    updateRTT
-  , updateCC
-  , metricsUpdated
-  , setInitialCongestionWindow
-  ) where
+    updateRTT,
+    updateCC,
+    metricsUpdated,
+    setInitialCongestionWindow,
+) where
 
 import Data.Sequence (Seq)
 import UnliftIO.STM
@@ -35,19 +35,26 @@ updateRTT ldcc@LDCC{..} lvl latestRTT0 ackDelay0 = metricsUpdated ldcc $ do
     --
     -- smoothed_rtt = rtt_sample
     -- rttvar = rtt_sample / 2
-    update rtt@RTT{..} | latestRTT == Microseconds 0 = (rtt {
-        latestRTT   = latestRTT0
-      , minRTT      = latestRTT0
-      , smoothedRTT = latestRTT0
-      , rttvar      = latestRTT0 `unsafeShiftR` 1
-      }, True)
+    update rtt@RTT{..}
+        | latestRTT == Microseconds 0 =
+            ( rtt
+                { latestRTT = latestRTT0
+                , minRTT = latestRTT0
+                , smoothedRTT = latestRTT0
+                , rttvar = latestRTT0 `unsafeShiftR` 1
+                }
+            , True
+            )
     -- Others:
-    update rtt@RTT{..} = (rtt {
-        latestRTT   = latestRTT0
-      , minRTT      = minRTT'
-      , smoothedRTT = smoothedRTT'
-      , rttvar      = rttvar'
-      }, False)
+    update rtt@RTT{..} =
+        ( rtt
+            { latestRTT = latestRTT0
+            , minRTT = minRTT'
+            , smoothedRTT = smoothedRTT'
+            , rttvar = rttvar'
+            }
+        , False
+        )
       where
         -- minRTT ignores ack delay.
         minRTT' = min minRTT latestRTT0
@@ -59,15 +66,19 @@ updateRTT ldcc@LDCC{..} lvl latestRTT0 ackDelay0 = metricsUpdated ldcc $ do
         -- if (latest_rtt >= min_rtt + ack_delay):
         --   adjusted_rtt = latest_rtt - ack_delay
         adjustedRTT
-          | latestRTT0 >= minRTT + ackDelay = latestRTT0 - ackDelay
-          | otherwise                       = latestRTT0
+            | latestRTT0 >= minRTT + ackDelay = latestRTT0 - ackDelay
+            | otherwise = latestRTT0
         -- rttvar_sample = abs(smoothed_rtt - adjusted_rtt)
         -- rttvar = 3/4 * rttvar + 1/4 * rttvar_sample
-        rttvar' = rttvar - (rttvar !>>. 2)
+        rttvar' =
+            rttvar
+                - (rttvar !>>. 2)
                 + (abs (smoothedRTT - adjustedRTT) !>>. 2)
         -- smoothed_rtt = 7/8 * smoothed_rtt + 1/8 * adjusted_rtt
-        smoothedRTT' = smoothedRTT - (smoothedRTT !>>. 3)
-                     + (adjustedRTT !>>. 3)
+        smoothedRTT' =
+            smoothedRTT
+                - (smoothedRTT !>>. 3)
+                + (adjustedRTT !>>. 3)
 
 updateCC :: LDCC -> Seq SentPacket -> Bool -> IO ()
 updateCC ldcc@LDCC{..} lostPackets isRecovery = do
@@ -78,27 +89,29 @@ updateCC ldcc@LDCC{..} lostPackets isRecovery = do
         metricsUpdated ldcc $ atomically $ modifyTVar' recoveryCC $ \cc@CC{..} ->
             let halfWindow = max minWindow $ kLossReductionFactor congestionWindow
                 cwin
-                  | persistent = minWindow
-                  | otherwise  = halfWindow
-                sst            = halfWindow
+                    | persistent = minWindow
+                    | otherwise = halfWindow
+                sst = halfWindow
                 mode
-                  | cwin < sst = SlowStart -- persistent
-                  | otherwise  = Recovery
-            in cc {
-                congestionRecoveryStartTime = Just now
-              , congestionWindow = cwin
-              , ssthresh         = sst
-              , ccMode           = mode
-              , bytesAcked       = 0
-              }
+                    | cwin < sst = SlowStart -- persistent
+                    | otherwise = Recovery
+             in cc
+                    { congestionRecoveryStartTime = Just now
+                    , congestionWindow = cwin
+                    , ssthresh = sst
+                    , ccMode = mode
+                    , bytesAcked = 0
+                    }
         CC{ccMode} <- readTVarIO recoveryCC
         qlogContestionStateUpdated ldcc ccMode
 
 setInitialCongestionWindow :: LDCC -> Int -> IO ()
 setInitialCongestionWindow ldcc@LDCC{..} pktSiz = metricsUpdated ldcc $
-    atomically $ do modifyTVar' recoveryCC $ \cc -> cc {
-        congestionWindow = kInitialWindow pktSiz
-      }
+    atomically $ do
+        modifyTVar' recoveryCC $ \cc ->
+            cc
+                { congestionWindow = kInitialWindow pktSiz
+                }
 
 ----------------------------------------------------------------
 
@@ -109,21 +122,22 @@ metricsUpdated ldcc@LDCC{..} body = do
     body
     rtt1 <- readIORef recoveryRTT
     cc1 <- readTVarIO recoveryCC
-    let ~diff = catMaybes [
-            time "min_rtt"      (minRTT      rtt0) (minRTT      rtt1)
-          , time "smoothed_rtt" (smoothedRTT rtt0) (smoothedRTT rtt1)
-          , time "latest_rtt"   (latestRTT   rtt0) (latestRTT   rtt1)
-          , time "rtt_variance" (rttvar      rtt0) (rttvar      rtt1)
-          , numb "pto_count"    (ptoCount    rtt0) (ptoCount    rtt1)
-          , numb "bytes_in_flight"   (bytesInFlight cc0) (bytesInFlight cc1)
-          , numb "congestion_window" (congestionWindow cc0) (congestionWindow cc1)
-          , numb "ssthresh"          (ssthresh cc0) (ssthresh cc1)
-          ]
+    let ~diff =
+            catMaybes
+                [ time "min_rtt" (minRTT rtt0) (minRTT rtt1)
+                , time "smoothed_rtt" (smoothedRTT rtt0) (smoothedRTT rtt1)
+                , time "latest_rtt" (latestRTT rtt0) (latestRTT rtt1)
+                , time "rtt_variance" (rttvar rtt0) (rttvar rtt1)
+                , numb "pto_count" (ptoCount rtt0) (ptoCount rtt1)
+                , numb "bytes_in_flight" (bytesInFlight cc0) (bytesInFlight cc1)
+                , numb "congestion_window" (congestionWindow cc0) (congestionWindow cc1)
+                , numb "ssthresh" (ssthresh cc0) (ssthresh cc1)
+                ]
     unless (null diff) $ qlogMetricsUpdated ldcc $ MetricsDiff diff
   where
     time tag (Microseconds v0) (Microseconds v1)
-      | v0 == v1  = Nothing
-      | otherwise = Just (tag,v1)
+        | v0 == v1 = Nothing
+        | otherwise = Just (tag, v1)
     numb tag v0 v1
-      | v0 == v1  = Nothing
-      | otherwise = Just (tag,v1)
+        | v0 == v1 = Nothing
+        | otherwise = Just (tag, v1)

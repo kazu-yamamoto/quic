@@ -10,6 +10,8 @@ spec :: Spec
 spec = do
     describe "toAckInfo and fromAckInfo" $ do
         it "should be dual" $ property $ \xs -> do
-            let rs = nub . sort . map (getSmall . getNonNegative) . getNonEmpty $  (xs :: NonEmptyList (NonNegative (Small PacketNumber)))
+            let rs =
+                    nub . sort . map (getSmall . getNonNegative) . getNonEmpty $
+                        (xs :: NonEmptyList (NonNegative (Small PacketNumber)))
                 rs' = reverse rs
             fromAckInfo (toAckInfo rs') `shouldBe` rs

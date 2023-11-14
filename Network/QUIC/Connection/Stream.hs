@@ -3,15 +3,15 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Stream (
-    getMyStreamId
-  , waitMyNewStreamId
-  , waitMyNewUniStreamId
-  , setTxMaxStreams
-  , setTxUniMaxStreams
-  , checkRxMaxStreams
-  , updatePeerStreamId
-  , checkStreamIdRoom
-  ) where
+    getMyStreamId,
+    waitMyNewStreamId,
+    waitMyNewUniStreamId,
+    setTxMaxStreams,
+    setTxUniMaxStreams,
+    checkRxMaxStreams,
+    updatePeerStreamId,
+    checkStreamIdRoom,
+) where
 
 import UnliftIO.STM
 
@@ -40,7 +40,7 @@ get tvar = atomically $ do
         StreamIdBase base = maxStreams
     checkSTM (currentStream < base * 4 + streamType)
     let currentStream' = currentStream + 4
-    writeTVar tvar conc { currentStream = currentStream' }
+    writeTVar tvar conc{currentStream = currentStream'}
     return currentStream
 
 -- From "Peer", but set it to "My".
@@ -52,20 +52,26 @@ setTxUniMaxStreams :: Connection -> Int -> IO ()
 setTxUniMaxStreams Connection{..} = set myUniStreamId
 
 set :: TVar Concurrency -> Int -> IO ()
-set tvar mx = atomically $ modifyTVar tvar $ \c -> c { maxStreams = StreamIdBase mx }
+set tvar mx = atomically $ modifyTVar tvar $ \c -> c{maxStreams = StreamIdBase mx}
 
 updatePeerStreamId :: Connection -> StreamId -> IO ()
 updatePeerStreamId conn sid = do
-    when ((isClient conn && isServerInitiatedBidirectional sid)
-       || (isServer conn && isClientInitiatedBidirectional sid)) $ do
-        atomicModifyIORef'' (peerStreamId conn) check
-    when ((isClient conn && isServerInitiatedUnidirectional sid)
-       || (isServer conn && isClientInitiatedUnidirectional sid)) $ do
-        atomicModifyIORef'' (peerUniStreamId conn) check
+    when
+        ( (isClient conn && isServerInitiatedBidirectional sid)
+            || (isServer conn && isClientInitiatedBidirectional sid)
+        )
+        $ do
+            atomicModifyIORef'' (peerStreamId conn) check
+    when
+        ( (isClient conn && isServerInitiatedUnidirectional sid)
+            || (isServer conn && isClientInitiatedUnidirectional sid)
+        )
+        $ do
+            atomicModifyIORef'' (peerUniStreamId conn) check
   where
     check conc@Concurrency{..}
-      | currentStream < sid = conc { currentStream = sid }
-      | otherwise           = conc
+        | currentStream < sid = conc{currentStream = sid}
+        | otherwise = conc
 
 checkRxMaxStreams :: Connection -> StreamId -> IO Bool
 checkRxMaxStreams conn@Connection{..} sid = do
@@ -76,30 +82,31 @@ checkRxMaxStreams conn@Connection{..} sid = do
   where
     streamType = sid .&. 0b11
     readForClient = case streamType of
-      0 -> readTVarIO myStreamId
-      1 -> readIORef  peerStreamId
-      2 -> readTVarIO myUniStreamId
-      3 -> readIORef  peerUniStreamId
-      _ -> error "never reach"
+        0 -> readTVarIO myStreamId
+        1 -> readIORef peerStreamId
+        2 -> readTVarIO myUniStreamId
+        3 -> readIORef peerUniStreamId
+        _ -> error "never reach"
     readForServer = case streamType of
-      0 -> readIORef  peerStreamId
-      1 -> readTVarIO myStreamId
-      2 -> readIORef  peerUniStreamId
-      3 -> readTVarIO myUniStreamId
-      _ -> error "never reach"
+        0 -> readIORef peerStreamId
+        1 -> readTVarIO myStreamId
+        2 -> readIORef peerUniStreamId
+        3 -> readTVarIO myUniStreamId
+        _ -> error "never reach"
 
 checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int)
 checkStreamIdRoom conn dir = do
-    let ref | dir == Bidirectional = peerStreamId conn
-            | otherwise            = peerUniStreamId conn
+    let ref
+            | dir == Bidirectional = peerStreamId conn
+            | otherwise = peerUniStreamId conn
     atomicModifyIORef' ref check
   where
     check conc@Concurrency{..} =
         let StreamIdBase base = maxStreams
             initialStreams = initialMaxStreamsBidi $ getMyParameters conn
             cbase = currentStream !>>. 2
-        in if (base - cbase < (initialStreams !>>. 3)) then
-               let base' = base + initialStreams
-               in (conc { maxStreams = StreamIdBase base' }, Just base')
-           else
-               (conc, Nothing)
+         in if (base - cbase < (initialStreams !>>. 3))
+                then
+                    let base' = base + initialStreams
+                     in (conc{maxStreams = StreamIdBase base'}, Just base')
+                else (conc, Nothing)

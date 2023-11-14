@@ -2,11 +2,11 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Recovery.Interface (
-    checkWindowOpenSTM
-  , takePingSTM
-  , speedup
-  , resender
-  ) where
+    checkWindowOpenSTM,
+    takePingSTM,
+    speedup,
+    resender,
+) where
 
 import qualified Data.Sequence as Seq
 import System.Log.FastLogger (LogStr)
@@ -38,7 +38,7 @@ speedup ldcc@LDCC{..} lvl desc = do
     setSpeedingUp ldcc
     qlogDebug ldcc $ Debug desc
     packets <- atomicModifyIORef' (sentPackets ! lvl) $
-                  \(SentPackets db) -> (emptySentPackets, db)
+        \(SentPackets db) -> (emptySentPackets, db)
     -- don't clear PeerPacketNumbers.
     unless (null packets) $ do
         onPacketsLost ldcc packets

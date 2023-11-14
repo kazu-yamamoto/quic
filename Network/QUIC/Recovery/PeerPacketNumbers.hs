@@ -1,16 +1,16 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Recovery.PeerPacketNumbers (
-    getPeerPacketNumbers
-  , addPeerPacketNumbers
-  , delPeerPacketNumbers
-  , clearPeerPacketNumbers
-  , reducePeerPacketNumbers
-  , setPreviousRTT1PPNs
-  , getPreviousRTT1PPNs
-  , nullPeerPacketNumbers
-  , fromPeerPacketNumbers
-  ) where
+    getPeerPacketNumbers,
+    addPeerPacketNumbers,
+    delPeerPacketNumbers,
+    clearPeerPacketNumbers,
+    reducePeerPacketNumbers,
+    setPreviousRTT1PPNs,
+    getPreviousRTT1PPNs,
+    nullPeerPacketNumbers,
+    fromPeerPacketNumbers,
+) where
 
 import qualified Data.IntSet as IntSet
 

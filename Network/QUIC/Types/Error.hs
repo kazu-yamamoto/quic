@@ -9,6 +9,7 @@ import Text.Printf
 -- | Transport errors of QUIC.
 newtype TransportError = TransportError Int deriving (Eq)
 
+{- FOURMOLU_DISABLE -}
 pattern NoError                 :: TransportError
 pattern NoError                  = TransportError  0x0
 
@@ -87,6 +88,7 @@ instance Show TransportError where
           Just e  -> "TLS " ++ show e
           Nothing -> "TLS Alert " ++ show x
       | otherwise = "TransportError " ++ printf "%x" x
+{- FOURMOLU_ENABLE -}
 
 -- | Converting a TLS alert to a corresponding transport error.
 cryptoError :: TLS.AlertDescription -> TransportError
@@ -95,4 +97,5 @@ cryptoError ad = TransportError ec
     ec = 0x100 + fromIntegral (fromAlertDescription ad)
 
 -- | Application protocol errors of QUIC.
-newtype ApplicationProtocolError = ApplicationProtocolError Int deriving (Eq, Show)
+newtype ApplicationProtocolError = ApplicationProtocolError Int
+    deriving (Eq, Show)

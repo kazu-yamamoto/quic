@@ -1,9 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Exception (
-    handleLogT
-  , handleLogUnit
-  ) where
+    handleLogT,
+    handleLogUnit,
+) where
 
 import qualified GHC.IO.Exception as E
 import qualified System.IO.Error as E
@@ -17,11 +17,11 @@ handleLogUnit logAction action = action `E.catchSyncOrAsync` handler
   where
     handler :: E.SomeException -> IO ()
     handler se = case E.fromException se of
-      -- threadWait: invalid argument (Bad file descriptor)
-      Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
-      -- recvBuf: does not exist (Connection refused)
-      Just e | E.ioeGetErrorType e == E.NoSuchThing     -> return ()
-      _                                                 -> logAction $ bhow se
+        -- threadWait: invalid argument (Bad file descriptor)
+        Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()
+        -- recvBuf: does not exist (Connection refused)
+        Just e | E.ioeGetErrorType e == E.NoSuchThing -> return ()
+        _ -> logAction $ bhow se
 
 -- Log and throw an exception
 handleLogT :: DebugLogger -> IO a -> IO a

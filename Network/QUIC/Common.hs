@@ -17,8 +17,8 @@ connResConnection (ConnRes conn _ _) = conn
 
 defaultPacketSize :: NS.SockAddr -> Int
 defaultPacketSize NS.SockAddrInet6{} = defaultQUICPacketSizeForIPv6
-defaultPacketSize _                  = defaultQUICPacketSizeForIPv4
+defaultPacketSize _ = defaultQUICPacketSizeForIPv4
 
 maximumPacketSize :: NS.SockAddr -> Int
 maximumPacketSize NS.SockAddrInet6{} = 1500 - 40 - 8 -- fixme
-maximumPacketSize _                  = 1500 - 20 - 8 -- fixme
+maximumPacketSize _ = 1500 - 20 - 8 -- fixme

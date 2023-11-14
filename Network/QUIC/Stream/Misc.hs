@@ -2,23 +2,23 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Misc (
-    getTxStreamOffset
-  , isTxStreamClosed
-  , setTxStreamClosed
-  , getRxStreamOffset
-  , isRxStreamClosed
-  , setRxStreamClosed
-  --
-  , readStreamFlowTx
-  , addTxStreamData
-  , setTxMaxStreamData
-  , readStreamFlowRx
-  , addRxStreamData
-  , setRxMaxStreamData
-  , addRxMaxStreamData
-  , getRxMaxStreamData
-  , getRxStreamWindow
-  ) where
+    getTxStreamOffset,
+    isTxStreamClosed,
+    setTxStreamClosed,
+    getRxStreamOffset,
+    isRxStreamClosed,
+    setRxStreamClosed,
+    --
+    readStreamFlowTx,
+    addTxStreamData,
+    setTxMaxStreamData,
+    readStreamFlowRx,
+    addRxStreamData,
+    setRxMaxStreamData,
+    addRxMaxStreamData,
+    getRxMaxStreamData,
+    getRxStreamWindow,
+) where
 
 import UnliftIO.STM
 
@@ -74,30 +74,30 @@ readStreamFlowTx Stream{..} = readTVar streamFlowTx
 addTxStreamData :: Stream -> Int -> STM ()
 addTxStreamData Stream{..} n = modifyTVar' streamFlowTx add
   where
-    add flow = flow { flowData = flowData flow + n }
+    add flow = flow{flowData = flowData flow + n}
 
 setTxMaxStreamData :: Stream -> Int -> IO ()
 setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
   where
     set flow
-     | flowMaxData flow < n = flow { flowMaxData = n }
-     | otherwise            = flow
+        | flowMaxData flow < n = flow{flowMaxData = n}
+        | otherwise = flow
 
 ----------------------------------------------------------------
 
 addRxStreamData :: Stream -> Int -> IO ()
 addRxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx add
   where
-    add flow = flow { flowData = flowData flow + n }
+    add flow = flow{flowData = flowData flow + n}
 
 setRxMaxStreamData :: Stream -> Int -> IO ()
-setRxMaxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx
-    $ \flow -> flow { flowMaxData = n }
+setRxMaxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx $
+    \flow -> flow{flowMaxData = n}
 
 addRxMaxStreamData :: Stream -> Int -> IO Int
 addRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add
   where
-    add flow = (flow { flowMaxData = m }, m)
+    add flow = (flow{flowMaxData = m}, m)
       where
         m = flowMaxData flow + n
 

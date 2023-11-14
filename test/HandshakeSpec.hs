@@ -4,7 +4,7 @@ module HandshakeSpec where
 
 import Control.Monad
 import qualified Data.ByteString as BS
-import Network.TLS (HandshakeMode13(..), Group(..))
+import Network.TLS (Group (..), HandshakeMode13 (..))
 import qualified Network.TLS as TLS
 import Test.Hspec
 import UnliftIO.Concurrent
@@ -22,11 +22,14 @@ spec = do
     sc0' <- runIO makeTestServerConfig
     smgr <- runIO newSessionManager
     var <- runIO newEmptyMVar
-    let sc0 = sc0' { scSessionManager = smgr
-                   , scHooks = (scHooks sc0') {
-                         onServerReady = putMVar var ()
-                       }
-                   }
+    let sc0 =
+            sc0'
+                { scSessionManager = smgr
+                , scHooks =
+                    (scHooks sc0')
+                        { onServerReady = putMVar var ()
+                        }
+                }
     let waitS = takeMVar var :: IO ()
     describe "handshake" $ do
         it "can handshake in the normal case" $ do
@@ -35,11 +38,11 @@ spec = do
             testHandshake cc sc waitS FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
             let cc = testClientConfig
-                sc = sc0 { scGroups = [P256] }
+                sc = sc0{scGroups = [P256]}
             testHandshake cc sc waitS HelloRetryRequest
         it "can handshake in the case of QUIC retry" $ do
             let cc = testClientConfig
-                sc = sc0 { scRequireRetry = True }
+                sc = sc0{scRequireRetry = True}
             testHandshake cc sc waitS FullHandshake
         it "can handshake in the case of resumption" $ do
             let cc = testClientConfig
@@ -47,46 +50,52 @@ spec = do
             testHandshake2 cc sc waitS (FullHandshake, PreSharedKey) False
         it "can handshake in the case of 0-RTT" $ do
             let cc = testClientConfig
-                sc = sc0 { scUse0RTT = True }
+                sc = sc0{scUse0RTT = True}
             testHandshake2 cc sc waitS (FullHandshake, RTT0) True
         it "fails with unknown server certificate" $ do
-            let cc1 = testClientConfig {
-                        ccValidate = True  -- ouch, default should be reversed
-                      }
+            let cc1 =
+                    testClientConfig
+                        { ccValidate = True -- ouch, default should be reversed
+                        }
                 cc2 = testClientConfig
-                sc  = sc0
+                sc = sc0
                 certificateRejected e
-                    | TransportErrorIsSent te@(TransportError _) _ <- e = te == cryptoError TLS.CertificateUnknown
+                    | TransportErrorIsSent te@(TransportError _) _ <- e =
+                        te == cryptoError TLS.CertificateUnknown
                     | otherwise = False
             testHandshake3 cc1 cc2 sc waitS certificateRejected
         it "fails with no group in common" $ do
-            let cc1 = testClientConfig { ccGroups = [X25519] }
-                cc2 = testClientConfig { ccGroups = [P256] }
-                sc  = sc0 { scGroups = [P256] }
+            let cc1 = testClientConfig{ccGroups = [X25519]}
+                cc2 = testClientConfig{ccGroups = [P256]}
+                sc = sc0{scGroups = [P256]}
                 handshakeFailure e
-                    | TransportErrorIsReceived te@(TransportError _) _ <- e = te == cryptoError TLS.HandshakeFailure
+                    | TransportErrorIsReceived te@(TransportError _) _ <- e =
+                        te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
             testHandshake3 cc1 cc2 sc waitS handshakeFailure
         it "can handshake with large HE from a client" $ do
             let cc0 = testClientConfig
-                params = (ccParameters cc0) {
-                      grease = Just (BS.pack (replicate 2400 0))
-                    }
-                cc = cc0 { ccParameters = params }
+                params =
+                    (ccParameters cc0)
+                        { grease = Just (BS.pack (replicate 2400 0))
+                        }
+                cc = cc0{ccParameters = params}
                 sc = sc0
             testHandshake cc sc waitS FullHandshake
         it "can handshake with large EE from a server (3-times rule)" $ do
             let cc = testClientConfig
-                params = (scParameters sc0) {
-                      grease = Just (BS.pack (replicate 3800 0))
-                    }
-                sc = sc0 { scParameters = params }
+                params =
+                    (scParameters sc0)
+                        { grease = Just (BS.pack (replicate 3800 0))
+                        }
+                sc = sc0{scParameters = params}
             testHandshake cc sc waitS FullHandshake
 
 onE :: IO b -> IO a -> IO a
 onE h b = E.onException b h
 
-testHandshake :: ClientConfig -> ServerConfig -> IO () -> HandshakeMode13 -> IO ()
+testHandshake
+    :: ClientConfig -> ServerConfig -> IO () -> HandshakeMode13 -> IO ()
 testHandshake cc sc waitS mode = do
     mvar <- newEmptyMVar
     E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
@@ -110,7 +119,13 @@ query content conn = do
     shutdownStream s
     void $ recvStream s 1024
 
-testHandshake2 :: ClientConfig -> ServerConfig -> IO () -> (HandshakeMode13, HandshakeMode13) -> Bool -> IO ()
+testHandshake2
+    :: ClientConfig
+    -> ServerConfig
+    -> IO ()
+    -> (HandshakeMode13, HandshakeMode13)
+    -> Bool
+    -> IO ()
 testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
     mvar <- newEmptyMVar
     E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
@@ -124,9 +139,11 @@ testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
         waitS
         res <- runClient cc1 mode1 $ query "first"
         threadDelay 50000
-        let cc2 = cc1 { ccResumption = res
-                      , ccUse0RTT    = use0RTT
-                      }
+        let cc2 =
+                cc1
+                    { ccResumption = res
+                    , ccUse0RTT = use0RTT
+                    }
         void $ runClient cc2 mode2 $ query "second"
         takeMVar mvar
     server mvar = S.run sc serv
@@ -136,16 +153,22 @@ testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
             bs <- recvStream s 1024
             sendStream s "bye"
             closeStream s
-            when (bs == "second") $  putMVar mvar ()
+            when (bs == "second") $ putMVar mvar ()
 
-testHandshake3 :: ClientConfig -> ClientConfig -> ServerConfig -> IO () -> (QUICException -> Bool) -> IO ()
+testHandshake3
+    :: ClientConfig
+    -> ClientConfig
+    -> ServerConfig
+    -> IO ()
+    -> (QUICException -> Bool)
+    -> IO ()
 testHandshake3 cc1 cc2 sc waitS selector = do
     mvar <- newEmptyMVar
     E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
     client mvar = do
         waitS
-        C.run cc1 (query "first")  `shouldThrow` selector
+        C.run cc1 (query "first") `shouldThrow` selector
         C.run cc2 (query "second") `shouldReturn` ()
         takeMVar mvar
     server mvar = S.run sc $ \conn -> do

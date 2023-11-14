@@ -9,30 +9,31 @@ import Network.QUIC.Types.Frame
 import Network.QUIC.Types.Packet
 
 -- | User level exceptions for QUIC.
-data QUICException =
-    ConnectionIsClosed -- NoError
-  | TransportErrorIsReceived TransportError ReasonPhrase
-  | TransportErrorIsSent     TransportError ReasonPhrase
-  | ApplicationProtocolErrorIsReceived ApplicationProtocolError ReasonPhrase
-  | ApplicationProtocolErrorIsSent     ApplicationProtocolError ReasonPhrase
-  | ConnectionIsTimeout String
-  | ConnectionIsReset
-  | StreamIsClosed
-  | HandshakeFailed TLS.AlertDescription -- failed in my side
-  | VersionIsUnknown Word32
-  | NoVersionIsSpecified
-  | VersionNegotiationFailed
-  | BadThingHappen E.SomeException
-  deriving (Show)
+data QUICException
+    = ConnectionIsClosed -- NoError
+    | TransportErrorIsReceived TransportError ReasonPhrase
+    | TransportErrorIsSent TransportError ReasonPhrase
+    | ApplicationProtocolErrorIsReceived ApplicationProtocolError ReasonPhrase
+    | ApplicationProtocolErrorIsSent ApplicationProtocolError ReasonPhrase
+    | ConnectionIsTimeout String
+    | ConnectionIsReset
+    | StreamIsClosed
+    | HandshakeFailed TLS.AlertDescription -- failed in my side
+    | VersionIsUnknown Word32
+    | NoVersionIsSpecified
+    | VersionNegotiationFailed
+    | BadThingHappen E.SomeException
+    deriving (Show)
 
 instance E.Exception QUICException
 
-data InternalControl = MustNotReached
-                     | ExitConnection
-                     | WrongTransportParameter
-                     | WrongVersionInformation
-                     | BreakForever
-                     deriving (Eq, Show)
+data InternalControl
+    = MustNotReached
+    | ExitConnection
+    | WrongTransportParameter
+    | WrongVersionInformation
+    | BreakForever
+    deriving (Eq, Show)
 
 instance E.Exception InternalControl
 
@@ -40,10 +41,11 @@ newtype NextVersion = NextVersion VersionInfo deriving (Show)
 
 instance E.Exception NextVersion
 
-data Abort = Abort ApplicationProtocolError ReasonPhrase
-           | VerNego VersionInfo
-           deriving (Show)
+data Abort
+    = Abort ApplicationProtocolError ReasonPhrase
+    | VerNego VersionInfo
+    deriving (Show)
 
 instance E.Exception Abort where
-  fromException = E.asyncExceptionFromException
-  toException = E.asyncExceptionToException
+    fromException = E.asyncExceptionFromException
+    toException = E.asyncExceptionToException
