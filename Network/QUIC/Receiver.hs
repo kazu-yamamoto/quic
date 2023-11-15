@@ -6,6 +6,7 @@ module Network.QUIC.Receiver (
 ) where
 
 import qualified Data.ByteString as BS
+import Network.Control
 import Network.TLS (AlertDescription (..))
 import UnliftIO.Concurrent (forkIO)
 import qualified UnliftIO.Exception as E
@@ -23,7 +24,7 @@ import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Server.Reader (runNewServerReader)
 import Network.QUIC.Stream
-import Network.QUIC.Types
+import Network.QUIC.Types as QUIC
 
 receiver :: Connection -> IO ()
 receiver conn = handleLogT logAction body
@@ -127,6 +128,17 @@ processReceivedPacketHandshake conn rpkt = do
                         onPacketNumberSpaceDiscarded ldcc InitialLevel
                 processReceivedPacket conn rpkt
 
+rateLimit :: Int
+rateLimit = 10
+
+checkRate :: [Frame] -> Int
+checkRate fs0 = go fs0 0
+  where
+    go [] n = n
+    go (f : fs) n
+        | rateControled f = go fs (n + 1)
+        | otherwise = go fs n
+
 processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacket conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
@@ -140,6 +152,11 @@ processReceivedPacket conn rpkt = do
                 closeConnection ProtocolViolation "Non 0 RR bits or no frames"
             when (isUnknownFrame plainMarks) $
                 closeConnection FrameEncodingError "Unknown frame"
+            let controlled = checkRate plainFrames
+            when (controlled /= 0) $ do
+                rate <- addRate (controlRate conn) controlled
+                when (rate > rateLimit) $ do
+                    closeConnection QUIC.InternalError "Rate control"
             -- For Ping, record PPN first, then send an ACK.
             onPacketReceived (connLDCC conn) lvl plainPacketNumber
             when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber

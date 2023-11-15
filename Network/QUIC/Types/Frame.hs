@@ -105,4 +105,9 @@ inFlight Ack{}                = False
 inFlight ConnectionClose{}    = False
 inFlight ConnectionCloseApp{} = False
 inFlight _                    = True
+
+rateControled :: Frame -> Bool
+rateControled ResetStream{} = True
+rateControled StopSending{} = True
+rateControled _             = False
 {- FOURMOLU_ENABLE -}

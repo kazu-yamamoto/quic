@@ -15,6 +15,7 @@ import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
+import Network.Control (Rate, newRate)
 import Network.TLS.QUIC
 import Network.UDP (UDPSocket)
 import UnliftIO.Concurrent
@@ -201,6 +202,7 @@ data Connection = Connection
     , udpSocket :: ~(IORef UDPSocket)
     , readers :: IORef (IO ())
     , mainThreadId :: ThreadId
+    , controlRate :: Rate
     , -- Info
       roleInfo :: IORef RoleInfo
     , quicVersionInfo :: IORef VersionInfo
@@ -301,6 +303,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     Connection connstate debugLog qLog hooks send recv recvQ sref
         <$> newIORef (return ())
         <*> myThreadId
+        <*> newRate
         -- Info
         <*> newIORef initialRoleInfo
         <*> newIORef verInfo
