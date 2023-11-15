@@ -23,10 +23,10 @@ import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import Data.OrdPSQ (OrdPSQ)
-import qualified Data.OrdPSQ as PSQ
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
+import Network.Control (LRUCache)
+import qualified Network.Control as LRUCache
 import Network.UDP (ListenSocket, UDPSocket, ClientSockAddr)
 import qualified Network.UDP as UDP
 import qualified System.IO.Error as E
@@ -91,29 +91,25 @@ unregisterConnectionDict ref cid = atomicModifyIORef'' ref $
 ----------------------------------------------------------------
 
 -- Original destination CID -> RecvQ
-data RecvQDict = RecvQDict Int (OrdPSQ CID Int RecvQ)
+data RecvQDict = RecvQDict(LRUCache CID RecvQ)
 
 recvQDictSize :: Int
 recvQDictSize = 100
 
 emptyRecvQDict :: RecvQDict
-emptyRecvQDict = RecvQDict 0 PSQ.empty
+emptyRecvQDict = RecvQDict $ LRUCache.empty recvQDictSize
 
 lookupRecvQDict :: IORef RecvQDict -> CID -> IO (Maybe RecvQ)
 lookupRecvQDict ref dcid = do
-    RecvQDict _ qt <- readIORef ref
-    return $ case PSQ.lookup dcid qt of
-      Nothing     -> Nothing
-      Just (_,q)  -> Just q
+    RecvQDict c <- readIORef ref
+    return $ case LRUCache.lookup dcid c of
+      Nothing -> Nothing
+      Just q -> Just q
 
 insertRecvQDict :: IORef RecvQDict -> CID -> RecvQ -> IO ()
 insertRecvQDict ref dcid q = atomicModifyIORef'' ref ins
   where
-    ins (RecvQDict p qt0) = let qt1 | PSQ.size qt0 <= recvQDictSize = qt0
-                                    | otherwise = PSQ.deleteMin qt0
-                                qt2 = PSQ.insert dcid p q qt1
-                                p' = p + 1 -- fixme: overflow
-                            in RecvQDict p' qt2
+    ins (RecvQDict c) = RecvQDict $ LRUCache.insert dcid q c
 
 ----------------------------------------------------------------
 
