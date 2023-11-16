@@ -14,8 +14,8 @@ module Network.QUIC.Stream.Misc (
     setTxMaxStreamData,
     --
     getRxMaxStreamData,
+    addRxStreamData,
     updateStreamFlowRx,
-    checkRxMaxStreamData,
 ) where
 
 import Network.Control
@@ -87,10 +87,17 @@ setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
 getRxMaxStreamData :: Stream -> IO Int
 getRxMaxStreamData Stream{..} = rxfLimit <$> readIORef streamFlowRx
 
+addRxStreamData :: Stream -> Int -> IO ()
+addRxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx add
+  where
+    add flow = flow{rxfReceived = rxfReceived flow + n}
+
 updateStreamFlowRx :: Stream -> Int -> IO (Maybe Int)
 updateStreamFlowRx Stream{..} consumed =
     atomicModifyIORef' streamFlowRx $ maybeOpenRxWindow consumed FCTMaxData
 
+{- cannot be used due to reassemble.
 checkRxMaxStreamData :: Stream -> Int -> IO Bool
 checkRxMaxStreamData Stream{..} len =
     atomicModifyIORef' streamFlowRx $ checkRxLimit len
+-}

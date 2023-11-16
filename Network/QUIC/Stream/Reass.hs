@@ -102,12 +102,12 @@ putRxStreamData s rx@(RxStreamData _ off len _) = do
             dup <- tryReassemble s rx put putFin
             if dup
                 then return Duplicated
-                else do
-                    ok <- checkRxMaxStreamData s len
-                    if ok then return Reassembled else return OverLimit
+                else return Reassembled
   where
     put "" = return ()
-    put d = putRecvStreamQ s d
+    put d = do
+        addRxStreamData s $ BS.length d
+        putRecvStreamQ s d
     putFin = putRecvStreamQ s ""
 
 -- fin of StreamState off fin means see-fin-already.
