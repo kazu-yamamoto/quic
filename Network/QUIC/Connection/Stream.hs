@@ -107,6 +107,6 @@ checkStreamIdRoom conn dir = do
             cbase = currentStream !>>. 2
          in if (base - cbase < (initialStreams !>>. 3))
                 then
-                    let base' = base + initialStreams
+                    let base' = cbase + initialStreams
                      in (conc{maxStreams = StreamIdBase base'}, Just base')
                 else (conc, Nothing)

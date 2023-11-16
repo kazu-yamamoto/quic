@@ -170,7 +170,7 @@ newtype StreamIdBase = StreamIdBase {fromStreamIdBase :: Int}
 data Concurrency = Concurrency
     { currentStream :: StreamId
     , maxStreams :: StreamIdBase
-    }
+    } deriving (Show)
 
 newConcurrency :: Role -> Direction -> Int -> Concurrency
 newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
