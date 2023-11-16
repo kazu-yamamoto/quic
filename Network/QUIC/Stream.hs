@@ -5,8 +5,6 @@ module Network.QUIC.Stream (
     streamConnection,
     newStream,
     TxStreamData (..),
-    Flow (..),
-    defaultFlow,
     StreamState (..),
     RecvStreamQ (..),
     RxStreamData (..),
@@ -24,13 +22,8 @@ module Network.QUIC.Stream (
     readStreamFlowTx,
     addTxStreamData,
     setTxMaxStreamData,
-    readStreamFlowRx,
-    addRxStreamData,
-    setRxMaxStreamData,
-    addRxMaxStreamData,
     getRxMaxStreamData,
-    getRxStreamWindow,
-    flowWindow,
+    updateStreamFlowRx,
 
     -- * Reass
     takeRecvStreamQwithSize,

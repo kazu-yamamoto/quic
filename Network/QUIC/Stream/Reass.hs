@@ -100,7 +100,11 @@ putRxStreamData s rx@(RxStreamData _ off len _) = do
         then return OverLimit
         else do
             dup <- tryReassemble s rx put putFin
-            return $ if dup then Duplicated else Reassembled
+            if dup
+                then return Duplicated
+                else do
+                    ok <- checkRxMaxStreamData s len
+                    if ok then return Reassembled else return OverLimit
   where
     put "" = return ()
     put d = putRecvStreamQ s d

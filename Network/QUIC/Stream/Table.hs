@@ -54,9 +54,9 @@ toCryptoStreamId RTT1Level = rtt1CryptoStreamId
 
 insertCryptoStreams :: Connection -> StreamTable -> IO StreamTable
 insertCryptoStreams conn stbl = do
-    strm1 <- newStream conn initialCryptoStreamId
-    strm2 <- newStream conn handshakeCryptoStreamId
-    strm3 <- newStream conn rtt1CryptoStreamId
+    strm1 <- newStream conn initialCryptoStreamId 0 0
+    strm2 <- newStream conn handshakeCryptoStreamId 0 0
+    strm3 <- newStream conn rtt1CryptoStreamId 0 0
     return $
         insertStream initialCryptoStreamId strm1 $
             insertStream handshakeCryptoStreamId strm2 $

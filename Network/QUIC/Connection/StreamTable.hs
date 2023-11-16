@@ -31,18 +31,20 @@ findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
 
 addStream :: Connection -> StreamId -> IO Stream
 addStream conn@Connection{..} sid = do
-    strm <- newStream conn sid
-    if isClient conn
-        then do
-            let clientParams = getMyParameters conn
-            setRxMaxStreamData strm $ clientInitial sid clientParams
-            serverParams <- getPeerParameters conn
-            setTxMaxStreamData strm $ serverInitial sid serverParams
-        else do
-            let serverParams = getMyParameters conn
-            setRxMaxStreamData strm $ serverInitial sid serverParams
-            clientParams <- getPeerParameters conn
-            setTxMaxStreamData strm $ clientInitial sid clientParams
+    strm <-
+        if isClient conn
+            then do
+                serverParams <- getPeerParameters conn
+                let txLim = serverInitial sid serverParams
+                let clientParams = getMyParameters conn
+                    rxLim = clientInitial sid clientParams
+                newStream conn sid txLim rxLim
+            else do
+                clientParams <- getPeerParameters conn
+                let txLim = clientInitial sid clientParams
+                    serverParams = getMyParameters conn
+                    rxLim = serverInitial sid serverParams
+                newStream conn sid txLim rxLim
     atomicModifyIORef'' streamTable $ insertStream sid strm
     return strm
 

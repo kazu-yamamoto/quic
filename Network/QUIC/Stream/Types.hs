@@ -4,9 +4,6 @@ module Network.QUIC.Stream.Types (
     Stream (..),
     newStream,
     TxStreamData (..),
-    Flow (..),
-    defaultFlow,
-    flowWindow,
     StreamState (..),
     RecvStreamQ (..),
     RxStreamData (..),
@@ -16,6 +13,7 @@ module Network.QUIC.Stream.Types (
 ) where
 
 import qualified Data.ByteString as BS
+import Network.Control
 import UnliftIO.Concurrent
 import UnliftIO.STM
 
@@ -35,8 +33,8 @@ data Stream = Stream
     , streamConnection :: Connection
     , -- "counter" is equivalent to "offset".
       -- It is duplicated but used for API level flow control.
-      streamFlowTx :: TVar Flow -- counter, maxDax
-    , streamFlowRx :: IORef Flow -- counter, maxDax
+      streamFlowTx :: TVar TxFlow -- counter, maxDax
+    , streamFlowRx :: IORef RxFlow -- counter, maxDax
     , streamStateTx :: IORef StreamState -- offset, fin
     , streamStateRx :: IORef StreamState -- offset, fin
     , streamRecvQ :: RecvStreamQ -- input bytestring
@@ -47,11 +45,11 @@ data Stream = Stream
 instance Show Stream where
     show s = show $ streamId s
 
-newStream :: Connection -> StreamId -> IO Stream
-newStream conn sid =
+newStream :: Connection -> Int -> Int -> StreamId -> IO Stream
+newStream conn sid txLim rxLim =
     Stream sid conn
-        <$> newTVarIO defaultFlow
-        <*> newIORef defaultFlow
+        <$> newTVarIO (newTxFlow txLim)
+        <*> newIORef (newRxFlow rxLim)
         <*> newIORef emptyStreamState
         <*> newIORef emptyStreamState
         <*> newRecvStreamQ
@@ -86,20 +84,6 @@ instance Frag RxStreamData where
             bs' = BS.drop n bs
             len' = len - n
          in RxStreamData bs' off' len' fin
-
-----------------------------------------------------------------
-
-data Flow = Flow
-    { flowData :: Int
-    , flowMaxData :: Int
-    }
-    deriving (Eq, Show)
-
-defaultFlow :: Flow
-defaultFlow = Flow 0 0
-
-flowWindow :: Flow -> Int
-flowWindow Flow{..} = flowMaxData - flowData
 
 ----------------------------------------------------------------
 

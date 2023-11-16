@@ -3,13 +3,13 @@
 module Network.QUIC.IO where
 
 import qualified Data.ByteString as BS
+import Network.Control
 import qualified UnliftIO.Exception as E
 import UnliftIO.STM
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Imports
-import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
@@ -108,8 +108,8 @@ checkBlocked s len wait = atomically $ do
     let conn = streamConnection s
     strmFlow <- readStreamFlowTx s
     connFlow <- readConnectionFlowTx conn
-    let strmWindow = flowWindow strmFlow
-        connWindow = flowWindow connFlow
+    let strmWindow = txFlowWindow strmFlow
+        connWindow = txFlowWindow connFlow
         minFlow = min strmWindow connWindow
         n = min len minFlow
     when wait $ checkSTM (n > 0)
@@ -119,9 +119,9 @@ checkBlocked s len wait = atomically $ do
             let cs = len > strmWindow
                 cw = len > connWindow
                 blocked
-                    | cs && cw = BothBlocked s (flowMaxData strmFlow) (flowMaxData connFlow)
-                    | cs = StrmBlocked s (flowMaxData strmFlow)
-                    | otherwise = ConnBlocked (flowMaxData connFlow)
+                    | cs && cw = BothBlocked s (txfLimit strmFlow) (txfLimit connFlow)
+                    | cs = StrmBlocked s (txfLimit strmFlow)
+                    | otherwise = ConnBlocked (txfLimit connFlow)
             return $ Left blocked
 
 ----------------------------------------------------------------
@@ -185,23 +185,17 @@ recvStream :: Stream -> Int -> IO ByteString
 recvStream s n = do
     bs <- takeRecvStreamQwithSize s n
     let len = BS.length bs
+        sid = streamId s
         conn = streamConnection s
-    addRxStreamData s len
-    addRxData conn len
-    window <- getRxStreamWindow s
-    let sid = streamId s
-        initialWindow = initialRxMaxStreamData conn sid
     -- FLOW CONTROL: MAX_STREAM_DATA: recv: announcing my limit properly
-    when (window <= (initialWindow !>>. 1)) $ do
-        newMax <- addRxMaxStreamData s initialWindow
+    mxs <- updateStreamFlowRx s len
+    forM_ mxs $ \newMax -> do
         sendFrames conn RTT1Level [MaxStreamData sid newMax]
         fire conn (Microseconds 50000) $
             sendFrames conn RTT1Level [MaxStreamData sid newMax]
     -- FLOW CONTROL: MAX_DATA: recv: announcing my limit properly
-    cwindow <- getRxDataWindow conn
-    let cinitialWindow = initialMaxData $ getMyParameters conn
-    when (cwindow <= (cinitialWindow !>>. 1)) $ do
-        newMax <- addRxMaxData conn cinitialWindow
+    mxc <- updateFlowRx conn len
+    forM_ mxc $ \newMax -> do
         sendFrames conn RTT1Level [MaxData newMax]
         fire conn (Microseconds 50000) $
             sendFrames conn RTT1Level [MaxData newMax]

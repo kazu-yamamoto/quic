@@ -11,14 +11,9 @@ module Network.QUIC.Connection.State (
     waitEstablished,
     readConnectionFlowTx,
     addTxData,
-    getTxData,
     setTxMaxData,
-    getTxMaxData,
-    addRxData,
-    getRxData,
-    addRxMaxData,
     getRxMaxData,
-    getRxDataWindow,
+    updateFlowRx,
     checkRxMaxData,
     addTxBytes,
     getTxBytes,
@@ -29,13 +24,13 @@ module Network.QUIC.Connection.State (
     checkAntiAmplificationFree,
 ) where
 
+import Network.Control
 import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Recovery
-import Network.QUIC.Stream
 
 ----------------------------------------------------------------
 
@@ -84,7 +79,7 @@ waitEstablished Connection{..} = atomically $ do
 
 ----------------------------------------------------------------
 
-readConnectionFlowTx :: Connection -> STM Flow
+readConnectionFlowTx :: Connection -> STM TxFlow
 readConnectionFlowTx Connection{..} = readTVar flowTx
 
 ----------------------------------------------------------------
@@ -92,55 +87,27 @@ readConnectionFlowTx Connection{..} = readTVar flowTx
 addTxData :: Connection -> Int -> STM ()
 addTxData Connection{..} n = modifyTVar' flowTx add
   where
-    add flow = flow{flowData = flowData flow + n}
-
-getTxData :: Connection -> IO Int
-getTxData Connection{..} = atomically $ flowData <$> readTVar flowTx
+    add flow = flow{txfSent = txfSent flow + n}
 
 setTxMaxData :: Connection -> Int -> IO ()
 setTxMaxData Connection{..} n = atomically $ modifyTVar' flowTx set
   where
     set flow
-        | flowMaxData flow < n = flow{flowMaxData = n}
+        | txfLimit flow < n = flow{txfLimit = n}
         | otherwise = flow
 
-getTxMaxData :: Connection -> STM Int
-getTxMaxData Connection{..} = flowMaxData <$> readTVar flowTx
-
 ----------------------------------------------------------------
-
-addRxData :: Connection -> Int -> IO ()
-addRxData Connection{..} n = atomicModifyIORef'' flowRx add
-  where
-    add flow = flow{flowData = flowData flow + n}
-
-getRxData :: Connection -> IO Int
-getRxData Connection{..} = flowData <$> readIORef flowRx
-
-addRxMaxData :: Connection -> Int -> IO Int
-addRxMaxData Connection{..} n = atomicModifyIORef' flowRx add
-  where
-    add flow = (flow{flowMaxData = m}, m)
-      where
-        m = flowMaxData flow + n
 
 getRxMaxData :: Connection -> IO Int
-getRxMaxData Connection{..} = flowMaxData <$> readIORef flowRx
+getRxMaxData Connection{..} = rxfLimit <$> readIORef flowRx
 
-getRxDataWindow :: Connection -> IO Int
-getRxDataWindow Connection{..} = flowWindow <$> readIORef flowRx
-
-----------------------------------------------------------------
+updateFlowRx :: Connection -> Int -> IO (Maybe Int)
+updateFlowRx Connection{..} consumed =
+    atomicModifyIORef' flowRx $ maybeOpenRxWindow consumed FCTMaxData
 
 checkRxMaxData :: Connection -> Int -> IO Bool
-checkRxMaxData Connection{..} len = do
-    received <- readIORef flowBytesRx
-    maxData <- flowMaxData <$> readIORef flowRx
-    if received + len < maxData
-        then do
-            modifyIORef' flowBytesRx (+ len)
-            return True
-        else return False
+checkRxMaxData Connection{..} len =
+    atomicModifyIORef' flowRx $ checkRxLimit len
 
 ----------------------------------------------------------------
 

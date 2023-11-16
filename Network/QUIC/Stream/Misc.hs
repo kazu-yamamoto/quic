@@ -12,14 +12,13 @@ module Network.QUIC.Stream.Misc (
     readStreamFlowTx,
     addTxStreamData,
     setTxMaxStreamData,
-    readStreamFlowRx,
-    addRxStreamData,
-    setRxMaxStreamData,
-    addRxMaxStreamData,
+    --
     getRxMaxStreamData,
-    getRxStreamWindow,
+    updateStreamFlowRx,
+    checkRxMaxStreamData,
 ) where
 
+import Network.Control
 import UnliftIO.STM
 
 import Network.QUIC.Imports
@@ -66,7 +65,7 @@ setRxStreamClosed strm@Stream{..} = do
 
 ----------------------------------------------------------------
 
-readStreamFlowTx :: Stream -> STM Flow
+readStreamFlowTx :: Stream -> STM TxFlow
 readStreamFlowTx Stream{..} = readTVar streamFlowTx
 
 ----------------------------------------------------------------
@@ -74,38 +73,24 @@ readStreamFlowTx Stream{..} = readTVar streamFlowTx
 addTxStreamData :: Stream -> Int -> STM ()
 addTxStreamData Stream{..} n = modifyTVar' streamFlowTx add
   where
-    add flow = flow{flowData = flowData flow + n}
+    add flow = flow{txfSent = txfSent flow + n}
 
 setTxMaxStreamData :: Stream -> Int -> IO ()
 setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
   where
     set flow
-        | flowMaxData flow < n = flow{flowMaxData = n}
+        | txfLimit flow < n = flow{txfLimit = n}
         | otherwise = flow
 
 ----------------------------------------------------------------
 
-addRxStreamData :: Stream -> Int -> IO ()
-addRxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx add
-  where
-    add flow = flow{flowData = flowData flow + n}
-
-setRxMaxStreamData :: Stream -> Int -> IO ()
-setRxMaxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx $
-    \flow -> flow{flowMaxData = n}
-
-addRxMaxStreamData :: Stream -> Int -> IO Int
-addRxMaxStreamData Stream{..} n = atomicModifyIORef' streamFlowRx add
-  where
-    add flow = (flow{flowMaxData = m}, m)
-      where
-        m = flowMaxData flow + n
-
 getRxMaxStreamData :: Stream -> IO Int
-getRxMaxStreamData Stream{..} = flowMaxData <$> readIORef streamFlowRx
+getRxMaxStreamData Stream{..} = rxfLimit <$> readIORef streamFlowRx
 
-getRxStreamWindow :: Stream -> IO Int
-getRxStreamWindow Stream{..} = flowWindow <$> readIORef streamFlowRx
+updateStreamFlowRx :: Stream -> Int -> IO (Maybe Int)
+updateStreamFlowRx Stream{..} consumed =
+    atomicModifyIORef' streamFlowRx $ maybeOpenRxWindow consumed FCTMaxData
 
-readStreamFlowRx :: Stream -> IO Flow
-readStreamFlowRx Stream{..} = readIORef streamFlowRx
+checkRxMaxStreamData :: Stream -> Int -> IO Bool
+checkRxMaxStreamData Stream{..} len =
+    atomicModifyIORef' streamFlowRx $ checkRxLimit len

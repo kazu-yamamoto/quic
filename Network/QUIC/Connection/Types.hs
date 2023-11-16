@@ -15,7 +15,7 @@ import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
-import Network.Control (Rate, newRate)
+import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
 import Network.TLS.QUIC
 import Network.UDP (UDPSocket)
 import UnliftIO.Concurrent
@@ -228,9 +228,8 @@ data Connection = Connection
     , myUniStreamId :: TVar Concurrency -- C:2 S:3
     , peerStreamId :: IORef Concurrency -- C:1 S:0
     , peerUniStreamId :: IORef Concurrency -- C:3 S:2
-    , flowTx :: TVar Flow
-    , flowRx :: IORef Flow
-    , flowBytesRx :: IORef Int
+    , flowTx :: TVar TxFlow
+    , flowRx :: IORef RxFlow
     , migrationState :: TVar MigrationState
     , minIdleTimeout :: IORef Microseconds
     , bytesTx :: TVar Int -- TVar for anti amplification
@@ -329,9 +328,8 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newTVarIO (newConcurrency rl Unidirectional 0)
         <*> newIORef peerConcurrency
         <*> newIORef peerUniConcurrency
-        <*> newTVarIO defaultFlow
-        <*> newIORef defaultFlow{flowMaxData = initialMaxData myparams}
-        <*> newIORef 0
+        <*> newTVarIO (newTxFlow 0) -- limit is set in Handshake
+        <*> newIORef (newRxFlow $ initialMaxData myparams)
         <*> newTVarIO NonMigration
         <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
         <*> newTVarIO 0
