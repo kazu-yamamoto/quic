@@ -108,8 +108,8 @@ checkBlocked s len wait = atomically $ do
     let conn = streamConnection s
     strmFlow <- readStreamFlowTx s
     connFlow <- readConnectionFlowTx conn
-    let strmWindow = txFlowWindow strmFlow
-        connWindow = txFlowWindow connFlow
+    let strmWindow = txWindowSize strmFlow
+        connWindow = txWindowSize connFlow
         minFlow = min strmWindow connWindow
         n = min len minFlow
     when wait $ checkSTM (n > 0)
