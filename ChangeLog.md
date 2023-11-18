@@ -1,3 +1,9 @@
+## 0.1.9
+
+- Using the network-control package.
+- Rate control for some frames.
+- Announcing MaxStreams correctly.
+
 ## 0.1.8
 
 - Announcing MaxStreams properly.
