@@ -16,6 +16,7 @@ module Network.QUIC.Parameters (
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
+import Network.Control
 import System.IO.Unsafe (unsafeDupablePerformIO)
 
 import Network.QUIC.Imports
@@ -286,16 +287,19 @@ decodeParameterList bs = unsafeDupablePerformIO $ withReadBuffer bs (`go` id)
                 go rbuf (build . ((Key key, val) :))
 
 -- | An example parameters obsoleted in the near future.
+--
+-- >>> defaultParameters
+-- Parameters {originalDestinationConnectionId = Nothing, maxIdleTimeout = 30000, statelessResetToken = Nothing, maxUdpPayloadSize = 2048, initialMaxData = 1048576, initialMaxStreamDataBidiLocal = 262144, initialMaxStreamDataBidiRemote = 262144, initialMaxStreamDataUni = 262144, initialMaxStreamsBidi = 64, initialMaxStreamsUni = 3, ackDelayExponent = 3, maxAckDelay = 25, disableActiveMigration = False, preferredAddress = Nothing, activeConnectionIdLimit = 3, initialSourceConnectionId = Nothing, retrySourceConnectionId = Nothing, grease = Nothing, greaseQuicBit = True, versionInformation = Nothing}
 defaultParameters :: Parameters
 defaultParameters =
     baseParameters
         { maxIdleTimeout = microToMilli idleTimeout -- 30000
         , maxUdpPayloadSize = maximumUdpPayloadSize -- 2048
-        , initialMaxData = 1048576
-        , initialMaxStreamDataBidiLocal = 262144
-        , initialMaxStreamDataBidiRemote = 262144
-        , initialMaxStreamDataUni = 262144
-        , initialMaxStreamsBidi = 100
+        , initialMaxData = defaultMaxData -- !M
+        , initialMaxStreamDataBidiLocal = defaultMaxStreamData -- 256K
+        , initialMaxStreamDataBidiRemote = defaultMaxStreamData -- 256K
+        , initialMaxStreamDataUni = defaultMaxStreamData -- 256K
+        , initialMaxStreamsBidi = defaultMaxStreams -- 64
         , initialMaxStreamsUni = 3
         , activeConnectionIdLimit = 3
         , greaseQuicBit = True
