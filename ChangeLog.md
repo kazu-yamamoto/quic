@@ -1,3 +1,7 @@
+## 0.1.10
+
+- Setting proper upper boundaries for the dependencies
+
 ## 0.1.9
 
 - Using the network-control package.
