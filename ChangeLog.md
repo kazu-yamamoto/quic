@@ -1,5 +1,9 @@
 ## 0.1.11
 
+- Rescuing GHC 8.10, 9.0 and 9.2.
+
+## 0.1.11
+
 - Adding possibleMyStreams.
 
 ## 0.1.10
