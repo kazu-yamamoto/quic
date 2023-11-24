@@ -1,3 +1,7 @@
+## 0.1.11
+
+- Adding possibleMyStreams.
+
 ## 0.1.10
 
 - Setting proper upper boundaries for the dependencies
