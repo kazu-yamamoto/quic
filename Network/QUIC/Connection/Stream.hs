@@ -32,7 +32,7 @@ possibleMyStreams :: Connection -> IO Int
 possibleMyStreams Connection{..} = do
     Concurrency{..} <- readTVarIO myStreamId
     let StreamIdBase base = maxStreams
-    return (base - (currentStream .>>. 2))
+    return (base - (currentStream !>>. 2))
 
 waitMyNewStreamId :: Connection -> IO StreamId
 waitMyNewStreamId Connection{..} = get myStreamId
