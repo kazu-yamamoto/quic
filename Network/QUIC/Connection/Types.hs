@@ -100,7 +100,7 @@ newCIDDB cid =
 data MigrationState
     = NonMigration
     | MigrationStarted
-    | SendChallenge [PathData]
+    | SendChallenge PathData
     | RecvResponse
     deriving (Eq, Show)
 

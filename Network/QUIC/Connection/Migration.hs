@@ -273,21 +273,21 @@ isStatelessRestTokenValid Connection{..} cid srt = srtCheck <$> readTVarIO peerC
 validatePath :: Connection -> Maybe CIDInfo -> IO ()
 validatePath conn Nothing = do
     pdat <- newPathData
-    setChallenges conn [pdat]
+    setChallenges conn pdat
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat] $ return ()
     waitResponse conn
 validatePath conn (Just (CIDInfo retiredSeqNum _ _)) = do
     pdat <- newPathData
-    setChallenges conn [pdat]
+    setChallenges conn pdat
     putOutput conn $
         OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum] $
             return ()
     waitResponse conn
     retirePeerCID conn retiredSeqNum
 
-setChallenges :: Connection -> [PathData] -> IO ()
-setChallenges Connection{..} pdats =
-    atomically $ writeTVar migrationState $ SendChallenge pdats
+setChallenges :: Connection -> PathData -> IO ()
+setChallenges Connection{..} pdat =
+    atomically $ writeTVar migrationState $ SendChallenge pdat
 
 setMigrationStarted :: Connection -> IO ()
 setMigrationStarted Connection{..} =
@@ -311,6 +311,6 @@ checkResponse :: Connection -> PathData -> IO ()
 checkResponse Connection{..} pdat = do
     state <- readTVarIO migrationState
     case state of
-        SendChallenge pdats
-            | pdat `elem` pdats -> atomically $ writeTVar migrationState RecvResponse
+        SendChallenge pdat'
+            | pdat == pdat' -> atomically $ writeTVar migrationState RecvResponse
         _ -> return ()
