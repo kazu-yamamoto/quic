@@ -4,6 +4,7 @@
 
 module Network.QUIC.Connection.Stream (
     getMyStreamId,
+    possibleMyStreams,
     waitMyNewStreamId,
     waitMyNewUniStreamId,
     setTxMaxStreams,
@@ -26,6 +27,12 @@ getMyStreamId :: Connection -> IO Int
 getMyStreamId Connection{..} = do
     next <- currentStream <$> readTVarIO myStreamId
     return $ next - 4
+
+possibleMyStreams :: Connection -> IO Int
+possibleMyStreams Connection{..} = do
+    Concurrency{..} <- readTVarIO myStreamId
+    let StreamIdBase base = maxStreams
+    return (base - (currentStream .>>. 2))
 
 waitMyNewStreamId :: Connection -> IO StreamId
 waitMyNewStreamId Connection{..} = get myStreamId
