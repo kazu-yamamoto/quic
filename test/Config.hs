@@ -37,6 +37,8 @@ makeTestServerConfig = do
         testServerConfig
             { scCredentials = credentials
             , scALPN = Just chooseALPN
+            , scDebugLog = Just "tmp/qlog/"
+            , scQLog = Just "tmp/qlog/"
             }
 
 testServerConfig :: ServerConfig
@@ -60,6 +62,8 @@ makeTestServerConfigR = do
         testServerConfigR
             { scCredentials = credentials
             , scALPN = Just chooseALPN
+            , scDebugLog = Just "tmp/qlog/"
+            , scQLog = Just "tmp/qlog/"
             }
 
 testServerConfigR :: ServerConfig
@@ -84,6 +88,8 @@ testClientConfig =
             (ccParameters defaultClientConfig)
                 { maxIdleTimeout = Milliseconds 4000
                 }
+        , ccQLog = Just "tmp/qlog/client/"
+        , ccKeyLog = \msg -> appendFile "/Users/kazu/tls_key.log" (msg ++ "\n")
         }
 
 testClientConfigR :: ClientConfig
@@ -97,13 +103,22 @@ testClientConfigR =
             (ccParameters defaultClientConfig)
                 { maxIdleTimeout = Milliseconds 4000
                 }
+        , ccQLog = Just "tmp/qlog/client/"
         }
 
 setServerQlog :: ServerConfig -> ServerConfig
-setServerQlog sc = sc
+setServerQlog sc =
+    sc
+        { scDebugLog = Just "tmp/qlog/"
+        , scQLog = Just "tmp/qlog/"
+        }
 
 setClientQlog :: ClientConfig -> ClientConfig
-setClientQlog cc = cc
+setClientQlog cc =
+    cc
+        { ccDebugLog = True
+        , ccQLog = Just "tmp/qlog/client/"
+        }
 
 data Scenario
     = Randomly Int
