@@ -33,7 +33,7 @@ dirDebugLogger Nothing _ = do
     return (dLog, clean)
 dirDebugLogger (Just dir) cid = do
     let file = dir </> (show cid <> ".txt")
-    (fastlogger, clean) <- newFastLogger1 (LogFileNoRotate file 4096)
+    (fastlogger, clean) <- newFastLogger1 (LogFileNoRotate file 409600)
     let dLog msg = do
             fastlogger (toLogStr msg <> "\n")
             stdoutLogger msg
