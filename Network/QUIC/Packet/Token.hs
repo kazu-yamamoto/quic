@@ -7,11 +7,10 @@ module Network.QUIC.Packet.Token (
     decryptToken,
 ) where
 
+import qualified UnliftIO.Exception as E
 import qualified Crypto.Token as CT
 import Data.UnixTime
 import Foreign.C.Types
-import Foreign.Ptr
-import Foreign.Storable
 import Network.ByteOrder
 
 import Network.QUIC.Imports
@@ -43,42 +42,23 @@ generateRetryToken ver l r o = do
 ----------------------------------------------------------------
 
 encryptToken :: CT.TokenManager -> CryptoToken -> IO Token
-encryptToken = CT.encryptToken
+encryptToken mgr ct = encodeCryptoToken ct >>= CT.encryptToken mgr
 
 decryptToken :: CT.TokenManager -> Token -> IO (Maybe CryptoToken)
-decryptToken = CT.decryptToken
+decryptToken mgr token = do
+    mx <- CT.decryptToken mgr token
+    case mx of
+      Nothing -> return Nothing
+      Just x -> decodeCryptoToken x
 
 ----------------------------------------------------------------
 
 cryptoTokenSize :: Int
 cryptoTokenSize = 76 -- 4 + 8 + 1 + (1 + 20) * 3
 
--- length includes its field
-instance Storable CryptoToken where
-    sizeOf ~_ = cryptoTokenSize
-    alignment ~_ = 4
-    peek ptr = do
-        rbuf <- newReadBuffer (castPtr ptr) cryptoTokenSize
-        ver <- Version <$> read32 rbuf
-        s <- CTime . fromIntegral <$> read64 rbuf
-        let tim = UnixTime s 0
-        typ <- read8 rbuf
-        case typ of
-            0 -> return $ CryptoToken ver tim Nothing
-            _ -> do
-                l <- pick rbuf
-                r <- pick rbuf
-                o <- pick rbuf
-                return $ CryptoToken ver tim $ Just (l, r, o)
-      where
-        pick rbuf = do
-            xlen0 <- fromIntegral <$> read8 rbuf
-            let xlen = min xlen0 20
-            x <- makeCID <$> extractShortByteString rbuf xlen
-            ff rbuf (20 - xlen)
-            return x
-    poke ptr (CryptoToken (Version ver) tim mcids) = do
-        wbuf <- newWriteBuffer (castPtr ptr) cryptoTokenSize
+encodeCryptoToken :: CryptoToken -> IO Token
+encodeCryptoToken (CryptoToken (Version ver) tim mcids) =
+    withWriteBuffer cryptoTokenSize $ \wbuf -> do
         write32 wbuf ver
         let CTime s = utSeconds tim
         write64 wbuf $ fromIntegral s
@@ -95,3 +75,31 @@ instance Storable CryptoToken where
             write8 wbuf xlen
             copyShortByteString wbuf xcid
             ff wbuf (20 - fromIntegral xlen)
+
+decodeCryptoToken :: Token -> IO (Maybe CryptoToken)
+decodeCryptoToken token = do
+    ex <- E.try $ decodeCryptoToken' token
+    case ex of
+      Left (E.SomeException _) -> return Nothing
+      Right x -> return $ Just x
+
+decodeCryptoToken' :: ByteString -> IO CryptoToken
+decodeCryptoToken' token = withReadBuffer token $ \rbuf -> do
+    ver <- Version <$> read32 rbuf
+    s <- CTime . fromIntegral <$> read64 rbuf
+    let tim = UnixTime s 0
+    typ <- read8 rbuf
+    case typ of
+        0 -> return $ CryptoToken ver tim Nothing
+        _ -> do
+            l <- pick rbuf
+            r <- pick rbuf
+            o <- pick rbuf
+            return $ CryptoToken ver tim $ Just (l, r, o)
+  where
+    pick rbuf = do
+        xlen0 <- fromIntegral <$> read8 rbuf
+        let xlen = min xlen0 20
+        x <- makeCID <$> extractShortByteString rbuf xlen
+        ff rbuf (20 - xlen)
+        return x
