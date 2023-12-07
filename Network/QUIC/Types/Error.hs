@@ -84,9 +84,7 @@ instance Show TransportError where
     show (TransportError   0x10) = "NoViablePath"
     show (TransportError   0x11) = "VersionNegotiationError"
     show (TransportError      x)
-      | 0x100 <= x && x <= 0x01ff = case toAlertDescription $ fromIntegral (x - 0x100) of
-          Just e  -> "TLS " ++ show e
-          Nothing -> "TLS Alert " ++ show x
+      | 0x100 <= x && x <= 0x01ff = "TLS" ++ show (toAlertDescription $ fromIntegral (x - 0x100))
       | otherwise = "TransportError " ++ printf "%x" x
 {- FOURMOLU_ENABLE -}
 

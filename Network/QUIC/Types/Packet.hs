@@ -4,7 +4,7 @@
 module Network.QUIC.Types.Packet where
 
 import Data.Ix
-import Network.TLS.QUIC (ExtensionID, extensionID_QuicTransportParameters)
+import Network.TLS.QUIC (ExtensionID(ExtensionID, EID_QuicTransportParameters))
 import Network.UDP
 import Text.Printf
 
@@ -60,9 +60,9 @@ brokenVersionInfo = VersionInfo Negotiation []
 ----------------------------------------------------------------
 
 extensionIDForTtransportParameter :: Version -> ExtensionID
-extensionIDForTtransportParameter Version1 = extensionID_QuicTransportParameters
-extensionIDForTtransportParameter Version2 = extensionID_QuicTransportParameters
-extensionIDForTtransportParameter _ = 0xffa5
+extensionIDForTtransportParameter Version1 = EID_QuicTransportParameters
+extensionIDForTtransportParameter Version2 = EID_QuicTransportParameters
+extensionIDForTtransportParameter _ = ExtensionID 0xffa5
 
 ----------------------------------------------------------------
 
