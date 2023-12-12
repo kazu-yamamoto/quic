@@ -1,3 +1,11 @@
+## 0.1.13
+
+- Garding the path_request attack.
+
+## 0.1.12
+
+- Fixing build.
+
 ## 0.1.11
 
 - Rescuing GHC 8.10, 9.0 and 9.2.
