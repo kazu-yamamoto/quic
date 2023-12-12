@@ -3,6 +3,7 @@ module Network.QUIC.Connection.Queue where
 import UnliftIO.STM
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Imports
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
@@ -29,6 +30,15 @@ tryPeekOutput conn = atomically $ tryPeekTQueue (outputQ conn)
 
 putOutput :: Connection -> Output -> IO ()
 putOutput conn out = atomically $ writeTQueue (outputQ conn) out
+
+putOutput1 :: Connection -> Output -> IO ()
+putOutput1 conn out = atomically $ do
+    ok <- isEmptyTBQueue (outputQ1 conn)
+    -- unless ok, the frames are intentionally dropped.
+    when ok $ writeTBQueue (outputQ1 conn) out
+
+takeOutput1STM :: Connection -> STM Output
+takeOutput1STM conn = readTBQueue (outputQ1 conn)
 
 ----------------------------------------------------------------
 

@@ -381,7 +381,7 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
                 unregister <- getUnregister conn
                 unregister cid
 processFrame conn RTT1Level (PathChallenge dat) =
-    sendFrames conn RTT1Level [PathResponse dat]
+    sendFrames1 conn RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
     -- RTT0Level falls intentionally
     checkResponse conn dat
