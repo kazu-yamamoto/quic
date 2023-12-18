@@ -23,6 +23,7 @@ sessionManager establish =
         , sessionResume = \_ -> return Nothing
         , sessionResumeOnlyOnce = \_ -> return Nothing
         , sessionInvalidate = \_ -> return ()
+        , sessionUseTicket = False
         }
 
 clientHandshaker

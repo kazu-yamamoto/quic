@@ -176,9 +176,10 @@ sessionManager ref =
         , sessionResume = resume
         , sessionResumeOnlyOnce = resume
         , sessionInvalidate = \_ -> return ()
+        , sessionUseTicket = False
         }
   where
-    establish sid sdata = writeIORef ref $ Just (sid, sdata)
+    establish sid sdata = writeIORef ref (Just (sid, sdata)) >> return Nothing
     resume sid = do
         mx <- readIORef ref
         case mx of
