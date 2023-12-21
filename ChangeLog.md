@@ -1,3 +1,7 @@
+## 0.1.14
+
+- Using crypto-token v0.1
+
 ## 0.1.13
 
 - Garding the path_request attack.
