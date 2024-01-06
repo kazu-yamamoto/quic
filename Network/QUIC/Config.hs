@@ -3,6 +3,7 @@
 
 module Network.QUIC.Config where
 
+import Data.Default.Class
 import Data.IP
 import Network.Socket
 import Network.TLS hiding (Hooks, HostName, Version)
@@ -57,6 +58,7 @@ data ClientConfig = ClientConfig
     , ccCredentials :: Credentials
     -- ^ TLS credentials.
     , ccHooks :: Hooks
+    , ccTlsHooks :: ClientHooks
     , ccUse0RTT :: Bool
     -- ^ Use 0-RTT on the 2nd connection if possible.
     -- client original
@@ -89,6 +91,7 @@ defaultClientConfig =
         , ccQLog = Nothing
         , ccCredentials = mempty
         , ccHooks = defaultHooks
+        , ccTlsHooks = def
         , ccUse0RTT = False
         , -- client original
           ccServerName = "127.0.0.1"
@@ -117,6 +120,7 @@ data ServerConfig = ServerConfig
     , scCredentials :: Credentials
     -- ^ Server certificate information.
     , scHooks :: Hooks
+    , scTlsHooks :: ServerHooks
     , scUse0RTT :: Bool
     -- ^ Use 0-RTT on the 2nd connection if possible.
     -- server original
@@ -143,6 +147,7 @@ defaultServerConfig =
         , scQLog = Nothing
         , scCredentials = mempty
         , scHooks = defaultHooks
+        , scTlsHooks = def
         , scUse0RTT = False
         , -- server original
           scAddresses = [("0.0.0.0", 4433), ("::", 4433)]

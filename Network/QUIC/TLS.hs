@@ -6,6 +6,7 @@ module Network.QUIC.TLS (
     serverHandshaker,
 ) where
 
+import Control.Applicative ((<|>))
 import Data.Default.Class
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
@@ -57,8 +58,8 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
             , sharedSessionManager = sessionManager establish
             }
     hook =
-        def
-            { onSuggestALPN = ccALPN ver
+        ccTlsHooks
+            { onSuggestALPN = (<|>) <$> ccALPN ver <*> onSuggestALPN ccTlsHooks
             }
     supported =
         defaultSupported
@@ -101,14 +102,15 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
             , sharedSessionManager = scSessionManager
             }
     hook =
-        def
+        scTlsHooks
             { onALPNClientSuggest = case scALPN of
-                Nothing -> Nothing
+                Nothing -> onALPNClientSuggest scTlsHooks
                 Just io -> Just $ io ver
             , onEncryptedExtensionsCreating = \exts0 -> do
+                exts0' <- onEncryptedExtensionsCreating scTlsHooks exts0
                 params <- getParams
                 let exts = convExt $ parametersToExtensionRaw ver $ convTP params
-                return $ exts ++ exts0
+                return $ exts ++ exts0'
             }
     supported =
         def
