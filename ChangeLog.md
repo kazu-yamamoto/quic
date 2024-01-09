@@ -1,3 +1,7 @@
+## 0.1.15
+
+- Support customizing ClientHooks and ServerHooks config from tls
+
 ## 0.1.14
 
 - Using crypto-token v0.1
