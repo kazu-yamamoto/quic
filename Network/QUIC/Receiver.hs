@@ -373,7 +373,7 @@ processFrame conn lvl (NewConnectionID cidInfo rpt) = do
         closeConnection FrameEncodingError "NEW_CONNECTION_ID parameter error"
     when (rpt >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
-        sendFrames conn RTT1Level $ map RetireConnectionID seqNums
+        sendFrames1 conn RTT1Level $ map RetireConnectionID seqNums
 processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     case mcidInfo of
