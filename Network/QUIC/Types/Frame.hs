@@ -107,9 +107,11 @@ inFlight ConnectionCloseApp{} = False
 inFlight _                    = True
 
 rateControled :: Frame -> Bool
-rateControled ResetStream{}   = True
-rateControled StopSending{}   = True
-rateControled PathChallenge{} = True
-rateControled PathResponse{}  = True
-rateControled _               = False
+rateControled ResetStream{}        = True
+rateControled StopSending{}        = True
+rateControled PathChallenge{}      = True
+rateControled PathResponse{}       = True
+rateControled NewConnectionID{}    = True
+rateControled RetireConnectionID{} = True
+rateControled _                    = False
 {- FOURMOLU_ENABLE -}
