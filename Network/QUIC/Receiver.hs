@@ -365,7 +365,9 @@ processFrame _conn lvl (StreamsBlocked _dir n) = do
 processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection ProtocolViolation "NEW_CONNECTION_ID in Initial or Handshake"
-    addPeerCID conn cidInfo
+    ok <- addPeerCID conn cidInfo
+    unless ok $
+        closeConnection ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
     let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
     when (cidlen < 1 || 20 < cidlen || rpt > cidInfoSeq cidInfo) $
         closeConnection FrameEncodingError "NEW_CONNECTION_ID parameter error"

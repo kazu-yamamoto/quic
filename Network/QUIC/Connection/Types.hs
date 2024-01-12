@@ -73,7 +73,6 @@ defaultServerRoleInfo =
         , certChain = Nothing
         }
 
--- fixme: limitation
 data CIDDB = CIDDB
     { usedCIDInfo :: CIDInfo
     , cidInfos :: IntMap CIDInfo

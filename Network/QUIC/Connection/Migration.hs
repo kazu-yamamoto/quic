@@ -30,9 +30,11 @@ import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import UnliftIO.STM
 
+import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Types
 
@@ -81,12 +83,19 @@ getNewMyCID Connection{..} = do
 ----------------------------------------------------------------
 
 -- | Receiving NewConnectionID
-addPeerCID :: Connection -> CIDInfo -> IO ()
-addPeerCID Connection{..} cidInfo = atomically $ do
-    db <- readTVar peerCIDDB
-    case Map.lookup (cidInfoCID cidInfo) (revInfos db) of
-        Nothing -> modifyTVar' peerCIDDB $ add cidInfo
-        Just _ -> return ()
+addPeerCID :: Connection -> CIDInfo -> IO Bool
+addPeerCID conn@Connection{..} cidInfo = do
+    lim <- activeConnectionIdLimit <$> getPeerParameters conn
+    atomically $ do
+        db <- readTVar peerCIDDB
+        let n = Map.size $ revInfos db
+        if n >= lim
+            then return False
+            else do
+                case Map.lookup (cidInfoCID cidInfo) (revInfos db) of
+                    Nothing -> modifyTVar' peerCIDDB $ add cidInfo
+                    Just _ -> return ()
+                return True
 
 shouldUpdatePeerCID :: Connection -> IO Bool
 shouldUpdatePeerCID Connection{..} =
