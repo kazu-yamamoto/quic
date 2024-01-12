@@ -255,7 +255,7 @@ processFrame conn lvl (StopSending sid err) = do
         Nothing -> do
             when (isInitiated conn sid) $
                 closeConnection StreamStateError "No such stream for STOP_SENDING"
-        Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
+        Just _strm -> sendFramesLim conn lvl [ResetStream sid err 0]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $
