@@ -217,7 +217,7 @@ data Connection = Connection
       inputQ :: InputQ
     , cryptoQ :: CryptoQ
     , outputQ :: OutputQ
-    , outputQ1 :: OutputQ1
+    , outputQLim :: OutputQLim
     , migrationQ :: MigrationQ
     , shared :: Shared
     , delayedAckCount :: IORef Int
@@ -417,7 +417,7 @@ data Output
 type InputQ = TQueue Input
 type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
-type OutputQ1 = TBQueue Output
+type OutputQLim = TBQueue Output
 type MigrationQ = TQueue ReceivedPacket
 
 ----------------------------------------------------------------

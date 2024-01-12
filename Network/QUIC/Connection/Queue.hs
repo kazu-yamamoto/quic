@@ -31,14 +31,17 @@ tryPeekOutput conn = atomically $ tryPeekTQueue (outputQ conn)
 putOutput :: Connection -> Output -> IO ()
 putOutput conn out = atomically $ writeTQueue (outputQ conn) out
 
-putOutput1 :: Connection -> Output -> IO ()
-putOutput1 conn out = atomically $ do
-    ok <- isEmptyTBQueue (outputQ1 conn)
+outputLimit :: Int
+outputLimit = 10
+
+putOutputLim :: Connection -> Output -> IO ()
+putOutputLim conn out = atomically $ do
+    len <- fromIntegral <$> lengthTBQueue (outputQLim conn)
     -- unless ok, the frames are intentionally dropped.
-    when ok $ writeTBQueue (outputQ1 conn) out
+    when (len < outputLimit) $ writeTBQueue (outputQLim conn) out
 
 takeOutput1STM :: Connection -> STM Output
-takeOutput1STM conn = readTBQueue (outputQ1 conn)
+takeOutput1STM conn = readTBQueue (outputQLim conn)
 
 ----------------------------------------------------------------
 
