@@ -1,10 +1,12 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 
 module Network.QUIC.Types.Packet where
 
 import Data.Ix
-import Network.TLS.QUIC (ExtensionID(ExtensionID, EID_QuicTransportParameters))
+import GHC.Generics
+import Network.TLS.QUIC (ExtensionID (EID_QuicTransportParameters, ExtensionID))
 import Network.UDP
 import Text.Printf
 
@@ -17,7 +19,7 @@ import Network.QUIC.Types.Time
 ----------------------------------------------------------------
 
 -- | QUIC version.
-newtype Version = Version Word32 deriving (Eq, Ord)
+newtype Version = Version Word32 deriving (Eq, Ord, Generic)
 
 {- FOURMOLU_DISABLE -}
 pattern Negotiation      :: Version
