@@ -94,6 +94,7 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
             , serverSupported = supported
             , serverDebug = debug
             , serverEarlyDataSize = if scUse0RTT then quicMaxEarlyDataSize else 0
+            , serverTicketLifetime = scTicketLifetime
             }
     convTP = onTransportParametersCreated scHooks
     convExt = onTLSExtensionCreated scHooks

@@ -59,11 +59,14 @@ data Dispatch = Dispatch {
   , acceptQ  :: AcceptQ
   }
 
-newDispatch :: IO Dispatch
-newDispatch = Dispatch <$> CT.spawnTokenManager CT.defaultConfig
-                       <*> newIORef emptyConnectionDict
-                       <*> newIORef emptyRecvQDict
-                       <*> newAcceptQ
+newDispatch :: ServerConfig -> IO Dispatch
+newDispatch ServerConfig{..} =
+    Dispatch <$> CT.spawnTokenManager conf
+             <*> newIORef emptyConnectionDict
+             <*> newIORef emptyRecvQDict
+             <*> newAcceptQ
+  where
+    conf = CT.defaultConfig { CT.tokenLifetime = scTicketLifetime }
 
 clearDispatch :: Dispatch -> IO ()
 clearDispatch d = CT.killTokenManager $ tokenMgr d
@@ -285,7 +288,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
     -- initial_source_connection_id       = S3   (dCID)  S2 in our server
     -- original_destination_connection_id = S1   (o)
     -- retry_source_connection_id         = S2   (dCID)
-    pushToAcceptRetried (CryptoToken _ _ (Just (_,_,o))) = do
+    pushToAcceptRetried (CryptoToken _ _ _ (Just (_,_,o))) = do
         let myAuthCIDs = defaultAuthCIDs {
                 initSrcCID  = Just dCID
               , origDstCID  = Just o
@@ -296,9 +299,9 @@ dispatch Dispatch{..} ServerConfig{..} logAction
               }
         pushToAcceptQ myAuthCIDs peerAuthCIDs o True
     pushToAcceptRetried _ = return ()
-    isRetryTokenValid (CryptoToken _tver etim (Just (l,r,_))) = do
+    isRetryTokenValid (CryptoToken _tver life etim (Just (l,r,_))) = do
         diff <- getElapsedTimeMicrosecond etim
-        return $ diff <= Microseconds 30000000 -- fixme
+        return $ diff <= Microseconds (fromIntegral life * 1000000)
               && dCID == l
               && sCID == r
 #if !defined(mingw32_HOST_OS)
@@ -309,7 +312,7 @@ dispatch Dispatch{..} ServerConfig{..} logAction
     isRetryTokenValid _ = return False
     sendRetry = do
         newdCID <- newCID
-        retryToken <- generateRetryToken peerVer newdCID sCID dCID
+        retryToken <- generateRetryToken peerVer scTicketLifetime newdCID sCID dCID
         mnewtoken <- timeout (Microseconds 100000) "sendRetry" $ encryptToken tokenMgr retryToken
         case mnewtoken of
           Nothing       -> logAction "retry token stacked"

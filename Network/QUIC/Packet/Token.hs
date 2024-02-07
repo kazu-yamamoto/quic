@@ -23,6 +23,7 @@ import Network.QUIC.Types
 
 data CryptoToken = CryptoToken
     { tokenQUICVersion :: Version
+    , tokenLifeTime :: Word32
     , tokenCreatedTime :: TimeMicrosecond
     , tokenCIDs :: Maybe (CID, CID, CID) -- local, remote, orig local
     }
@@ -38,15 +39,15 @@ isRetryToken token = isJust $ tokenCIDs token
 
 ----------------------------------------------------------------
 
-generateToken :: Version -> IO CryptoToken
-generateToken ver = do
+generateToken :: Version -> Int -> IO CryptoToken
+generateToken ver life = do
     t <- getTimeMicrosecond
-    return $ CryptoToken ver t Nothing
+    return $ CryptoToken ver (fromIntegral life) t Nothing
 
-generateRetryToken :: Version -> CID -> CID -> CID -> IO CryptoToken
-generateRetryToken ver l r o = do
+generateRetryToken :: Version -> Int -> CID -> CID -> CID -> IO CryptoToken
+generateRetryToken ver life l r o = do
     t <- getTimeMicrosecond
-    return $ CryptoToken ver t $ Just (l, r, o)
+    return $ CryptoToken ver (fromIntegral life) t $ Just (l, r, o)
 
 ----------------------------------------------------------------
 
