@@ -1,6 +1,6 @@
 cabal-version:      >=1.10
 name:               quic
-version:            0.1.15
+version:            0.1.16
 license:            BSD3
 license-file:       LICENSE
 maintainer:         kazu@iij.ad.jp
@@ -181,7 +181,7 @@ executable server
         network-byte-order,
         quic,
         tls,
-        tls-session-manager,
+        tls-session-manager >= 0.0.5,
         unliftio
 
     if flag(devel)

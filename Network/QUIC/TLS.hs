@@ -17,14 +17,7 @@ import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 sessionManager :: SessionEstablish -> SessionManager
-sessionManager establish =
-    SessionManager
-        { sessionEstablish = establish
-        , sessionResume = \_ -> return Nothing
-        , sessionResumeOnlyOnce = \_ -> return Nothing
-        , sessionInvalidate = \_ -> return ()
-        , sessionUseTicket = False
-        }
+sessionManager establish = noSessionManager{sessionEstablish = establish}
 
 clientHandshaker
     :: QUICCallbacks
