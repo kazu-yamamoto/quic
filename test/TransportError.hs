@@ -8,7 +8,7 @@ import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Network.TLS as TLS
-import Network.TLS.QUIC (ExtensionRaw (..))
+import Network.TLS.QUIC (ExtensionRaw (..), ExtensionID (..))
 import Test.Hspec
 import UnliftIO.Concurrent
 import UnliftIO.Timeout
@@ -194,7 +194,7 @@ transportErrorSpec cc0 ms = do
         it
             "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]"
             $ \_ -> do
-                let f [ExtensionRaw _ v] = [ExtensionRaw 0xffa5 v]
+                let f [ExtensionRaw _ v] = [ExtensionRaw (ExtensionID 0xffa5) v]
                     f _ = error "f"
                     cc = addHook cc0 $ setOnTLSExtensionCreated f
                 runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]

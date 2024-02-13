@@ -53,7 +53,7 @@ recvTLS :: Connection -> IORef HndState -> CryptLevel -> IO (Either TLS.TLSError
 recvTLS conn hsr level =
     case level of
             CryptInitial           -> go InitialLevel
-            CryptMasterSecret      -> failure "QUIC does not receive data < TLS 1.3"
+            CryptMainSecret        -> failure "QUIC does not receive data < TLS 1.3"
             CryptEarlySecret       -> failure "QUIC does not send early data with TLS library"
             CryptHandshakeSecret   -> go HandshakeLevel
             CryptApplicationSecret -> go RTT1Level
@@ -80,7 +80,7 @@ sendTLS conn hsr x = do
     sendCompleted hsr
   where
     convertLevel (CryptInitial, bs) = return (InitialLevel, bs)
-    convertLevel (CryptMasterSecret, _) = errorTLS "QUIC does not send data < TLS 1.3"
+    convertLevel (CryptMainSecret, _) = errorTLS "QUIC does not send data < TLS 1.3"
     convertLevel (CryptEarlySecret, _) = errorTLS "QUIC does not receive early data with TLS library"
     convertLevel (CryptHandshakeSecret, bs) = return (HandshakeLevel, bs)
     convertLevel (CryptApplicationSecret, bs) = return (RTT1Level, bs)

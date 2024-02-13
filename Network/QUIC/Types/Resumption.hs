@@ -9,7 +9,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Types.Frame
 import Network.QUIC.Types.Packet
 
-type SessionEstablish = SessionID -> SessionData -> IO ()
+type SessionEstablish = SessionID -> SessionData -> IO (Maybe Ticket)
 
 -- | Information about resumption
 data ResumptionInfo = ResumptionInfo

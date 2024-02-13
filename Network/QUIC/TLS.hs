@@ -17,13 +17,7 @@ import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 sessionManager :: SessionEstablish -> SessionManager
-sessionManager establish =
-    SessionManager
-        { sessionEstablish = establish
-        , sessionResume = \_ -> return Nothing
-        , sessionResumeOnlyOnce = \_ -> return Nothing
-        , sessionInvalidate = \_ -> return ()
-        }
+sessionManager establish = noSessionManager{sessionEstablish = establish}
 
 clientHandshaker
     :: QUICCallbacks
@@ -44,7 +38,7 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
             , clientSupported = supported
             , clientDebug = debug
             , clientWantSessionResume = resumptionSession ccResumption
-            , clientEarlyData = if use0RTT then Just "" else Nothing
+            , clientUseEarlyData = use0RTT
             }
     convTP = onTransportParametersCreated ccHooks
     params = convTP $ setCIDsToParameters myAuthCIDs ccParameters
@@ -93,6 +87,7 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
             , serverSupported = supported
             , serverDebug = debug
             , serverEarlyDataSize = if scUse0RTT then quicMaxEarlyDataSize else 0
+            , serverTicketLifetime = scTicketLifetime
             }
     convTP = onTransportParametersCreated scHooks
     convExt = onTLSExtensionCreated scHooks

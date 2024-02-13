@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 module Network.QUIC.Types.CID (
     CID (..),
     myCIDLength,
@@ -15,13 +17,14 @@ module Network.QUIC.Types.CID (
 
 import qualified Data.ByteString.Short as Short
 
+import GHC.Generics
 import Network.QUIC.Imports
 
 myCIDLength :: Int
 myCIDLength = 8
 
 -- | A type for conneciton ID.
-newtype CID = CID Bytes deriving (Eq, Ord)
+newtype CID = CID Bytes deriving (Eq, Ord, Generic)
 
 instance Show CID where
     show (CID cid) = shortToString (enc16s cid)

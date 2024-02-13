@@ -133,6 +133,8 @@ data ServerConfig = ServerConfig
     , scSessionManager :: SessionManager
     -- ^ A session manager of TLS 1.3.
     , scDebugLog :: Maybe FilePath
+    , scTicketLifetime :: Int
+    -- ^ A lifetime (in seconds) for TLS session ticket and QUIC token.
     }
 
 -- | The default value for server configuration.
@@ -155,4 +157,5 @@ defaultServerConfig =
         , scRequireRetry = False
         , scSessionManager = noSessionManager
         , scDebugLog = Nothing
+        , scTicketLifetime = 7200
         }

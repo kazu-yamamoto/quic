@@ -53,7 +53,7 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     debugLog msg | doDebug   = stdoutLogger ("run: " <> msg)
                  | otherwise = return ()
     setup = do
-        dispatch <- newDispatch
+        dispatch <- newDispatch conf
         -- fixme: the case where sockets cannot be created.
         ssas <- mapM UDP.serverSocket $ scAddresses conf
         tids <- mapM (runDispatcher dispatch conf) ssas
@@ -79,7 +79,7 @@ runServer conf server0 dispatch baseThreadId acc =
             handshaker <- handshakeServer conf' conn myAuthCIDs
             let server = do
                     wait1RTTReady conn
-                    afterHandshakeServer conn
+                    afterHandshakeServer conf conn
                     server0 conn
                 ldcc = connLDCC conn
                 supporters = foldr1 concurrently_ [handshaker
@@ -160,14 +160,15 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
     return $ ConnRes conn accMyAuthCIDs reader
 #endif
 
-afterHandshakeServer :: Connection -> IO ()
-afterHandshakeServer conn = handleLogT logAction $ do
+afterHandshakeServer :: ServerConfig -> Connection -> IO ()
+afterHandshakeServer ServerConfig{..} conn = handleLogT logAction $ do
     --
     cidInfo <- getNewMyCID conn
     register <- getRegister conn
     register (cidInfoCID cidInfo) conn
     --
-    cryptoToken <- generateToken =<< getVersion conn
+    ver <- getVersion conn
+    cryptoToken <- generateToken ver scTicketLifetime
     mgr <- getTokenManager conn
     token <- encryptToken mgr cryptoToken
     let ncid = NewConnectionID cidInfo 0

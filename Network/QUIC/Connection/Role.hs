@@ -92,6 +92,7 @@ setResumptionSession conn@Connection{..} si sd = do
                     , resumptionSession = Just (si, sd)
                     }
             }
+    return Nothing
 
 setNewToken :: Connection -> Token -> IO ()
 setNewToken conn@Connection{..} token = do
