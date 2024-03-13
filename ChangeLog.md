@@ -1,3 +1,11 @@
+## 0.1.17
+
+- Garding the new_connection_id attack.
+
+## 0.1.16
+
+- Using tls v2.0.
+
 ## 0.1.15
 
 - Support customizing ClientHooks and ServerHooks config from tls
