@@ -17,7 +17,9 @@ module Network.QUIC.Types.CID (
 
 import qualified Data.ByteString.Short as Short
 
+import Codec.Serialise
 import GHC.Generics
+
 import Network.QUIC.Imports
 
 myCIDLength :: Int
@@ -25,6 +27,8 @@ myCIDLength = 8
 
 -- | A type for conneciton ID.
 newtype CID = CID Bytes deriving (Eq, Ord, Generic)
+
+instance Serialise CID
 
 instance Show CID where
     show (CID cid) = shortToString (enc16s cid)

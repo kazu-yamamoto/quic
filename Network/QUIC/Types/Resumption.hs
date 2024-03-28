@@ -1,7 +1,10 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Types.Resumption where
 
+import Codec.Serialise
+import GHC.Generics
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
 
@@ -18,7 +21,9 @@ data ResumptionInfo = ResumptionInfo
     , resumptionToken :: Token
     , resumptionRetry :: Bool
     }
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
+
+instance Serialise ResumptionInfo
 
 defaultResumptionInfo :: ResumptionInfo
 defaultResumptionInfo =

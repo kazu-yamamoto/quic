@@ -4,6 +4,7 @@
 
 module Network.QUIC.Types.Packet where
 
+import Codec.Serialise
 import Data.Ix
 import GHC.Generics
 import Network.TLS.QUIC (ExtensionID (EID_QuicTransportParameters, ExtensionID))
@@ -20,6 +21,8 @@ import Network.QUIC.Types.Time
 
 -- | QUIC version.
 newtype Version = Version Word32 deriving (Eq, Ord, Generic)
+
+instance Serialise Version
 
 {- FOURMOLU_DISABLE -}
 pattern Negotiation      :: Version

@@ -30,8 +30,6 @@ data CryptoToken = CryptoToken
     deriving (Generic)
 
 instance Serialise UnixTime
-instance Serialise Version
-instance Serialise CID
 instance Serialise CryptoToken
 
 isRetryToken :: CryptoToken -> Bool
