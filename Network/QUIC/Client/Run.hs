@@ -71,6 +71,10 @@ runClient conf client0 isICVN verInfo = do
         setToken conn $ resumptionToken $ ccResumption conf
         handshaker <- handshakeClient conf' conn myAuthCIDs
         let client = do
+                -- For 0-RTT, the following variables should be initialized
+                -- in advance.
+                setTxMaxStreams conn $ initialMaxStreamsBidi defaultParameters
+                setTxUniMaxStreams conn $ initialMaxStreamsUni defaultParameters
                 if ccUse0RTT conf
                     then wait0RTTReady conn
                     else wait1RTTReady conn
