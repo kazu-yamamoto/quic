@@ -46,8 +46,10 @@ defaultHooks =
 
 -- | Client configuration.
 data ClientConfig = ClientConfig
-    { ccVersions :: [Version]
-    -- ^ Compatible versions in the preferred order.
+    { ccVersion :: Version
+    -- ^ The version to start with.
+    , ccVersions :: [Version]
+    -- ^ Compatible versions with 'ccVersion' in the preferred order.
     , ccCiphers :: [Cipher]
     -- ^ Cipher candidates defined in TLS 1.3.
     , ccGroups :: [Group]
@@ -83,7 +85,8 @@ data ClientConfig = ClientConfig
 defaultClientConfig :: ClientConfig
 defaultClientConfig =
     ClientConfig
-        { ccVersions = [Version2, Version1]
+        { ccVersion = Version1
+        , ccVersions = [Version2, Version1]
         , ccCiphers = supportedCiphers defaultSupported
         , ccGroups = supportedGroups defaultSupported
         , ccParameters = defaultParameters
