@@ -1,3 +1,8 @@
+## 0.1.18
+
+- Fixing a buf of 0-RTT where unidirectionalStream waits for SH.
+- Introducing ccVersion to start with Version1.
+
 ## 0.1.17
 
 - Garding the new_connection_id attack.
