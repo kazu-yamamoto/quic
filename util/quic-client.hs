@@ -103,12 +103,12 @@ options =
         (ReqArg (\gs o -> o{optGroups = Just gs}) "<groups>")
         "specify groups"
     , Option
-        ['c']
+        ['e']
         ["validate"]
         (NoArg (\o -> o{optValidate = True}))
         "validate server's certificate"
     , Option
-        ['r']
+        ['9']
         ["hq"]
         (NoArg (\o -> o{optHQ = True}))
         "prefer hq (HTTP/0.9)"
