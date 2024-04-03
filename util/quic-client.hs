@@ -121,7 +121,7 @@ options =
         ['i']
         ["interactive"]
         (NoArg (\o -> o{optInteractive = True}))
-        "prefer hq (HTTP/0.9)"
+        "enter interactive mode"
     , Option
         ['V']
         ["vernego"]
