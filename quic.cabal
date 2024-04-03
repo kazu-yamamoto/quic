@@ -161,8 +161,8 @@ library
             cbits/fusion.c
             cbits/picotls.c
 
-executable server
-    main-is:            server.hs
+executable quic-server
+    main-is:            quic-server.hs
     hs-source-dirs:     util
     other-modules:
         H3
@@ -192,8 +192,8 @@ executable server
     if os(windows)
         ghc-options: -with-rtsopts=--io-manager=native
 
-executable client
-    main-is:            client.hs
+executable quic-client
+    main-is:            quic-client.hs
     hs-source-dirs:     util
     other-modules:
         H3
