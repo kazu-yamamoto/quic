@@ -29,11 +29,11 @@ qpackServer = do
     server <- encStr 92 name
     return $ BS.concat [BS.pack [0, 0, status, ct], server]
 
-qpackClient :: String -> String -> IO ByteString
+qpackClient :: ByteString -> String -> IO ByteString
 qpackClient path authority = do
     let method = 0b11000000 .|. 17 -- :method: GET
         scheme = 0b11000000 .|. 22 -- :scheme: http
-    path' <- encStr 1 $ C8.pack path
+    path' <- encStr 1 path
     auth <- encStr 0 $ C8.pack authority
     ua <- encStr 95 name
     return $
@@ -62,4 +62,4 @@ taglen i bs = BS.concat [tag, len, bs]
 
 html :: ByteString
 html =
-    "<html><head><title>Welcome to QUIC in Haskell</title></head><body><p>Welcome to QUIC in Haskell. This server asks clients to retry if no token/retry_token is provided. HTTP 0.9, HTTP/3 and QPACK implementations are a toy and hard-coded. No path validation at this moment.</p></body></html>"
+    "<html><head><title>Welcome to QUIC in Haskell</title></head><body><p>Welcome to QUIC in Haskell.</p></body></html>"
