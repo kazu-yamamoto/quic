@@ -1,30 +1,39 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module ClientX where
+module ClientX (
+    Aux (..),
+    Cli,
+    clientHQ,
+    clientH3,
+    clientPF,
+) where
 
 import Control.Concurrent
+import Control.Concurrent.Async
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C8
 import Network.ByteOrder
 
 import H3
 import Network.QUIC
 
 data Aux = Aux
-    { auxPath :: ByteString
-    , auxAuthority :: String
+    { auxAuthority :: String
     , auxDebug :: String -> IO ()
     , auxShow :: ByteString -> IO ()
     , auxCheckClose :: IO Bool
     }
 
-type Cli = Aux -> Connection -> IO ()
+type Cli = Aux -> [ByteString] -> Connection -> IO ()
 
 clientHQ :: Int -> Cli
-clientHQ n0 aux@Aux{..} conn = loop n0
+clientHQ n0 aux paths conn =
+    foldr1 concurrently_ $ map (clientHQ' n0 aux conn) paths
+
+clientHQ' :: Int -> Aux -> Connection -> ByteString -> IO ()
+clientHQ' n0 aux@Aux{..} conn path = loop n0
   where
-    cmd = C8.pack ("GET " ++ C8.unpack auxPath ++ "\r\n")
+    cmd = "GET " <> path <> "\r\n"
     loop 0 = auxDebug "Connection finished"
     loop 1 = do
         auxDebug "GET"
@@ -41,8 +50,7 @@ clientHQ n0 aux@Aux{..} conn = loop n0
         consume aux s
 
 clientH3 :: Int -> Cli
-clientH3 n0 aux@Aux{..} conn = do
-    hdrblk <- taglen 1 <$> qpackClient auxPath auxAuthority
+clientH3 n0 aux paths conn = do
     s2 <- unidirectionalStream conn
     s6 <- unidirectionalStream conn
     s10 <- unidirectionalStream conn
@@ -52,6 +60,11 @@ clientH3 n0 aux@Aux{..} conn = do
     sendStream s6 (BS.pack [2])
     -- 3: from decoder to encoder
     sendStream s10 (BS.pack [3])
+    foldr1 concurrently_ $ map (clientH3' n0 aux conn) paths
+
+clientH3' :: Int -> Aux -> Connection -> ByteString -> IO ()
+clientH3' n0 aux@Aux{..} conn path = do
+    hdrblk <- taglen 1 <$> qpackClient path auxAuthority
     loop n0 hdrblk
   where
     loop 0 _ = auxDebug "Connection finished"
@@ -82,7 +95,7 @@ consume aux@Aux{..} s = do
             consume aux s
 
 clientPF :: Word64 -> Cli
-clientPF n Aux{..} conn = do
+clientPF n Aux{..} _paths conn = do
     cmd <- withWriteBuffer 8 $ \wbuf -> write64 wbuf n
     s <- stream conn
     sendStream s cmd
