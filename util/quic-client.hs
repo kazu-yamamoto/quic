@@ -73,7 +73,7 @@ defaultOptions =
         }
 
 usage :: String
-usage = "Usage: client [OPTION] addr port"
+usage = "Usage: quic-client [OPTION] addr port [path]"
 
 options :: [OptDescr (Options -> Options)]
 options =
@@ -200,16 +200,13 @@ main :: IO ()
 main = do
     args <- getArgs
     (opts@Options{..}, ips) <- clientOpts args
-    let ipslen = length ips
-    when (ipslen /= 2 && ipslen /= 3) $
-        showUsageAndExit "cannot recognize <addr> and <port>\n"
+    (host, port, paths) <- case ips of
+        [] -> showUsageAndExit usage
+        _ : [] -> showUsageAndExit usage
+        h : p : [] -> return (h, p, ["/"])
+        h : p : ps -> return (h, p, C8.pack <$> ps)
     cmvar <- newEmptyMVar
-    let path
-            | ipslen == 3 = ips !! 2
-            | otherwise = "/"
-        addr = head ips
-        port = head $ tail ips
-        ccalpn ver
+    let ccalpn ver
             | optPerformance /= 0 = return $ Just ["perf"]
             | otherwise =
                 let (h3X, hqX) = makeProtos ver
@@ -228,7 +225,7 @@ main = do
         cc0 = defaultClientConfig
         cc =
             cc0
-                { ccServerName = addr
+                { ccServerName = host
                 , ccPortName = port
                 , ccALPN = ccalpn
                 , ccValidate = optValidate
@@ -253,8 +250,8 @@ main = do
             | otherwise = \_ -> return ()
         aux =
             Aux
-                { auxPath = path
-                , auxAuthority = addr
+                { auxPath = head paths
+                , auxAuthority = host
                 , auxDebug = debug
                 , auxShow = showContent
                 , auxCheckClose = do
@@ -438,7 +435,7 @@ console aux client conn = do
         case l of
             "q" -> putStrLn "bye"
             "g" -> do
-                putStrLn $ "GET " ++ auxPath aux
+                putStrLn $ "GET " ++ C8.unpack (auxPath aux)
                 _ <- forkIO $ client aux conn
                 loop
             "p" -> do

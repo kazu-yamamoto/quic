@@ -14,7 +14,7 @@ import H3
 import Network.QUIC
 
 data Aux = Aux
-    { auxPath :: String
+    { auxPath :: ByteString
     , auxAuthority :: String
     , auxDebug :: String -> IO ()
     , auxShow :: ByteString -> IO ()
@@ -26,7 +26,7 @@ type Cli = Aux -> Connection -> IO ()
 clientHQ :: Int -> Cli
 clientHQ n0 aux@Aux{..} conn = loop n0
   where
-    cmd = C8.pack ("GET " ++ auxPath ++ "\r\n")
+    cmd = C8.pack ("GET " ++ C8.unpack auxPath ++ "\r\n")
     loop 0 = auxDebug "Connection finished"
     loop 1 = do
         auxDebug "GET"
