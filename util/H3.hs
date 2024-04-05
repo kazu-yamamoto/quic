@@ -1,7 +1,5 @@
 {-# LANGUAGE BinaryLiterals #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Strict #-}
-{-# LANGUAGE StrictData #-}
 
 module H3 (
     qpackClient,

@@ -1,8 +1,6 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE Strict #-}
-{-# LANGUAGE StrictData #-}
 
 module Main where
 

@@ -1,8 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE Strict #-}
-{-# LANGUAGE StrictData #-}
 {-# LANGUAGE TupleSections #-}
 
 module Main where
