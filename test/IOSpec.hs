@@ -5,6 +5,7 @@ module IOSpec where
 import Control.Monad
 import qualified Data.ByteString as BS
 import Test.Hspec
+import UnliftIO.Async
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -85,6 +86,9 @@ spec = do
             withPipe (Randomly 20) $ testRecvStreamClientStopFirst cc sc waitS
         it "don't block if server stop sending first" $ do
             withPipe (Randomly 20) $ testRecvStreamServerStopFirst cc sc waitS
+    describe "concurrency" $ do
+        it "can handle multiple clients" $ do
+            withPipe (Randomly 20) $ testMultiSendRecv cc sc waitS 500
 
 consumeBytes :: Stream -> Int -> IO ()
 consumeBytes _ 0 = return ()
@@ -166,3 +170,33 @@ testSendRecv cc sc waitS times = do
         consumeBytes strm (10000 * times)
         assertEndOfStream strm
         putMVar mvar ()
+
+testMultiSendRecv :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
+testMultiSendRecv cc sc waitS times = do
+    mvars <- replicateM concurrency newEmptyMVar
+    E.bracket (forkIO $ server mvars) killThread $ \_ -> client mvars
+  where
+    concurrency = 10
+    client mvars = do
+        waitS
+        C.run cc $ \conn -> foldr1 concurrently_ $ replicate concurrency $ go conn
+      where
+        go conn = do
+            strm <- stream conn
+            let n = streamId strm `div` 4
+            sendStream strm $ BS.singleton $ fromIntegral n
+            let bs = BS.replicate 10000 0
+            replicateM_ times $ sendStream strm bs
+            shutdownStream strm
+            takeMVar (mvars !! n) `shouldReturn` ()
+    server mvars = run sc loop
+      where
+        loop conn = do
+            strm <- acceptStream conn
+            void $ forkIO $ do
+                bs <- recvStream strm 1
+                let n = fromIntegral $ head $ BS.unpack bs
+                consumeBytes strm (10000 * times)
+                assertEndOfStream strm
+                putMVar (mvars !! n) ()
+            loop conn
