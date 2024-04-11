@@ -8,7 +8,7 @@ import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
 import qualified Network.TLS as TLS
-import Network.TLS.QUIC (ExtensionRaw (..), ExtensionID (..))
+import Network.TLS.QUIC (ExtensionID (..), ExtensionRaw (..))
 import Test.Hspec
 import UnliftIO.Concurrent
 import UnliftIO.Timeout
@@ -136,7 +136,7 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated sendOnlyStream
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]
         it
-            "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a non-existing stream [Transport 19.10]"
+            "MUST send STREAM_STATE_ERROR if MAX_STREAM_DATA is received for a stream that has not yet been created [Transport 19.10]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated maxStreamData
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamStateError]

@@ -343,9 +343,11 @@ processFrame conn lvl (MaxStreamData sid n) = do
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
-        Nothing -> do
-            when (isInitiated conn sid) $
-                closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
+        Nothing ->
+            when (isInitiated conn sid) $ do
+                curSid <- getMyStreamId conn
+                when (sid > curSid) $
+                    closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
         Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
