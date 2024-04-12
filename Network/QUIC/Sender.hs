@@ -413,7 +413,7 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
                 if total1 < limitation
                     then do
                         _ <- takeSendStreamQ conn -- cf tryPeek
-                        fin1' <- packFin conn s fin1 -- must be after takeSendStreamQ
+                        fin1' <- packFin conn s1 fin1 -- must be after takeSendStreamQ
                         off1 <- getTxStreamOffset s1 len1
                         let sid = streamId s
                             sid1 = streamId s1
