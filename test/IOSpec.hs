@@ -177,6 +177,8 @@ testMultiSendRecv cc sc waitS times = do
     E.bracket (forkIO $ server mvars) killThread $ \_ -> client mvars
   where
     concurrency = 10
+    chunklen = 12345
+    chunk = BS.replicate chunklen 0
     client mvars = do
         waitS
         C.run cc $ \conn -> foldr1 concurrently_ $ replicate concurrency $ go conn
@@ -185,8 +187,7 @@ testMultiSendRecv cc sc waitS times = do
             strm <- stream conn
             let n = streamId strm `div` 4
             sendStream strm $ BS.singleton $ fromIntegral n
-            let bs = BS.replicate 10000 0
-            replicateM_ times $ sendStream strm bs
+            replicateM_ times $ sendStream strm chunk
             shutdownStream strm
             takeMVar (mvars !! n) `shouldReturn` ()
     server mvars = run sc loop
@@ -196,7 +197,7 @@ testMultiSendRecv cc sc waitS times = do
             void $ forkIO $ do
                 bs <- recvStream strm 1
                 let n = fromIntegral $ head $ BS.unpack bs
-                consumeBytes strm (10000 * times)
+                consumeBytes strm (chunklen * times)
                 assertEndOfStream strm
                 putMVar (mvars !! n) ()
             loop conn
