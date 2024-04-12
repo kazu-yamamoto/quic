@@ -1,3 +1,11 @@
+## 0.1.20
+
+- bug fix for packing Fin
+- proper handling for MAX_STREAM_DATA
+- util/{client,server} are now called util/{quic-client, quic-server}.
+- Renaming two command options for util/quic-client.
+- Supporting multiple targets in util/quic-client.
+
 ## 0.1.19
 
 - Using network-control v0.1.
