@@ -75,7 +75,7 @@ data PacketI
     = PacketIV VersionNegotiationPacket
     | PacketIR RetryPacket
     | PacketIC CryptPacket EncryptionLevel Int
-    | PacketIB BrokenPacket
+    | PacketIB BrokenPacket Int
     deriving (Eq, Show)
 
 -- Not used internally. Only for 'encodePacket'.

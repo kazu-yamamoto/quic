@@ -51,7 +51,7 @@ readerClient cs0@(UDPSocket s0 _ _) conn = handleLogUnit logAction $ do
                 mapM_ (putQ now) pkts
                 loop
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
-    putQ _ (PacketIB BrokenPacket) = return ()
+    putQ _ (PacketIB BrokenPacket _) = return ()
     putQ t (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
         qlogReceived conn pkt t
         myVerInfo <- getVersionInfo conn

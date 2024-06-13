@@ -21,9 +21,15 @@ import Network.QUIC.Types
 decodeCryptPackets :: ByteString -> IO [(CryptPacket, EncryptionLevel, Int)]
 decodeCryptPackets bs0 = unwrap <$> decodePackets bs0
   where
-    unwrap (PacketIC c l s : xs) = (c, l, s) : unwrap xs
+    unwrap (PacketIC c l s : xs) = loop (c, l, s) xs
     unwrap (_ : xs) = unwrap xs
     unwrap [] = []
+    loop p (PacketIC c l s : xs) = p : loop (c, l, s) xs
+    -- For anti-amplification, adding the length of broken packets
+    -- as if it is pddings.
+    loop (c, l, s) (PacketIB BrokenPacket siz : xs) = loop (c, l, s + siz) xs
+    loop p (_ : xs) = loop p xs
+    loop p [] = [p]
 
 -- Client uses this.
 decodePackets :: ByteString -> IO [PacketI]
@@ -74,7 +80,9 @@ decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
                     crypt <- CryptPacket header <$> makeLongCrypt bs rbuf
                     siz <- savingSize rbuf
                     return $ PacketIC crypt HandshakeLevel siz
-    handler BufferOverrun = return (PacketIB BrokenPacket, "")
+    handler BufferOverrun = return (PacketIB BrokenPacket len, "")
+      where
+        len = BS.length bs
 
 makeShortCrypt :: ByteString -> ReadBuffer -> IO Crypt
 makeShortCrypt bs rbuf = do
