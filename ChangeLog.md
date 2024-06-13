@@ -1,7 +1,12 @@
+## 0.1.21
+
+- Workaround for 0s paddings.
+- Another bug fix for packing Fin.
+
 ## 0.1.20
 
-- bug fix for packing Fin
-- proper handling for MAX_STREAM_DATA
+- Bug fix for packing Fin.
+- Proper handling for MAX_STREAM_DATA
 - util/{client,server} are now called util/{quic-client, quic-server}.
 - Renaming two command options for util/quic-client.
 - Supporting multiple targets in util/quic-client.
