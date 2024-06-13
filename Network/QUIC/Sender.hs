@@ -423,12 +423,12 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
                                         StreamF _ o d _ -> (o, d)
                                         _ -> error "sendStreamSmall"
                                     frame1 = StreamF sid off (dats ++ dats1) fin1'
-                                    sb1 = if fin1 then (sb . (s1 :)) else sb
+                                    sb1 = if fin1' then (sb . (s1 :)) else sb
                                 loop s1 frame1 total1 build sb1
                             else do
                                 let frame1 = StreamF sid1 off1 dats1 fin1'
                                     build1 = build . (frame :)
-                                    sb1 = if fin1 then (sb . (s1 :)) else sb
+                                    sb1 = if fin1' then (sb . (s1 :)) else sb
                                 loop s1 frame1 total1 build1 sb1
                     else return (build [frame], sb [])
 
