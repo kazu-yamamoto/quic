@@ -47,7 +47,7 @@ readerClient cs0@(UDPSocket s0 _ _) conn = handleLogUnit logAction $ do
             Nothing -> close cs0
             Just bs -> do
                 now <- getTimeMicrosecond
-                pkts <- decodePackets bs
+                pkts <- decodePackets bs False
                 mapM_ (putQ now) pkts
                 loop
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)

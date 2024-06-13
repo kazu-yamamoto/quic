@@ -156,7 +156,7 @@ dispatcher d conf mysock = handleLogUnit logAction $ do
         (bs, peersa) <- safeRecv $ UDP.recvFrom mysock
         now <- getTimeMicrosecond
         let send' b = UDP.sendTo mysock b peersa
-        cpckts <- decodeCryptPackets bs
+        cpckts <- decodeCryptPackets bs True
         let bytes = BS.length bs
             switch = dispatch d conf logAction mysock peersa send' bytes now
         mapM_ switch cpckts
@@ -371,7 +371,8 @@ readerServer us conn = handleLogUnit logAction loop
           Nothing -> UDP.close us
           Just bs -> do
               now <- getTimeMicrosecond
-              pkts <- decodeCryptPackets bs
+              quicBit <- greaseQuicBit <$> getPeerParameters conn
+              pkts <- decodeCryptPackets bs (not quicBit)
               mapM_ (\(p,l,siz) -> writeRecvQ (connRecvQ conn) (mkReceivedPacket p now siz l)) pkts
               loop
     logAction msg = connDebugLog conn ("debug: readerServer: " <> msg)

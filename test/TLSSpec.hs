@@ -135,7 +135,7 @@ spec = do
         it "describes the examples of Retry" $ do
             let wire0 =
                     dec16 "ff000000010008f067a5502a4262b5746f6b656e04a265ba2eff4d829058fb3f0f2496ba"
-            (ipkt, rest) <- decodePacket wire0
+            (ipkt, rest) <- decodePacket wire0 True
             rest `shouldBe` ""
             case ipkt of
                 PacketIR retrypkt -> do
@@ -259,7 +259,7 @@ spec = do
         it "describes the examples of Retry" $ do
             let wire0 =
                     dec16 "cf6b3343cf0008f067a5502a4262b5746f6b656ec8646ce8bfe33952d955543665dcc7b6"
-            (ipkt, rest) <- decodePacket wire0
+            (ipkt, rest) <- decodePacket wire0 True
             rest `shouldBe` ""
             case ipkt of
                 PacketIR retrypkt -> do

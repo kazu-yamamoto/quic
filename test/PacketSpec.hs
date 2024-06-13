@@ -87,7 +87,7 @@ makeConnections conf v = do
 checkBinary :: (Connection, Connection) -> PacketNumber -> ByteString -> IO ()
 checkBinary (senderConn, recverConn) pn bin = do
     ---- Decoding by the receiver
-    (PacketIC (CryptPacket header crypt) lvl _, _) <- decodePacket bin
+    (PacketIC (CryptPacket header crypt) lvl _, _) <- decodePacket bin True
     ---- Cecrypting by the receiver
     Just plain <- decryptCrypt recverConn crypt lvl
     ---- Checking
@@ -97,7 +97,7 @@ checkBinary (senderConn, recverConn) pn bin = do
     bin' <- BS.createAndTrim 4096 $ \buf ->
         fst <$> encodePlainPacket senderConn (SizedBuffer buf 2048) ppkt Nothing
     ---- Decoding by the receiver again
-    (PacketIC (CryptPacket header' crypt') lvl' _, _) <- decodePacket bin'
+    (PacketIC (CryptPacket header' crypt') lvl' _, _) <- decodePacket bin' True
     ---- Cecrypting by the receiver again
     Just plain' <- decryptCrypt recverConn crypt' lvl'
     ---- Checking

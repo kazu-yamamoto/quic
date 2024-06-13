@@ -3,6 +3,7 @@
 module Network.QUIC.Packet.Header (
     isLong,
     isShort,
+    isQuic,
     protectFlags,
     unprotectFlags,
     encodeLongHeaderFlags,
@@ -24,6 +25,10 @@ isLong flags = testBit flags 7
 {-# INLINE isShort #-}
 isShort :: Flags Protected -> Bool
 isShort (Flags flags) = not $ testBit flags 7
+
+{-# INLINE isQuic #-}
+isQuic :: Flags Protected -> Bool
+isQuic (Flags flags) = testBit flags 6
 
 ----------------------------------------------------------------
 

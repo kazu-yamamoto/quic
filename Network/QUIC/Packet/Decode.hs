@@ -18,8 +18,9 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 -- Server uses this.
-decodeCryptPackets :: ByteString -> IO [(CryptPacket, EncryptionLevel, Int)]
-decodeCryptPackets bs0 = unwrap <$> decodePackets bs0
+decodeCryptPackets
+    :: ByteString -> Bool -> IO [(CryptPacket, EncryptionLevel, Int)]
+decodeCryptPackets bs0 checkQuicBit = unwrap <$> decodePackets bs0 checkQuicBit
   where
     unwrap (PacketIC c l s : xs) = loop (c, l, s) xs
     unwrap (_ : xs) = unwrap xs
@@ -32,23 +33,27 @@ decodeCryptPackets bs0 = unwrap <$> decodePackets bs0
     loop p [] = [p]
 
 -- Client uses this.
-decodePackets :: ByteString -> IO [PacketI]
-decodePackets bs0 = loop bs0 id
+decodePackets :: ByteString -> Bool -> IO [PacketI]
+decodePackets bs0 checkQuicBit = loop bs0 id
   where
     loop "" build = return $ build [] -- fixme
     loop bs build = do
-        (pkt, rest) <- decodePacket bs
+        (pkt, rest) <- decodePacket bs checkQuicBit
         loop rest (build . (pkt :))
 
-decodePacket :: ByteString -> IO (PacketI, ByteString)
-decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
+decodePacket :: ByteString -> Bool -> IO (PacketI, ByteString)
+decodePacket bs checkQuicBit = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     save rbuf
     proFlags <- Flags <$> read8 rbuf
-    let short = isShort proFlags
-    pkt <- decode rbuf proFlags short
-    siz <- savingSize rbuf
-    let rest = BS.drop siz bs
-    return (pkt, rest)
+    if checkQuicBit && not (isQuic proFlags)
+        then
+            return (PacketIB BrokenPacket len, "")
+        else do
+            let short = isShort proFlags
+            pkt <- decode rbuf proFlags short
+            siz <- savingSize rbuf
+            let rest = BS.drop siz bs
+            return (pkt, rest)
   where
     decode rbuf _proFlags True = do
         header <- Short . makeCID <$> extractShortByteString rbuf myCIDLength
@@ -81,8 +86,7 @@ decodePacket bs = E.handle handler $ withReadBuffer bs $ \rbuf -> do
                     siz <- savingSize rbuf
                     return $ PacketIC crypt HandshakeLevel siz
     handler BufferOverrun = return (PacketIB BrokenPacket len, "")
-      where
-        len = BS.length bs
+    len = BS.length bs
 
 makeShortCrypt :: ByteString -> ReadBuffer -> IO Crypt
 makeShortCrypt bs rbuf = do
