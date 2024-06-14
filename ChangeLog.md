@@ -1,3 +1,7 @@
+## 0.1.22
+
+- Incresing activeConnectionIdLimit and fix a bug
+
 ## 0.1.21
 
 - Workaround for 0s paddings.
