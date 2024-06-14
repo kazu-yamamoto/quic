@@ -85,7 +85,7 @@ getNewMyCID Connection{..} = do
 -- | Receiving NewConnectionID
 addPeerCID :: Connection -> CIDInfo -> IO Bool
 addPeerCID conn@Connection{..} cidInfo = do
-    lim <- activeConnectionIdLimit <$> getPeerParameters conn
+    let lim = activeConnectionIdLimit $ getMyParameters conn
     atomically $ do
         db <- readTVar peerCIDDB
         let n = Map.size $ revInfos db

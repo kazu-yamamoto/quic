@@ -289,7 +289,7 @@ decodeParameterList bs = unsafeDupablePerformIO $ withReadBuffer bs (`go` id)
 -- | An example parameters obsoleted in the near future.
 --
 -- >>> defaultParameters
--- Parameters {originalDestinationConnectionId = Nothing, maxIdleTimeout = 30000, statelessResetToken = Nothing, maxUdpPayloadSize = 2048, initialMaxData = 1048576, initialMaxStreamDataBidiLocal = 262144, initialMaxStreamDataBidiRemote = 262144, initialMaxStreamDataUni = 262144, initialMaxStreamsBidi = 64, initialMaxStreamsUni = 3, ackDelayExponent = 3, maxAckDelay = 25, disableActiveMigration = False, preferredAddress = Nothing, activeConnectionIdLimit = 3, initialSourceConnectionId = Nothing, retrySourceConnectionId = Nothing, grease = Nothing, greaseQuicBit = True, versionInformation = Nothing}
+-- Parameters {originalDestinationConnectionId = Nothing, maxIdleTimeout = 30000, statelessResetToken = Nothing, maxUdpPayloadSize = 2048, initialMaxData = 1048576, initialMaxStreamDataBidiLocal = 262144, initialMaxStreamDataBidiRemote = 262144, initialMaxStreamDataUni = 262144, initialMaxStreamsBidi = 64, initialMaxStreamsUni = 3, ackDelayExponent = 3, maxAckDelay = 25, disableActiveMigration = False, preferredAddress = Nothing, activeConnectionIdLimit = 5, initialSourceConnectionId = Nothing, retrySourceConnectionId = Nothing, grease = Nothing, greaseQuicBit = True, versionInformation = Nothing}
 defaultParameters :: Parameters
 defaultParameters =
     baseParameters
@@ -301,7 +301,7 @@ defaultParameters =
         , initialMaxStreamDataUni = defaultMaxStreamData -- 256K
         , initialMaxStreamsBidi = defaultMaxStreams -- 64
         , initialMaxStreamsUni = 3
-        , activeConnectionIdLimit = 3
+        , activeConnectionIdLimit = 5
         , greaseQuicBit = True
         }
 
