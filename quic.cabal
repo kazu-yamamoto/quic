@@ -113,6 +113,7 @@ library
         Network.QUIC.Types.Error
         Network.QUIC.Types.Exception
         Network.QUIC.Types.Frame
+        Network.QUIC.Types.Info
         Network.QUIC.Types.Integer
         Network.QUIC.Types.Packet
         Network.QUIC.Types.Queue

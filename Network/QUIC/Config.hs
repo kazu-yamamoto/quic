@@ -27,6 +27,7 @@ data Hooks = Hooks
         -> ([(EncryptionLevel, CryptoData)], Bool)
     , onResetStreamReceived :: Stream -> ApplicationProtocolError -> IO ()
     , onServerReady :: IO ()
+    , onConnectionEstablished :: ConnectionInfo -> IO ()
     }
 
 -- | Default hooks.
@@ -40,6 +41,7 @@ defaultHooks =
         , onTLSHandshakeCreated = (,False)
         , onResetStreamReceived = \_ _ -> return ()
         , onServerReady = return ()
+        , onConnectionEstablished = \_ -> return ()
         }
 
 ----------------------------------------------------------------

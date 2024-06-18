@@ -193,6 +193,7 @@ handshakeServer' conf conn ver hsRef paramRef = handshaker
             clearCryptoStream conn RTT1Level
         setConnection1RTTReady conn
         setConnectionEstablished conn
+        getConnectionInfo conn >>= onConnectionEstablished (connHooks conn)
 --        sendFrames conn RTT1Level [HandshakeDone]
         --
         info <- getConnectionInfo conn

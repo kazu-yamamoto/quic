@@ -17,6 +17,7 @@ import Network.QUIC.Connector
 import Network.QUIC.Crypto
 import Network.QUIC.Exception
 import Network.QUIC.Imports
+import Network.QUIC.Info
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
@@ -411,6 +412,7 @@ processFrame conn lvl HandshakeDone = do
         clearCryptoStream conn HandshakeLevel
         clearCryptoStream conn RTT1Level
     setConnectionEstablished conn
+    getConnectionInfo conn >>= onConnectionEstablished (connHooks conn)
     -- to receive NewSessionTicket
     fire conn (Microseconds 1000000) $ killHandshaker conn lvl
 processFrame _ _ _ = closeConnection ProtocolViolation "Frame is not allowed"

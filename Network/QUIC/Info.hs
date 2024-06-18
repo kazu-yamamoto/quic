@@ -14,19 +14,6 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
--- | Information about a connection.
-data ConnectionInfo = ConnectionInfo
-    { version :: Version
-    , cipher :: Cipher
-    , alpn :: Maybe ByteString
-    , handshakeMode :: HandshakeMode13
-    , retry :: Bool
-    , localSockAddr :: NS.SockAddr
-    , remoteSockAddr :: NS.SockAddr
-    , localCID :: CID
-    , remoteCID :: CID
-    }
-
 -- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
@@ -51,33 +38,6 @@ getConnectionInfo conn = do
             , localCID = mycid
             , remoteCID = peercid
             }
-
-instance Show ConnectionInfo where
-    show ConnectionInfo{..} =
-        "Version: "
-            ++ show version
-            ++ "\n"
-            ++ "Cipher: "
-            ++ show cipher
-            ++ "\n"
-            ++ "ALPN: "
-            ++ maybe "none" C8.unpack alpn
-            ++ "\n"
-            ++ "Mode: "
-            ++ show handshakeMode
-            ++ "\n"
-            ++ "Local CID: "
-            ++ show localCID
-            ++ "\n"
-            ++ "Remote CID: "
-            ++ show remoteCID
-            ++ "\n"
-            ++ "Local SockAddr: "
-            ++ show localSockAddr
-            ++ "\n"
-            ++ "Remote SockAddr: "
-            ++ show remoteSockAddr
-            ++ if retry then "\nQUIC retry" else ""
 
 ----------------------------------------------------------------
 
