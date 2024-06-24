@@ -90,3 +90,4 @@ import Network.QUIC.IO
 import Network.QUIC.Info
 import Network.QUIC.Stream
 import Network.QUIC.Types
+import Network.QUIC.Types.Info

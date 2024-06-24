@@ -9,7 +9,6 @@ module Network.QUIC.Types (
     module Network.QUIC.Types.Error,
     module Network.QUIC.Types.Exception,
     module Network.QUIC.Types.Frame,
-    module Network.QUIC.Types.Info,
     module Network.QUIC.Types.Integer,
     module Network.QUIC.Types.Packet,
     module Network.QUIC.Types.Queue,
@@ -24,7 +23,7 @@ import Network.QUIC.Types.Constants
 import Network.QUIC.Types.Error
 import Network.QUIC.Types.Exception
 import Network.QUIC.Types.Frame
-import Network.QUIC.Types.Info
+
 import Network.QUIC.Types.Integer
 import Network.QUIC.Types.Packet
 import Network.QUIC.Types.Queue

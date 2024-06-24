@@ -23,7 +23,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
-import Network.QUIC.Types hiding (localCID, remoteCID)
+import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
 readerClient :: UDPSocket -> Connection -> IO ()

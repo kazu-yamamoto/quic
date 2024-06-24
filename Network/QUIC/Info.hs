@@ -6,6 +6,7 @@ module Network.QUIC.Info where
 import Data.ByteString ()
 import Network.QUIC.Connection
 import Network.QUIC.Types
+import Network.QUIC.Types.Info
 import qualified Network.Socket as NS
 import Network.UDP (UDPSocket (..))
 

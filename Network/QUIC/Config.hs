@@ -13,6 +13,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
+import Network.QUIC.Types.Info
 
 ----------------------------------------------------------------
 
