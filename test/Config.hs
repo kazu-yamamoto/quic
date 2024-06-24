@@ -18,13 +18,7 @@ import Data.IORef
 import qualified Data.List as L
 import Network.Socket
 import Network.Socket.ByteString
-import Network.TLS (
-    Credentials (..),
-    SessionData,
-    SessionID,
-    SessionManager (..),
-    credentialLoadX509,
- )
+import Network.TLS hiding (Version)
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -171,7 +165,7 @@ newSessionManager = sessionManager <$> newIORef Nothing
 
 sessionManager :: IORef (Maybe (SessionID, SessionData)) -> SessionManager
 sessionManager ref =
-    SessionManager
+    noSessionManager
         { sessionEstablish = establish
         , sessionResume = resume
         , sessionResumeOnlyOnce = resume

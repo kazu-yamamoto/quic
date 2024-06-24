@@ -3,14 +3,11 @@
 
 module Network.QUIC.Info where
 
-import qualified Data.ByteString.Char8 as C8
-import qualified Network.Socket as NS
-import Network.TLS hiding (HandshakeFailed, Version)
-import Network.UDP (UDPSocket (..))
-
+import Data.ByteString ()
 import Network.QUIC.Connection
-import Network.QUIC.Imports
 import Network.QUIC.Types
+import qualified Network.Socket as NS
+import Network.UDP (UDPSocket (..))
 
 ----------------------------------------------------------------
 
