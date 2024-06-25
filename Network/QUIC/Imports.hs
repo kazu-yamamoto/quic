@@ -1,31 +1,31 @@
 {-# LANGUAGE CPP #-}
 
 module Network.QUIC.Imports (
-    Bytes
-  , ByteString(..)
-  , ShortByteString(..)
-  , Builder
-  , module Control.Applicative
-  , module Control.Monad
-  , module Data.Bits
-  , module Data.Foldable
-  , module Data.IORef
-  , module Data.Int
-  , module Data.Monoid
-  , module Data.Ord
-  , module Data.Word
-  , module Data.Array
-  , module Data.Array.IO
-  , module Data.Maybe
-  , module Numeric
-  , module Network.ByteOrder
-  , module Network.QUIC.Utils
+    Bytes,
+    ByteString (..),
+    ShortByteString (..),
+    Builder,
+    module Control.Applicative,
+    module Control.Monad,
+    module Data.Bits,
+    module Data.Foldable,
+    module Data.IORef,
+    module Data.Int,
+    module Data.Monoid,
+    module Data.Ord,
+    module Data.Word,
+    module Data.Array,
+    module Data.Array.IO,
+    module Data.Maybe,
+    module Numeric,
+    module Network.ByteOrder,
+    module Network.QUIC.Utils,
 #if !MIN_VERSION_base(4,17,0)
   , (!<<.), (!>>.)
 #endif
-  , atomicModifyIORef''
-  , copyBS
-  ) where
+    atomicModifyIORef'',
+    copyBS,
+) where
 
 import Control.Applicative
 import Control.Monad
@@ -33,8 +33,8 @@ import Data.Array
 import Data.Array.IO
 import Data.Bits
 import Data.ByteString.Builder (Builder)
-import Data.ByteString.Internal (ByteString(..))
-import Data.ByteString.Short.Internal (ShortByteString(..))
+import Data.ByteString.Internal (ByteString (..))
+import Data.ByteString.Short.Internal (ShortByteString (..))
 import Data.Foldable
 import Data.IORef
 import Data.Int
