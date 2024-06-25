@@ -141,6 +141,16 @@ data ServerConfig = ServerConfig
     , scDebugLog :: Maybe FilePath
     , scTicketLifetime :: Int
     -- ^ A lifetime (in seconds) for TLS session ticket and QUIC token.
+    , scWildcardSocketonly :: Bool
+    -- ^ If 'True', only wild sockets are used.
+    -- Packets are dispatched in Haskell code according to
+    -- destination connection ID. This is an overhead however
+    -- clinets can make QUIC connections even if intermediate NATs
+    -- rebind UDP ports frequently.
+    -- Otherwise, connected sockets are also used.
+    -- This means that packets are dispatched by a kernel.
+    -- But unfortunately, clients cannot make QUIC connections
+    -- if intermediate NATs rebind UDP ports frequently.
     }
 
 -- | The default value for server configuration.
@@ -164,4 +174,5 @@ defaultServerConfig =
         , scSessionManager = noSessionManager
         , scDebugLog = Nothing
         , scTicketLifetime = 7200
+        , scWildcardSocketonly = True
         }
