@@ -21,7 +21,7 @@ module Network.QUIC.Imports (
     module Network.ByteOrder,
     module Network.QUIC.Utils,
 #if !MIN_VERSION_base(4,17,0)
-  , (!<<.), (!>>.)
+    (!<<.), (!>>.),
 #endif
     atomicModifyIORef'',
     copyBS,
