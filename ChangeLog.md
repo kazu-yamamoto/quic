@@ -1,3 +1,10 @@
+# ChangeLog
+
+## 0.1.23
+
+* Introducing `onConnectionEstablished` into `Hooks`.
+* Preparing for tls v2.1.
+
 ## 0.1.22
 
 - Incresing activeConnectionIdLimit and fix a bug
