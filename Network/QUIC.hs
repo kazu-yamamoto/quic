@@ -36,23 +36,12 @@ module Network.QUIC (
     sendStreamMany,
 
     -- * Information
-    ConnectionInfo,
+    ConnectionInfo (..),
     getConnectionInfo,
-    version,
-    cipher,
-    alpn,
-    handshakeMode,
-    retry,
-    localSockAddr,
-    remoteSockAddr,
-    localCID,
-    remoteCID,
 
     -- * Statistics
-    ConnectionStats,
+    ConnectionStats (..),
     getConnectionStats,
-    txBytes,
-    rxBytes,
 
     -- * Synchronization
     wait0RTTReady,

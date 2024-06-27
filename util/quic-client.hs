@@ -398,11 +398,11 @@ runClient2 cc Options{..} aux@Aux{..} paths res client = do
             }
 
 printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
-printThroughput t1 t2 stats =
+printThroughput t1 t2 ConnectionStats{..} =
     printf
         "Throughput %.2f Mbps (%d bytes in %d msecs)\n"
         bytesPerSeconds
-        (rxBytes stats)
+        rxBytes
         millisecs
   where
     UnixDiffTime (CTime s) u = t2 `diffUnixTime` t1
@@ -410,7 +410,7 @@ printThroughput t1 t2 stats =
     millisecs = fromIntegral s * 1000 + fromIntegral u `div` 1000
     bytesPerSeconds :: Double
     bytesPerSeconds =
-        fromIntegral (rxBytes stats)
+        fromIntegral rxBytes
             * (1000 :: Double)
             * 8
             / fromIntegral millisecs
