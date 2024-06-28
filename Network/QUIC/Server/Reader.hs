@@ -147,8 +147,7 @@ accept = readAcceptQ . acceptQ
 ----------------------------------------------------------------
 
 runDispatcher :: Dispatch -> ServerConfig -> ListenSocket -> IO ThreadId
-runDispatcher d conf mysock =
-    forkFinally (dispatcher d conf mysock) $ \_ -> UDP.stop mysock
+runDispatcher d conf mysock = forkIO $ dispatcher d conf mysock
 
 dispatcher :: Dispatch -> ServerConfig -> ListenSocket -> IO ()
 dispatcher d conf mysock = handleLogUnit logAction $ do

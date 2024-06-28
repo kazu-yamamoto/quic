@@ -43,7 +43,7 @@ import Network.QUIC.Types
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     baseThreadId <- myThreadId
-    E.bracket setup teardown $ \(dispatch,_) -> do
+    E.bracket setup teardown $ \(dispatch,_,_) -> do
         onServerReady $ scHooks conf
         forever $ do
             acc <- accept dispatch
@@ -57,10 +57,11 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
         -- fixme: the case where sockets cannot be created.
         ssas <- mapM UDP.serverSocket $ scAddresses conf
         tids <- mapM (runDispatcher dispatch conf) ssas
-        return (dispatch, tids)
-    teardown (dispatch, tids) = do
+        return (dispatch, tids, ssas)
+    teardown (dispatch, tids, ssas) = do
         clearDispatch dispatch
         mapM_ killThread tids
+        mapM_ UDP.stop ssas
 
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
