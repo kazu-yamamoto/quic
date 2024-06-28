@@ -1,9 +1,13 @@
 # ChangeLog
 
-## 0.1.25
+## 0.1.26
 
 * fix syntax error, for GHC 9.2
   [#64](https://github.com/kazu-yamamoto/quic/pull/64)
+
+## 0.1.25 (Obsoleted)
+
+* Accidentally release on a wrong branch.
 
 ## 0.1.24
 
