@@ -5,6 +5,7 @@
 
 module Network.QUIC.Server.Run (
     run
+  , runWithSockets
   , stop
   ) where
 
@@ -62,6 +63,34 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
         clearDispatch dispatch
         mapM_ killThread tids
         mapM_ UDP.stop ssas
+
+-- | Running a QUIC server.
+--   The action is executed with a new connection
+--   in a new lightweight thread.
+runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
+runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
+    baseThreadId <- myThreadId
+    E.bracket setup teardown $ \(dispatch,_) -> do
+        onServerReady $ scHooks conf
+        forever $ do
+            acc <- accept dispatch
+            void $ forkIO (runServer conf server dispatch baseThreadId acc)
+  where
+    doDebug = isJust $ scDebugLog conf
+    debugLog msg | doDebug   = stdoutLogger ("run: " <> msg)
+                 | otherwise = return ()
+    setup = do
+        dispatch <- newDispatch conf
+        -- fixme: the case where sockets cannot be created.
+        ssas' <- mapM mkSocket ssas
+        tids <- mapM (runDispatcher dispatch conf) ssas'
+        return (dispatch, tids)
+    mkSocket s = do
+        sa <- NS.getSocketName s
+        return $ ListenSocket s sa False -- interface specific
+    teardown (dispatch, tids) = do
+        clearDispatch dispatch
+        mapM_ killThread tids
 
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.

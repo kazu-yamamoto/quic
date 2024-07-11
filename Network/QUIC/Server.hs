@@ -2,6 +2,7 @@
 module Network.QUIC.Server (
     -- * Running a QUIC server
     run,
+    runWithSockets,
     stop,
 
     -- * Configuration
