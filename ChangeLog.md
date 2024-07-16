@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.1.27
+
+* New API: `runWithSockets` for servers.
+
 ## 0.1.26
 
 * fix syntax error, for GHC 9.2
