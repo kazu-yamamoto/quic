@@ -1,16 +1,15 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Server.Run (
-    run
-  , runWithSockets
-  , stop
-  ) where
+    run,
+    runWithSockets,
+    stop,
+) where
 
 import qualified Network.Socket as NS
-import Network.UDP (UDPSocket(..), ListenSocket(..))
+import Network.UDP (ListenSocket (..), UDPSocket (..))
 import qualified Network.UDP as UDP
 import System.Log.FastLogger
 import UnliftIO.Async
@@ -44,15 +43,16 @@ import Network.QUIC.Types
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     baseThreadId <- myThreadId
-    E.bracket setup teardown $ \(dispatch,_,_) -> do
+    E.bracket setup teardown $ \(dispatch, _, _) -> do
         onServerReady $ scHooks conf
         forever $ do
             acc <- accept dispatch
             void $ forkIO (runServer conf server dispatch baseThreadId acc)
   where
     doDebug = isJust $ scDebugLog conf
-    debugLog msg | doDebug   = stdoutLogger ("run: " <> msg)
-                 | otherwise = return ()
+    debugLog msg
+        | doDebug = stdoutLogger ("run: " <> msg)
+        | otherwise = return ()
     setup = do
         dispatch <- newDispatch conf
         -- fixme: the case where sockets cannot be created.
@@ -70,15 +70,16 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
 runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     baseThreadId <- myThreadId
-    E.bracket setup teardown $ \(dispatch,_) -> do
+    E.bracket setup teardown $ \(dispatch, _) -> do
         onServerReady $ scHooks conf
         forever $ do
             acc <- accept dispatch
             void $ forkIO (runServer conf server dispatch baseThreadId acc)
   where
     doDebug = isJust $ scDebugLog conf
-    debugLog msg | doDebug   = stdoutLogger ("run: " <> msg)
-                 | otherwise = return ()
+    debugLog msg
+        | doDebug = stdoutLogger ("run: " <> msg)
+        | otherwise = return ()
     setup = do
         dispatch <- newDispatch conf
         -- fixme: the case where sockets cannot be created.
@@ -94,35 +95,38 @@ runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
-runServer :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
+runServer
+    :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
 runServer conf server0 dispatch baseThreadId acc =
     E.bracket open clse $ \(ConnRes conn myAuthCIDs _reader) ->
         handleLogUnit (debugLog conn) $ do
-#if !defined(mingw32_HOST_OS)
-            forkIO _reader >>= addReader conn
-#endif
-            let conf' = conf {
-                    scParameters = (scParameters conf) {
-                          versionInformation = Just $ accVersionInfo acc
+            let conf' =
+                    conf
+                        { scParameters =
+                            (scParameters conf)
+                                { versionInformation = Just $ accVersionInfo acc
+                                }
                         }
-                  }
             handshaker <- handshakeServer conf' conn myAuthCIDs
             let server = do
                     wait1RTTReady conn
                     afterHandshakeServer conf conn
                     server0 conn
                 ldcc = connLDCC conn
-                supporters = foldr1 concurrently_ [handshaker
-                                                  ,sender   conn
-                                                  ,receiver conn
-                                                  ,resender  ldcc
-                                                  ,ldccTimer ldcc
-                                                  ]
+                supporters =
+                    foldr1
+                        concurrently_
+                        [ handshaker
+                        , sender conn
+                        , receiver conn
+                        , resender ldcc
+                        , ldccTimer ldcc
+                        ]
                 runThreads = do
                     er <- race supporters server
                     case er of
-                      Left () -> E.throwIO MustNotReached
-                      Right r -> return r
+                        Left () -> E.throwIO MustNotReached
+                        Right r -> return r
             ex <- E.trySyncOrAsync runThreads
             sendFinal conn
             closure conn ldcc ex
@@ -132,15 +136,16 @@ runServer conf server0 dispatch baseThreadId acc =
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
-#if !defined(mingw32_HOST_OS)
-        killReaders conn
-#endif
     debugLog conn msg = do
         connDebugLog conn ("runServer: " <> msg)
         qlogDebug conn $ Debug $ toLogStr msg
 
-createServerConnection :: ServerConfig -> Dispatch -> Accept -> ThreadId
-                       -> IO ConnRes
+createServerConnection
+    :: ServerConfig
+    -> Dispatch
+    -> Accept
+    -> ThreadId
+    -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
     us <- UDP.accept accMySocket accPeerSockAddr
     let ListenSocket _ mysa _ = accMySocket
@@ -150,11 +155,23 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
             NS.sendBuf udpSocket buf siz
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs
-        ocid  = fromJust $ origDstCID accMyAuthCIDs
-    (qLog, qclean)     <- dirQLogger scQLog accTime ocid "server"
+        ocid = fromJust $ origDstCID accMyAuthCIDs
+    (qLog, qclean) <- dirQLogger scQLog accTime ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     debugLog $ "Original CID: " <> bhow ocid
-    conn <- serverConnection conf accVersionInfo accMyAuthCIDs accPeerAuthCIDs debugLog qLog scHooks sref accRecvQ send recv
+    conn <-
+        serverConnection
+            conf
+            accVersionInfo
+            accMyAuthCIDs
+            accPeerAuthCIDs
+            debugLog
+            qLog
+            scHooks
+            sref
+            accRecvQ
+            send
+            recv
     addResource conn qclean
     addResource conn dclean
     let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
@@ -182,13 +199,9 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
     addResource conn $ do
         myCIDs <- getMyCIDs conn
         mapM_ accUnregister myCIDs
+
     --
-#if defined(mingw32_HOST_OS)
     return $ ConnRes conn accMyAuthCIDs undefined
-#else
-    let reader = readerServer us conn -- dies when us is closed.
-    return $ ConnRes conn accMyAuthCIDs reader
-#endif
 
 afterHandshakeServer :: ServerConfig -> Connection -> IO ()
 afterHandshakeServer ServerConfig{..} conn = handleLogT logAction $ do
@@ -202,7 +215,7 @@ afterHandshakeServer ServerConfig{..} conn = handleLogT logAction $ do
     mgr <- getTokenManager conn
     token <- encryptToken mgr cryptoToken
     let ncid = NewConnectionID cidInfo 0
-    sendFrames conn RTT1Level [NewToken token,ncid,HandshakeDone]
+    sendFrames conn RTT1Level [NewToken token, ncid, HandshakeDone]
   where
     logAction msg = connDebugLog conn $ "afterHandshakeServer: " <> msg
 
