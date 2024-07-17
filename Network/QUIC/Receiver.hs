@@ -8,7 +8,6 @@ module Network.QUIC.Receiver (
 import qualified Data.ByteString as BS
 import Network.Control
 import Network.TLS (AlertDescription (..))
-import UnliftIO.Concurrent (forkIO)
 import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
@@ -23,7 +22,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
-import Network.QUIC.Server.Reader (runNewServerReader)
 import Network.QUIC.Stream
 import Network.QUIC.Types as QUIC
 
@@ -163,10 +161,6 @@ processReceivedPacket conn rpkt = do
             when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
             qlogReceived conn (PlainPacket hdr plain) tim
             let ackEli = any ackEliciting plainFrames
-            case cryptMigraionInfo crypt of
-                Nothing -> return ()
-                Just miginfo ->
-                    void . forkIO $ runNewServerReader conn miginfo
             (ckp, cpn) <- getCurrentKeyPhase conn
             let Flags flags = plainFlags
                 nkp = flags `testBit` 2

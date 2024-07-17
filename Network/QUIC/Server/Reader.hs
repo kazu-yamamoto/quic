@@ -15,10 +15,6 @@ module Network.QUIC.Server.Reader (
     -- * Receiving and reading
     RecvQ,
     recvServer,
-    readerServer,
-
-    -- * Misc
-    runNewServerReader,
 ) where
 
 import qualified Crypto.Token as CT
@@ -29,10 +25,9 @@ import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Control (LRUCache)
 import qualified Network.Control as LRUCache
-import Network.UDP (ClientSockAddr, ListenSocket, UDPSocket)
+import Network.UDP (ClientSockAddr, ListenSocket)
 import qualified Network.UDP as UDP
 import qualified System.IO.Error as E
-import System.Log.FastLogger
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 import UnliftIO.STM
@@ -44,7 +39,6 @@ import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
-import Network.QUIC.Qlog
 import Network.QUIC.Types
 import Network.QUIC.Windows
 
@@ -359,51 +353,5 @@ dispatch
             Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
             Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 
-----------------------------------------------------------------
-
--- | readerServer dies when the socket is closed.
-readerServer :: UDPSocket -> Connection -> IO ()
-readerServer us conn = handleLogUnit logAction loop
-  where
-    loop = do
-        ito <- readMinIdleTimeout conn
-        mbs <- timeout ito "readerServer" $ UDP.recv us
-        case mbs of
-            Nothing -> UDP.close us
-            Just bs -> do
-                now <- getTimeMicrosecond
-                let quicBit = greaseQuicBit $ getMyParameters conn
-                pkts <- decodeCryptPackets bs (not quicBit)
-                mapM_
-                    (\(p, l, siz) -> writeRecvQ (connRecvQ conn) (mkReceivedPacket p now siz l))
-                    pkts
-                loop
-    logAction msg = connDebugLog conn ("debug: readerServer: " <> msg)
-
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ
-
-----------------------------------------------------------------
-
-runNewServerReader :: Connection -> MigrationInfo -> IO ()
-runNewServerReader conn (MigrationInfo mysock peersa dCID) = handleLogUnit logAction $ do
-    migrating <- isPathValidating conn -- fixme: test and set
-    unless migrating $ do
-        setMigrationStarted conn
-        -- fixme: should not block
-        mcidinfo <-
-            timeout (Microseconds 100000) "runNewServerReader" $ waitPeerCID conn
-        let msg = "Migration: " <> bhow peersa <> " (" <> bhow dCID <> ")"
-        qlogDebug conn $ Debug $ toLogStr msg
-        connDebugLog conn $ "debug: runNewServerReader: " <> msg
-        E.bracketOnError setup UDP.close $ \s1 ->
-            E.bracket (setSocket conn s1) UDP.close $ \_ -> do
-                void $ forkIO $ readerServer s1 conn
-                -- fixme: if cannot set
-                setMyCID conn dCID
-                validatePath conn mcidinfo
-                -- holding the old socket for a while
-                delay $ Microseconds 20000
-  where
-    setup = UDP.accept mysock peersa
-    logAction msg = connDebugLog conn ("debug: runNewServerReader: " <> msg)
