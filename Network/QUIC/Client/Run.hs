@@ -107,8 +107,7 @@ runClient conf client0 isICVN verInfo = do
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
-    us@(UDPSocket _ sa _) <-
-        UDP.clientSocket ccServerName ccPortName (not ccAutoMigration)
+    us@(UDPSocket _ sa _) <- UDP.clientSocket ccServerName ccPortName False
     q <- newRecvQ
     sref <- newIORef us
     let send = \buf siz -> do
@@ -151,8 +150,6 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     return $ ConnRes conn myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation
---   with a new connection ID. Typically, this is used
---   for migration in the case where 'ccAutoMigration' is 'False'.
---   But this can also be used even when the value is 'True'.
+--   with a new connection ID.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration
