@@ -5,7 +5,7 @@ module Network.QUIC.Closer (closure) where
 
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
-import qualified Network.UDP as UDP
+import qualified Network.Socket as NS
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -44,14 +44,15 @@ closure' conn ldcc frame = do
     sendBuf <- mallocBytes bufsiz
     recvBuf <- mallocBytes bufsiz
     siz <- encodeCC conn (SizedBuffer sendBuf bufsiz) frame
-    us <- getSocket conn
+    sock <- getSocket conn
+    peersa <- getPeerSockAddr conn
     let clos = do
-            UDP.close us
+            NS.close sock
             -- This is just in case.
             -- UDP.close never throw exceptions.
-            getSocket conn >>= UDP.close
-        send = UDP.sendBuf us sendBuf siz
-        recv = UDP.recvBuf us recvBuf bufsiz
+            getSocket conn >>= NS.close
+        send = void $ NS.sendBufTo sock sendBuf siz peersa
+        recv = NS.recvBuf sock recvBuf bufsiz
         hook = onCloseCompleted $ connHooks conn
     pto <- getPTO ldcc
     void $ forkFinally (closer conn pto send recv hook) $ \e -> do
@@ -60,7 +61,7 @@ closure' conn ldcc frame = do
             Right _ -> return ()
         free sendBuf
         free recvBuf
-        clos
+        when (isClient conn) clos
 
 encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
 encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do

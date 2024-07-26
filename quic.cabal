@@ -97,6 +97,7 @@ library
         Network.QUIC.Sender
         Network.QUIC.Server.Reader
         Network.QUIC.Server.Run
+        Network.QUIC.Socket
         Network.QUIC.Stream
         Network.QUIC.Stream.Frag
         Network.QUIC.Stream.Misc
@@ -145,7 +146,6 @@ library
         network >= 3.1.4,
         network-byte-order >= 0.1.7 && < 0.2,
         network-control >= 0.1 && < 0.2,
-        network-udp >= 0.0.0 && < 0.1,
         random >= 1.2.1 && < 1.3,
         serialise,
         tls >= 2.0 && < 2.2,
@@ -255,7 +255,6 @@ test-suite spec
         crypton,
         hspec,
         network >=3.1.2,
-        network-udp,
         quic,
         tls,
         unix-time,

@@ -16,8 +16,8 @@ import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
 import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
+import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC
-import Network.UDP (UDPSocket)
 import UnliftIO.Concurrent
 import UnliftIO.STM
 
@@ -199,7 +199,7 @@ data Connection = Connection
     , connRecv :: ~Recv -- ~ for testing
     -- Manage
     , connRecvQ :: RecvQ
-    , udpSocket :: ~(IORef UDPSocket)
+    , connSocket :: IORef Socket
     , readers :: IORef (IO ())
     , mainThreadId :: ThreadId
     , controlRate :: Rate
@@ -213,6 +213,7 @@ data Connection = Connection
     , -- Peer
       peerParameters :: IORef Parameters
     , peerCIDDB :: TVar CIDDB
+    , peerSockAddr :: IORef SockAddr
     , -- Queues
       inputQ :: InputQ
     , cryptoQ :: CryptoQ
@@ -287,12 +288,14 @@ newConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef UDPSocket
+    -> IORef Socket
+    -> IORef SockAddr
     -> RecvQ
     -> Send
     -> Recv
     -> IO Connection
-newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref recvQ ~send ~recv = do
+newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref psaref recvQ ~send ~recv = do
+    -- ~ for testing
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
     connstate <- newConnState rl
@@ -314,6 +317,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- Peer
         <*> newIORef baseParameters
         <*> newTVarIO (newCIDDB peerCID)
+        <*> return psaref
         -- Queues
         <*> newTQueueIO
         <*> newTQueueIO
@@ -380,7 +384,8 @@ clientConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef UDPSocket
+    -> IORef Socket
+    -> IORef SockAddr
     -> RecvQ
     -> Send
     -> Recv
@@ -396,7 +401,8 @@ serverConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef UDPSocket
+    -> IORef Socket
+    -> IORef SockAddr
     -> RecvQ
     -> Send
     -> Recv

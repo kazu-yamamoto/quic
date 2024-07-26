@@ -25,8 +25,8 @@ import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Control (LRUCache)
 import qualified Network.Control as LRUCache
-import Network.UDP (ClientSockAddr, ListenSocket)
-import qualified Network.UDP as UDP
+import Network.Socket (SockAddr, Socket)
+import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
@@ -113,8 +113,8 @@ data Accept = Accept
     { accVersionInfo :: VersionInfo
     , accMyAuthCIDs :: AuthCIDs
     , accPeerAuthCIDs :: AuthCIDs
-    , accMySocket :: ListenSocket
-    , accPeerSockAddr :: ClientSockAddr
+    , accMySocket :: Socket
+    , accPeerSockAddr :: SockAddr
     , accRecvQ :: RecvQ
     , accPacketSize :: Int
     , accRegister :: CID -> Connection -> IO ()
@@ -139,15 +139,15 @@ accept = readAcceptQ . acceptQ
 
 ----------------------------------------------------------------
 
-runDispatcher :: Dispatch -> ServerConfig -> ListenSocket -> IO ThreadId
+runDispatcher :: Dispatch -> ServerConfig -> Socket -> IO ThreadId
 runDispatcher d conf mysock = forkIO $ dispatcher d conf mysock
 
-dispatcher :: Dispatch -> ServerConfig -> ListenSocket -> IO ()
+dispatcher :: Dispatch -> ServerConfig -> Socket -> IO ()
 dispatcher d conf mysock = handleLogUnit logAction $ do
     forever $ do
-        (bs, peersa) <- safeRecv $ UDP.recvFrom mysock
+        (bs, peersa) <- safeRecv $ NSB.recvFrom mysock 2048
         now <- getTimeMicrosecond
-        let send' b = UDP.sendTo mysock b peersa
+        let send' b = void $ NSB.sendTo mysock b peersa
         cpckts <- decodeCryptPackets bs True
         let bytes = BS.length bs
             switch = dispatch d conf logAction mysock peersa send' bytes now
@@ -181,8 +181,8 @@ dispatch
     :: Dispatch
     -> ServerConfig
     -> DebugLogger
-    -> ListenSocket
-    -> ClientSockAddr
+    -> Socket
+    -> SockAddr
     -> (ByteString -> IO ())
     -> Int
     -> TimeMicrosecond
@@ -341,7 +341,7 @@ dispatch
     Dispatch{..}
     _
     logAction
-    _mysock
+    mysock
     peersa
     _
     _
@@ -351,7 +351,10 @@ dispatch
         mconn <- lookupConnectionDict dstTable dCID
         case mconn of
             Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
-            Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
+            Just conn -> do
+                void $ setSocket conn mysock
+                setPeerSockAddr conn peersa
+                writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ

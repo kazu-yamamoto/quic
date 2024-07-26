@@ -9,8 +9,6 @@ module Network.QUIC.Server.Run (
 ) where
 
 import qualified Network.Socket as NS
-import Network.UDP (ListenSocket (..), UDPSocket (..))
-import qualified Network.UDP as UDP
 import System.Log.FastLogger
 import UnliftIO.Async
 import UnliftIO.Concurrent
@@ -33,6 +31,7 @@ import Network.QUIC.Receiver
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Server.Reader
+import Network.QUIC.Socket
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -56,13 +55,13 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     setup = do
         dispatch <- newDispatch conf
         -- fixme: the case where sockets cannot be created.
-        ssas <- mapM UDP.serverSocket $ scAddresses conf
+        ssas <- mapM serverSocket $ scAddresses conf
         tids <- mapM (runDispatcher dispatch conf) ssas
         return (dispatch, tids, ssas)
     teardown (dispatch, tids, ssas) = do
         clearDispatch dispatch
         mapM_ killThread tids
-        mapM_ UDP.stop ssas
+        mapM_ NS.close ssas
 
 -- | Running a QUIC server.
 --   The action is executed with a new connection
@@ -83,12 +82,8 @@ runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     setup = do
         dispatch <- newDispatch conf
         -- fixme: the case where sockets cannot be created.
-        ssas' <- mapM mkSocket ssas
-        tids <- mapM (runDispatcher dispatch conf) ssas'
+        tids <- mapM (runDispatcher dispatch conf) ssas
         return (dispatch, tids)
-    mkSocket s = do
-        sa <- NS.getSocketName s
-        return $ ListenSocket s sa False -- interface specific
     teardown (dispatch, tids) = do
         clearDispatch dispatch
         mapM_ killThread tids
@@ -147,12 +142,12 @@ createServerConnection
     -> ThreadId
     -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
-    us <- UDP.accept accMySocket accPeerSockAddr
-    let ListenSocket _ mysa _ = accMySocket
-    sref <- newIORef us
+    sref <- newIORef accMySocket
+    psaref <- newIORef accPeerSockAddr
     let send buf siz = void $ do
-            UDPSocket{..} <- readIORef sref
-            NS.sendBuf udpSocket buf siz
+            sock <- readIORef sref
+            sa <- readIORef psaref
+            NS.sendBufTo sock buf siz sa
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs
         ocid = fromJust $ origDstCID accMyAuthCIDs
@@ -169,6 +164,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
             qLog
             scHooks
             sref
+            psaref
             accRecvQ
             send
             recv
@@ -178,7 +174,9 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
         ver = chosenVersion accVersionInfo
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz = (defaultPacketSize mysa `max` accPacketSize) `min` maximumPacketSize mysa
+    let pktSiz =
+            (defaultPacketSize accPeerSockAddr `max` accPacketSize)
+                `min` maximumPacketSize accPeerSockAddr
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"

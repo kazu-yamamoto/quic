@@ -8,15 +8,16 @@ import Network.QUIC.Connection
 import Network.QUIC.Types
 import Network.QUIC.Types.Info
 import qualified Network.Socket as NS
-import Network.UDP (UDPSocket (..))
 
 ----------------------------------------------------------------
 
 -- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
-    UDPSocket{..} <- getSocket conn
-    mysa <- NS.getSocketName udpSocket
+    sock <- getSocket conn
+    -- fixme: this is undefined
+    mysa <- NS.getSocketName sock
+    peersa <- getPeerSockAddr conn
     mycid <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level
@@ -32,7 +33,7 @@ getConnectionInfo conn = do
             , handshakeMode = mode
             , retry = r
             , localSockAddr = mysa
-            , remoteSockAddr = peerSockAddr
+            , remoteSockAddr = peersa
             , localCID = mycid
             , remoteCID = peercid
             }

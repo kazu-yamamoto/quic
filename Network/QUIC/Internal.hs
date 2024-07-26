@@ -14,6 +14,7 @@ module Network.QUIC.Internal (
     module Network.QUIC.Recovery,
     module Network.QUIC.Client.Reader,
     module Network.QUIC.Windows,
+    module Network.QUIC.Socket,
 ) where
 
 import Network.QUIC.Client.Reader (ConnectionControl (..), controlConnection)
@@ -26,6 +27,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
+import Network.QUIC.Socket
 import Network.QUIC.Stream
 import Network.QUIC.TLS
 import Network.QUIC.Types
