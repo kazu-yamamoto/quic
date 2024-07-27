@@ -148,7 +148,9 @@ dispatcher d conf mysock = handleLogUnit logAction $ do
         (bs, peersa) <- safeRecv $ NSB.recvFrom mysock 2048
         now <- getTimeMicrosecond
         let send' b = void $ NSB.sendTo mysock b peersa
-        cpckts <- decodeCryptPackets bs True
+            -- cf: greaseQuicBit $ getMyParameters conn
+            quicBit = greaseQuicBit $ scParameters conf
+        cpckts <- decodeCryptPackets bs (not quicBit)
         let bytes = BS.length bs
             switch = dispatch d conf logAction mysock peersa send' bytes now
         mapM_ switch cpckts
