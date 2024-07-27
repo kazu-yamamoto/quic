@@ -370,7 +370,7 @@ readerServer us conn = handleLogUnit logAction loop
           Nothing -> UDP.close us
           Just bs -> do
               now <- getTimeMicrosecond
-              quicBit <- greaseQuicBit <$> getPeerParameters conn
+              let quicBit = greaseQuicBit $ getMyParameters conn
               pkts <- decodeCryptPackets bs (not quicBit)
               mapM_ (\(p,l,siz) -> writeRecvQ (connRecvQ conn) (mkReceivedPacket p now siz l)) pkts
               loop
