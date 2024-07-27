@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.1.28
+
+* Fixing a bug of quic bit.
+
 ## 0.1.27
 
 * New API: `runWithSockets` for servers.
