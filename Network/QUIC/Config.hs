@@ -80,8 +80,6 @@ data ClientConfig = ClientConfig
     , ccPacketSize :: Maybe Int
     -- ^ QUIC packet size (UDP payload size)
     , ccDebugLog :: Bool
-    , ccAutoMigration :: Bool
-    -- ^ If 'True', use a unconnected socket for auto migration. Otherwise, use a connected socket.
     }
 
 -- | The default value for client configuration.
@@ -107,7 +105,6 @@ defaultClientConfig =
         , ccResumption = defaultResumptionInfo
         , ccPacketSize = Nothing
         , ccDebugLog = False
-        , ccAutoMigration = True
         }
 
 ----------------------------------------------------------------

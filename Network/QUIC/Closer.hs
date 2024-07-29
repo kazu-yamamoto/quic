@@ -1,11 +1,10 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Closer (closure) where
 
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
-import qualified Network.UDP as UDP
+import qualified Network.Socket as NS
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -39,27 +38,35 @@ closure conn ldcc (Left se)
 
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
-    killReaders conn
-    let bufsiz = maximumUdpPayloadSize
-    sendBuf <- mallocBytes bufsiz
-    recvBuf <- mallocBytes bufsiz
-    siz <- encodeCC conn (SizedBuffer sendBuf bufsiz) frame
-    us <- getSocket conn
-    let clos = do
-            UDP.close us
-            -- This is just in case.
-            -- UDP.close never throw exceptions.
-            getSocket conn >>= UDP.close
-        send = UDP.sendBuf us sendBuf siz
-        recv = UDP.recvBuf us recvBuf bufsiz
-        hook = onCloseCompleted $ connHooks conn
+    sock <- getSocket conn
+    peersa <- getPeerSockAddr conn
+    -- send
+    let sbuf@(SizedBuffer sendBuf _) = encryptRes conn
+    siz <- encodeCC conn sbuf frame
+    let send = void $ NS.sendBufTo sock sendBuf siz peersa
+    -- recv and clos
+    killReaders conn -- client only
+    (recv, freeRecvBuf, clos) <-
+        if isServer conn
+            then return (void $ connRecv conn, return (), return ())
+            else do
+                let bufsiz = maximumUdpPayloadSize
+                recvBuf <- mallocBytes bufsiz
+                let recv' = void $ NS.recvBuf sock recvBuf bufsiz
+                    free' = free recvBuf
+                    clos' = do
+                        NS.close sock
+                        -- This is just in case.
+                        getSocket conn >>= NS.close
+                return (recv', free', clos')
+    -- hook
+    let hook = onCloseCompleted $ connHooks conn
     pto <- getPTO ldcc
     void $ forkFinally (closer conn pto send recv hook) $ \e -> do
         case e of
             Left e' -> connDebugLog conn $ "closure' " <> bhow e'
             Right _ -> return ()
-        free sendBuf
-        free recvBuf
+        freeRecvBuf
         clos
 
 encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
@@ -93,12 +100,8 @@ encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
             else
                 return 0
 
-closer :: Connection -> Microseconds -> IO () -> IO Int -> IO () -> IO ()
-closer _conn (Microseconds pto) send recv hook
-#if defined(mingw32_HOST_OS)
-    | isServer _conn = send
-#endif
-    | otherwise = loop (3 :: Int)
+closer :: Connection -> Microseconds -> IO () -> IO () -> IO () -> IO ()
+closer _conn (Microseconds pto) send recv hook = loop (3 :: Int)
   where
     loop 0 = return ()
     loop n = do
@@ -107,14 +110,12 @@ closer _conn (Microseconds pto) send recv hook
         mx <- timeout (Microseconds (pto !>>. 1)) "closer 1" recv
         case mx of
             Nothing -> hook
-            Just 0 -> return ()
-            Just _ -> loop (n - 1)
+            Just () -> loop (n - 1)
     skip tmo@(Microseconds duration) base = do
         mx <- timeout tmo "closer 2" recv
         case mx of
             Nothing -> return ()
-            Just 0 -> return ()
-            Just _ -> do
+            Just () -> do
                 Microseconds elapsed <- getElapsedTimeMicrosecond base
                 let duration' = duration - elapsed
                 when (duration' >= 5000) $ skip (Microseconds duration') base

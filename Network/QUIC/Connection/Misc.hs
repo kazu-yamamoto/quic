@@ -10,6 +10,8 @@ module Network.QUIC.Connection.Misc (
     getSocket,
     setSocket,
     clearSocket,
+    getPeerSockAddr,
+    setPeerSockAddr,
     getPeerAuthCIDs,
     setPeerAuthCIDs,
     getClientDstCID,
@@ -31,7 +33,7 @@ module Network.QUIC.Connection.Misc (
     abortConnection,
 ) where
 
-import Network.UDP
+import Network.Socket (SockAddr, Socket)
 import System.Mem.Weak
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
@@ -64,15 +66,22 @@ getOriginalVersion = chosenVersion . origVersionInfo
 
 ----------------------------------------------------------------
 
-getSocket :: Connection -> IO UDPSocket
-getSocket Connection{..} = readIORef udpSocket
+getSocket :: Connection -> IO Socket
+getSocket Connection{..} = readIORef connSocket
 
-setSocket :: Connection -> UDPSocket -> IO UDPSocket
-setSocket Connection{..} sock = atomicModifyIORef' udpSocket $
+setSocket :: Connection -> Socket -> IO Socket
+setSocket Connection{..} sock = atomicModifyIORef' connSocket $
     \sock0 -> (sock, sock0)
 
-clearSocket :: Connection -> IO UDPSocket
-clearSocket Connection{..} = atomicModifyIORef' udpSocket (undefined,)
+-- fixme
+clearSocket :: Connection -> IO Socket
+clearSocket Connection{..} = atomicModifyIORef' connSocket (undefined,)
+
+getPeerSockAddr :: Connection -> IO SockAddr
+getPeerSockAddr Connection{..} = readIORef peerSockAddr
+
+setPeerSockAddr :: Connection -> SockAddr -> IO ()
+setPeerSockAddr Connection{..} sa = writeIORef peerSockAddr sa
 
 ----------------------------------------------------------------
 

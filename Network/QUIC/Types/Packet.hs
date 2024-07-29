@@ -8,7 +8,6 @@ import Codec.Serialise
 import Data.Ix
 import GHC.Generics
 import Network.TLS.QUIC (ExtensionID (EID_QuicTransportParameters, ExtensionID))
-import Network.UDP
 import Text.Printf
 
 import Network.QUIC.Imports
@@ -159,14 +158,10 @@ isNoPaddings = (`testBit` 8)
 is4bytesPN :: Int -> Bool
 is4bytesPN = (`testBit` 9)
 
-data MigrationInfo = MigrationInfo ListenSocket ClientSockAddr CID
-    deriving (Eq, Show)
-
 data Crypt = Crypt
     { cryptPktNumOffset :: Int
     , cryptPacket :: ByteString
     , cryptMarks :: Int
-    , cryptMigraionInfo :: Maybe MigrationInfo
     }
     deriving (Eq, Show)
 

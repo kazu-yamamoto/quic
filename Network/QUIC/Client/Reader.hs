@@ -6,11 +6,12 @@ module Network.QUIC.Client.Reader (
     recvClient,
     ConnectionControl (..),
     controlConnection,
+    clientSocket,
 ) where
 
 import Data.List (intersect)
-import Network.Socket (getSocketName)
-import Network.UDP
+import Network.Socket (Socket, close, getSocketName)
+import Network.Socket.ByteString (recvFrom)
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -23,11 +24,12 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
+import Network.QUIC.Socket
 import Network.QUIC.Types
 
 -- | readerClient dies when the socket is closed.
-readerClient :: UDPSocket -> Connection -> IO ()
-readerClient cs0@(UDPSocket s0 _ _) conn = handleLogUnit logAction $ do
+readerClient :: Socket -> Connection -> IO ()
+readerClient s0 conn = handleLogUnit logAction $ do
     wait
     loop
   where
@@ -42,10 +44,11 @@ readerClient cs0@(UDPSocket s0 _ _) conn = handleLogUnit logAction $ do
         ito <- readMinIdleTimeout conn
         mbs <-
             timeout ito "readeClient" $
-                recv cs0
+                recvFrom s0 2048 -- fixme
         case mbs of
-            Nothing -> close cs0
-            Just bs -> do
+            Nothing -> close s0
+            Just (bs, peersa) -> do
+                setPeerSockAddr conn peersa
                 now <- getTimeMicrosecond
                 let quicBit = greaseQuicBit $ getMyParameters conn
                 pkts <- decodePackets bs (not quicBit)
@@ -139,10 +142,9 @@ controlConnection' conn ActiveMigration = do
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
-    cs0 <- getSocket conn
-    cs <- natRebinding cs0
-    cs0' <- setSocket conn cs
-    let reader = readerClient cs conn
+    peersa <- getPeerSockAddr conn
+    newSock <- natRebinding peersa
+    oldSock <- setSocket conn newSock
+    let reader = readerClient newSock conn
     forkIO reader >>= addReader conn
-    -- Using cs0' just in case.
-    fire conn microseconds $ close cs0'
+    fire conn microseconds $ close oldSock

@@ -44,7 +44,6 @@ data Options = Options
     , optPacketSize :: Maybe Int
     , optPerformance :: Word64
     , optNumOfReqs :: Int
-    , optUnconSock :: Bool
     }
     deriving (Show)
 
@@ -68,7 +67,6 @@ defaultOptions =
         , optPacketSize = Nothing
         , optPerformance = 0
         , optNumOfReqs = 1
-        , optUnconSock = True
         }
 
 usage :: String
@@ -176,11 +174,6 @@ options =
         ["number-of-requests"]
         (ReqArg (\n o -> o{optNumOfReqs = read n}) "<n>")
         "specify the number of requests"
-    , Option
-        ['m']
-        ["use-connected-socket"]
-        (NoArg (\o -> o{optUnconSock = False}))
-        "use connected sockets instead of unconnected sockets"
     ]
 
 showUsageAndExit :: String -> IO a
@@ -239,7 +232,6 @@ main = do
                     defaultHooks
                         { onCloseCompleted = putMVar cmvar ()
                         }
-                , ccAutoMigration = optUnconSock
                 }
         debug
             | optDebugLog = putStrLn
@@ -398,11 +390,11 @@ runClient2 cc Options{..} aux@Aux{..} paths res client = do
             }
 
 printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
-printThroughput t1 t2 ConnectionStats{..} =
+printThroughput t1 t2 stats =
     printf
         "Throughput %.2f Mbps (%d bytes in %d msecs)\n"
         bytesPerSeconds
-        rxBytes
+        (rxBytes stats)
         millisecs
   where
     UnixDiffTime (CTime s) u = t2 `diffUnixTime` t1
@@ -410,7 +402,7 @@ printThroughput t1 t2 ConnectionStats{..} =
     millisecs = fromIntegral s * 1000 + fromIntegral u `div` 1000
     bytesPerSeconds :: Double
     bytesPerSeconds =
-        fromIntegral rxBytes
+        fromIntegral (rxBytes stats)
             * (1000 :: Double)
             * 8
             / fromIntegral millisecs

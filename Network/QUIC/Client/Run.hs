@@ -8,8 +8,6 @@ module Network.QUIC.Client.Run (
 ) where
 
 import qualified Network.Socket as NS
-import Network.UDP (UDPSocket (..))
-import qualified Network.UDP as UDP
 import UnliftIO.Async
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
@@ -107,13 +105,14 @@ runClient conf client0 isICVN verInfo = do
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
-    us@(UDPSocket _ sa _) <-
-        UDP.clientSocket ccServerName ccPortName (not ccAutoMigration)
+    (sock, peersa) <- clientSocket ccServerName ccPortName
     q <- newRecvQ
-    sref <- newIORef us
+    sref <- newIORef sock
+    psaref <- newIORef peersa
     let send = \buf siz -> do
-            cs <- readIORef sref
-            UDP.sendBuf cs buf siz
+            s <- readIORef sref
+            sa <- readIORef psaref
+            void $ NS.sendBufTo s buf siz sa
         recv = recvClient q
     myCID <- newCID
     peerCID <- newCID
@@ -135,6 +134,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             qLog
             ccHooks
             sref
+            psaref
             q
             send
             recv
@@ -143,16 +143,14 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
     let pktSiz0 = fromMaybe 0 ccPacketSize
-        pktSiz = (defaultPacketSize sa `max` pktSiz0) `min` maximumPacketSize sa
+        pktSiz = (defaultPacketSize peersa `max` pktSiz0) `min` maximumPacketSize peersa
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated conn
-    let reader = readerClient us conn -- dies when s0 is closed.
+    let reader = readerClient sock conn -- dies when s0 is closed.
     return $ ConnRes conn myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation
---   with a new connection ID. Typically, this is used
---   for migration in the case where 'ccAutoMigration' is 'False'.
---   But this can also be used even when the value is 'True'.
+--   with a new connection ID.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration

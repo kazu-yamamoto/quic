@@ -7,7 +7,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
 import Data.IORef
 import Data.Tuple (swap)
-import Network.UDP
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -47,9 +46,10 @@ makeConnections conf v = do
         clientAuthCIDs = defaultAuthCIDs{initSrcCID = Just clientCID}
     -- dummy
     let clientConf = testClientConfig
-    us <- clientSocket "127.0.0.1" "2000" False
+    (sock, peersa) <- clientSocket "127.0.0.1" "2000"
     q <- newRecvQ
-    sref <- newIORef us
+    sref <- newIORef sock
+    psaref <- newIORef peersa
     let ver = v
         verInfo = VersionInfo ver [ver]
     ----
@@ -63,6 +63,7 @@ makeConnections conf v = do
             noLog
             defaultHooks
             sref
+            psaref
             q
             undefined
             undefined
@@ -77,6 +78,7 @@ makeConnections conf v = do
             noLog
             defaultHooks
             sref
+            psaref -- dummy
             q
             undefined
             undefined
