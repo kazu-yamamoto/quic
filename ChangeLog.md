@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.2.0
+
+* A new server architecture: only wildcard (unconnected) sockets are used.
+  [#66](https://github.com/kazu-yamamoto/quic/pull/66)
+* Breaking change: `ccAutoMigration` is removed. Clients always use
+  unconnected sockets.
+
 ## 0.1.28
 
 * Fixing a bug of quic bit.
