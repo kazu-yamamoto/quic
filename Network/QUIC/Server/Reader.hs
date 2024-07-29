@@ -218,18 +218,17 @@ dispatch
                     | otherwise -> pushToAcceptFirst False
                 Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
         | otherwise = do
-            mct <- decryptToken tokenMgr token
-            case mct of
-                Just ct
-                    | isRetryToken ct -> do
-                        ok <- isRetryTokenValid ct
-                        if ok then pushToAcceptRetried ct else sendRetry
-                    | otherwise -> do
-                        mconn <- lookupConnectionDict dstTable dCID
-                        case mconn of
-                            Nothing -> pushToAcceptFirst True
-                            Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
-                _ -> sendRetry
+            mconn <- lookupConnectionDict dstTable dCID
+            case mconn of
+                Nothing -> do
+                    mct <- decryptToken tokenMgr token
+                    case mct of
+                        Just ct
+                            | isRetryToken ct -> do
+                                ok <- isRetryTokenValid ct
+                                if ok then pushToAcceptRetried ct else sendRetry
+                        _ -> pushToAcceptFirst True
+                Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
       where
         myVersions = scVersions
         pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
@@ -328,13 +327,13 @@ dispatch
     Dispatch{..}
     _
     _
-    _
+    _mysock
     _peersa
     _
     _
     tim
-    (cpkt@(CryptPacket (RTT0 _ o _) _), lvl, siz) = do
-        mq <- lookupRecvQDict srcTable o
+    (cpkt@(CryptPacket (RTT0 _ dCID _) _), lvl, siz) = do
+        mq <- lookupRecvQDict srcTable dCID
         case mq of
             Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             Nothing -> return ()
