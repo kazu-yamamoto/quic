@@ -87,7 +87,7 @@ unregisterConnectionDict ref cid = atomicModifyIORef'' ref $
 ----------------------------------------------------------------
 
 -- Original destination CID -> RecvQ
-data RecvQDict = RecvQDict (LRUCache CID RecvQ)
+newtype RecvQDict = RecvQDict (LRUCache CID RecvQ)
 
 recvQDictSize :: Int
 recvQDictSize = 100

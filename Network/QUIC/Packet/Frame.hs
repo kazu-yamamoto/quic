@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Network.QUIC.Packet.Frame (
     encodeFrames,
     encodeFramesWithPadding,

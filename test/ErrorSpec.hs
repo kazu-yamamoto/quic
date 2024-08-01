@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module ErrorSpec where
 
 import Control.Monad (forever, void)
@@ -28,7 +26,7 @@ setup = do
     loop conn = forever $ void $ acceptStream conn
 
 teardown :: ThreadId -> IO ()
-teardown tid = killThread tid
+teardown = killThread
 
 spec :: Spec
 spec =

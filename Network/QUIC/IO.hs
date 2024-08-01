@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Network.QUIC.IO where
 
 import qualified Data.ByteString as BS

@@ -109,7 +109,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     q <- newRecvQ
     sref <- newIORef sock
     psaref <- newIORef peersa
-    let send = \buf siz -> do
+    let send buf siz = do
             s <- readIORef sref
             sa <- readIORef psaref
             void $ NS.sendBufTo s buf siz sa
