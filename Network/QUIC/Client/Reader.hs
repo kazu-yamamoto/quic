@@ -11,7 +11,7 @@ module Network.QUIC.Client.Reader (
 
 import Data.List (intersect)
 import Network.Socket (Socket, close, getSocketName)
-import Network.Socket.ByteString (recvFrom)
+import qualified Network.Socket.ByteString as NSB
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
 
@@ -44,7 +44,7 @@ readerClient s0 conn = handleLogUnit logAction $ do
         ito <- readMinIdleTimeout conn
         mbs <-
             timeout ito "readeClient" $
-                recvFrom s0 2048 -- fixme
+                NSB.recvFrom s0 2048 -- fixme
         case mbs of
             Nothing -> close s0
             Just (bs, peersa) -> do

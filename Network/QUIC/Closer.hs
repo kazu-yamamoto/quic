@@ -41,9 +41,9 @@ closure' conn ldcc frame = do
     sock <- getSocket conn
     peersa <- getPeerSockAddr conn
     -- send
-    let sbuf@(SizedBuffer sendBuf _) = encryptRes conn
+    let sbuf@(SizedBuffer sendbuf _) = encryptRes conn
     siz <- encodeCC conn sbuf frame
-    let send = void $ NS.sendBufTo sock sendBuf siz peersa
+    let send = void $ NS.sendBufTo sock sendbuf siz peersa
     -- recv and clos
     killReaders conn -- client only
     (recv, freeRecvBuf, clos) <-
@@ -51,9 +51,9 @@ closure' conn ldcc frame = do
             then return (void $ connRecv conn, return (), return ())
             else do
                 let bufsiz = maximumUdpPayloadSize
-                recvBuf <- mallocBytes bufsiz
-                let recv' = void $ NS.recvBuf sock recvBuf bufsiz
-                    free' = free recvBuf
+                recvbuf <- mallocBytes bufsiz
+                let recv' = void $ NS.recvBuf sock recvbuf bufsiz
+                    free' = free recvbuf
                     clos' = do
                         NS.close sock
                         -- This is just in case.
@@ -70,7 +70,7 @@ closure' conn ldcc frame = do
         clos
 
 encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
-encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
+encodeCC conn res0@(SizedBuffer sendbuf0 bufsiz0) frame = do
     lvl0 <- getEncryptionLevel conn
     let lvl
             | lvl0 == RTT0Level = InitialLevel
@@ -78,9 +78,9 @@ encodeCC conn res0@(SizedBuffer sendBuf0 bufsiz0) frame = do
     if lvl == HandshakeLevel
         then do
             siz0 <- encCC res0 InitialLevel
-            let sendBuf1 = sendBuf0 `plusPtr` siz0
+            let sendbuf1 = sendbuf0 `plusPtr` siz0
                 bufsiz1 = bufsiz0 - siz0
-                res1 = SizedBuffer sendBuf1 bufsiz1
+                res1 = SizedBuffer sendbuf1 bufsiz1
             siz1 <- encCC res1 HandshakeLevel
             return (siz0 + siz1)
         else
