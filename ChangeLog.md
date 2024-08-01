@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.1
+
+* Using recvMsg and sendBufMsg.
+
 ## 0.2.0
 
 * A new server architecture: only wildcard (unconnected) sockets are used.
