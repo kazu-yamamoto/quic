@@ -16,7 +16,7 @@ import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
 import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
-import Network.Socket (SockAddr, Socket)
+import Network.Socket (Cmsg, SockAddr, Socket)
 import Network.TLS.QUIC
 import UnliftIO.Concurrent
 import UnliftIO.STM
@@ -185,6 +185,8 @@ newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
 type Send = Buffer -> Int -> IO ()
 type Recv = IO ReceivedPacket
 
+data PeerInfo = PeerInfo SockAddr [Cmsg] deriving (Eq, Show)
+
 ----------------------------------------------------------------
 
 -- | A quic connection to carry multiple streams.
@@ -213,7 +215,7 @@ data Connection = Connection
     , -- Peer
       peerParameters :: IORef Parameters
     , peerCIDDB :: TVar CIDDB
-    , peerSockAddr :: IORef SockAddr
+    , peerInfo :: IORef PeerInfo
     , -- Queues
       inputQ :: InputQ
     , cryptoQ :: CryptoQ
@@ -289,12 +291,12 @@ newConnection
     -> QLogger
     -> Hooks
     -> IORef Socket
-    -> IORef SockAddr
+    -> IORef PeerInfo
     -> RecvQ
     -> Send
     -> Recv
     -> IO Connection
-newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref psaref recvQ ~send ~recv = do
+newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref piref recvQ ~send ~recv = do
     -- ~ for testing
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
@@ -317,7 +319,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         -- Peer
         <*> newIORef baseParameters
         <*> newTVarIO (newCIDDB peerCID)
-        <*> return psaref
+        <*> return piref
         -- Queues
         <*> newTQueueIO
         <*> newTQueueIO
@@ -385,7 +387,7 @@ clientConnection
     -> QLogger
     -> Hooks
     -> IORef Socket
-    -> IORef SockAddr
+    -> IORef PeerInfo
     -> RecvQ
     -> Send
     -> Recv
@@ -402,7 +404,7 @@ serverConnection
     -> QLogger
     -> Hooks
     -> IORef Socket
-    -> IORef SockAddr
+    -> IORef PeerInfo
     -> RecvQ
     -> Send
     -> Recv

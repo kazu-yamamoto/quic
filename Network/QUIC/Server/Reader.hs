@@ -25,7 +25,7 @@ import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Control (LRUCache)
 import qualified Network.Control as LRUCache
-import Network.Socket (SockAddr, Socket)
+import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import UnliftIO.Concurrent
@@ -114,7 +114,7 @@ data Accept = Accept
     , accMyAuthCIDs :: AuthCIDs
     , accPeerAuthCIDs :: AuthCIDs
     , accMySocket :: Socket
-    , accPeerSockAddr :: SockAddr
+    , accPeerInfo :: PeerInfo
     , accRecvQ :: RecvQ
     , accPacketSize :: Int
     , accRegister :: CID -> Connection -> IO ()
@@ -145,14 +145,15 @@ runDispatcher d conf mysock = forkIO $ dispatcher d conf mysock
 dispatcher :: Dispatch -> ServerConfig -> Socket -> IO ()
 dispatcher d conf mysock = handleLogUnit logAction $ do
     forever $ do
-        (bs, peersa) <- safeRecv $ NSB.recvFrom mysock 2048
+        (peersa, bs, cmsgs, _) <- safeRecv $ NSB.recvMsg mysock 2048 2048 0
         now <- getTimeMicrosecond
-        let send' b = void $ NSB.sendTo mysock b peersa
+        let send' b = void $ NSB.sendMsg mysock peersa [b] cmsgs 0
             -- cf: greaseQuicBit $ getMyParameters conn
             quicBit = greaseQuicBit $ scParameters conf
         cpckts <- decodeCryptPackets bs (not quicBit)
         let bytes = BS.length bs
-            switch = dispatch d conf logAction mysock peersa send' bytes now
+            peerInfo = PeerInfo peersa cmsgs
+            switch = dispatch d conf logAction mysock peerInfo send' bytes now
         mapM_ switch cpckts
   where
     doDebug = isJust $ scDebugLog conf
@@ -184,7 +185,7 @@ dispatch
     -> ServerConfig
     -> DebugLogger
     -> Socket
-    -> SockAddr
+    -> PeerInfo
     -> (ByteString -> IO ())
     -> Int
     -> TimeMicrosecond
@@ -195,13 +196,13 @@ dispatch
     ServerConfig{..}
     logAction
     mysock
-    peersa
+    peerInfo
     send'
     bytes
     tim
     (cpkt@(CryptPacket (Initial peerVer dCID sCID token) _), lvl, siz)
         | bytes < defaultQUICPacketSize = do
-            logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
+            logAction $ "too small " <> bhow bytes <> ", " <> bhow peerInfo
         | peerVer `notElem` myVersions = do
             let offerVersions
                     | peerVer == GreasingVersion = GreasingVersion2 : myVersions
@@ -247,7 +248,7 @@ dispatch
                                 , accMyAuthCIDs = myAuthCIDs
                                 , accPeerAuthCIDs = peerAuthCIDs
                                 , accMySocket = mysock
-                                , accPeerSockAddr = peersa
+                                , accPeerInfo = peerInfo
                                 , accRecvQ = q
                                 , accPacketSize = bytes
                                 , accRegister = reg
@@ -328,7 +329,7 @@ dispatch
     _
     _
     _mysock
-    _peersa
+    _peerInfo
     _
     _
     tim
@@ -343,7 +344,7 @@ dispatch
     _
     logAction
     mysock
-    peersa
+    peerInfo
     _
     _
     tim
@@ -351,10 +352,10 @@ dispatch
         let dCID = headerMyCID hdr
         mconn <- lookupConnectionDict dstTable dCID
         case mconn of
-            Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
+            Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peerInfo
             Just conn -> do
                 void $ setSocket conn mysock
-                setPeerSockAddr conn peersa
+                setPeerInfo conn peerInfo
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 
 recvServer :: RecvQ -> IO ReceivedPacket

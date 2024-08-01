@@ -49,7 +49,7 @@ makeConnections conf v = do
     (sock, peersa) <- clientSocket "127.0.0.1" "2000"
     q <- newRecvQ
     sref <- newIORef sock
-    psaref <- newIORef peersa
+    piref <- newIORef $ PeerInfo peersa []
     let ver = v
         verInfo = VersionInfo ver [ver]
     ----
@@ -63,7 +63,7 @@ makeConnections conf v = do
             noLog
             defaultHooks
             sref
-            psaref
+            piref
             q
             undefined
             undefined
@@ -78,7 +78,7 @@ makeConnections conf v = do
             noLog
             defaultHooks
             sref
-            psaref -- dummy
+            piref -- dummy
             q
             undefined
             undefined

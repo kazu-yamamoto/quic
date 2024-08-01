@@ -143,11 +143,11 @@ createServerConnection
     -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
     sref <- newIORef accMySocket
-    psaref <- newIORef accPeerSockAddr
+    piref <- newIORef accPeerInfo
     let send buf siz = void $ do
             sock <- readIORef sref
-            sa <- readIORef psaref
-            NS.sendBufTo sock buf siz sa
+            PeerInfo sa cmsgs <- readIORef piref
+            NS.sendBufMsg sock sa [(buf, siz)] cmsgs 0
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs
         ocid = fromJust $ origDstCID accMyAuthCIDs
@@ -164,7 +164,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
             qLog
             scHooks
             sref
-            psaref
+            piref
             accRecvQ
             send
             recv
@@ -174,9 +174,10 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
         ver = chosenVersion accVersionInfo
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz =
-            (defaultPacketSize accPeerSockAddr `max` accPacketSize)
-                `min` maximumPacketSize accPeerSockAddr
+    let PeerInfo peersa _ = accPeerInfo
+        pktSiz =
+            (defaultPacketSize peersa `max` accPacketSize)
+                `min` maximumPacketSize peersa
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"

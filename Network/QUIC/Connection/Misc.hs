@@ -10,8 +10,8 @@ module Network.QUIC.Connection.Misc (
     getSocket,
     setSocket,
     clearSocket,
-    getPeerSockAddr,
-    setPeerSockAddr,
+    getPeerInfo,
+    setPeerInfo,
     getPeerAuthCIDs,
     setPeerAuthCIDs,
     getClientDstCID,
@@ -33,7 +33,7 @@ module Network.QUIC.Connection.Misc (
     abortConnection,
 ) where
 
-import Network.Socket (SockAddr, Socket)
+import Network.Socket (Socket)
 import System.Mem.Weak
 import UnliftIO.Concurrent
 import qualified UnliftIO.Exception as E
@@ -77,11 +77,11 @@ setSocket Connection{..} sock = atomicModifyIORef' connSocket $
 clearSocket :: Connection -> IO Socket
 clearSocket Connection{..} = atomicModifyIORef' connSocket (undefined,)
 
-getPeerSockAddr :: Connection -> IO SockAddr
-getPeerSockAddr Connection{..} = readIORef peerSockAddr
+getPeerInfo :: Connection -> IO PeerInfo
+getPeerInfo Connection{..} = readIORef peerInfo
 
-setPeerSockAddr :: Connection -> SockAddr -> IO ()
-setPeerSockAddr Connection{..} sa = writeIORef peerSockAddr sa
+setPeerInfo :: Connection -> PeerInfo -> IO ()
+setPeerInfo Connection{..} = writeIORef peerInfo
 
 ----------------------------------------------------------------
 

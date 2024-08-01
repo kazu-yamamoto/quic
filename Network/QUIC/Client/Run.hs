@@ -108,11 +108,11 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     (sock, peersa) <- clientSocket ccServerName ccPortName
     q <- newRecvQ
     sref <- newIORef sock
-    psaref <- newIORef peersa
+    piref <- newIORef $ PeerInfo peersa []
     let send buf siz = do
             s <- readIORef sref
-            sa <- readIORef psaref
-            void $ NS.sendBufTo s buf siz sa
+            PeerInfo sa cmsgs <- readIORef piref
+            void $ NS.sendBufMsg s sa [(buf, siz)] cmsgs 0
         recv = recvClient q
     myCID <- newCID
     peerCID <- newCID
@@ -134,7 +134,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             qLog
             ccHooks
             sref
-            psaref
+            piref
             q
             send
             recv

@@ -44,11 +44,11 @@ readerClient s0 conn = handleLogUnit logAction $ do
         ito <- readMinIdleTimeout conn
         mbs <-
             timeout ito "readeClient" $
-                NSB.recvFrom s0 2048 -- fixme
+                NSB.recvMsg s0 2048 2048 0 -- fixme
         case mbs of
             Nothing -> close s0
-            Just (bs, peersa) -> do
-                setPeerSockAddr conn peersa
+            Just (peersa, bs, cmsgs, _) -> do
+                setPeerInfo conn $ PeerInfo peersa cmsgs
                 now <- getTimeMicrosecond
                 let quicBit = greaseQuicBit $ getMyParameters conn
                 pkts <- decodePackets bs (not quicBit)
@@ -142,7 +142,7 @@ controlConnection' conn ActiveMigration = do
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
-    peersa <- getPeerSockAddr conn
+    PeerInfo peersa _ <- getPeerInfo conn
     newSock <- natRebinding peersa
     oldSock <- setSocket conn newSock
     let reader = readerClient newSock conn
