@@ -210,14 +210,21 @@ isInitiated conn sid
     | otherwise = isServerInitiated sid
 
 guardStream :: Connection -> StreamId -> Maybe Stream -> IO ()
-guardStream conn sid Nothing
+guardStream conn sid Nothing =
+    streamNotCreatedYet
+        conn
+        sid
+        "a locally-initiated stream that has not yet been created"
+guardStream _ _ _ = return ()
+
+-- fixme: what about unidirection stream?
+streamNotCreatedYet :: Connection -> StreamId -> ReasonPhrase -> IO ()
+streamNotCreatedYet conn sid emsg
     | isInitiated conn sid = do
         curSid <- getMyStreamId conn
         when (sid > curSid) $
-            closeConnection
-                StreamStateError
-                "a locally-initiated stream that has not yet been created"
-guardStream _ _ _ = return ()
+            closeConnection StreamStateError emsg
+streamNotCreatedYet _ _ _ = return ()
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -247,9 +254,7 @@ processFrame conn lvl (StopSending sid err) = do
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
-        Nothing -> do
-            when (isInitiated conn sid) $
-                closeConnection StreamStateError "No such stream for STOP_SENDING"
+        Nothing -> streamNotCreatedYet conn sid "No such stream for STOP_SENDING"
         Just _strm -> sendFramesLim conn lvl [ResetStream sid err 0]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
@@ -338,11 +343,7 @@ processFrame conn lvl (MaxStreamData sid n) = do
         closeConnection StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
-        Nothing ->
-            when (isInitiated conn sid) $ do
-                curSid <- getMyStreamId conn
-                when (sid > curSid) $
-                    closeConnection StreamStateError "No such stream for MAX_STREAM_DATA"
+        Nothing -> streamNotCreatedYet conn sid "No such stream for MAX_STREAM_DATA"
         Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
