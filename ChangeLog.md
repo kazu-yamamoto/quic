@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.2
+
+# Introducing streamNotCreatedYet for STOP_SENDING.
+
 ## 0.2.1
 
 * Using recvMsg and sendBufMsg.
