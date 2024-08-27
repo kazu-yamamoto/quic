@@ -5,15 +5,15 @@ module Network.QUIC.Exception (
     handleLogUnit,
 ) where
 
+import qualified Control.Exception as E
 import qualified GHC.IO.Exception as E
 import qualified System.IO.Error as E
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Logger
 
 -- Catch all exceptions including asynchronous ones.
 handleLogUnit :: DebugLogger -> IO () -> IO ()
-handleLogUnit logAction action = action `E.catchSyncOrAsync` handler
+handleLogUnit logAction action = action `E.catch` handler
   where
     handler :: E.SomeException -> IO ()
     handler se = case E.fromException se of
@@ -25,7 +25,7 @@ handleLogUnit logAction action = action `E.catchSyncOrAsync` handler
 
 -- Log and throw an exception
 handleLogT :: DebugLogger -> IO a -> IO a
-handleLogT logAction action = action `E.catchAny` handler
+handleLogT logAction action = action `E.catch` handler
   where
     handler (E.SomeException e) = do
         logAction $ bhow e

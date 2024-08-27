@@ -26,9 +26,9 @@ module Network.QUIC.Connection.Migration (
     validatePath,
 ) where
 
+import Control.Concurrent.STM
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
-import UnliftIO.STM
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
@@ -123,7 +123,7 @@ waitPeerCID conn@Connection{..} = do
         let ref = peerCIDDB
         db <- readTVar ref
         mncid <- pickPeerCID conn
-        checkSTM $ isJust mncid
+        check $ isJust mncid
         let u = usedCIDInfo db
         setPeerCID conn (fromJust mncid) True
         return u
@@ -313,7 +313,7 @@ isPathValidating Connection{..} = do
 waitResponse :: Connection -> IO ()
 waitResponse Connection{..} = atomically $ do
     state <- readTVar migrationState
-    checkSTM (state == RecvResponse)
+    check (state == RecvResponse)
     writeTVar migrationState NonMigration
 
 checkResponse :: Connection -> PathData -> IO ()

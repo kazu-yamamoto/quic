@@ -17,6 +17,9 @@ module Network.QUIC.Server.Reader (
     recvServer,
 ) where
 
+import Control.Concurrent
+import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
@@ -28,9 +31,6 @@ import qualified Network.Control as LRUCache
 import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
-import UnliftIO.STM
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -162,7 +162,7 @@ dispatcher d conf mysock = handleLogUnit logAction $ do
         | otherwise = return ()
 
     safeRecv rcv = do
-        ex <- E.tryAny $ windowsThreadBlockHack rcv
+        ex <- E.try $ windowsThreadBlockHack rcv
         case ex of
             Right x -> return x
             Left se -> case E.fromException se of

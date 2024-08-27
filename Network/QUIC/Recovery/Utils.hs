@@ -11,10 +11,10 @@ module Network.QUIC.Recovery.Utils (
     delay,
 ) where
 
+import Control.Concurrent
+import Control.Concurrent.STM
 import Data.Sequence (Seq, ViewL (..), (<|))
 import qualified Data.Sequence as Seq
-import UnliftIO.Concurrent
-import UnliftIO.STM
 
 import Network.QUIC.Connector
 import Network.QUIC.Imports

@@ -1,12 +1,12 @@
 module FrameSpec where
 
+import qualified Control.Exception as E
 import Data.Word
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Utils (fillBytes)
 import Foreign.Ptr
 import Foreign.Storable
 import Test.Hspec
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Internal
 

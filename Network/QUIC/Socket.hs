@@ -4,9 +4,9 @@ module Network.QUIC.Socket (
     natRebinding,
 ) where
 
+import qualified Control.Exception as E
 import Data.IP (IP, toSockAddr)
 import Network.Socket
-import qualified UnliftIO.Exception as E
 
 natRebinding :: SockAddr -> IO Socket
 natRebinding sa = E.bracketOnError open close return

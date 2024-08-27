@@ -12,6 +12,8 @@ module Config (
     newSessionManager,
 ) where
 
+import Control.Concurrent
+import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import Data.IORef
@@ -19,8 +21,6 @@ import qualified Data.List as L
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Client
 import Network.QUIC.Internal

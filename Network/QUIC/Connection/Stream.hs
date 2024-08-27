@@ -14,7 +14,7 @@ module Network.QUIC.Connection.Stream (
     checkStreamIdRoom,
 ) where
 
-import UnliftIO.STM
+import Control.Concurrent.STM
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
@@ -45,7 +45,7 @@ get tvar = atomically $ do
     conc@Concurrency{..} <- readTVar tvar
     let streamType = currentStream .&. 0b11
         StreamIdBase base = maxStreams
-    checkSTM (currentStream < base * 4 + streamType)
+    check (currentStream < base * 4 + streamType)
     let currentStream' = currentStream + 4
     writeTVar tvar conc{currentStream = currentStream'}
     return currentStream
@@ -68,15 +68,15 @@ updatePeerStreamId conn sid = do
             || (isServer conn && isClientInitiatedBidirectional sid)
         )
         $ do
-            atomicModifyIORef'' (peerStreamId conn) check
+            atomicModifyIORef'' (peerStreamId conn) checkConc
     when
         ( (isClient conn && isServerInitiatedUnidirectional sid)
             || (isServer conn && isClientInitiatedUnidirectional sid)
         )
         $ do
-            atomicModifyIORef'' (peerUniStreamId conn) check
+            atomicModifyIORef'' (peerUniStreamId conn) checkConc
   where
-    check conc@Concurrency{..}
+    checkConc conc@Concurrency{..}
         | currentStream < sid = conc{currentStream = sid}
         | otherwise = conc
 
@@ -106,9 +106,9 @@ checkStreamIdRoom conn dir = do
     let ref
             | dir == Bidirectional = peerStreamId conn
             | otherwise = peerUniStreamId conn
-    atomicModifyIORef' ref check
+    atomicModifyIORef' ref checkConc
   where
-    check conc@Concurrency{..} =
+    checkConc conc@Concurrency{..} =
         let StreamIdBase base = maxStreams
             initialStreams = initialMaxStreamsBidi $ getMyParameters conn
             cbase = currentStream !>>. 2

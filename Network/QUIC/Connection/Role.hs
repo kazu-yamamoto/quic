@@ -22,9 +22,9 @@ module Network.QUIC.Connection.Role (
     getCertificateChain,
 ) where
 
+import Control.Concurrent
 import qualified Crypto.Token as CT
 import Data.X509 (CertificateChain)
-import UnliftIO.Concurrent
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types

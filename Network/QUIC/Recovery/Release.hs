@@ -7,9 +7,9 @@ module Network.QUIC.Recovery.Release (
     onPacketsLost,
 ) where
 
+import Control.Concurrent.STM
 import Data.Sequence (Seq, ViewL (..), ViewR (..), (><))
 import qualified Data.Sequence as Seq
-import UnliftIO.STM
 
 import Network.QUIC.Imports
 import Network.QUIC.Recovery.Metrics

@@ -1,8 +1,8 @@
 module Network.QUIC.Connector where
 
+import Control.Concurrent.STM
 import Data.IORef
 import Network.QUIC.Types
-import UnliftIO.STM
 
 class Connector a where
     getRole :: a -> Role

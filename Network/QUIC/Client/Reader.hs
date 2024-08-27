@@ -9,11 +9,11 @@ module Network.QUIC.Client.Reader (
     clientSocket,
 ) where
 
+import Control.Concurrent
+import qualified Control.Exception as E
 import Data.List (intersect)
 import Network.Socket (Socket, close, getSocketName)
 import qualified Network.Socket.ByteString as NSB
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -34,7 +34,7 @@ readerClient s0 conn = handleLogUnit logAction $ do
     loop
   where
     wait = do
-        bound <- E.handleAny (\_ -> return False) $ do
+        bound <- E.handle (\(E.SomeException _) -> return False) $ do
             _ <- getSocketName s0
             return True
         unless bound $ do

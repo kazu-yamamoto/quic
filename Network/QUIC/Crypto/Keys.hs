@@ -12,10 +12,10 @@ module Network.QUIC.Crypto.Keys (
     headerProtectionKey,
 ) where
 
+import qualified Control.Exception as E
 import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Crypto.Types
 import Network.QUIC.Imports
@@ -35,7 +35,7 @@ initialSalt Version1 =
     "\x38\x76\x2c\xf7\xf5\x59\x34\xb3\x4d\x17\x9a\xe6\xa4\xc8\x0c\xad\xcc\xbb\x7f\x0a"
 initialSalt Version2 =
     "\x0d\xed\xe3\xde\xf7\x00\xa6\xdb\x81\x93\x81\xbe\x6e\x26\x9d\xcb\xf9\xbd\x2e\xd9"
-initialSalt (Version v) = E.impureThrow $ VersionIsUnknown v
+initialSalt (Version v) = E.throw $ VersionIsUnknown v
 
 initialSecrets :: Version -> CID -> TrafficSecrets InitialSecret
 initialSecrets v c = (clientInitialSecret v c, serverInitialSecret v c)

@@ -5,6 +5,8 @@
 
 module Network.QUIC.Connection.Types where
 
+import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.ByteString.Internal
@@ -18,8 +20,6 @@ import Foreign.Ptr (nullPtr)
 import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
 import Network.Socket (Cmsg, SockAddr, Socket)
 import Network.TLS.QUIC
-import UnliftIO.Concurrent
-import UnliftIO.STM
 
 import Network.QUIC.Config
 import Network.QUIC.Connector

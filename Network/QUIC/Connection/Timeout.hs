@@ -5,10 +5,10 @@ module Network.QUIC.Connection.Timeout (
     delay,
 ) where
 
+import Control.Concurrent
+import qualified Control.Exception as E
 import Network.QUIC.Event
 import qualified System.Timeout as ST
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
@@ -25,7 +25,7 @@ fire conn (Microseconds microseconds) action = do
   where
     action' = do
         alive <- getAlive conn
-        when alive action `E.catchSyncOrAsync` ignore
+        when alive action `E.catch` ignore
 
 cfire :: Connection -> Microseconds -> TimeoutCallback -> IO (IO ())
 cfire conn (Microseconds microseconds) action = do
@@ -36,7 +36,7 @@ cfire conn (Microseconds microseconds) action = do
   where
     action' = do
         alive <- getAlive conn
-        when alive action `E.catchSyncOrAsync` ignore
+        when alive action `E.catch` ignore
 
 delay :: Microseconds -> IO ()
 delay (Microseconds microseconds) = threadDelay microseconds

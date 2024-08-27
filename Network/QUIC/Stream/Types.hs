@@ -12,10 +12,10 @@ module Network.QUIC.Stream.Types (
     waitFinTx,
 ) where
 
+import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import Network.Control
-import UnliftIO.Concurrent
-import UnliftIO.STM
 
 import {-# SOURCE #-} Network.QUIC.Connection.Types
 import Network.QUIC.Imports

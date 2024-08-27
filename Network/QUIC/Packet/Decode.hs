@@ -7,9 +7,9 @@ module Network.QUIC.Packet.Decode (
     decodeStatelessResetToken,
 ) where
 
+import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Imports
 import Network.QUIC.Packet.Header

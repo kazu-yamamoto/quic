@@ -7,9 +7,9 @@ module Network.QUIC.Recovery.Interface (
     resender,
 ) where
 
+import Control.Concurrent.STM
 import qualified Data.Sequence as Seq
 import System.Log.FastLogger (LogStr)
-import UnliftIO.STM
 
 import Network.QUIC.Imports
 import Network.QUIC.Qlog
@@ -23,12 +23,12 @@ import Network.QUIC.Types
 checkWindowOpenSTM :: LDCC -> Int -> STM ()
 checkWindowOpenSTM LDCC{..} siz = do
     CC{..} <- readTVar recoveryCC
-    checkSTM (siz <= congestionWindow - bytesInFlight)
+    check (siz <= congestionWindow - bytesInFlight)
 
 takePingSTM :: LDCC -> STM EncryptionLevel
 takePingSTM LDCC{..} = do
     mx <- readTVar ptoPing
-    checkSTM $ isJust mx
+    check $ isJust mx
     writeTVar ptoPing Nothing
     return $ fromJust mx
 
@@ -48,7 +48,7 @@ resender :: LDCC -> IO ()
 resender ldcc@LDCC{..} = forever $ do
     atomically $ do
         lostPackets <- readTVar lostCandidates
-        checkSTM (lostPackets /= emptySentPackets)
+        check (lostPackets /= emptySentPackets)
     delay $ Microseconds 10000 -- fixme
     packets <- atomically $ do
         SentPackets pkts <- readTVar lostCandidates

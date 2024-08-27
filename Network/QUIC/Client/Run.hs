@@ -7,10 +7,10 @@ module Network.QUIC.Client.Run (
     migrate,
 ) where
 
+import Control.Concurrent
+import Control.Concurrent.Async
+import qualified Control.Exception as E
 import qualified Network.Socket as NS
-import UnliftIO.Async
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Client.Reader
 import Network.QUIC.Closer
@@ -92,7 +92,7 @@ runClient conf client0 isICVN verInfo = do
                 case er of
                     Left () -> E.throwIO MustNotReached
                     Right r -> return r
-        ex <- E.trySyncOrAsync runThreads
+        ex <- E.try runThreads
         sendFinal conn
         closure conn ldcc ex
   where

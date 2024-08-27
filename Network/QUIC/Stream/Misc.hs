@@ -18,8 +18,8 @@ module Network.QUIC.Stream.Misc (
     updateStreamFlowRx,
 ) where
 
+import Control.Concurrent.STM
 import Network.Control
-import UnliftIO.STM
 
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Queue

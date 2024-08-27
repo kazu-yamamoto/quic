@@ -8,11 +8,11 @@ module Network.QUIC.Server.Run (
     stop,
 ) where
 
+import Control.Concurrent
+import Control.Concurrent.Async
+import qualified Control.Exception as E
 import qualified Network.Socket as NS
 import System.Log.FastLogger
-import UnliftIO.Async
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Closer
 import Network.QUIC.Common
@@ -122,7 +122,7 @@ runServer conf server0 dispatch baseThreadId acc =
                     case er of
                         Left () -> E.throwIO MustNotReached
                         Right r -> return r
-            ex <- E.trySyncOrAsync runThreads
+            ex <- E.try runThreads
             sendFinal conn
             closure conn ldcc ex
   where

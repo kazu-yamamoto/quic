@@ -24,8 +24,8 @@ module Network.QUIC.Connection.Crypto (
     setCurrentKeyPhase,
 ) where
 
+import Control.Concurrent.STM
 import Network.TLS.QUIC
-import UnliftIO.STM
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
@@ -63,7 +63,7 @@ putOffCrypto Connection{..} lvl rpkt =
 waitEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
 waitEncryptionLevel Connection{..} lvl = atomically $ do
     l <- readTVar $ encryptionLevel connState
-    checkSTM (l >= lvl)
+    check (l >= lvl)
 
 ----------------------------------------------------------------
 

@@ -2,6 +2,7 @@
 
 module Network.QUIC.Utils where
 
+import Control.Exception
 import Control.Monad (replicateM)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base16
@@ -15,7 +16,6 @@ import Data.Word
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, plusPtr)
 import System.Random (randomIO)
-import UnliftIO.Exception
 
 -- GHC 8.0 does not provide fromRight.
 fromRight :: b -> Either a b -> b

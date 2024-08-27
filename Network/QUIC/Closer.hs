@@ -2,11 +2,11 @@
 
 module Network.QUIC.Closer (closure) where
 
+import Control.Concurrent
+import qualified Control.Exception as E
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import qualified Network.Socket as NS
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
 
 import Network.QUIC.Config
 import Network.QUIC.Connection

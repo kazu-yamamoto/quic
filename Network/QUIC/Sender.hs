@@ -6,11 +6,11 @@ module Network.QUIC.Sender (
     sendFinal,
 ) where
 
+import Control.Concurrent
+import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Foreign.Ptr (plusPtr)
-import UnliftIO.Concurrent
-import qualified UnliftIO.Exception as E
-import UnliftIO.STM
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
