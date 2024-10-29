@@ -3,7 +3,7 @@
 
 module Network.QUIC.Config where
 
-import Data.Default.Class
+import Data.Default
 import Data.IP
 import Network.Socket
 import Network.TLS hiding (Hooks, HostName, Version)
