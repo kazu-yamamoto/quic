@@ -8,7 +8,7 @@ module Network.QUIC.TLS (
 
 import Control.Applicative ((<|>))
 import Data.Default
-import Network.TLS hiding (Version)
+import Network.TLS hiding (Version, defaultSupported)
 import Network.TLS.QUIC
 import System.X509
 
