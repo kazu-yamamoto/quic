@@ -32,6 +32,7 @@ import Network.Socket (Socket)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 
+import Network.QUIC.Common
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Exception
@@ -59,7 +60,11 @@ newDispatch ServerConfig{..} =
         <*> newIORef emptyRecvQDict
         <*> newAcceptQ
   where
-    conf = CT.defaultConfig{CT.tokenLifetime = scTicketLifetime}
+    conf =
+        CT.defaultConfig
+            { CT.tokenLifetime = scTicketLifetime
+            , CT.threadName = "QUIC token manager"
+            }
 
 clearDispatch :: Dispatch -> IO ()
 clearDispatch d = CT.killTokenManager $ tokenMgr d
@@ -144,6 +149,7 @@ runDispatcher d conf mysock = forkIO $ dispatcher d conf mysock
 
 dispatcher :: Dispatch -> ServerConfig -> Socket -> IO ()
 dispatcher d conf mysock = handleLogUnit logAction $ do
+    labelMe "QUIC dispatcher"
     forever $ do
         (peersa, bs, cmsgs, _) <- safeRecv $ NSB.recvMsg mysock 2048 2048 0
         now <- getTimeMicrosecond

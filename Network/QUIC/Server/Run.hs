@@ -41,6 +41,7 @@ import Network.QUIC.Types
 --   in a new lightweight thread.
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
+    labelMe "QUIC run"
     baseThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch, _, _) -> do
         onServerReady $ scHooks conf
@@ -68,6 +69,7 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 --   in a new lightweight thread.
 runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
 runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
+    labelMe "QUIC runWithSockets"
     baseThreadId <- myThreadId
     E.bracket setup teardown $ \(dispatch, _) -> do
         onServerReady $ scHooks conf
@@ -92,7 +94,8 @@ runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 -- And the exception should be ignored.
 runServer
     :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
-runServer conf server0 dispatch baseThreadId acc =
+runServer conf server0 dispatch baseThreadId acc = do
+    labelMe "QUIC runServer"
     E.bracket open clse $ \(ConnRes conn myAuthCIDs _reader) ->
         handleLogUnit (debugLog conn) $ do
             let conf' =
