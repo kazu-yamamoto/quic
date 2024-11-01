@@ -8,6 +8,7 @@ import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import qualified Network.Socket as NS
 
+import Network.QUIC.Common
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -101,7 +102,9 @@ encodeCC conn res0@(SizedBuffer sendbuf0 bufsiz0) frame = do
                 return 0
 
 closer :: Connection -> Microseconds -> IO () -> IO () -> IO () -> IO ()
-closer _conn (Microseconds pto) send recv hook = loop (3 :: Int)
+closer _conn (Microseconds pto) send recv hook = do
+    labelMe "QUIC closer"
+    loop (3 :: Int)
   where
     loop 0 = return ()
     loop n = do
