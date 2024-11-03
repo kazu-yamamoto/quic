@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.2.3
+
+* Supporting tls v2.1.3.
+* Labeling threads.
+* Using data-default.
+* Removing `unliftio`.
+
 ## 0.2.2
 
 # Introducing streamNotCreatedYet for STOP_SENDING.
