@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.4
+
+* Putting `#if` for `threadLabel`.
+* Revert Timeout.hs which is accidentally committed.
+
 ## 0.2.3
 
 * Supporting tls v2.1.3.
