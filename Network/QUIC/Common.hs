@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE StrictData #-}
 
 module Network.QUIC.Common where
@@ -27,9 +28,15 @@ maximumPacketSize NS.SockAddrInet6{} = 1500 - 40 - 8 -- fixme
 maximumPacketSize _ = 1500 - 20 - 8 -- fixme
 
 labelMe :: String -> IO ()
+#if MIN_VERSION_base(4,18,0)
 labelMe name = do
     tid <- myThreadId
     mlabel <- threadLabel tid
     case mlabel of
         Nothing -> labelThread tid name
         Just _ -> return ()
+#else
+labelMe name = do
+    tid <- myThreadId
+    labelThread tid name
+#endif
