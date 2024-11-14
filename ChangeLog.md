@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.5
+
+* Re-throwing asynchronous exceptions.
+
 ## 0.2.4
 
 * Putting `#if` for `threadLabel`.
