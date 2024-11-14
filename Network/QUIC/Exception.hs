@@ -9,6 +9,7 @@ import qualified Control.Exception as E
 import qualified GHC.IO.Exception as E
 import qualified System.IO.Error as E
 
+import Network.QUIC.Imports
 import Network.QUIC.Logger
 
 -- Catch all exceptions including asynchronous ones.
@@ -16,6 +17,7 @@ handleLogUnit :: DebugLogger -> IO () -> IO ()
 handleLogUnit logAction action = action `E.catch` handler
   where
     handler :: E.SomeException -> IO ()
+    handler se | isAsyncException se = E.throwIO se
     handler se = case E.fromException se of
         -- threadWait: invalid argument (Bad file descriptor)
         Just e | E.ioeGetErrorType e == E.InvalidArgument -> return ()

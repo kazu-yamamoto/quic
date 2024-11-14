@@ -58,4 +58,17 @@ shortpack :: String -> ShortByteString
 shortpack = Short.toShort . C8.pack
 
 ignore :: SomeException -> IO ()
-ignore _ = return ()
+ignore se
+    | isAsyncException se = throwIO se
+    | otherwise = return ()
+
+isAsyncException :: Exception e => e -> Bool
+isAsyncException e =
+    case fromException (toException e) of
+        Just (SomeAsyncException _) -> True
+        Nothing -> False
+
+throughAsync :: IO a -> SomeException -> IO a
+throughAsync action (SomeException e)
+    | isAsyncException e = throwIO e
+    | otherwise = action

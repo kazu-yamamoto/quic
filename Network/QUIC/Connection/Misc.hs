@@ -150,7 +150,7 @@ setMaxPacketSize Connection{..} n = writeIORef (maxPacketSize connState) n
 addResource :: Connection -> IO () -> IO ()
 addResource Connection{..} f = atomicModifyIORef'' connResources $ \fs -> f' >> fs
   where
-    f' = f `E.catch` (\(E.SomeException _) -> return ())
+    f' = f `E.catch` ignore
 
 freeResources :: Connection -> IO ()
 freeResources Connection{..} =

@@ -34,7 +34,7 @@ readerClient s0 conn = handleLogUnit logAction $ do
     loop
   where
     wait = do
-        bound <- E.handle (\(E.SomeException _) -> return False) $ do
+        bound <- E.handle (throughAsync (return False)) $ do
             _ <- getSocketName s0
             return True
         unless bound $ do
