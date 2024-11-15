@@ -50,7 +50,7 @@ data RoleInfo
         , registerCID :: CID -> Connection -> IO ()
         , unregisterCID :: CID -> IO ()
         , askRetry :: Bool
-        , baseThreadId :: ~ThreadId
+        , stopServer :: IO ()
         , certChain :: Maybe CertificateChain
         }
 
@@ -69,7 +69,7 @@ defaultServerRoleInfo =
         , registerCID = \_ _ -> return ()
         , unregisterCID = \_ -> return ()
         , askRetry = False
-        , baseThreadId = undefined
+        , stopServer = return ()
         , certChain = Nothing
         }
 

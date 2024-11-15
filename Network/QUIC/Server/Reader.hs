@@ -9,12 +9,12 @@ module Network.QUIC.Server.Reader (
     tokenMgr,
 
     -- * Accepting
-    accept,
     Accept (..),
 
     -- * Receiving and reading
     RecvQ,
     recvServer,
+    ServerState (..),
 ) where
 
 import Control.Concurrent
@@ -28,7 +28,7 @@ import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Control (LRUCache)
 import qualified Network.Control as LRUCache
-import Network.Socket (Socket)
+import Network.Socket (Socket, waitReadSocketSTM)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 
@@ -49,7 +49,6 @@ data Dispatch = Dispatch
     { tokenMgr :: CT.TokenManager
     , dstTable :: IORef ConnectionDict
     , srcTable :: IORef RecvQDict
-    , acceptQ :: AcceptQ
     }
 
 newDispatch :: ServerConfig -> IO Dispatch
@@ -58,7 +57,6 @@ newDispatch ServerConfig{..} =
         <$> CT.spawnTokenManager conf
         <*> newIORef emptyConnectionDict
         <*> newIORef emptyRecvQDict
-        <*> newAcceptQ
   where
     conf =
         CT.defaultConfig
@@ -128,40 +126,56 @@ data Accept = Accept
     , accTime :: TimeMicrosecond
     }
 
-newtype AcceptQ = AcceptQ (TQueue Accept)
-
-newAcceptQ :: IO AcceptQ
-newAcceptQ = AcceptQ <$> newTQueueIO
-
-readAcceptQ :: AcceptQ -> IO Accept
-readAcceptQ (AcceptQ q) = atomically $ readTQueue q
-
-writeAcceptQ :: AcceptQ -> Accept -> IO ()
-writeAcceptQ (AcceptQ q) x = atomically $ writeTQueue q x
-
-accept :: Dispatch -> IO Accept
-accept = readAcceptQ . acceptQ
-
 ----------------------------------------------------------------
 
-runDispatcher :: Dispatch -> ServerConfig -> Socket -> IO ThreadId
-runDispatcher d conf mysock = forkIO $ dispatcher d conf mysock
+runDispatcher
+    :: Dispatch
+    -> ServerConfig
+    -> TVar ServerState
+    -> (Accept -> IO ())
+    -> Socket
+    -> IO ThreadId
+runDispatcher d conf stvar forkConn mysock = forkIO $ dispatcher d conf stvar forkConn mysock
 
-dispatcher :: Dispatch -> ServerConfig -> Socket -> IO ()
-dispatcher d conf mysock = handleLogUnit logAction $ do
+data ServerState = Running | Stopped deriving (Eq, Show)
+
+checkLoop :: TVar ServerState -> STM () -> IO Bool
+checkLoop stvar waitsock = atomically $ do
+    st <- readTVar stvar
+    if st == Stopped
+        then
+            return False
+        else do
+            waitsock -- blocking is retry
+            return True
+
+dispatcher
+    :: Dispatch
+    -> ServerConfig
+    -> TVar ServerState
+    -> (Accept -> IO ())
+    -> Socket
+    -> IO ()
+dispatcher d conf stvar forkConnection mysock = do
     labelMe "QUIC dispatcher"
-    forever $ do
-        (peersa, bs, cmsgs, _) <- safeRecv $ NSB.recvMsg mysock 2048 2048 0
-        now <- getTimeMicrosecond
-        let send' b = void $ NSB.sendMsg mysock peersa [b] cmsgs 0
-            -- cf: greaseQuicBit $ getMyParameters conn
-            quicBit = greaseQuicBit $ scParameters conf
-        cpckts <- decodeCryptPackets bs (not quicBit)
-        let bytes = BS.length bs
-            peerInfo = PeerInfo peersa cmsgs
-            switch = dispatch d conf logAction mysock peerInfo send' bytes now
-        mapM_ switch cpckts
+    wait <- waitReadSocketSTM mysock
+    handleLogUnit logAction $ loop wait
   where
+    loop wait = do
+        cont <- checkLoop stvar wait
+        when cont $ do
+            (peersa, bs, cmsgs, _) <- safeRecv $ NSB.recvMsg mysock 2048 2048 0
+            now <- getTimeMicrosecond
+            let send' b = void $ NSB.sendMsg mysock peersa [b] cmsgs 0
+                -- cf: greaseQuicBit $ getMyParameters conn
+                quicBit = greaseQuicBit $ scParameters conf
+            cpckts <- decodeCryptPackets bs (not quicBit)
+            let bytes = BS.length bs
+                peerInfo = PeerInfo peersa cmsgs
+                switch = dispatch d conf forkConnection logAction mysock peerInfo send' bytes now
+            mapM_ switch cpckts
+            loop wait
+
     doDebug = isJust $ scDebugLog conf
     logAction msg
         | doDebug = stdoutLogger ("dispatch(er): " <> msg)
@@ -189,6 +203,7 @@ dispatcher d conf mysock = handleLogUnit logAction $ do
 dispatch
     :: Dispatch
     -> ServerConfig
+    -> (Accept -> IO ())
     -> DebugLogger
     -> Socket
     -> PeerInfo
@@ -200,6 +215,7 @@ dispatch
 dispatch
     Dispatch{..}
     ServerConfig{..}
+    forkConnection
     logAction
     mysock
     peerInfo
@@ -248,7 +264,7 @@ dispatch
                     writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
                     let reg = registerConnectionDict dstTable
                         unreg = unregisterConnectionDict dstTable
-                        ent =
+                        acc =
                             Accept
                                 { accVersionInfo = VersionInfo peerVer myVersions
                                 , accMyAuthCIDs = myAuthCIDs
@@ -262,8 +278,7 @@ dispatch
                                 , accAddressValidated = addrValid
                                 , accTime = tim
                                 }
-                    -- fixme: check acceptQ length
-                    writeAcceptQ acceptQ ent
+                    forkConnection acc
         -- Initial: DCID=S1, SCID=C1 ->
         --                                     <- Initial: DCID=C1, SCID=S2
         --                               ...
@@ -334,6 +349,7 @@ dispatch
     Dispatch{..}
     _
     _
+    _
     _mysock
     _peerInfo
     _
@@ -347,6 +363,7 @@ dispatch
 ----------------------------------------------------------------
 dispatch
     Dispatch{..}
+    _
     _
     logAction
     mysock

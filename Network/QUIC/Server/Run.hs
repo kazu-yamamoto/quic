@@ -10,9 +10,10 @@ module Network.QUIC.Server.Run (
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Network.Socket as NS
-import System.Log.FastLogger
+import System.Log.FastLogger hiding (check)
 
 import Network.QUIC.Closer
 import Network.QUIC.Common
@@ -42,22 +43,23 @@ import Network.QUIC.Types
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     labelMe "QUIC run"
-    baseThreadId <- myThreadId
-    E.bracket setup teardown $ \(dispatch, _, _) -> do
+    stvar <- newTVarIO Running
+    E.bracket (setup stvar) teardown $ \(_, _, _) -> do
         onServerReady $ scHooks conf
-        forever $ do
-            acc <- accept dispatch
-            void $ forkIO (runServer conf server dispatch baseThreadId acc)
+        atomically $ do
+            st <- readTVar stvar
+            check $ st == Stopped
   where
     doDebug = isJust $ scDebugLog conf
     debugLog msg
         | doDebug = stdoutLogger ("run: " <> msg)
         | otherwise = return ()
-    setup = do
+    setup stvar = do
         dispatch <- newDispatch conf
+        let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
         -- fixme: the case where sockets cannot be created.
         ssas <- mapM serverSocket $ scAddresses conf
-        tids <- mapM (runDispatcher dispatch conf) ssas
+        tids <- mapM (runDispatcher dispatch conf stvar forkConn) ssas
         return (dispatch, tids, ssas)
     teardown (dispatch, tids, ssas) = do
         clearDispatch dispatch
@@ -70,21 +72,22 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
 runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
     labelMe "QUIC runWithSockets"
-    baseThreadId <- myThreadId
-    E.bracket setup teardown $ \(dispatch, _) -> do
+    stvar <- newTVarIO Running
+    E.bracket (setup stvar) teardown $ \(_, _) -> do
         onServerReady $ scHooks conf
-        forever $ do
-            acc <- accept dispatch
-            void $ forkIO (runServer conf server dispatch baseThreadId acc)
+        atomically $ do
+            st <- readTVar stvar
+            check $ st == Stopped
   where
     doDebug = isJust $ scDebugLog conf
     debugLog msg
         | doDebug = stdoutLogger ("run: " <> msg)
         | otherwise = return ()
-    setup = do
+    setup stvar = do
         dispatch <- newDispatch conf
+        let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
         -- fixme: the case where sockets cannot be created.
-        tids <- mapM (runDispatcher dispatch conf) ssas
+        tids <- mapM (runDispatcher dispatch conf stvar forkConn) ssas
         return (dispatch, tids)
     teardown (dispatch, tids) = do
         clearDispatch dispatch
@@ -93,8 +96,13 @@ runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
 runServer
-    :: ServerConfig -> (Connection -> IO ()) -> Dispatch -> ThreadId -> Accept -> IO ()
-runServer conf server0 dispatch baseThreadId acc = do
+    :: ServerConfig
+    -> (Connection -> IO ())
+    -> Dispatch
+    -> TVar ServerState
+    -> Accept
+    -> IO ()
+runServer conf server0 dispatch stvar acc = do
     labelMe "QUIC runServer"
     E.bracket open clse $ \(ConnRes conn myAuthCIDs _reader) ->
         handleLogUnit (debugLog conn) $ do
@@ -130,7 +138,7 @@ runServer conf server0 dispatch baseThreadId acc = do
             sendFinal conn
             closure conn ldcc ex
   where
-    open = createServerConnection conf dispatch acc baseThreadId
+    open = createServerConnection conf dispatch acc stvar
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
@@ -143,9 +151,9 @@ createServerConnection
     :: ServerConfig
     -> Dispatch
     -> Accept
-    -> ThreadId
+    -> TVar ServerState
     -> IO ConnRes
-createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = do
+createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
     sref <- newIORef accMySocket
     piref <- newIORef accPeerInfo
     let send buf siz = void $ do
@@ -195,7 +203,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} baseThreadId = 
     let mgr = tokenMgr dispatch
     setTokenManager conn mgr
     --
-    setBaseThreadId conn baseThreadId
+    setStopServer conn $ atomically $ writeTVar stvar Stopped
     --
     setRegister conn accRegister accUnregister
     accRegister myCID conn
@@ -224,4 +232,6 @@ afterHandshakeServer ServerConfig{..} conn = handleLogT logAction $ do
 
 -- | Stopping the base thread of the server.
 stop :: Connection -> IO ()
-stop conn = getBaseThreadId conn >>= killThread
+stop conn = do
+    action <- getStopServer conn
+    action

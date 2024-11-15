@@ -16,13 +16,12 @@ module Network.QUIC.Connection.Role (
     getUnregister,
     setTokenManager,
     getTokenManager,
-    setBaseThreadId,
-    getBaseThreadId,
+    setStopServer,
+    getStopServer,
     setCertificateChain,
     getCertificateChain,
 ) where
 
-import Control.Concurrent
 import qualified Crypto.Token as CT
 import Data.X509 (CertificateChain)
 
@@ -133,12 +132,12 @@ getTokenManager Connection{..} = tokenManager <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 
-setBaseThreadId :: Connection -> ThreadId -> IO ()
-setBaseThreadId Connection{..} tid = atomicModifyIORef'' roleInfo $
-    \si -> si{baseThreadId = tid}
+setStopServer :: Connection -> IO () -> IO ()
+setStopServer Connection{..} action = atomicModifyIORef'' roleInfo $
+    \si -> si{stopServer = action}
 
-getBaseThreadId :: Connection -> IO ThreadId
-getBaseThreadId Connection{..} = baseThreadId <$> readIORef roleInfo
+getStopServer :: Connection -> IO (IO ())
+getStopServer Connection{..} = stopServer <$> readIORef roleInfo
 
 ----------------------------------------------------------------
 
