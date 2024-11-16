@@ -47,6 +47,7 @@ run conf client = NS.withSocketsDo $ do
                         vers = ccVersions conf
                      in VersionInfo ver vers
             _ -> let ver = resumptionVersion resInfo in VersionInfo ver [ver]
+    -- Exceptions except NextVersion are passed through.
     ex <- E.try $ runClient conf client False verInfo
     case ex of
         Right v -> return v

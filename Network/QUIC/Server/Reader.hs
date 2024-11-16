@@ -185,6 +185,7 @@ dispatcher d conf stvar forkConnection mysock = do
         ex <- E.try $ windowsThreadBlockHack rcv
         case ex of
             Right x -> return x
+            Left se | isAsyncException se -> E.throwIO (se :: E.SomeException)
             Left se -> case E.fromException se of
                 Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
                 _ -> do
