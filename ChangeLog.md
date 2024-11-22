@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.6
+
+* Using `ServerState` instead of `killThread`.
+* Don't catch asynchronous exceptions.
+
 ## 0.2.5
 
 * Re-throwing asynchronous exceptions.
