@@ -24,7 +24,6 @@ closure conn ldcc (Right x) = do
     closure' conn ldcc $ ConnectionClose NoError 0 ""
     return x
 closure conn ldcc (Left se)
-    | isAsyncException se = E.throwIO se
     | Just e@(TransportErrorIsSent err desc) <- E.fromException se = do
         closure' conn ldcc $ ConnectionClose err 0 desc
         E.throwIO e
@@ -36,7 +35,7 @@ closure conn ldcc (Left se)
         E.throwIO $ ApplicationProtocolErrorIsSent err desc
     | Just (VerNego vers) <- E.fromException se = do
         E.throwIO $ NextVersion vers
-    | otherwise = E.throwIO se
+    | otherwise = E.throwIO se -- including asynchronous exceptions
 
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
