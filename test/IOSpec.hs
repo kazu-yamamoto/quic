@@ -89,6 +89,9 @@ spec = do
     describe "concurrency" $ do
         it "can handle multiple clients" $ do
             withPipe (Randomly 20) $ testMultiSendRecv cc sc waitS 500
+    describe "abortConnection" $ do
+        it "can abort connection" $ do
+            withPipe (Randomly 20) $ testAbort cc sc waitS
 
 consumeBytes :: Stream -> Int -> IO ()
 consumeBytes _ 0 = return ()
@@ -200,4 +203,31 @@ testMultiSendRecv cc sc waitS times = do
                 consumeBytes strm (chunklen * times)
                 assertEndOfStream strm
                 putMVar (mvars !! n) ()
+            loop conn
+
+appErr :: QUICException -> Bool
+appErr (ApplicationProtocolErrorIsReceived _ _) = True
+appErr _ = False
+
+testAbort :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testAbort cc sc waitS = do
+    E.bracket (forkIO server) killThread $ \_ ->
+        client `shouldThrow` appErr
+  where
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "foo"
+            void $ recvStream strm 10
+    server = run sc loop
+      where
+        loop conn = do
+            _strm <- acceptStream conn
+            void $
+                forkIO $
+                    abortConnection
+                        conn
+                        (ApplicationProtocolError 1)
+                        "testing abortConnection"
             loop conn
