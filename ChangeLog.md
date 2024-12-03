@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.7
+
+* Introducing `forkManaged` to manage readers of clients properly.
+
 ## 0.2.6
 
 * Using `ServerState` instead of `killThread`.
