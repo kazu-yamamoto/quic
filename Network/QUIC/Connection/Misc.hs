@@ -35,7 +35,6 @@ module Network.QUIC.Connection.Misc (
 
 import Control.Concurrent
 import qualified Control.Exception as E
-import qualified Data.IntMap as IntMap
 import qualified Data.Map.Strict as Map
 import Network.Socket (Socket)
 import System.Mem.Weak
@@ -168,7 +167,6 @@ addReader Connection{..} tid = do
 
 delReader :: Connection -> ThreadId -> IO ()
 delReader Connection{..} tid = do
-    wtid <- mkWeakThreadId tid
     let n = fromThreadId tid
     atomicModifyIORef'' readers $ Map.delete n
 
