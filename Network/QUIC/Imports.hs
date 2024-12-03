@@ -52,6 +52,8 @@ import Numeric
 
 #if __GLASGOW_HASKELL__ >= 908
 import GHC.Conc.Sync (fromThreadId)
+#else
+import Control.Concurrent (ThreadId)
 #endif
 
 -- | All internal byte sequences.
