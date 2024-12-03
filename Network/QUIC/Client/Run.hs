@@ -7,7 +7,6 @@ module Network.QUIC.Client.Run (
     migrate,
 ) where
 
-import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
 import qualified Network.Socket as NS
@@ -58,7 +57,7 @@ run conf client = NS.withSocketsDo $ do
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
 runClient conf client0 isICVN verInfo = do
     E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) -> do
-        forkIO reader >>= addReader conn
+        forkManaged conn reader
         let conf' =
                 conf
                     { ccParameters =

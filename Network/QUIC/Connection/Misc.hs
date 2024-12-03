@@ -21,7 +21,7 @@ module Network.QUIC.Connection.Misc (
     delayedAck,
     resetDealyedAck,
     setMaxPacketSize,
-    addReader,
+    forkManaged,
     killReaders,
     addResource,
     freeResources,
@@ -35,6 +35,8 @@ module Network.QUIC.Connection.Misc (
 
 import Control.Concurrent
 import qualified Control.Exception as E
+import qualified Data.IntMap as IntMap
+import qualified Data.Map.Strict as Map
 import Network.Socket (Socket)
 import System.Mem.Weak
 
@@ -161,12 +163,33 @@ freeResources Connection{..} =
 addReader :: Connection -> ThreadId -> IO ()
 addReader Connection{..} tid = do
     wtid <- mkWeakThreadId tid
-    atomicModifyIORef'' readers $ \m -> do
-        m
-        deRefWeak wtid >>= mapM_ killThread
+    let n = fromThreadId tid
+    atomicModifyIORef'' readers $ Map.insert n wtid
+
+delReader :: Connection -> ThreadId -> IO ()
+delReader Connection{..} tid = do
+    wtid <- mkWeakThreadId tid
+    let n = fromThreadId tid
+    atomicModifyIORef'' readers $ Map.delete n
+
+forkManaged :: Connection -> IO () -> IO ()
+forkManaged conn action = void $ forkIO $ do
+    E.bracket setup clean $ \_ -> action
+  where
+    setup = do
+        tid <- myThreadId
+        addReader conn tid
+        return tid
+    clean = delReader conn
 
 killReaders :: Connection -> IO ()
-killReaders Connection{..} = join $ readIORef readers
+killReaders Connection{..} = do
+    wtids <- readIORef readers
+    forM_ wtids $ \wtid -> do
+        mtid <- deRefWeak wtid
+        case mtid of
+            Nothing -> return ()
+            Just tid -> killThread tid
 
 ----------------------------------------------------------------
 

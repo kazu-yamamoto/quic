@@ -20,6 +20,7 @@ import Foreign.Ptr (nullPtr)
 import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
 import Network.Socket (Cmsg, SockAddr, Socket)
 import Network.TLS.QUIC
+import System.Mem.Weak (Weak)
 
 import Network.QUIC.Config
 import Network.QUIC.Connector
@@ -202,7 +203,7 @@ data Connection = Connection
     -- Manage
     , connRecvQ :: RecvQ
     , connSocket :: IORef Socket
-    , readers :: IORef (IO ())
+    , readers :: IORef (Map Word64 (Weak ThreadId))
     , mainThreadId :: ThreadId
     , controlRate :: Rate
     , -- Info
@@ -306,7 +307,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     ecrptBuf <- mallocBytes bufsiz
     dcrptBuf <- mallocBytes bufsiz
     Connection connstate debugLog qLog hooks send recv recvQ sref
-        <$> newIORef (return ())
+        <$> newIORef Map.empty
         <*> myThreadId
         <*> newRate
         -- Info

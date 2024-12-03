@@ -25,6 +25,7 @@ module Network.QUIC.Imports (
 #endif
     atomicModifyIORef'',
     copyBS,
+    fromThreadId,
 ) where
 
 import Control.Applicative
@@ -49,6 +50,10 @@ import Network.ByteOrder
 import Network.QUIC.Utils
 import Numeric
 
+#if __GLASGOW_HASKELL__ >= 908
+import GHC.Conc.Sync (fromThreadId)
+#endif
+
 -- | All internal byte sequences.
 --   `ByteString` should be used for FFI related stuff.
 type Bytes = ShortByteString
@@ -71,3 +76,8 @@ copyBS dst (PS fptr off len) = withForeignPtr fptr $ \src0 -> do
     let src = src0 `plusPtr` off
     copyBytes dst src len
     return len
+
+#if __GLASGOW_HASKELL__ < 908
+fromThreadId :: ThreadId -> Word64
+fromThreadId tid = read (drop 9 $ show tid)
+#endif

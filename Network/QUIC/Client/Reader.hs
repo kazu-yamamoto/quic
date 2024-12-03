@@ -15,6 +15,7 @@ import Data.List (intersect)
 import Network.Socket (Socket, close, getSocketName)
 import qualified Network.Socket.ByteString as NSB
 
+import Network.QUIC.Common
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
@@ -30,6 +31,7 @@ import Network.QUIC.Types
 -- | readerClient dies when the socket is closed.
 readerClient :: Socket -> Connection -> IO ()
 readerClient s0 conn = handleLogUnit logAction $ do
+    labelMe "readerClient"
     wait
     loop
   where
@@ -146,5 +148,5 @@ rebind conn microseconds = do
     newSock <- natRebinding peersa
     oldSock <- setSocket conn newSock
     let reader = readerClient newSock conn
-    forkIO reader >>= addReader conn
+    forkManaged conn reader
     fire conn microseconds $ close oldSock
