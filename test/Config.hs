@@ -18,6 +18,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import Data.IORef
 import qualified Data.List as L
+import qualified Data.List.NonEmpty as NE
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
@@ -137,7 +138,7 @@ withPipe scenario body = do
             , addrFamily = AF_INET
             }
     resolve port =
-        head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just port)
+        NE.head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just port)
     shouldDrop (Randomly n) _ _ = do
         w <- getRandomOneByte
         return ((w `mod` fromIntegral n) == 0)

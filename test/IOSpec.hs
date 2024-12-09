@@ -199,10 +199,13 @@ testMultiSendRecv cc sc waitS times = do
             strm <- acceptStream conn
             void $ forkIO $ do
                 bs <- recvStream strm 1
-                let n = fromIntegral $ head $ BS.unpack bs
-                consumeBytes strm (chunklen * times)
-                assertEndOfStream strm
-                putMVar (mvars !! n) ()
+                case BS.uncons bs of
+                    Nothing -> return ()
+                    Just (w, _) -> do
+                        let n = fromIntegral w
+                        consumeBytes strm (chunklen * times)
+                        assertEndOfStream strm
+                        putMVar (mvars !! n) ()
             loop conn
 
 appErr :: QUICException -> Bool

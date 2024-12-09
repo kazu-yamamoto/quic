@@ -6,6 +6,7 @@ module Network.QUIC.Socket (
 
 import qualified Control.Exception as E
 import Data.IP (IP, toSockAddr)
+import qualified Data.List.NonEmpty as NE
 import Network.Socket
 
 natRebinding :: SockAddr -> IO Socket
@@ -21,7 +22,7 @@ sockAddrFamily _ = error "sockAddrFamily"
 
 clientSocket :: HostName -> ServiceName -> IO (Socket, SockAddr)
 clientSocket host port = do
-    addr <- head <$> getAddrInfo (Just hints) (Just host) (Just port)
+    addr <- NE.head <$> getAddrInfo (Just hints) (Just host) (Just port)
     E.bracketOnError (openSocket addr) close $ \s -> return (s, addrAddress addr)
   where
     hints = defaultHints{addrSocketType = Datagram, addrFlags = [AI_ADDRCONFIG]}
