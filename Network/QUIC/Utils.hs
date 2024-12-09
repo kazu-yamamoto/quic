@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Utils where
@@ -11,7 +12,9 @@ import Data.ByteString.Internal (ByteString (..))
 import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as Short
 import Data.Char (chr)
+#if __GLASGOW_HASKELL__ < 910
 import Data.List (foldl')
+#endif
 import Data.Word
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign.Ptr (Ptr, plusPtr)
