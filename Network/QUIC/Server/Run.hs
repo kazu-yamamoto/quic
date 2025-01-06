@@ -41,7 +41,7 @@ import Network.QUIC.Types
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
-run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
+run conf server = handleLogUnit debugLog $ do
     labelMe "QUIC run"
     stvar <- newTVarIO Running
     E.bracket (setup stvar) teardown $ \(_, _, _) -> do
@@ -70,7 +70,7 @@ run conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
-runWithSockets ssas conf server = NS.withSocketsDo $ handleLogUnit debugLog $ do
+runWithSockets ssas conf server = handleLogUnit debugLog $ do
     labelMe "QUIC runWithSockets"
     stvar <- newTVarIO Running
     E.bracket (setup stvar) teardown $ \(_, _) -> do

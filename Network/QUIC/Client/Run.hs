@@ -37,7 +37,7 @@ import Network.QUIC.Types
 --   Use the 'migrate' API for the connected socket.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
-run conf client = NS.withSocketsDo $ do
+run conf client = do
     let resInfo = ccResumption conf
         verInfo = case resumptionSession resInfo of
             Nothing
