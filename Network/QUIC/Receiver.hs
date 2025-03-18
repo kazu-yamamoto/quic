@@ -178,21 +178,12 @@ processReceivedPacket conn rpkt = do
                             qlogDebug conn $ Debug "ping for speedup"
                             sendFrames conn lvl [Ping]
         Nothing -> do
-            statelessReset <- isStatelessReset conn hdr crypt
-            if statelessReset
-                then do
-                    qlogReceived conn StatelessReset tim
-                    connDebugLog conn "debug: connection is reset statelessly"
-                    E.throwIO ConnectionIsReset
-                else do
-                    qlogDropped conn hdr
-                    connDebugLog conn $
-                        "debug: cannot decrypt: "
-                            <> bhow lvl
-                            <> " size = "
-                            <> bhow (BS.length $ cryptPacket crypt)
-
--- fixme: sending statelss reset
+            qlogDropped conn hdr
+            connDebugLog conn $
+                "debug: cannot decrypt: "
+                    <> bhow lvl
+                    <> " size = "
+                    <> bhow (BS.length $ cryptPacket crypt)
 
 isSendOnly :: Connection -> StreamId -> Bool
 isSendOnly conn sid
@@ -411,18 +402,6 @@ processFrame conn lvl HandshakeDone = do
     -- to receive NewSessionTicket
     fire conn (Microseconds 1000000) $ killHandshaker conn lvl
 processFrame _ _ _ = closeConnection ProtocolViolation "Frame is not allowed"
-
--- QUIC version 1 uses only short packets for stateless reset.
--- But we should check other packets, too.
-isStatelessReset :: Connection -> Header -> Crypt -> IO Bool
-isStatelessReset conn hdr Crypt{..} = do
-    let cid = headerMyCID hdr
-    included <- myCIDsInclude conn cid
-    case included of
-        Just _ -> return False
-        _ -> case decodeStatelessResetToken cryptPacket of
-            Nothing -> return False
-            Just token -> isStatelessRestTokenValid conn cid token
 
 -- Return value indicates duplication.
 putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO Bool
