@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Network.QUIC.Stream.Types (
     Stream (..),
     newStream,

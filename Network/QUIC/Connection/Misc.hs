@@ -71,8 +71,7 @@ getSocket :: Connection -> IO Socket
 getSocket Connection{..} = readIORef connSocket
 
 setSocket :: Connection -> Socket -> IO Socket
-setSocket Connection{..} sock = atomicModifyIORef' connSocket $
-    \sock0 -> (sock, sock0)
+setSocket Connection{..} sock = atomicModifyIORef' connSocket (sock,)
 
 -- fixme
 clearSocket :: Connection -> IO Socket

@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Network.QUIC.Packet.Encode (
     --    encodePacket
     encodeVersionNegotiationPacket,

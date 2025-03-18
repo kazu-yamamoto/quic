@@ -101,9 +101,7 @@ emptyRecvQDict = RecvQDict $ LRUCache.empty recvQDictSize
 lookupRecvQDict :: IORef RecvQDict -> CID -> IO (Maybe RecvQ)
 lookupRecvQDict ref dcid = do
     RecvQDict c <- readIORef ref
-    return $ case LRUCache.lookup dcid c of
-        Nothing -> Nothing
-        Just q -> Just q
+    return $ LRUCache.lookup dcid c
 
 insertRecvQDict :: IORef RecvQDict -> CID -> RecvQ -> IO ()
 insertRecvQDict ref dcid q = atomicModifyIORef'' ref ins
