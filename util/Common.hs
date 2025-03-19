@@ -36,9 +36,9 @@ getGroups _ (Just gs) = mapMaybe (`lookup` namedGroups) $ split ',' gs
 split :: Char -> String -> [String]
 split _ "" = []
 split c s = case break (c ==) s of
-    ("", r) -> split c (tail r)
+    ("", r) -> split c (drop 1 r)
     (s', "") -> [s']
-    (s', r) -> s' : split c (tail r)
+    (s', r) -> s' : split c (drop 1 r)
 
 getLogger :: Maybe FilePath -> (String -> IO ())
 getLogger Nothing = \_ -> return ()
