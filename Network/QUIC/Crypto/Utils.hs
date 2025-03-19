@@ -27,16 +27,16 @@ bsXOR = Byte.xor
 
 tagLength :: Cipher -> Int
 tagLength cipher
-    | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
-    | cipher == cipher_TLS13_AES128CCM_SHA256 = 16
-    | cipher == cipher_TLS13_AES256GCM_SHA384 = 16
+    | cipher == cipher13_AES_128_GCM_SHA256 = 16
+    | cipher == cipher13_AES_128_CCM_SHA256 = 16
+    | cipher == cipher13_AES_256_GCM_SHA384 = 16
     | otherwise = error "tagLength"
 
 sampleLength :: Cipher -> Int
 sampleLength cipher
-    | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
-    | cipher == cipher_TLS13_AES128CCM_SHA256 = 16
-    | cipher == cipher_TLS13_AES256GCM_SHA384 = 16
+    | cipher == cipher13_AES_128_GCM_SHA256 = 16
+    | cipher == cipher13_AES_128_CCM_SHA256 = 16
+    | cipher == cipher13_AES_256_GCM_SHA384 = 16
     | otherwise = error "sampleLength"
 
 ----------------------------------------------------------------

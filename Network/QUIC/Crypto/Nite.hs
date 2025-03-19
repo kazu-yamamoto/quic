@@ -40,19 +40,17 @@ import Network.QUIC.Types
 cipherEncrypt
     :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
 cipherEncrypt cipher
-    | cipher == cipher_TLS13_AES128GCM_SHA256 = aes128gcmEncrypt
-    | cipher == cipher_TLS13_AES128CCM_SHA256 =
-        error "cipher_TLS13_AES128CCM_SHA256"
-    | cipher == cipher_TLS13_AES256GCM_SHA384 = aes256gcmEncrypt
+    | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmEncrypt
+    | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
+    | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmEncrypt
     | otherwise = error "cipherEncrypt"
 
 cipherDecrypt
     :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
 cipherDecrypt cipher
-    | cipher == cipher_TLS13_AES128GCM_SHA256 = aes128gcmDecrypt
-    | cipher == cipher_TLS13_AES128CCM_SHA256 =
-        error "cipher_TLS13_AES128CCM_SHA256"
-    | cipher == cipher_TLS13_AES256GCM_SHA384 = aes256gcmDecrypt
+    | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmDecrypt
+    | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
+    | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmDecrypt
     | otherwise = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
@@ -227,10 +225,9 @@ protectionMask cipher key =
 
 cipherHeaderProtection :: Cipher -> Key -> (Sample -> Mask)
 cipherHeaderProtection cipher key
-    | cipher == cipher_TLS13_AES128GCM_SHA256 = aes128ecbEncrypt key
-    | cipher == cipher_TLS13_AES128CCM_SHA256 =
-        error "cipher_TLS13_AES128CCM_SHA256"
-    | cipher == cipher_TLS13_AES256GCM_SHA384 = aes256ecbEncrypt key
+    | cipher == cipher13_AES_128_GCM_SHA256 = aes128ecbEncrypt key
+    | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256 "
+    | cipher == cipher13_AES_256_GCM_SHA384 = aes256ecbEncrypt key
     | otherwise =
         error "cipherHeaderProtection"
 

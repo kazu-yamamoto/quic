@@ -149,7 +149,7 @@ library
         network-control >= 0.1 && < 0.2,
         random >= 1.2.1 && < 1.4,
         serialise,
-        tls >= 2.0 && < 2.2
+        tls >= 2.1.6 && < 2.2
 
     if os(windows)
         cc-options: -D_WINDOWS

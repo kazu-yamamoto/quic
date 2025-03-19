@@ -24,7 +24,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 defaultCipher :: Cipher
-defaultCipher = cipher_TLS13_AES128GCM_SHA256
+defaultCipher = cipher13_AES_128_GCM_SHA256
 
 ----------------------------------------------------------------
 
