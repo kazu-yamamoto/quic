@@ -44,9 +44,7 @@ readerClient s0 conn = handleLogUnit logAction $ do
             wait
     loop = do
         ito <- readMinIdleTimeout conn
-        mbs <-
-            timeout ito "readeClient" $
-                NSB.recvMsg s0 2048 2048 0 -- fixme
+        mbs <- timeout ito "readeClient" $ NSB.recvMsg s0 2048 2048 0 -- fixme
         case mbs of
             Nothing -> close s0
             Just (peersa, bs, cmsgs, _) -> do
