@@ -26,7 +26,7 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
-import Network.Control (LRUCache)
+import Network.Control (LRUCacheRef)
 import qualified Network.Control as LRUCache
 import Network.Socket (Socket, waitReadSocketSTM)
 import qualified Network.Socket.ByteString as NSB
@@ -48,7 +48,7 @@ import Network.QUIC.Windows
 data Dispatch = Dispatch
     { tokenMgr :: CT.TokenManager
     , dstTable :: IORef ConnectionDict
-    , srcTable :: IORef RecvQDict
+    , srcTable :: RecvQDict
     }
 
 newDispatch :: ServerConfig -> IO Dispatch
@@ -56,7 +56,7 @@ newDispatch ServerConfig{..} =
     Dispatch
         <$> CT.spawnTokenManager conf
         <*> newIORef emptyConnectionDict
-        <*> newIORef emptyRecvQDict
+        <*> newRecvQDict
   where
     conf =
         CT.defaultConfig
@@ -89,24 +89,21 @@ unregisterConnectionDict ref cid = atomicModifyIORef'' ref $
 
 ----------------------------------------------------------------
 
--- Original destination CID -> RecvQ
-newtype RecvQDict = RecvQDict (LRUCache CID RecvQ)
+-- Source CID -> RecvQ
+-- Initials and RTT0 are queued before Conneciton is created.
+newtype RecvQDict = RecvQDict (LRUCacheRef CID RecvQ)
 
 recvQDictSize :: Int
 recvQDictSize = 100
 
-emptyRecvQDict :: RecvQDict
-emptyRecvQDict = RecvQDict $ LRUCache.empty recvQDictSize
+newRecvQDict :: IO RecvQDict
+newRecvQDict = RecvQDict <$> LRUCache.newLRUCacheRef recvQDictSize
 
-lookupRecvQDict :: IORef RecvQDict -> CID -> IO (Maybe RecvQ)
-lookupRecvQDict ref dcid = do
-    RecvQDict c <- readIORef ref
-    return $ LRUCache.lookup dcid c
+lookupRecvQDict :: RecvQDict -> CID -> IO (RecvQ, Bool)
+lookupRecvQDict (RecvQDict ref) dcid = LRUCache.cached ref dcid newRecvQ
 
-insertRecvQDict :: IORef RecvQDict -> CID -> RecvQ -> IO ()
-insertRecvQDict ref dcid q = atomicModifyIORef'' ref ins
-  where
-    ins (RecvQDict c) = RecvQDict $ LRUCache.insert dcid q c
+lookupRecvQDict' :: RecvQDict -> CID -> IO (Maybe RecvQ)
+lookupRecvQDict' (RecvQDict ref) dcid = LRUCache.cached' ref dcid
 
 ----------------------------------------------------------------
 
@@ -253,31 +250,27 @@ dispatch
                 Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
       where
         myVersions = scVersions
-        pushToAcceptQ myAuthCIDs peerAuthCIDs key addrValid = do
-            mq <- lookupRecvQDict srcTable key
-            case mq of
-                Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
-                Nothing -> do
-                    q <- newRecvQ
-                    insertRecvQDict srcTable key q
-                    writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
-                    let reg = registerConnectionDict dstTable
-                        unreg = unregisterConnectionDict dstTable
-                        acc =
-                            Accept
-                                { accVersionInfo = VersionInfo peerVer myVersions
-                                , accMyAuthCIDs = myAuthCIDs
-                                , accPeerAuthCIDs = peerAuthCIDs
-                                , accMySocket = mysock
-                                , accPeerInfo = peerInfo
-                                , accRecvQ = q
-                                , accPacketSize = bytes
-                                , accRegister = reg
-                                , accUnregister = unreg
-                                , accAddressValidated = addrValid
-                                , accTime = tim
-                                }
-                    forkConnection acc
+        pushToAcceptQ myAuthCIDs peerAuthCIDs addrValid = do
+            (q, exist) <- lookupRecvQDict srcTable sCID
+            writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
+            unless exist $ do
+                let reg = registerConnectionDict dstTable
+                    unreg = unregisterConnectionDict dstTable
+                    acc =
+                        Accept
+                            { accVersionInfo = VersionInfo peerVer myVersions
+                            , accMyAuthCIDs = myAuthCIDs
+                            , accPeerAuthCIDs = peerAuthCIDs
+                            , accMySocket = mysock
+                            , accPeerInfo = peerInfo
+                            , accRecvQ = q
+                            , accPacketSize = bytes
+                            , accRegister = reg
+                            , accUnregister = unreg
+                            , accAddressValidated = addrValid
+                            , accTime = tim
+                            }
+                forkConnection acc
         -- Initial: DCID=S1, SCID=C1 ->
         --                                     <- Initial: DCID=C1, SCID=S2
         --                               ...
@@ -298,7 +291,7 @@ dispatch
                     defaultAuthCIDs
                         { initSrcCID = Just sCID
                         }
-            pushToAcceptQ myAuthCIDs peerAuthCIDs dCID addrValid
+            pushToAcceptQ myAuthCIDs peerAuthCIDs addrValid
         -- Initial: DCID=S1, SCID=C1 ->
         --                                       <- Retry: DCID=C1, SCID=S2
         -- Initial: DCID=S2, SCID=C1 ->
@@ -321,7 +314,7 @@ dispatch
                     defaultAuthCIDs
                         { initSrcCID = Just sCID
                         }
-            pushToAcceptQ myAuthCIDs peerAuthCIDs o True
+            pushToAcceptQ myAuthCIDs peerAuthCIDs True
         pushToAcceptRetried _ = return ()
         isRetryTokenValid (CryptoToken _tver life etim (Just (l, r, _))) = do
             diff <- getElapsedTimeMicrosecond etim
@@ -354,8 +347,8 @@ dispatch
     _
     _
     tim
-    (cpkt@(CryptPacket (RTT0 _ dCID _) _), lvl, siz) = do
-        mq <- lookupRecvQDict srcTable dCID
+    (cpkt@(CryptPacket (RTT0 _ _dCID sCID) _), lvl, siz) = do
+        mq <- lookupRecvQDict' srcTable sCID
         case mq of
             Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             Nothing -> return ()
