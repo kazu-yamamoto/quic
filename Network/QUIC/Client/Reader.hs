@@ -47,12 +47,16 @@ readerClient s0 conn = handleLogUnit logAction $ do
         mbs <- timeout ito "readeClient" $ NSB.recvMsg s0 2048 2048 0 -- fixme
         case mbs of
             Nothing -> close s0
+            -- FIXME: cmsgs, setPeerInfo?
             Just (peersa, bs, cmsgs, _) -> do
-                setPeerInfo conn $ PeerInfo peersa cmsgs
-                now <- getTimeMicrosecond
-                let quicBit = greaseQuicBit $ getMyParameters conn
-                pkts <- decodePackets bs (not quicBit)
-                mapM_ (putQ now) pkts
+                PeerInfo peersa' _ <- getPeerInfo conn
+                when (peersa == peersa') $ do
+                    -- FIXME
+                    -- setPeerInfo conn $ PeerInfo peersa cmsgs
+                    now <- getTimeMicrosecond
+                    let quicBit = greaseQuicBit $ getMyParameters conn
+                    pkts <- decodePackets bs (not quicBit)
+                    mapM_ (putQ now) pkts
                 loop
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ (PacketIB BrokenPacket _) = return ()
