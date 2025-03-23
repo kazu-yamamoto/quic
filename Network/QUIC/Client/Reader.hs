@@ -69,7 +69,24 @@ readerClient s0 conn = handleLogUnit logAction $ do
                     vers@(ver : _) | ok -> VersionInfo ver vers
                     _ -> brokenVersionInfo
             E.throwTo (mainThreadId conn) $ VerNego nextVerInfo
-    putQ t (PacketIC pkt lvl siz) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t siz lvl
+    putQ t (PacketIC pkt@(CryptPacket hdr crypt) lvl siz) = do
+        let cid = headerMyCID hdr
+        included <- myCIDsInclude conn cid
+        case included of
+            Just _ -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t siz lvl
+            Nothing -> case decodeStatelessResetToken (cryptPacket crypt) of
+                Just token -> do
+                    isStatelessReset <- isStatelessRestTokenValid conn cid token
+                    -- Our client does not send a stateless reset:
+                    -- 1) Stateless reset token is not generated for
+                    --    the my first CID.
+                    -- 2) It's unlikely that QUIC packets are delivered
+                    --    to a new UDP port when out client is rebooted.
+                    when isStatelessReset $ do
+                        qlogReceived conn StatelessReset t
+                        connDebugLog conn "debug: connection is reset statelessly"
+                        E.throwTo (mainThreadId conn) ConnectionIsReset
+                _ -> return () -- really invalid, just ignore
     putQ t (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
         ok <- checkCIDs conn dCID ex

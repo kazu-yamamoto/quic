@@ -50,6 +50,7 @@ run conf client = do
     ex <- E.try $ runClient conf client False verInfo
     case ex of
         Right v -> return v
+        -- Other exceptions go though.
         Left (NextVersion nextVerInfo)
             | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
             | otherwise -> runClient conf client True nextVerInfo
