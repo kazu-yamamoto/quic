@@ -132,11 +132,11 @@ frameExtra (MaxStreams _Direction ms) = ",\"maximum\":\"" <> sw ms <> "\""
 frameExtra DataBlocked{} = ""
 frameExtra StreamDataBlocked{} = ""
 frameExtra StreamsBlocked{} = ""
-frameExtra (NewConnectionID (CIDInfo sn cid _) rpt) =
+frameExtra (NewConnectionID cidinfo rpt) =
     ",\"sequence_number\":\""
-        <> sw sn
+        <> sw (cidInfoSeq cidinfo)
         <> "\",\"connection_id:\":\""
-        <> sw cid
+        <> sw (cidInfoCID cidinfo)
         <> "\",\"retire_prior_to\":\""
         <> sw rpt
         <> "\""

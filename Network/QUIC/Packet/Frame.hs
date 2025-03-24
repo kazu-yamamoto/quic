@@ -346,7 +346,7 @@ decodeNewConnectionID rbuf = do
     cidLen <- fromIntegral <$> read8 rbuf
     cID <- makeCID <$> extractShortByteString rbuf cidLen
     token <- StatelessResetToken <$> extractShortByteString rbuf 16
-    return $ NewConnectionID (CIDInfo seqNum cID token) rpt
+    return $ NewConnectionID (newCIDInfo seqNum cID token) rpt
 
 decodeRetireConnectionID :: ReadBuffer -> IO Frame
 decodeRetireConnectionID rbuf = do

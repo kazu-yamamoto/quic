@@ -50,6 +50,7 @@ run conf client = do
     ex <- E.try $ runClient conf client False verInfo
     case ex of
         Right v -> return v
+        -- Other exceptions go though.
         Left (NextVersion nextVerInfo)
             | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
             | otherwise -> runClient conf client True nextVerInfo
@@ -108,11 +109,11 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     (sock, peersa) <- clientSocket ccServerName ccPortName
     q <- newRecvQ
     sref <- newIORef sock
-    piref <- newIORef $ PeerInfo peersa []
+    piref <- newIORef $ PeerInfo peersa
     let send buf siz = do
             s <- readIORef sref
-            PeerInfo sa cmsgs <- readIORef piref
-            void $ NS.sendBufMsg s sa [(buf, siz)] cmsgs 0
+            PeerInfo sa <- readIORef piref
+            void $ NS.sendBufTo s buf siz sa
         recv = recvClient q
     myCID <- newCID
     peerCID <- newCID
@@ -124,6 +125,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     debugLog $ "Original CID: " <> bhow peerCID
     let myAuthCIDs = defaultAuthCIDs{initSrcCID = Just myCID}
         peerAuthCIDs = defaultAuthCIDs{initSrcCID = Just peerCID, origDstCID = Just peerCID}
+    genSRT <- makeGenStatelessReset
     conn <-
         clientConnection
             conf
@@ -138,6 +140,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             q
             send
             recv
+            genSRT
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID

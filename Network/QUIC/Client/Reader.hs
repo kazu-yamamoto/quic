@@ -44,15 +44,16 @@ readerClient s0 conn = handleLogUnit logAction $ do
             wait
     loop = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito "readeClient" $ NSB.recvMsg s0 2048 2048 0 -- fixme
+        mbs <- timeout ito "readeClient" $ NSB.recvFrom s0 2048
         case mbs of
             Nothing -> close s0
-            Just (peersa, bs, cmsgs, _) -> do
-                setPeerInfo conn $ PeerInfo peersa cmsgs
-                now <- getTimeMicrosecond
-                let quicBit = greaseQuicBit $ getMyParameters conn
-                pkts <- decodePackets bs (not quicBit)
-                mapM_ (putQ now) pkts
+            Just (bs, peersa) -> do
+                PeerInfo peersa' <- getPeerInfo conn
+                when (peersa == peersa') $ do
+                    now <- getTimeMicrosecond
+                    let quicBit = greaseQuicBit $ getMyParameters conn
+                    pkts <- decodePackets bs (not quicBit)
+                    mapM_ (putQ now) pkts
                 loop
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ (PacketIB BrokenPacket _) = return ()
@@ -69,7 +70,24 @@ readerClient s0 conn = handleLogUnit logAction $ do
                     vers@(ver : _) | ok -> VersionInfo ver vers
                     _ -> brokenVersionInfo
             E.throwTo (mainThreadId conn) $ VerNego nextVerInfo
-    putQ t (PacketIC pkt lvl siz) = writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t siz lvl
+    putQ t (PacketIC pkt@(CryptPacket hdr crypt) lvl siz) = do
+        let cid = headerMyCID hdr
+        included <- myCIDsInclude conn cid
+        case included of
+            Just _ -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t siz lvl
+            Nothing -> case decodeStatelessResetToken (cryptPacket crypt) of
+                Just token -> do
+                    isStatelessReset <- isStatelessRestTokenValid conn token
+                    -- Our client does not send a stateless reset:
+                    -- 1) Stateless reset token is not generated for
+                    --    the my first CID.
+                    -- 2) It's unlikely that QUIC packets are delivered
+                    --    to a new UDP port when out client is rebooted.
+                    when isStatelessReset $ do
+                        qlogReceived conn StatelessReset t
+                        connDebugLog conn "debug: connection is reset statelessly"
+                        E.throwTo (mainThreadId conn) ConnectionIsReset
+                _ -> return () -- really invalid, just ignore
     putQ t (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
         ok <- checkCIDs conn dCID ex
@@ -120,8 +138,8 @@ controlConnection' conn ChangeServerCID = do
     mn <- timeout (Microseconds 1000000) "controlConnection' 1" $ waitPeerCID conn -- fixme
     case mn of
         Nothing -> return False
-        Just (CIDInfo n _ _) -> do
-            sendFrames conn RTT1Level [RetireConnectionID n]
+        Just cidInfo -> do
+            sendFrames conn RTT1Level [RetireConnectionID (cidInfoSeq cidInfo)]
             return True
 controlConnection' conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
@@ -142,7 +160,7 @@ controlConnection' conn ActiveMigration = do
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
-    PeerInfo peersa _ <- getPeerInfo conn
+    PeerInfo peersa <- getPeerInfo conn
     newSock <- natRebinding peersa
     oldSock <- setSocket conn newSock
     let reader = readerClient newSock conn

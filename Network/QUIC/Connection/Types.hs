@@ -18,7 +18,7 @@ import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
 import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
-import Network.Socket (Cmsg, SockAddr, Socket)
+import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC
 import System.Mem.Weak (Weak)
 
@@ -74,6 +74,8 @@ defaultServerRoleInfo =
         , certChain = Nothing
         }
 
+-- cidInfoSRT in CIDInfo is only used in client
+-- which accepts stateless reset.
 data CIDDB = CIDDB
     { usedCIDInfo :: CIDInfo
     , cidInfos :: IntMap CIDInfo
@@ -93,7 +95,7 @@ newCIDDB cid =
         , triggeredByMe = False
         }
   where
-    cidInfo = CIDInfo 0 cid (StatelessResetToken "")
+    cidInfo = newCIDInfo 0 cid $ StatelessResetToken ""
 
 ----------------------------------------------------------------
 
@@ -186,7 +188,7 @@ newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
 type Send = Buffer -> Int -> IO ()
 type Recv = IO ReceivedPacket
 
-data PeerInfo = PeerInfo SockAddr [Cmsg] deriving (Eq, Show)
+data PeerInfo = PeerInfo SockAddr deriving (Eq, Show)
 
 ----------------------------------------------------------------
 
@@ -203,6 +205,7 @@ data Connection = Connection
     -- Manage
     , connRecvQ :: RecvQ
     , connSocket :: IORef Socket
+    , genStatelessResetToken :: CID -> StatelessResetToken
     , readers :: IORef (Map Word64 (Weak ThreadId))
     , mainThreadId :: ThreadId
     , controlRate :: Rate
@@ -296,8 +299,9 @@ newConnection
     -> RecvQ
     -> Send
     -> Recv
+    -> (CID -> StatelessResetToken)
     -> IO Connection
-newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref piref recvQ ~send ~recv = do
+newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref piref recvQ ~send ~recv genSRT = do
     -- ~ for testing
     outQ <- newTQueueIO
     let put x = atomically $ writeTQueue outQ $ OutRetrans x
@@ -306,7 +310,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     encBuf <- mallocBytes bufsiz
     ecrptBuf <- mallocBytes bufsiz
     dcrptBuf <- mallocBytes bufsiz
-    Connection connstate debugLog qLog hooks send recv recvQ sref
+    Connection connstate debugLog qLog hooks send recv recvQ sref genSRT
         <$> newIORef Map.empty
         <*> myThreadId
         <*> newRate
@@ -392,6 +396,7 @@ clientConnection
     -> RecvQ
     -> Send
     -> Recv
+    -> (CID -> StatelessResetToken)
     -> IO Connection
 clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Client ccParameters verInfo myAuthCIDs peerAuthCIDs
@@ -409,6 +414,7 @@ serverConnection
     -> RecvQ
     -> Send
     -> Recv
+    -> (CID -> StatelessResetToken)
     -> IO Connection
 serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Server scParameters verInfo myAuthCIDs peerAuthCIDs

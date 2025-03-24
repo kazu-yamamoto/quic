@@ -27,6 +27,7 @@ data Options = Options
     , optQLogDir :: Maybe FilePath
     , optKeyLogFile :: Maybe FilePath
     , optGroups :: Maybe String
+    , optTimeout :: Maybe Int
     , optCertFile :: FilePath
     , optKeyFile :: FilePath
     , optRetry :: Bool
@@ -40,6 +41,7 @@ defaultOptions =
         , optQLogDir = Nothing
         , optKeyLogFile = Nothing
         , optGroups = Nothing
+        , optTimeout = Nothing
         , optCertFile = "servercert.pem"
         , optKeyFile = "serverkey.pem"
         , optRetry = False
@@ -82,6 +84,11 @@ options =
         ["retry"]
         (NoArg (\o -> o{optRetry = True}))
         "require stateless retry"
+    , Option
+        ['o']
+        ["timeout"]
+        (ReqArg (\tim o -> o{optTimeout = Just (read tim)}) "<timeout>")
+        "RX timeout in seconds"
     ]
 
 usage :: String
@@ -140,6 +147,9 @@ main = do
                 , scCredentials = Credentials [cred]
                 }
     run sc $ \conn -> do
+        case optTimeout of
+            Just t -> setMinIdleTimeout conn $ Microseconds $ t * 1000000
+            Nothing -> return ()
         info <- getConnectionInfo conn
         let server = case alpn info of
                 Just proto

@@ -77,7 +77,7 @@ resetPeerCID Connection{..} cid = atomically $ writeTVar peerCIDDB $ newCIDDB ci
 getNewMyCID :: Connection -> IO CIDInfo
 getNewMyCID Connection{..} = do
     cid <- newCID
-    srt <- newStatelessResetToken
+    let srt = genStatelessResetToken cid
     atomicModifyIORef' myCIDDB $ new cid srt
 
 ----------------------------------------------------------------
@@ -207,18 +207,18 @@ set cidInfo pri db = db'
             }
 
 add :: CIDInfo -> CIDDB -> CIDDB
-add cidInfo@CIDInfo{..} db@CIDDB{..} = db'
+add cidInfo db@CIDDB{..} = db'
   where
     db' =
         db
-            { cidInfos = IntMap.insert cidInfoSeq cidInfo cidInfos
-            , revInfos = Map.insert cidInfoCID cidInfoSeq revInfos
+            { cidInfos = IntMap.insert (cidInfoSeq cidInfo) cidInfo cidInfos
+            , revInfos = Map.insert (cidInfoCID cidInfo) (cidInfoSeq cidInfo) revInfos
             }
 
 new :: CID -> StatelessResetToken -> CIDDB -> (CIDDB, CIDInfo)
 new cid srt db@CIDDB{..} = (db', cidInfo)
   where
-    cidInfo = CIDInfo nextSeqNum cid srt
+    cidInfo = newCIDInfo nextSeqNum cid srt
     db' =
         db
             { nextSeqNum = nextSeqNum + 1
@@ -268,14 +268,17 @@ setPeerStatelessResetToken Connection{..} srt =
                         , usedCIDInfo = cidinfo'
                         }
 
-isStatelessRestTokenValid :: Connection -> CID -> StatelessResetToken -> IO Bool
-isStatelessRestTokenValid Connection{..} cid srt = srtCheck <$> readTVarIO peerCIDDB
+-- Used in client only.  Stateless reset is independent from
+-- Connection because its CID is random.  However, client uses only
+-- one Connection.  So, peerCIDDB can be considered a global variable.
+-- This function tries to find the target statless reset token in
+-- peerCIDDB.
+isStatelessRestTokenValid :: Connection -> StatelessResetToken -> IO Bool
+isStatelessRestTokenValid Connection{..} srt = srtCheck <$> readTVarIO peerCIDDB
   where
-    srtCheck CIDDB{..} = case Map.lookup cid revInfos of
-        Nothing -> False
-        Just n -> case IntMap.lookup n cidInfos of
-            Nothing -> False
-            Just (CIDInfo _ _ srt0) -> srt == srt0
+    srtCheck CIDDB{..} = foldr chk False cidInfos
+    chk _ True = True
+    chk cidInfo _ = cidInfoSRT cidInfo == srt
 
 ----------------------------------------------------------------
 
@@ -285,12 +288,15 @@ validatePath conn Nothing = do
     setChallenges conn pdat
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat] $ return ()
     waitResponse conn
-validatePath conn (Just (CIDInfo retiredSeqNum _ _)) = do
+validatePath conn (Just cidInfo) = do
     pdat <- newPathData
     setChallenges conn pdat
-    putOutput conn $
-        OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum] $
-            return ()
+    let retiredSeqNum = cidInfoSeq cidInfo
+    putOutput conn
+        $ OutControl
+            RTT1Level
+            [PathChallenge pdat, RetireConnectionID retiredSeqNum]
+        $ return ()
     waitResponse conn
     retirePeerCID conn retiredSeqNum
 
