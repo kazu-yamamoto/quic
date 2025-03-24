@@ -415,7 +415,10 @@ console aux paths client conn = do
     putStrLn "q -- quit"
     putStrLn "g -- get"
     putStrLn "p -- ping"
-    putStrLn "n -- NAT rebinding"
+    putStrLn "M -- change server CID"
+    putStrLn "N -- change client CID"
+    putStrLn "B -- NAT rebinding"
+    putStrLn "A -- address mobility"
     loop
   where
     loop = do
@@ -433,8 +436,17 @@ console aux paths client conn = do
                 putStrLn "Ping"
                 sendFrames conn RTT1Level [Ping]
                 loop
-            "n" -> do
+            "M" -> do
+                controlConnection conn ChangeServerCID >>= print
+                loop
+            "N" -> do
+                controlConnection conn ChangeClientCID >>= print
+                loop
+            "B" -> do
                 controlConnection conn NATRebinding >>= print
+                loop
+            "A" -> do
+                controlConnection conn ActiveMigration >>= print
                 loop
             _ -> do
                 putStrLn "No such command"
