@@ -366,7 +366,7 @@ dispatch
     Dispatch{..}
     _
     _
-    _logAction
+    logAction
     mysock
     peerInfo
     send'
@@ -387,6 +387,7 @@ dispatch
                         let srt = genStatelessReset dCID
                             statelessReset = BS.concat [BS.singleton flag, body, fromStatelessResetToken srt]
                         send' statelessReset
+                        logAction $ "Stateless reset is sent to " <> bhow peerInfo
             Just conn -> do
                 void $ setSocket conn mysock
                 setPeerInfo conn peerInfo
