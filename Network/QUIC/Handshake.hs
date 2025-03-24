@@ -156,14 +156,18 @@ handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
 
 ----------------------------------------------------------------
 
-handshakeServer :: ServerConfig -> Connection -> AuthCIDs -> IO (IO ())
-handshakeServer conf conn myAuthCIDs =
+handshakeServer
+    :: ServerConfig -> Connection -> AuthCIDs -> StatelessResetToken -> IO (IO ())
+handshakeServer conf conn myAuthCIDs srt =
     handshakeServer' conf conn
         <$> getVersion conn
         <*> newHndStateRef
         <*> newIORef params
   where
-    params = setCIDsToParameters myAuthCIDs $ scParameters conf
+    params =
+        (setCIDsToParameters myAuthCIDs $ scParameters conf)
+            { statelessResetToken = Just srt
+            }
 
 handshakeServer'
     :: ServerConfig

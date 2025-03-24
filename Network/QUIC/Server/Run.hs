@@ -113,7 +113,8 @@ runServer conf server0 dispatch stvar acc = do
                                 { versionInformation = Just $ accVersionInfo acc
                                 }
                         }
-            handshaker <- handshakeServer conf' conn myAuthCIDs
+            let srt = genStatelessReset dispatch $ fromJust $ initSrcCID myAuthCIDs
+            handshaker <- handshakeServer conf' conn myAuthCIDs srt
             let server = do
                     wait1RTTReady conn
                     afterHandshakeServer conf conn
