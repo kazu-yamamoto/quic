@@ -74,6 +74,8 @@ defaultServerRoleInfo =
         , certChain = Nothing
         }
 
+-- cidInfoSRT in CIDInfo is only used in client
+-- which accepts stateless reset.
 data CIDDB = CIDDB
     { usedCIDInfo :: CIDInfo
     , cidInfos :: IntMap CIDInfo
