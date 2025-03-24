@@ -27,11 +27,12 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import qualified GHC.IO.Exception as E
 import Network.ByteOrder
-import Network.Control (LRUCacheRef)
+import Network.Control (LRUCacheRef, Rate, getRate, newRate)
 import qualified Network.Control as LRUCache
 import Network.Socket (Socket, waitReadSocketSTM)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
+import System.Random (getStdRandom, randomRIO, uniformByteString)
 
 import Network.QUIC.Common
 import Network.QUIC.Config
@@ -51,7 +52,11 @@ data Dispatch = Dispatch
     , dstTable :: IORef ConnectionDict
     , srcTable :: RecvQDict
     , genStatelessReset :: CID -> StatelessResetToken
+    , statelessResetRate :: Rate
     }
+
+statelessResetLimit :: Int
+statelessResetLimit = 20
 
 newDispatch :: ServerConfig -> IO Dispatch
 newDispatch ServerConfig{..} =
@@ -60,6 +65,7 @@ newDispatch ServerConfig{..} =
         <*> newIORef emptyConnectionDict
         <*> newRecvQDict
         <*> makeGenStatelessReset
+        <*> newRate
   where
     conf =
         CT.defaultConfig
@@ -355,6 +361,36 @@ dispatch
         case mq of
             Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             Nothing -> return ()
+----------------------------------------------------------------
+dispatch
+    Dispatch{..}
+    _
+    _
+    _logAction
+    mysock
+    peerInfo
+    send'
+    bytes
+    tim
+    (cpkt@(CryptPacket (Short dCID) _), lvl, siz) = do
+        mconn <- lookupConnectionDict dstTable dCID
+        case mconn of
+            Nothing -> do
+                -- Three times rule for stateless reset
+                -- Our packet size is 1280
+                when (bytes > 427) $ do
+                    srRate <- getRate statelessResetRate
+                    -- fixme: hard coding
+                    when (srRate < statelessResetLimit) $ do
+                        flag <- randomRIO (0, 127)
+                        body <- getStdRandom $ uniformByteString 1263
+                        let srt = genStatelessReset dCID
+                            statelessReset = BS.concat [BS.singleton flag, body, fromStatelessResetToken srt]
+                        send' statelessReset
+            Just conn -> do
+                void $ setSocket conn mysock
+                setPeerInfo conn peerInfo
+                writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 ----------------------------------------------------------------
 dispatch
     Dispatch{..}
