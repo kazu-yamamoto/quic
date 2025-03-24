@@ -125,6 +125,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     debugLog $ "Original CID: " <> bhow peerCID
     let myAuthCIDs = defaultAuthCIDs{initSrcCID = Just myCID}
         peerAuthCIDs = defaultAuthCIDs{initSrcCID = Just peerCID, origDstCID = Just peerCID}
+    genSRT <- makeGenStatelessReset
     conn <-
         clientConnection
             conf
@@ -139,6 +140,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             q
             send
             recv
+            genSRT
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID

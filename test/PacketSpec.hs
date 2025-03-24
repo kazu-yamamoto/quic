@@ -52,6 +52,7 @@ makeConnections conf v = do
     piref <- newIORef $ PeerInfo peersa []
     let ver = v
         verInfo = VersionInfo ver [ver]
+    genSRT <- makeGenStatelessReset
     ----
     clientConn <-
         clientConnection
@@ -67,6 +68,7 @@ makeConnections conf v = do
             q
             undefined
             undefined
+            genSRT
     initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
     serverConn <-
         serverConnection
@@ -82,6 +84,7 @@ makeConnections conf v = do
             q
             undefined
             undefined
+            genSRT
     initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
     ----
     return (clientConn, serverConn)

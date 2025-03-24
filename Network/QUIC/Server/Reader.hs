@@ -7,6 +7,7 @@ module Network.QUIC.Server.Reader (
     clearDispatch,
     runDispatcher,
     tokenMgr,
+    genStatelessReset,
 
     -- * Accepting
     Accept (..),
@@ -49,6 +50,7 @@ data Dispatch = Dispatch
     { tokenMgr :: CT.TokenManager
     , dstTable :: IORef ConnectionDict
     , srcTable :: RecvQDict
+    , genStatelessReset :: CID -> StatelessResetToken
     }
 
 newDispatch :: ServerConfig -> IO Dispatch
@@ -57,6 +59,7 @@ newDispatch ServerConfig{..} =
         <$> CT.spawnTokenManager conf
         <*> newIORef emptyConnectionDict
         <*> newRecvQDict
+        <*> makeGenStatelessReset
   where
     conf =
         CT.defaultConfig

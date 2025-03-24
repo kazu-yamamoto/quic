@@ -9,7 +9,8 @@ module Network.QUIC.Types.CID (
     makeCID,
     unpackCID,
     StatelessResetToken (..),
-    newStatelessResetToken,
+    fromStatelessResetToken,
+    makeGenStatelessReset,
     PathData (..),
     newPathData,
     CIDInfo,
@@ -19,10 +20,12 @@ module Network.QUIC.Types.CID (
     cidInfoSRT,
 ) where
 
-import qualified Data.ByteString.Short as Short
-
 import Codec.Serialise
+import Crypto.Hash
+import Crypto.KDF.HKDF
+import qualified Data.ByteString.Short as Short
 import GHC.Generics
+import System.Random (getStdRandom, uniformByteString)
 
 import Network.QUIC.Imports
 
@@ -58,8 +61,16 @@ unpackCID (CID sbs) = (sbs, len)
 -- 16 bytes
 newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq, Ord, Show)
 
-newStatelessResetToken :: IO StatelessResetToken
-newStatelessResetToken = StatelessResetToken <$> getRandomBytes 16
+fromStatelessResetToken :: StatelessResetToken -> ByteString
+fromStatelessResetToken (StatelessResetToken srt) = Short.fromShort srt
+
+makeGenStatelessReset :: IO (CID -> StatelessResetToken)
+makeGenStatelessReset = do
+    salt <- getStdRandom $ uniformByteString 20
+    ikm <- getStdRandom $ uniformByteString 20
+    let prk = extract salt ikm :: PRK SHA256
+        makeStatelessReset dcid = StatelessResetToken $ Short.toShort $ expand prk (fromCID dcid) 16
+    return makeStatelessReset
 
 -- 8 bytes
 newtype PathData = PathData Bytes deriving (Eq, Show)

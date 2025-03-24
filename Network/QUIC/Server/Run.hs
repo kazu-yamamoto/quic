@@ -180,6 +180,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
             accRecvQ
             send
             recv
+            (genStatelessReset dispatch)
     addResource conn qclean
     addResource conn dclean
     let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs

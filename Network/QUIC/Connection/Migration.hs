@@ -77,7 +77,7 @@ resetPeerCID Connection{..} cid = atomically $ writeTVar peerCIDDB $ newCIDDB ci
 getNewMyCID :: Connection -> IO CIDInfo
 getNewMyCID Connection{..} = do
     cid <- newCID
-    srt <- newStatelessResetToken
+    let srt = genStatelessResetToken cid
     atomicModifyIORef' myCIDDB $ new cid srt
 
 ----------------------------------------------------------------
