@@ -141,8 +141,8 @@ controlConnection' conn ChangeServerCID = do
     mn <- timeout (Microseconds 1000000) "controlConnection' 1" $ waitPeerCID conn -- fixme
     case mn of
         Nothing -> return False
-        Just (CIDInfo n _ _) -> do
-            sendFrames conn RTT1Level [RetireConnectionID n]
+        Just cidInfo -> do
+            sendFrames conn RTT1Level [RetireConnectionID (cidInfoSeq cidInfo)]
             return True
 controlConnection' conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn

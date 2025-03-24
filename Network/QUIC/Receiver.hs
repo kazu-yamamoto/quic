@@ -367,10 +367,10 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     case mcidInfo of
         Nothing -> return ()
-        Just (CIDInfo _ cid _) -> do
+        Just cidInfo -> do
             when (isServer conn) $ do
                 unregister <- getUnregister conn
-                unregister cid
+                unregister $ cidInfoCID cidInfo
 processFrame conn RTT1Level (PathChallenge dat) =
     sendFramesLim conn RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =

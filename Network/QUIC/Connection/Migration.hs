@@ -207,18 +207,18 @@ set cidInfo pri db = db'
             }
 
 add :: CIDInfo -> CIDDB -> CIDDB
-add cidInfo@CIDInfo{..} db@CIDDB{..} = db'
+add cidInfo db@CIDDB{..} = db'
   where
     db' =
         db
-            { cidInfos = IntMap.insert cidInfoSeq cidInfo cidInfos
-            , revInfos = Map.insert cidInfoCID cidInfoSeq revInfos
+            { cidInfos = IntMap.insert (cidInfoSeq cidInfo) cidInfo cidInfos
+            , revInfos = Map.insert (cidInfoCID cidInfo) (cidInfoSeq cidInfo) revInfos
             }
 
 new :: CID -> StatelessResetToken -> CIDDB -> (CIDDB, CIDInfo)
 new cid srt db@CIDDB{..} = (db', cidInfo)
   where
-    cidInfo = CIDInfo nextSeqNum cid srt
+    cidInfo = newCIDInfo nextSeqNum cid srt
     db' =
         db
             { nextSeqNum = nextSeqNum + 1
@@ -275,7 +275,7 @@ isStatelessRestTokenValid Connection{..} cid srt = srtCheck <$> readTVarIO peerC
         Nothing -> False
         Just n -> case IntMap.lookup n cidInfos of
             Nothing -> False
-            Just (CIDInfo _ _ srt0) -> srt == srt0
+            Just cidInfo -> cidInfoSRT cidInfo == srt
 
 ----------------------------------------------------------------
 
@@ -285,12 +285,15 @@ validatePath conn Nothing = do
     setChallenges conn pdat
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat] $ return ()
     waitResponse conn
-validatePath conn (Just (CIDInfo retiredSeqNum _ _)) = do
+validatePath conn (Just cidInfo) = do
     pdat <- newPathData
     setChallenges conn pdat
-    putOutput conn $
-        OutControl RTT1Level [PathChallenge pdat, RetireConnectionID retiredSeqNum] $
-            return ()
+    let retiredSeqNum = cidInfoSeq cidInfo
+    putOutput conn
+        $ OutControl
+            RTT1Level
+            [PathChallenge pdat, RetireConnectionID retiredSeqNum]
+        $ return ()
     waitResponse conn
     retirePeerCID conn retiredSeqNum
 

@@ -93,7 +93,7 @@ newCIDDB cid =
         , triggeredByMe = False
         }
   where
-    cidInfo = CIDInfo 0 cid (StatelessResetToken "")
+    cidInfo = newCIDInfo 0 cid $ StatelessResetToken ""
 
 ----------------------------------------------------------------
 

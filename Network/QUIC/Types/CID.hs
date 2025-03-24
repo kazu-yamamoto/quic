@@ -12,7 +12,11 @@ module Network.QUIC.Types.CID (
     newStatelessResetToken,
     PathData (..),
     newPathData,
-    CIDInfo (..),
+    CIDInfo,
+    newCIDInfo,
+    cidInfoSeq,
+    cidInfoCID,
+    cidInfoSRT,
 ) where
 
 import qualified Data.ByteString.Short as Short
@@ -69,3 +73,11 @@ data CIDInfo = CIDInfo
     , cidInfoSRT :: StatelessResetToken
     }
     deriving (Eq, Ord, Show)
+
+newCIDInfo :: Int -> CID -> StatelessResetToken -> CIDInfo
+newCIDInfo n cid srt =
+    CIDInfo
+        { cidInfoSeq = n
+        , cidInfoCID = cid
+        , cidInfoSRT = srt
+        }
