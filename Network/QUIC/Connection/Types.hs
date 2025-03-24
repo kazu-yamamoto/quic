@@ -18,7 +18,7 @@ import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
 import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
-import Network.Socket (Cmsg, SockAddr, Socket)
+import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC
 import System.Mem.Weak (Weak)
 
@@ -186,7 +186,7 @@ newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
 type Send = Buffer -> Int -> IO ()
 type Recv = IO ReceivedPacket
 
-data PeerInfo = PeerInfo SockAddr [Cmsg] deriving (Eq, Show)
+data PeerInfo = PeerInfo SockAddr deriving (Eq, Show)
 
 ----------------------------------------------------------------
 

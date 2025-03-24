@@ -168,14 +168,14 @@ dispatcher d conf stvar forkConnection mysock = do
     loop wait = do
         cont <- checkLoop stvar wait
         when cont $ do
-            (peersa, bs, cmsgs, _) <- safeRecv $ NSB.recvMsg mysock 2048 2048 0
+            (bs, peersa) <- safeRecv $ NSB.recvFrom mysock 2048
             now <- getTimeMicrosecond
-            let send' b = void $ NSB.sendMsg mysock peersa [b] cmsgs 0
+            let send' b = void $ NSB.sendTo mysock b peersa
                 -- cf: greaseQuicBit $ getMyParameters conn
                 quicBit = greaseQuicBit $ scParameters conf
             cpckts <- decodeCryptPackets bs (not quicBit)
             let bytes = BS.length bs
-                peerInfo = PeerInfo peersa cmsgs
+                peerInfo = PeerInfo peersa
                 switch = dispatch d conf forkConnection logAction mysock peerInfo send' bytes now
             mapM_ switch cpckts
             loop wait
