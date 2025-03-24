@@ -80,7 +80,7 @@ readerClient s0 conn = handleLogUnit logAction $ do
             Just _ -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket pkt t siz lvl
             Nothing -> case decodeStatelessResetToken (cryptPacket crypt) of
                 Just token -> do
-                    isStatelessReset <- isStatelessRestTokenValid conn cid token
+                    isStatelessReset <- isStatelessRestTokenValid conn token
                     -- Our client does not send a stateless reset:
                     -- 1) Stateless reset token is not generated for
                     --    the my first CID.

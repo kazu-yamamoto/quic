@@ -268,14 +268,17 @@ setPeerStatelessResetToken Connection{..} srt =
                         , usedCIDInfo = cidinfo'
                         }
 
-isStatelessRestTokenValid :: Connection -> CID -> StatelessResetToken -> IO Bool
-isStatelessRestTokenValid Connection{..} cid srt = srtCheck <$> readTVarIO peerCIDDB
+-- Used in client only.  Stateless reset is independent from
+-- Connection because its CID is random.  However, client uses only
+-- one Connection.  So, peerCIDDB can be considered a global variable.
+-- This function tries to find the target statless reset token in
+-- peerCIDDB.
+isStatelessRestTokenValid :: Connection -> StatelessResetToken -> IO Bool
+isStatelessRestTokenValid Connection{..} srt = srtCheck <$> readTVarIO peerCIDDB
   where
-    srtCheck CIDDB{..} = case Map.lookup cid revInfos of
-        Nothing -> False
-        Just n -> case IntMap.lookup n cidInfos of
-            Nothing -> False
-            Just cidInfo -> cidInfoSRT cidInfo == srt
+    srtCheck CIDDB{..} = foldr chk False cidInfos
+    chk _ True = True
+    chk cidInfo _ = cidInfoSRT cidInfo == srt
 
 ----------------------------------------------------------------
 
