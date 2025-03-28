@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.2.8
+
+* Proper handling for stateless reset. Servers generate SRTs based on
+  their CIDs. Clients check SRTs before dispatching to a Connection.
+  Note that the CID of stateless reset is random.
+  Test: `quic-server -o 5` and `quic-client -i`/`p`.
+
 ## 0.2.7
 
 * Introducing `forkManaged` to manage readers of clients properly.
