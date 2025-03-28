@@ -37,6 +37,7 @@ import System.Random (getStdRandom, randomRIO, uniformByteString)
 import Network.QUIC.Common
 import Network.QUIC.Config
 import Network.QUIC.Connection
+import Network.QUIC.Connector
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Logger
@@ -264,7 +265,8 @@ dispatch
             writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             unless exist $ do
                 let reg = registerConnectionDict dstTable
-                    unreg = unregisterConnectionDict dstTable
+                    unreg cid =
+                        fire' (Microseconds 10000000) $ unregisterConnectionDict dstTable cid
                     acc =
                         Accept
                             { accVersionInfo = VersionInfo peerVer myVersions
@@ -389,9 +391,11 @@ dispatch
                         send' statelessReset
                         logAction $ "Stateless reset is sent to " <> bhow peerInfo
             Just conn -> do
-                void $ setSocket conn mysock
-                setPeerInfo conn peerInfo
-                writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
+                alive <- getAlive conn
+                when alive $ do
+                    void $ setSocket conn mysock
+                    setPeerInfo conn peerInfo
+                    writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 ----------------------------------------------------------------
 dispatch
     Dispatch{..}

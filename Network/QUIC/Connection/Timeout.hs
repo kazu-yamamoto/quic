@@ -1,6 +1,7 @@
 module Network.QUIC.Connection.Timeout (
     timeout,
     fire,
+    fire',
     cfire,
     delay,
 ) where
@@ -26,6 +27,11 @@ fire conn (Microseconds microseconds) action = do
     action' = do
         alive <- getAlive conn
         when alive action `E.catch` ignore
+
+fire' :: Microseconds -> TimeoutCallback -> IO ()
+fire' (Microseconds microseconds) action = do
+    timmgr <- getSystemTimerManager
+    void $ registerTimeout timmgr microseconds action
 
 cfire :: Connection -> Microseconds -> TimeoutCallback -> IO (IO ())
 cfire conn (Microseconds microseconds) action = do
