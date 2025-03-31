@@ -46,8 +46,3 @@ is0RTTPossible ResumptionInfo{..} =
 -- | Is resumption possible?
 isResumptionPossible :: ResumptionInfo -> Bool
 isResumptionPossible ResumptionInfo{..} = isJust resumptionSession
-
-get0RTTCipher :: ResumptionInfo -> Maybe CipherID
-get0RTTCipher ri = case resumptionSession ri of
-    Nothing -> Nothing
-    Just (_, sd) -> Just $ sessionCipher sd
