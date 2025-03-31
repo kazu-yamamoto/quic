@@ -40,7 +40,7 @@ run :: ClientConfig -> (Connection -> IO a) -> IO a
 run conf client = do
     let resInfo = ccResumption conf
         verInfo = case resumptionSession resInfo of
-            Nothing
+            []
                 | resumptionToken resInfo == emptyToken ->
                     let ver = ccVersion conf
                         vers = ccVersions conf

@@ -84,13 +84,14 @@ setResumptionSession :: Connection -> SessionEstablish
 setResumptionSession conn@Connection{..} si sd = do
     ver <- getVersion conn
     atomicModifyIORef'' roleInfo $ \ci ->
-        ci
-            { resumptionInfo =
-                (resumptionInfo ci)
-                    { resumptionVersion = ver
-                    , resumptionSession = Just (si, sd)
-                    }
-            }
+        let resumInfo = resumptionInfo ci
+         in ci
+                { resumptionInfo =
+                    resumInfo
+                        { resumptionVersion = ver
+                        , resumptionSession = (si, sd) : resumptionSession resumInfo
+                        }
+                }
     return Nothing
 
 setNewToken :: Connection -> Token -> IO ()
