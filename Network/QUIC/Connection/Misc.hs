@@ -40,6 +40,7 @@ import Network.Socket (Socket)
 import System.Mem.Weak
 
 import Network.QUIC.Connection.Queue
+import Network.QUIC.Connection.State
 import Network.QUIC.Connection.Timeout
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
@@ -210,8 +211,10 @@ sendFramesLim conn lvl frames = putOutputLim conn $ OutControl lvl frames $ retu
 
 -- | Closing a connection with/without a transport error.
 --   Internal threads should use this.
-closeConnection :: TransportError -> ReasonPhrase -> IO ()
-closeConnection err desc = E.throwIO quicexc
+closeConnection :: Connection -> TransportError -> ReasonPhrase -> IO ()
+closeConnection conn err desc = do
+    setConnectionClosed conn
+    E.throwIO quicexc
   where
     quicexc = TransportErrorIsSent err desc
 

@@ -140,8 +140,9 @@ closeStream :: Stream -> IO ()
 closeStream s = do
     let conn = streamConnection s
     let sid = streamId s
+    closed <- isConnectionClosed conn
     sclosed <- isTxStreamClosed s
-    unless sclosed $ do
+    unless (closed || sclosed) $ do
         setTxStreamClosed s
         setRxStreamClosed s
         putSendStreamQ conn $ TxStreamData s [] 0 True

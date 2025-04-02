@@ -6,6 +6,8 @@ module Network.QUIC.Connection.State (
     setConnection1RTTReady,
     isConnectionEstablished,
     setConnectionEstablished,
+    isConnectionClosed,
+    setConnectionClosed,
     wait0RTTReady,
     wait1RTTReady,
     waitEstablished,
@@ -49,12 +51,20 @@ setConnection1RTTReady conn = do
 setConnectionEstablished :: Connection -> IO ()
 setConnectionEstablished conn = setConnectionState conn Established
 
+setConnectionClosed :: Connection -> IO ()
+setConnectionClosed conn = setConnectionState conn Closed
+
 ----------------------------------------------------------------
 
 isConnection1RTTReady :: Connection -> IO Bool
 isConnection1RTTReady Connection{..} = atomically $ do
     st <- readTVar $ connectionState connState
     return (st >= ReadyFor1RTT)
+
+isConnectionClosed :: Connection -> IO Bool
+isConnectionClosed Connection{..} = atomically $ do
+    st <- readTVar $ connectionState connState
+    return (st == Closed)
 
 ----------------------------------------------------------------
 

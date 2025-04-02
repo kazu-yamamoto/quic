@@ -112,7 +112,8 @@ handshakeClient'
 handshakeClient' conf conn myAuthCIDs ver hsr = handshaker
   where
     handshaker =
-        clientHandshaker qc conf ver myAuthCIDs setter use0RTT `E.catch` sendCCTLSError
+        clientHandshaker qc conf ver myAuthCIDs setter use0RTT
+            `E.catch` sendCCTLSError conn
     qc =
         QUICCallbacks
             { quicSend = sendTLS conn hsr
@@ -178,7 +179,9 @@ handshakeServer'
     -> IO ()
 handshakeServer' conf conn ver hsRef paramRef = handshaker
   where
-    handshaker = serverHandshaker qc conf ver getParams `E.catch` sendCCTLSError
+    handshaker =
+        serverHandshaker qc conf ver getParams
+            `E.catch` sendCCTLSError conn
     qc =
         QUICCallbacks
             { quicSend = sendTLS conn hsRef
@@ -235,7 +238,7 @@ setPeerParams conn _ctx peerExts = do
     tpId <- extensionIDForTtransportParameter <$> getVersion conn
     case getTP tpId peerExts of
         Nothing ->
-            sendCCTLSAlert TLS.MissingExtension "QUIC transport parameters are mssing"
+            sendCCTLSAlert conn TLS.MissingExtension "QUIC transport parameters are mssing"
         Just (ExtensionRaw _ bs) -> setPP bs
   where
     getTP n = find (\(ExtensionRaw extid _) -> extid == n)
@@ -325,17 +328,17 @@ sendCCParamError = E.throwIO WrongTransportParameter
 sendCCVNError :: IO ()
 sendCCVNError = E.throwIO WrongVersionInformation
 
-sendCCTLSError :: TLS.TLSException -> IO ()
-sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection TransportParameterError "Transport parameter error"
-sendCCTLSError (TLS.HandshakeFailed (TLS.Error_Misc "WrongVersionInformation")) = closeConnection VersionNegotiationError "Version negotiation error"
-sendCCTLSError e = closeConnection err msg
+sendCCTLSError :: Connection -> TLS.TLSException -> IO ()
+sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection conn TransportParameterError "Transport parameter error"
+sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongVersionInformation")) = closeConnection conn VersionNegotiationError "Version negotiation error"
+sendCCTLSError conn e = closeConnection conn err msg
   where
     tlserr = getErrorCause e
     err = cryptoError $ errorToAlertDescription tlserr
     msg = shortpack $ errorToAlertMessage tlserr
 
-sendCCTLSAlert :: TLS.AlertDescription -> ReasonPhrase -> IO ()
-sendCCTLSAlert a msg = closeConnection (cryptoError a) msg
+sendCCTLSAlert :: Connection -> TLS.AlertDescription -> ReasonPhrase -> IO ()
+sendCCTLSAlert conn a msg = closeConnection conn (cryptoError a) msg
 
 getErrorCause :: TLS.TLSException -> TLS.TLSError
 getErrorCause (TLS.Terminated _ _ e) = e

@@ -52,6 +52,7 @@ data ConnectionState
     | ReadyFor0RTT
     | ReadyFor1RTT
     | Established
+    | Closed
     deriving (Eq, Ord, Show)
 
 isConnectionEstablished :: Connector a => a -> IO Bool

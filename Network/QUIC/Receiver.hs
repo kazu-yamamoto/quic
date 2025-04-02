@@ -148,14 +148,14 @@ processReceivedPacket conn rpkt = do
         Just plain@Plain{..} -> do
             addRxBytes conn $ rpReceivedBytes rpkt
             when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
-                closeConnection ProtocolViolation "Non 0 RR bits or no frames"
+                closeConnection conn ProtocolViolation "Non 0 RR bits or no frames"
             when (isUnknownFrame plainMarks) $
-                closeConnection FrameEncodingError "Unknown frame"
+                closeConnection conn FrameEncodingError "Unknown frame"
             let controlled = checkRate plainFrames
             when (controlled /= 0) $ do
                 rate <- addRate (controlRate conn) controlled
                 when (rate > rateLimit) $ do
-                    closeConnection QUIC.InternalError "Rate control"
+                    closeConnection conn QUIC.InternalError "Rate control"
             -- For Ping, record PPN first, then send an ACK.
             onPacketReceived (connLDCC conn) lvl plainPacketNumber
             when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
@@ -214,7 +214,7 @@ streamNotCreatedYet conn sid emsg
     | isInitiated conn sid = do
         curSid <- getMyStreamId conn
         when (sid > curSid) $
-            closeConnection StreamStateError emsg
+            closeConnection conn StreamStateError emsg
 streamNotCreatedYet _ _ _ = return ()
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
@@ -223,13 +223,13 @@ processFrame conn lvl Ping = do
     -- see ackEli above
     when (lvl /= InitialLevel && lvl /= RTT1Level) $ sendFrames conn lvl []
 processFrame conn lvl (Ack ackInfo ackDelay) = do
-    when (lvl == RTT0Level) $ closeConnection ProtocolViolation "ACK"
+    when (lvl == RTT0Level) $ closeConnection conn ProtocolViolation "ACK"
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
 processFrame conn lvl (ResetStream sid aerr _finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        closeConnection ProtocolViolation "RESET_STREAM"
+        closeConnection conn ProtocolViolation "RESET_STREAM"
     when (isSendOnly conn sid) $
-        closeConnection StreamStateError "Received in a send-only stream"
+        closeConnection conn StreamStateError "Received in a send-only stream"
     mstrm <- findStream conn sid
     case mstrm of
         Nothing -> return ()
@@ -240,9 +240,9 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
             delStream conn strm
 processFrame conn lvl (StopSending sid err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        closeConnection ProtocolViolation "STOP_SENDING"
+        closeConnection conn ProtocolViolation "STOP_SENDING"
     when (isReceiveOnly conn sid) $
-        closeConnection StreamStateError "Receive-only stream"
+        closeConnection conn StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
         Nothing -> streamNotCreatedYet conn sid "No such stream for STOP_SENDING"
@@ -250,7 +250,7 @@ processFrame conn lvl (StopSending sid err) = do
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $
-        closeConnection ProtocolViolation "CRYPTO in 0-RTT"
+        closeConnection conn ProtocolViolation "CRYPTO in 0-RTT"
     let len = BS.length cdat
         rx = RxStreamData cdat off len False
     case lvl of
@@ -266,18 +266,18 @@ processFrame conn lvl (CryptoF off cdat) = do
             | isClient conn ->
                 void $ putRxCrypto conn lvl rx
             | otherwise ->
-                closeConnection (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT"
+                closeConnection conn (cryptoError UnexpectedMessage) "CRYPTO in 1-RTT"
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
-        closeConnection ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
+        closeConnection conn ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
     when (off == 0) $ updatePeerStreamId conn sid
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
-    unless ok $ closeConnection StreamLimitError "stream id is too large"
+    unless ok $ closeConnection conn StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
-        closeConnection StreamStateError "send-only stream"
+        closeConnection conn StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
     strm <- maybe (createStream conn sid) return mstrm
@@ -286,28 +286,32 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
     fc <- putRxStreamData strm rx
     case fc of
         -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-        OverLimit -> closeConnection FlowControlError "Flow control error for stream in 0-RTT"
+        OverLimit ->
+            closeConnection conn FlowControlError "Flow control error for stream in 0-RTT"
         Duplicated -> return ()
         Reassembled -> do
             ok' <- checkRxMaxData conn len
             -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
             unless ok' $
-                closeConnection FlowControlError "Flow control error for connection in 0-RTT"
+                closeConnection
+                    conn
+                    FlowControlError
+                    "Flow control error for connection in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
-    unless ok $ closeConnection StreamLimitError "stream id is too large"
+    unless ok $ closeConnection conn StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
-        closeConnection StreamStateError "send-only stream"
+        closeConnection conn StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
 processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
     when (off == 0) $ updatePeerStreamId conn sid
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
-    unless ok $ closeConnection StreamLimitError "stream id is too large"
+    unless ok $ closeConnection conn StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
-        closeConnection StreamStateError "send-only stream"
+        closeConnection conn StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
     strm <- maybe (createStream conn sid) return mstrm
@@ -316,50 +320,57 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
     fc <- putRxStreamData strm rx
     case fc of
         -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-        OverLimit -> closeConnection FlowControlError "Flow control error for stream in 1-RTT"
+        OverLimit ->
+            closeConnection conn FlowControlError "Flow control error for stream in 1-RTT"
         Duplicated -> return ()
         Reassembled -> do
             ok' <- checkRxMaxData conn len
             -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
             unless ok' $
-                closeConnection FlowControlError "Flow control error for connection in 1-RTT"
+                closeConnection
+                    conn
+                    FlowControlError
+                    "Flow control error for connection in 1-RTT"
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        closeConnection ProtocolViolation "MAX_DATA in Initial or Handshake"
+        closeConnection conn ProtocolViolation "MAX_DATA in Initial or Handshake"
     setTxMaxData conn n
 processFrame conn lvl (MaxStreamData sid n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        closeConnection ProtocolViolation "MAX_STREAM_DATA in Initial or Handshake"
+        closeConnection conn ProtocolViolation "MAX_STREAM_DATA in Initial or Handshake"
     when (isReceiveOnly conn sid) $
-        closeConnection StreamStateError "Receive-only stream"
+        closeConnection conn StreamStateError "Receive-only stream"
     mstrm <- findStream conn sid
     case mstrm of
         Nothing -> streamNotCreatedYet conn sid "No such stream for MAX_STREAM_DATA"
         Just strm -> setTxMaxStreamData strm n
 processFrame conn lvl (MaxStreams dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        closeConnection ProtocolViolation "MAX_STREAMS in Initial or Handshake"
+        closeConnection conn ProtocolViolation "MAX_STREAMS in Initial or Handshake"
     when (n > 2 ^ (60 :: Int)) $
-        closeConnection FrameEncodingError "Too large MAX_STREAMS"
+        closeConnection conn FrameEncodingError "Too large MAX_STREAMS"
     if dir == Bidirectional
         then setTxMaxStreams conn n
         else setTxUniMaxStreams conn n
 processFrame _conn _lvl DataBlocked{} = return ()
 processFrame _conn _lvl (StreamDataBlocked _sid _) = return ()
-processFrame _conn lvl (StreamsBlocked _dir n) = do
+processFrame conn lvl (StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        closeConnection ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake"
+        closeConnection conn ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake"
     when (n > 2 ^ (60 :: Int)) $
-        closeConnection FrameEncodingError "Too large STREAMS_BLOCKED"
+        closeConnection conn FrameEncodingError "Too large STREAMS_BLOCKED"
 processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
-        closeConnection ProtocolViolation "NEW_CONNECTION_ID in Initial or Handshake"
+        closeConnection
+            conn
+            ProtocolViolation
+            "NEW_CONNECTION_ID in Initial or Handshake"
     ok <- addPeerCID conn cidInfo
     unless ok $
-        closeConnection ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
+        closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
     let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
     when (cidlen < 1 || 20 < cidlen || rpt > cidInfoSeq cidInfo) $
-        closeConnection FrameEncodingError "NEW_CONNECTION_ID parameter error"
+        closeConnection conn FrameEncodingError "NEW_CONNECTION_ID parameter error"
     when (rpt >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn rpt
         sendFramesLim conn RTT1Level $ map RetireConnectionID seqNums
@@ -386,7 +397,7 @@ processFrame _conn _lvl (ConnectionCloseApp err reason) = do
     E.throwIO quicexc
 processFrame conn lvl HandshakeDone = do
     when (isServer conn || lvl /= RTT1Level) $
-        closeConnection ProtocolViolation "HANDSHAKE_DONE for server"
+        closeConnection conn ProtocolViolation "HANDSHAKE_DONE for server"
     fire conn (Microseconds 100000) $ do
         let ldcc = connLDCC conn
         discarded0 <- getAndSetPacketNumberSpaceDiscarded ldcc RTT0Level
@@ -401,7 +412,7 @@ processFrame conn lvl HandshakeDone = do
     getConnectionInfo conn >>= onConnectionEstablished (connHooks conn)
     -- to receive NewSessionTicket
     fire conn (Microseconds 1000000) $ killHandshaker conn lvl
-processFrame _ _ _ = closeConnection ProtocolViolation "Frame is not allowed"
+processFrame conn _ _ = closeConnection conn ProtocolViolation "Frame is not allowed"
 
 -- Return value indicates duplication.
 putRxCrypto :: Connection -> EncryptionLevel -> RxStreamData -> IO Bool
