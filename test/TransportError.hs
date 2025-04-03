@@ -294,6 +294,9 @@ setMaxAckDelay params = params{maxAckDelay = 2 ^ (15 :: Int)}
 
 ----------------------------------------------------------------
 
+-- Stream 0 is not created internally.  It is assumed that a server
+-- send CC without sending back Stream 0.  If the server send back any
+-- data for Stream 0, `streamNotCreatedYet` throws an exception, sigh.
 largeOffset :: EncryptionLevel -> Plain -> Plain
 largeOffset lvl plain
     | lvl == RTT1Level = plain{plainFrames = fake : plainFrames plain}
