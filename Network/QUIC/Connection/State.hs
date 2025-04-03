@@ -59,7 +59,7 @@ setConnectionClosed conn = setConnectionState conn Closed
 isConnection1RTTReady :: Connection -> IO Bool
 isConnection1RTTReady Connection{..} = atomically $ do
     st <- readTVar $ connectionState connState
-    return (st >= ReadyFor1RTT)
+    return (st >= ReadyFor1RTT && st /= Closed)
 
 isConnectionClosed :: Connection -> IO Bool
 isConnectionClosed Connection{..} = atomically $ do
@@ -72,20 +72,20 @@ isConnectionClosed Connection{..} = atomically $ do
 wait0RTTReady :: Connection -> IO ()
 wait0RTTReady Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
-    check (cs >= ReadyFor0RTT)
+    check (cs >= ReadyFor0RTT && cs /= Closed)
 
 -- | Waiting until 1-RTT data can be sent.
 wait1RTTReady :: Connection -> IO ()
 wait1RTTReady Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
-    check (cs >= ReadyFor1RTT)
+    check (cs >= ReadyFor1RTT && cs /= Closed)
 
 -- | For clients, waiting until HANDSHAKE_DONE is received.
 --   For servers, waiting until a TLS stack reports that the handshake is complete.
 waitEstablished :: Connection -> IO ()
 waitEstablished Connection{..} = atomically $ do
     cs <- readTVar $ connectionState connState
-    check (cs >= Established)
+    check (cs >= Established && cs /= Closed)
 
 ----------------------------------------------------------------
 
