@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.9
+
+* Don't send Fin if connection is already closed.
+* Using clientWantSessionResumeList for multiple tickets.
+
 ## 0.2.8
 
 * Proper handling for stateless reset. Servers generate SRTs based on
