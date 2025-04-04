@@ -359,7 +359,7 @@ processFrame conn lvl (StreamsBlocked _dir n) = do
         closeConnection conn ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake"
     when (n > 2 ^ (60 :: Int)) $
         closeConnection conn FrameEncodingError "Too large STREAMS_BLOCKED"
-processFrame conn lvl (NewConnectionID cidInfo rpt) = do
+processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection
             conn
@@ -369,10 +369,10 @@ processFrame conn lvl (NewConnectionID cidInfo rpt) = do
     unless ok $
         closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
     let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
-    when (cidlen < 1 || 20 < cidlen || rpt > cidInfoSeq cidInfo) $
+    when (cidlen < 1 || 20 < cidlen || retirePriorTo > cidInfoSeq cidInfo) $
         closeConnection conn FrameEncodingError "NEW_CONNECTION_ID parameter error"
-    when (rpt >= 1) $ do
-        seqNums <- setPeerCIDAndRetireCIDs conn rpt
+    when (retirePriorTo >= 1) $ do
+        seqNums <- setPeerCIDAndRetireCIDs conn retirePriorTo
         sendFramesLim conn RTT1Level $ map RetireConnectionID seqNums
 processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn

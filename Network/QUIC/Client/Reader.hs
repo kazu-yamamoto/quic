@@ -139,12 +139,14 @@ controlConnection' conn ChangeServerCID = do
     case mn of
         Nothing -> return False
         Just cidInfo -> do
+            -- Client tells "I don't use this CID of yours".
             sendFrames conn RTT1Level [RetireConnectionID (cidInfoSeq cidInfo)]
             return True
 controlConnection' conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
-    x <- (+ 1) <$> getMyCIDSeqNum conn
-    sendFrames conn RTT1Level [NewConnectionID cidInfo x]
+    retirePriorTo <- (+ 1) <$> getMyCIDSeqNum conn
+    -- Client tells "My CIDs less than retirePriorTo should be retired".
+    sendFrames conn RTT1Level [NewConnectionID cidInfo retirePriorTo]
     return True
 controlConnection' conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0

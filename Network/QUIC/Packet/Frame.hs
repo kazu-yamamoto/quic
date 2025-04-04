@@ -103,10 +103,10 @@ encodeFrame wbuf (StreamsBlocked dir ms) = do
         Bidirectional -> write8 wbuf 0x16
         Unidirectional -> write8 wbuf 0x17
     encodeInt' wbuf $ fromIntegral ms
-encodeFrame wbuf (NewConnectionID cidInfo rpt) = do
+encodeFrame wbuf (NewConnectionID cidInfo retirePriorTo) = do
     write8 wbuf 0x18
     encodeInt' wbuf $ fromIntegral $ cidInfoSeq cidInfo
-    encodeInt' wbuf $ fromIntegral rpt
+    encodeInt' wbuf $ fromIntegral retirePriorTo
     let (cid, len) = unpackCID $ cidInfoCID cidInfo
     write8 wbuf len
     copyShortByteString wbuf cid
@@ -342,11 +342,11 @@ decodeConnectionCloseApp rbuf = do
 decodeNewConnectionID :: ReadBuffer -> IO Frame
 decodeNewConnectionID rbuf = do
     seqNum <- fromIntegral <$> decodeInt' rbuf
-    rpt <- fromIntegral <$> decodeInt' rbuf
+    retirePriorTo <- fromIntegral <$> decodeInt' rbuf
     cidLen <- fromIntegral <$> read8 rbuf
     cID <- makeCID <$> extractShortByteString rbuf cidLen
     token <- StatelessResetToken <$> extractShortByteString rbuf 16
-    return $ NewConnectionID (newCIDInfo seqNum cID token) rpt
+    return $ NewConnectionID (newCIDInfo seqNum cID token) retirePriorTo
 
 decodeRetireConnectionID :: ReadBuffer -> IO Frame
 decodeRetireConnectionID rbuf = do
