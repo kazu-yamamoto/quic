@@ -158,12 +158,12 @@ options =
         ['B']
         ["nat-rebinding"]
         (NoArg (\o -> o{optMigration = Just NATRebinding}))
-        "use a new local port"
+        "use a new client port"
     , Option
         ['A']
         ["address-mobility"]
         (NoArg (\o -> o{optMigration = Just ActiveMigration}))
-        "use a new address and a new server CID"
+        "use a new client address and a new server CID"
     , Option
         ['t']
         ["performance"]
