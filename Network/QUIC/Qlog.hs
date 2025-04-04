@@ -139,6 +139,8 @@ frameExtra (NewConnectionID cidinfo rpt) =
         <> sw (cidInfoCID cidinfo)
         <> "\",\"retire_prior_to\":\""
         <> sw rpt
+        <> "\",\"stateless_reset_token\":\""
+        <> sw (cidInfoSRT cidinfo)
         <> "\""
 frameExtra (RetireConnectionID sn) = ",\"sequence_number\":\"" <> sw sn <> "\""
 frameExtra (PathChallenge _PathData) = ""

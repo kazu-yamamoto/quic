@@ -59,7 +59,10 @@ unpackCID (CID sbs) = (sbs, len)
     len = fromIntegral $ Short.length sbs
 
 -- 16 bytes
-newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq, Ord, Show)
+newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq, Ord)
+
+instance Show StatelessResetToken where
+    show (StatelessResetToken srt) = shortToString (enc16s srt)
 
 fromStatelessResetToken :: StatelessResetToken -> ByteString
 fromStatelessResetToken (StatelessResetToken srt) = Short.fromShort srt
