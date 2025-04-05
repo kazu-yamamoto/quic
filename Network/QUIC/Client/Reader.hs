@@ -133,7 +133,17 @@ controlConnection conn typ
         controlConnection' conn typ
     | otherwise = return False
 
+-- ping: NewConnectionID(retirePriorTo)
+-- pong: RetireConnectionID
+--
+-- ping: RetireConnectionID
+-- pong: NewConnectionID
+--
+-- ping: PathChallenge
+-- pong: PathResponse
 controlConnection' :: Connection -> ConnectionControl -> IO Bool
+-- C: newServerCID {RetireConnectionID(oldServerCID)}
+-- S: curClientCID {NewConnectionID}
 controlConnection' conn ChangeServerCID = do
     mn <- timeout (Microseconds 1000000) "controlConnection' 1" $ waitPeerCID conn -- fixme
     case mn of
@@ -142,15 +152,27 @@ controlConnection' conn ChangeServerCID = do
             -- Client tells "I don't use this CID of yours".
             sendFrames conn RTT1Level [RetireConnectionID (cidInfoSeq cidInfo)]
             return True
+-- C: curServerCID {NewConnectionID(retirePriorTo)}
+-- S: newClientCID {RetireConnectionID(oldClientCID)}
 controlConnection' conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
     retirePriorTo <- (+ 1) <$> getMyCIDSeqNum conn
     -- Client tells "My CIDs less than retirePriorTo should be retired".
     sendFrames conn RTT1Level [NewConnectionID cidInfo retirePriorTo]
     return True
+-- S: curClientCID {PathChallenge}
+-- C: curServerCID {PathResponse}
 controlConnection' conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
+-- C: newServerCID {RetireConnectionID(oldServerCID)}
+-- C: newServerCID {PathChallenge}
+-- S: curClientCID {NewConnectionID}
+-- S: newCelintCID {RetireConnectionID(oldClientCID)}
+-- S: newClientCID {PathChallenge}
+-- C: newServerCID {NewConnectionID}
+-- C: newServerCID {PathResponse}
+-- S: newClientCID {PathResponse}
 controlConnection' conn ActiveMigration = do
     mn <- timeout (Microseconds 1000000) "controlConnection' 2" $ waitPeerCID conn -- fixme
     case mn of
