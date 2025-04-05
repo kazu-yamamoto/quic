@@ -156,10 +156,10 @@ createServerConnection
     -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
     sref <- newIORef accMySocket
-    piref <- newIORef accPeerInfo
+    piref <- newIORef $ PeerInfo accPeerSockAddr Nothing
     let send buf siz = void $ do
             sock <- readIORef sref
-            PeerInfo sa <- readIORef piref
+            PeerInfo sa _ <- readIORef piref
             NS.sendBufTo sock buf siz sa
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs
@@ -188,7 +188,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
         ver = chosenVersion accVersionInfo
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
-    let PeerInfo peersa = accPeerInfo
+    let peersa = accPeerSockAddr
         pktSiz =
             (defaultPacketSize peersa `max` accPacketSize)
                 `min` maximumPacketSize peersa

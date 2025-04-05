@@ -29,9 +29,10 @@ import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Control (LRUCacheRef, Rate, getRate, newRate)
 import qualified Network.Control as LRUCache
-import Network.Socket (Socket, waitReadSocketSTM)
+import Network.Socket (SockAddr, Socket, waitReadSocketSTM)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
+import System.Log.FastLogger
 import System.Random (getStdRandom, randomRIO, uniformByteString)
 
 import Network.QUIC.Common
@@ -43,6 +44,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.Qlog
 import Network.QUIC.Types
 import Network.QUIC.Windows
 
@@ -122,7 +124,7 @@ data Accept = Accept
     , accMyAuthCIDs :: AuthCIDs
     , accPeerAuthCIDs :: AuthCIDs
     , accMySocket :: Socket
-    , accPeerInfo :: PeerInfo
+    , accPeerSockAddr :: SockAddr
     , accRecvQ :: RecvQ
     , accPacketSize :: Int
     , accRegister :: CID -> Connection -> IO ()
@@ -176,8 +178,7 @@ dispatcher d conf stvar forkConnection mysock = do
                 quicBit = greaseQuicBit $ scParameters conf
             cpckts <- decodeCryptPackets bs (not quicBit)
             let bytes = BS.length bs
-                peerInfo = PeerInfo peersa
-                switch = dispatch d conf forkConnection logAction mysock peerInfo send' bytes now
+                switch = dispatch d conf forkConnection logAction mysock peersa send' bytes now
             mapM_ switch cpckts
             loop wait
 
@@ -212,7 +213,7 @@ dispatch
     -> (Accept -> IO ())
     -> DebugLogger
     -> Socket
-    -> PeerInfo
+    -> SockAddr
     -> (ByteString -> IO ())
     -> Int
     -> TimeMicrosecond
@@ -224,13 +225,13 @@ dispatch
     forkConnection
     logAction
     mysock
-    peerInfo
+    peersa
     send'
     bytes
     tim
     (cpkt@(CryptPacket (Initial peerVer dCID sCID token) _), lvl, siz)
         | bytes < defaultQUICPacketSize = do
-            logAction $ "too small " <> bhow bytes <> ", " <> bhow peerInfo
+            logAction $ "too small " <> bhow bytes <> ", " <> bhow peersa
         | peerVer `notElem` myVersions = do
             let offerVersions
                     | peerVer == GreasingVersion = GreasingVersion2 : myVersions
@@ -273,7 +274,7 @@ dispatch
                             , accMyAuthCIDs = myAuthCIDs
                             , accPeerAuthCIDs = peerAuthCIDs
                             , accMySocket = mysock
-                            , accPeerInfo = peerInfo
+                            , accPeerSockAddr = peersa
                             , accRecvQ = q
                             , accPacketSize = bytes
                             , accRegister = reg
@@ -354,7 +355,7 @@ dispatch
     _
     _
     _mysock
-    _peerInfo
+    _peersa
     _
     _
     tim
@@ -370,7 +371,7 @@ dispatch
     _
     logAction
     mysock
-    peerInfo
+    peersa
     send'
     bytes
     tim
@@ -389,12 +390,22 @@ dispatch
                         let srt = genStatelessReset dCID
                             statelessReset = BS.concat [BS.singleton flag, body, fromStatelessResetToken srt]
                         send' statelessReset
-                        logAction $ "Stateless reset is sent to " <> bhow peerInfo
+                        logAction $ "Stateless reset is sent to " <> bhow peersa
             Just conn -> do
                 alive <- getAlive conn
                 when alive $ do
-                    void $ setSocket conn mysock
-                    setPeerInfo conn peerInfo
+                    void $ setSocket conn mysock -- fixme
+                    curCID <- getMyCID conn
+                    let cidChanged = curCID /= dCID
+                    when cidChanged $ do
+                        -- This changes my default CID.  But since
+                        -- short packets are used, we don't make use
+                        -- of the new defualt CID.
+                        setMyCID conn dCID
+                    mem <- elemPeerInfo conn peersa
+                    unless mem $
+                        forkManaged conn $
+                            onClientMigration conn dCID peersa cidChanged
                     writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 ----------------------------------------------------------------
 dispatch
@@ -403,7 +414,7 @@ dispatch
     _
     logAction
     mysock
-    peerInfo
+    peersa
     _
     _
     tim
@@ -411,11 +422,30 @@ dispatch
         let dCID = headerMyCID hdr
         mconn <- lookupConnectionDict dstTable dCID
         case mconn of
-            Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peerInfo
+            Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
             Just conn -> do
-                void $ setSocket conn mysock
-                setPeerInfo conn peerInfo
+                void $ setSocket conn mysock -- fixme
+                mem <- elemPeerInfo conn peersa
+                unless mem $ addPeerInfo conn peersa
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ
+
+onClientMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
+onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
+    migrating <- isPathValidating conn -- fixme: test and set
+    unless migrating $ do
+        setMigrationStarted conn
+        -- fixme: should not block
+        mcidinfo <-
+            if cidChanged
+                then timeout (Microseconds 100000) "onClientMigration" $ waitPeerCID conn
+                else return Nothing -- PathChallenge only, no RetireConnectionID
+        let msg = "Migration: " <> bhow peersa <> " (" <> bhow newdCID <> ")"
+        qlogDebug conn $ Debug $ toLogStr msg
+        connDebugLog conn $ "debug: onClientMigration: " <> msg
+        addPeerInfo conn peersa
+        validatePath conn mcidinfo
+  where
+    logAction msg = connDebugLog conn ("debug: onClientMigration: " <> msg)

@@ -188,7 +188,12 @@ newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
 type Send = Buffer -> Int -> IO ()
 type Recv = IO ReceivedPacket
 
-data PeerInfo = PeerInfo SockAddr deriving (Eq, Show)
+-- For migration, two SockAddr for the peer are contained.
+data PeerInfo = PeerInfo
+    { currSockAddr :: SockAddr
+    , prevSockAddr :: Maybe SockAddr
+    }
+    deriving (Eq, Show)
 
 ----------------------------------------------------------------
 

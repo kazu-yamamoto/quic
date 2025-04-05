@@ -11,7 +11,8 @@ module Network.QUIC.Connection.Misc (
     setSocket,
     clearSocket,
     getPeerInfo,
-    setPeerInfo,
+    addPeerInfo,
+    elemPeerInfo,
     getPeerAuthCIDs,
     setPeerAuthCIDs,
     getClientDstCID,
@@ -36,7 +37,7 @@ module Network.QUIC.Connection.Misc (
 import Control.Concurrent
 import qualified Control.Exception as E
 import qualified Data.Map.Strict as Map
-import Network.Socket (Socket)
+import Network.Socket (SockAddr, Socket)
 import System.Mem.Weak
 
 import Network.QUIC.Connection.Queue
@@ -78,11 +79,18 @@ setSocket Connection{..} sock = atomicModifyIORef' connSocket (sock,)
 clearSocket :: Connection -> IO Socket
 clearSocket Connection{..} = atomicModifyIORef' connSocket (undefined,)
 
-getPeerInfo :: Connection -> IO PeerInfo
-getPeerInfo Connection{..} = readIORef peerInfo
+getPeerInfo :: Connection -> IO SockAddr
+getPeerInfo Connection{..} = currSockAddr <$> readIORef peerInfo
 
-setPeerInfo :: Connection -> PeerInfo -> IO ()
-setPeerInfo Connection{..} = writeIORef peerInfo
+addPeerInfo :: Connection -> SockAddr -> IO ()
+addPeerInfo Connection{..} newsa = atomicModifyIORef'' peerInfo add
+  where
+    add (PeerInfo oldsa _) = PeerInfo newsa $ Just oldsa
+
+elemPeerInfo :: Connection -> SockAddr -> IO Bool
+elemPeerInfo Connection{..} sa = do
+    PeerInfo currsa mprevsa <- readIORef peerInfo
+    return (currsa == sa || mprevsa == Just sa)
 
 ----------------------------------------------------------------
 

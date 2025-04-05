@@ -40,7 +40,7 @@ closure conn ldcc (Left se)
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
     sock <- getSocket conn
-    PeerInfo peersa <- getPeerInfo conn
+    peersa <- getPeerInfo conn
     -- send
     let sbuf@(SizedBuffer sendbuf _) = encryptRes conn
     siz <- encodeCC conn sbuf frame

@@ -48,8 +48,8 @@ readerClient s0 conn = handleLogUnit logAction $ do
         case mbs of
             Nothing -> close s0
             Just (bs, peersa) -> do
-                PeerInfo peersa' <- getPeerInfo conn
-                when (peersa == peersa') $ do
+                mem <- elemPeerInfo conn peersa
+                when mem $ do
                     now <- getTimeMicrosecond
                     let quicBit = greaseQuicBit $ getMyParameters conn
                     pkts <- decodePackets bs (not quicBit)
@@ -184,7 +184,7 @@ controlConnection' conn ActiveMigration = do
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
-    PeerInfo peersa <- getPeerInfo conn
+    peersa <- getPeerInfo conn
     newSock <- natRebinding peersa
     oldSock <- setSocket conn newSock
     let reader = readerClient newSock conn
