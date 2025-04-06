@@ -267,6 +267,7 @@ setPeerParams conn _ctx peerExts = do
         when (maxUdpPayloadSize params < 1200) sendCCParamError
         when (ackDelayExponent params > 20) sendCCParamError
         when (maxAckDelay params >= 2 ^ (14 :: Int)) sendCCParamError
+        when (activeConnectionIdLimit params < 2) sendCCParamError
         when (isServer conn) $ do
             when (isJust $ originalDestinationConnectionId params) sendCCParamError
             when (isJust $ preferredAddress params) sendCCParamError
