@@ -134,20 +134,37 @@ controlConnection conn typ
         controlConnection' conn typ
     | otherwise = return False
 
--- ping: NewConnectionID(retirePriorTo)
--- pong: RetireConnectionID
+----------------------------------------------------------------
+-- ping: NewConnectionID(retirePriorTo), pong: RetireConnectionID
+--
+-- RFC 9000 Sec 5.1.2: Upon receipt of an increased Retire Prior To
+-- field, the peer MUST stop using the corresponding connection IDs
+-- and retire them with RETIRE_CONNECTION_ID frames before adding the
+-- newly provided connection ID to the set of active connection IDs.
+--
+-- An endpoint MUST NOT forget a connection ID without retiring it.
+--
+----------------------------------------------------------------
+-- ping: RetireConnectionID, pong: NewConnectionID
 --
 -- RFC 9000 Sec 5.1.1: An endpoint SHOULD supply a new connection ID
 -- when the peer retires a connection ID.
--- ping: RetireConnectionID
--- pong: NewConnectionID
+-- RFC 9000 Sec 5.1.2: Sending a RETIRE_CONNECTION_ID frame indicates
+-- that the connection ID will not be used again and requests that the
+-- peer replace it with a new connection ID using a NEW_CONNECTION_ID
+-- frame.
+--
+----------------------------------------------------------------
+-- ping: PathChallenge, pong: PathResponse
 --
 -- RFC 9000 Sec 8.2.2: On receiving a PATH_CHALLENGE frame, an
 -- endpoint MUST respond by echoing the data contained in the
 -- PATH_CHALLENGE frame in a PATH_RESPONSE frame.
--- ping: PathChallenge
--- pong: PathResponse
+--
 controlConnection' :: Connection -> ConnectionControl -> IO Bool
+----------------------------------------------------------------
+-- ChangeServerCID (-M)
+--
 -- C: newServerCID {RetireConnectionID(oldServerCID)}
 -- S: curClientCID {NewConnectionID}
 controlConnection' conn ChangeServerCID = do
@@ -158,6 +175,9 @@ controlConnection' conn ChangeServerCID = do
             -- Client tells "I don't use this CID of yours".
             sendFrames conn RTT1Level [RetireConnectionID (cidInfoSeq cidInfo)]
             return True
+----------------------------------------------------------------
+-- ChangeClientCID (-N)
+--
 -- C: curServerCID {NewConnectionID(retirePriorTo)}
 -- S: newClientCID {RetireConnectionID(oldClientCID)}
 controlConnection' conn ChangeClientCID = do
@@ -169,11 +189,17 @@ controlConnection' conn ChangeClientCID = do
     -- Client tells "My CIDs less than retirePriorTo should be retired".
     sendFrames conn RTT1Level [NewConnectionID cidInfo retirePriorTo']
     return True
+----------------------------------------------------------------
+-- NATRebinding (-B)
+--
 -- S: curClientCID {PathChallenge}
 -- C: curServerCID {PathResponse}
 controlConnection' conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
+----------------------------------------------------------------
+-- ActiveMigration (-A)
+--
 -- C: newServerCID {RetireConnectionID(oldServerCID)}
 -- C: newServerCID {PathChallenge}
 -- S: curClientCID {NewConnectionID}
