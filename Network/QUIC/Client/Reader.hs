@@ -92,6 +92,7 @@ readerClient s0 conn = handleLogUnit logAction $ do
         qlogReceived conn pkt t
         ok <- checkCIDs conn dCID ex
         when ok $ do
+            -- Re-creating peer's CIDDB with peer's CID.
             resetPeerCID conn sCID
             setPeerAuthCIDs conn $ \auth -> auth{retrySrcCID = Just sCID}
             initializeCoder conn InitialLevel $ initialSecrets ver sCID

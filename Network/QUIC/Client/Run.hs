@@ -116,6 +116,9 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             void $ NS.sendBufTo s buf siz sa
         recv = recvClient q
     myCID <- newCID
+    -- Creating peer's CIDDB with the temporary CID.  This is
+    -- overridden by resetPeerCID later since no sequence number is
+    -- assigned to the temporary CID by spec.
     peerCID <- newCID
     now <- getTimeMicrosecond
     (qLog, qclean) <- dirQLogger ccQLog now peerCID "client"
