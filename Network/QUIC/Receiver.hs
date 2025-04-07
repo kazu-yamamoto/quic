@@ -57,8 +57,14 @@ receiver conn = handleLogT logAction body
         included <- myCIDsInclude conn cid
         case included of
             Just nseq -> do
+                -- RFC 9000 Sec 5.1.1: If an endpoint provided fewer
+                -- connection IDs than the peer's
+                -- active_connection_id_limit, it MAY supply a new
+                -- connection ID when it receives a packet with a
+                -- previously unused connection ID.
                 shouldUpdate <- shouldUpdateMyCID conn nseq
-                when shouldUpdate $ do
+                capOK <- checkPeerCIDCapacity conn
+                when (shouldUpdate && capOK) $ do
                     setMyCID conn cid
                     cidInfo <- getNewMyCID conn
                     when (isServer conn) $ do

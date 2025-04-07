@@ -161,6 +161,8 @@ controlConnection' conn ChangeServerCID = do
 -- C: curServerCID {NewConnectionID(retirePriorTo)}
 -- S: newClientCID {RetireConnectionID(oldClientCID)}
 controlConnection' conn ChangeClientCID = do
+    -- checkPeerCIDCapacity is not necessary beucase one CID is
+    -- retired.
     cidInfo <- getNewMyCID conn
     retirePriorTo' <- (+ 1) <$> getMyCIDSeqNum conn
     setMyRetirePriorTo conn retirePriorTo' -- just for record

@@ -28,6 +28,7 @@ module Network.QUIC.Connection.Migration (
     setMyRetirePriorTo,
     getPeerRetirePriorTo,
     setPeerRetirePriorTo,
+    checkPeerCIDCapacity,
 ) where
 
 import Control.Concurrent.STM
@@ -151,6 +152,12 @@ retirePeerCID Connection{..} n =
     atomically $ modifyTVar' peerCIDDB $ del n
 
 ----------------------------------------------------------------
+
+checkPeerCIDCapacity :: Connection -> IO Bool
+checkPeerCIDCapacity Connection{..} = do
+    lim <- activeConnectionIdLimit <$> readIORef peerParameters
+    cap <- IntMap.size . cidInfos <$> readIORef myCIDDB
+    return (cap < lim)
 
 getMyRetirePriorTo :: Connection -> IO Int
 getMyRetirePriorTo Connection{..} = retirePriorTo <$> readIORef myCIDDB
