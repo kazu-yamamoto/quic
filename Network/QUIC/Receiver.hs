@@ -409,6 +409,8 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
     case mcidInfo of
         Nothing -> return ()
         Just cidInfo -> do
+            -- Don't send NewConnectionID since loopEstablished
+            -- sends it when CID is changed.
             when (isServer conn) $ do
                 unregister <- getUnregister conn
                 unregister $ cidInfoCID cidInfo

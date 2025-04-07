@@ -396,12 +396,9 @@ dispatch
                 when alive $ do
                     void $ setSocket conn mysock -- fixme
                     curCID <- getMyCID conn
+                    -- setMyCID is not called here since setMyCID is
+                    -- done in Receiver.
                     let cidChanged = curCID /= dCID
-                    when cidChanged $ do
-                        -- This changes my default CID.  But since
-                        -- short packets are used, we don't make use
-                        -- of the new defualt CID.
-                        setMyCID conn dCID
                     mem <- elemPeerInfo conn peersa
                     unless mem $
                         forkManaged conn $
