@@ -365,15 +365,22 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
             conn
             ProtocolViolation
             "NEW_CONNECTION_ID in Initial or Handshake"
-    ok <- addPeerCID conn cidInfo
-    unless ok $
-        closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
     let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
     when (cidlen < 1 || 20 < cidlen || retirePriorTo > cidInfoSeq cidInfo) $
         closeConnection conn FrameEncodingError "NEW_CONNECTION_ID parameter error"
+    -- Retiring CIDs first then add a new CID.
+    --
+    -- RFC 9000 Sec 5.1.1 says:
+    -- An endpoint MAY send connection IDs that temporarily exceed a
+    -- peer's limit if the NEW_CONNECTION_ID frame also requires the
+    -- retirement of any excess, by including a sufficiently large
+    -- value in the Retire Prior To field.
     when (retirePriorTo >= 1) $ do
         seqNums <- setPeerCIDAndRetireCIDs conn retirePriorTo
         sendFramesLim conn RTT1Level $ map RetireConnectionID seqNums
+    ok <- addPeerCID conn cidInfo
+    unless ok $
+        closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
 processFrame conn RTT1Level (RetireConnectionID sn) = do
     mcidInfo <- retireMyCID conn sn
     case mcidInfo of
