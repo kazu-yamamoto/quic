@@ -157,9 +157,10 @@ controlConnection' conn ChangeServerCID = do
 -- S: newClientCID {RetireConnectionID(oldClientCID)}
 controlConnection' conn ChangeClientCID = do
     cidInfo <- getNewMyCID conn
-    retirePriorTo <- (+ 1) <$> getMyCIDSeqNum conn
+    retirePriorTo' <- (+ 1) <$> getMyCIDSeqNum conn
+    setMyRetirePriorTo conn retirePriorTo' -- just for record
     -- Client tells "My CIDs less than retirePriorTo should be retired".
-    sendFrames conn RTT1Level [NewConnectionID cidInfo retirePriorTo]
+    sendFrames conn RTT1Level [NewConnectionID cidInfo retirePriorTo']
     return True
 -- S: curClientCID {PathChallenge}
 -- C: curServerCID {PathResponse}

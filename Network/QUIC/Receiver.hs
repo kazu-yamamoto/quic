@@ -366,7 +366,8 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
             ProtocolViolation
             "NEW_CONNECTION_ID in Initial or Handshake"
     let (_, cidlen) = unpackCID $ cidInfoCID cidInfo
-    when (cidlen < 1 || 20 < cidlen || retirePriorTo > cidInfoSeq cidInfo) $
+        seqNum = cidInfoSeq cidInfo
+    when (cidlen < 1 || 20 < cidlen || retirePriorTo > seqNum) $
         closeConnection conn FrameEncodingError "NEW_CONNECTION_ID parameter error"
     -- Retiring CIDs first then add a new CID.
     --
@@ -375,13 +376,29 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
     -- peer's limit if the NEW_CONNECTION_ID frame also requires the
     -- retirement of any excess, by including a sufficiently large
     -- value in the Retire Prior To field.
-    when (retirePriorTo >= 1) $ do
+    rpt <- getPeerRetirePriorTo conn
+    when (retirePriorTo >= rpt) $ do
+        -- RFC 9000 Sec 5.1.2 says:
+        -- Upon receipt of an increased Retire Prior To field, the
+        -- peer MUST stop using the corresponding connection IDs and
+        -- retire them with RETIRE_CONNECTION_ID frames before adding
+        -- the newly provided connection ID to the set of active
+        -- connection IDs.
         seqNums <- setPeerCIDAndRetireCIDs conn retirePriorTo
         sendFramesLim conn RTT1Level $ map RetireConnectionID seqNums
-    ok <- addPeerCID conn cidInfo
-    unless ok $
-        closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
+    if seqNum < rpt
+        then
+            sendFramesLim conn RTT1Level [RetireConnectionID seqNum]
+        else do
+            ok <- addPeerCID conn cidInfo
+            unless ok $
+                closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
 processFrame conn RTT1Level (RetireConnectionID sn) = do
+    -- FIXME: CID is necessary here
+    -- The sequence number specified in a RETIRE_CONNECTION_ID frame
+    -- MUST NOT refer to the Destination Connection ID field of the
+    -- packet in which the frame is contained. The peer MAY treat this
+    -- as a connection error of type PROTOCOL_VIOLATION.
     mcidInfo <- retireMyCID conn sn
     case mcidInfo of
         Nothing -> return ()

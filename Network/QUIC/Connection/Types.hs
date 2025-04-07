@@ -81,6 +81,7 @@ data CIDDB = CIDDB
     , cidInfos :: IntMap CIDInfo
     , revInfos :: Map CID Int
     , nextSeqNum :: Int -- only for mine (new)
+    , retirePriorTo :: Int
     , triggeredByMe :: Bool -- only for peer's
     }
     deriving (Show)
@@ -92,6 +93,7 @@ newCIDDB cid =
         , cidInfos = IntMap.singleton 0 cidInfo
         , revInfos = Map.singleton cid 0
         , nextSeqNum = 1
+        , retirePriorTo = 1
         , triggeredByMe = False
         }
   where

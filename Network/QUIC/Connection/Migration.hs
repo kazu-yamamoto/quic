@@ -24,6 +24,10 @@ module Network.QUIC.Connection.Migration (
     isPathValidating,
     checkResponse,
     validatePath,
+    getMyRetirePriorTo,
+    setMyRetirePriorTo,
+    getPeerRetirePriorTo,
+    setPeerRetirePriorTo,
 ) where
 
 import Control.Concurrent.STM
@@ -148,24 +152,38 @@ retirePeerCID Connection{..} n =
 
 ----------------------------------------------------------------
 
+getMyRetirePriorTo :: Connection -> IO Int
+getMyRetirePriorTo Connection{..} = retirePriorTo <$> readIORef myCIDDB
+
+setMyRetirePriorTo :: Connection -> Int -> IO ()
+setMyRetirePriorTo Connection{..} rpt =
+    modifyIORef' myCIDDB $ \db -> db{retirePriorTo = rpt}
+
+getPeerRetirePriorTo :: Connection -> IO Int
+getPeerRetirePriorTo Connection{..} = retirePriorTo <$> readTVarIO peerCIDDB
+
+setPeerRetirePriorTo :: Connection -> Int -> IO ()
+setPeerRetirePriorTo Connection{..} rpt =
+    atomically $ modifyTVar' peerCIDDB $ \db -> db{retirePriorTo = rpt}
+
 -- | Receiving NewConnectionID
 setPeerCIDAndRetireCIDs :: Connection -> Int -> IO [Int]
-setPeerCIDAndRetireCIDs Connection{..} n = atomically $ do
+setPeerCIDAndRetireCIDs Connection{..} rpt = atomically $ do
     db <- readTVar peerCIDDB
-    let (db', ns) = arrange n db
+    let (db', ns) = arrange rpt db
     writeTVar peerCIDDB db'
     return ns
 
 arrange :: Int -> CIDDB -> (CIDDB, [Int])
-arrange n db@CIDDB{..} = (db', dropSeqnums)
+arrange rpt db@CIDDB{..} = (db', dropSeqnums)
   where
-    (toDrops, cidInfos') = IntMap.partitionWithKey (\k _ -> k < n) cidInfos
+    (toDrops, cidInfos') = IntMap.partitionWithKey (\k _ -> k < rpt) cidInfos
     dropSeqnums = IntMap.foldrWithKey (\k _ ks -> k : ks) [] toDrops
     dropCIDs = IntMap.foldr (\c r -> cidInfoCID c : r) [] toDrops
     -- IntMap.findMin is a partial function.
     -- But receiver guarantees that there is at least one cidinfo.
     usedCIDInfo'
-        | cidInfoSeq usedCIDInfo >= n = usedCIDInfo
+        | cidInfoSeq usedCIDInfo >= rpt = usedCIDInfo
         | otherwise = snd $ IntMap.findMin cidInfos'
     revInfos' = foldr Map.delete revInfos dropCIDs
     db' =
@@ -173,6 +191,7 @@ arrange n db@CIDDB{..} = (db', dropSeqnums)
             { usedCIDInfo = usedCIDInfo'
             , cidInfos = cidInfos'
             , revInfos = revInfos'
+            , retirePriorTo = rpt
             }
 
 ----------------------------------------------------------------
