@@ -384,7 +384,7 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
         -- retire them with RETIRE_CONNECTION_ID frames before adding
         -- the newly provided connection ID to the set of active
         -- connection IDs.
-        seqNums <- setPeerCIDAndRetireCIDs conn retirePriorTo
+        seqNums <- setPeerCIDAndRetireCIDs conn retirePriorTo -- upadting RPT
         sendFramesLim conn RTT1Level $ map RetireConnectionID seqNums
     if seqNum < rpt
         then

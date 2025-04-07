@@ -137,9 +137,14 @@ controlConnection conn typ
 -- ping: NewConnectionID(retirePriorTo)
 -- pong: RetireConnectionID
 --
+-- RFC 9000 Sec 5.1.1: An endpoint SHOULD supply a new connection ID
+-- when the peer retires a connection ID.
 -- ping: RetireConnectionID
 -- pong: NewConnectionID
 --
+-- RFC 9000 Sec 8.2.2: On receiving a PATH_CHALLENGE frame, an
+-- endpoint MUST respond by echoing the data contained in the
+-- PATH_CHALLENGE frame in a PATH_RESPONSE frame.
 -- ping: PathChallenge
 -- pong: PathResponse
 controlConnection' :: Connection -> ConnectionControl -> IO Bool
