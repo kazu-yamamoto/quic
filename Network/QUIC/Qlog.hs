@@ -26,6 +26,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Data.List (intersperse)
 import System.Log.FastLogger
+import Text.Printf
 
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
@@ -311,7 +312,7 @@ sw = toLogStr . show
 
 {-# INLINE swtim #-}
 swtim :: TimeMicrosecond -> TimeMicrosecond -> LogStr
-swtim tim base = toLogStr (show m ++ "." ++ show u)
+swtim tim base = toLogStr (show m ++ "." ++ printf "%03d" u)
   where
     Microseconds x = elapsedTimeMicrosecond tim base
     (m, u) = x `divMod` 1000
