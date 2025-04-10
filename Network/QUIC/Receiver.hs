@@ -409,8 +409,10 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
     case mcidInfo of
         Nothing -> return ()
         Just cidInfo -> do
-            -- Don't send NewConnectionID since loopEstablished
-            -- sends it when CID is changed.
+            -- Don't send NewConnectionID since we don't know it is
+            -- ping or pong. If this is a pong, NewConnectionID should
+            -- not be send back. Instead, loopEstablished sends it
+            -- when CID is changed.
             when (isServer conn) $ do
                 unregister <- getUnregister conn
                 unregister $ cidInfoCID cidInfo
