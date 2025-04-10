@@ -165,8 +165,8 @@ controlConnection' :: Connection -> ConnectionControl -> IO Bool
 ----------------------------------------------------------------
 -- ChangeServerCID (-M)
 --
--- C: newServerCID {RetireConnectionID(oldServerCID)}
--- S: curClientCID {NewConnectionID}
+-- Co -> Sn: RetireConnectionID(So)
+-- Cn <- Sn: NewConnectionID (receiver)
 controlConnection' conn ChangeServerCID = do
     mn <- timeout (Microseconds 1000000) "controlConnection' 1" $ waitPeerCID conn -- fixme
     case mn of
@@ -178,8 +178,9 @@ controlConnection' conn ChangeServerCID = do
 ----------------------------------------------------------------
 -- ChangeClientCID (-N)
 --
--- C: curServerCID {NewConnectionID(retirePriorTo)}
--- S: newClientCID {RetireConnectionID(oldClientCID)}
+-- Co -> So: NewConnectionID(retirePriorTo So)
+-- Cn <- Sn: RetireConnectionID(Co) (processFrame)
+-- Cn -> Sn: NewConnectionID (receiver)
 controlConnection' conn ChangeClientCID = do
     -- checkPeerCIDCapacity is not necessary beucase one CID is
     -- retired.
@@ -192,28 +193,30 @@ controlConnection' conn ChangeClientCID = do
 ----------------------------------------------------------------
 -- NATRebinding (-B)
 --
--- S: curClientCID {PathChallenge}
--- C: curServerCID {PathResponse}
+-- <local port change>
+-- So -> Co: PathChallenge (validatePath)
+-- Co -> So: PathResponse (processFrame)
 controlConnection' conn NATRebinding = do
     rebind conn $ Microseconds 5000 -- nearly 0
     return True
 ----------------------------------------------------------------
 -- ActiveMigration (-A)
 --
--- C: newServerCID {RetireConnectionID(oldServerCID)}
--- C: newServerCID {PathChallenge}
--- S: curClientCID {NewConnectionID}
--- S: newCelintCID {RetireConnectionID(oldClientCID)}
--- S: newClientCID {PathChallenge}
--- C: newServerCID {NewConnectionID}
--- C: newServerCID {PathResponse}
--- S: newClientCID {PathResponse}
+-- <local port change>
+-- Co -> Sn: RetireConnectionID(So), PathChallenge (validatePath)
+-- Cn <- Sn: RetireConnectionID(Co), PathChallenge (validatePath)
+-- Cn -> Sn: NewConnectionID (receiver)
+-- Sn -> Cn: NewConnectionID (receiver)
+-- Sn -> Cn: PathResponse (processFrame)
+-- Cn -> Sn: PathResponse (processFrame)
 controlConnection' conn ActiveMigration = do
+    -- Changing peer CID
     mn <- timeout (Microseconds 1000000) "controlConnection' 2" $ waitPeerCID conn -- fixme
     case mn of
         Nothing -> return False
         mcidinfo -> do
             rebind conn $ Microseconds 5000000
+            -- Sending PathChallenge pdat and RetireConnectionID
             validatePath conn mcidinfo
             return True
 
