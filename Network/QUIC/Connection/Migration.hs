@@ -38,6 +38,7 @@ import qualified Data.Map.Strict as Map
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Types
+import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
@@ -319,11 +320,20 @@ validatePath conn (Just cidInfo) = do
     setChallenges conn pdat
     let retiredSeqNum = cidInfoSeq cidInfo
     retirePeerCID conn retiredSeqNum
-    putOutput conn
-        $ OutControl
-            RTT1Level
-            [PathChallenge pdat, RetireConnectionID retiredSeqNum]
-        $ return ()
+    extra <-
+        if isClient conn
+            then do
+                -- Cf: controlConnection' ChangeClientCID
+                myCidInfo <- getNewMyCID conn
+                retirePriorTo' <- (+ 1) <$> getMyCIDSeqNum conn
+                setMyRetirePriorTo conn retirePriorTo' -- just for record
+                writeIORef (sentRetirePriorTo conn) True
+                -- Client tells "My CIDs less than retirePriorTo should be retired".
+                return [NewConnectionID myCidInfo retirePriorTo']
+            else
+                return []
+    let frames = extra ++ [PathChallenge pdat, RetireConnectionID retiredSeqNum]
+    putOutput conn $ OutControl RTT1Level frames $ return ()
     waitResponse conn
 
 setChallenges :: Connection -> PathData -> IO ()

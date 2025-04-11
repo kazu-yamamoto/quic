@@ -246,6 +246,7 @@ data Connection = Connection
     , flowTx :: TVar TxFlow
     , flowRx :: IORef RxFlow
     , migrationState :: TVar MigrationState
+    , sentRetirePriorTo :: IORef Bool
     , minIdleTimeout :: IORef Microseconds
     , bytesTx :: TVar Int -- TVar for anti amplification
     , bytesRx :: TVar Int -- TVar for anti amplification
@@ -351,6 +352,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newTVarIO (newTxFlow 0) -- limit is set in Handshake
         <*> newIORef (newRxFlow $ initialMaxData myparams)
         <*> newTVarIO NonMigration
+        <*> newIORef False
         <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
         <*> newTVarIO 0
         <*> newTVarIO 0

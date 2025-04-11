@@ -180,15 +180,15 @@ controlConnection' conn ChangeServerCID = do
 ----------------------------------------------------------------
 -- ChangeClientCID (-N)
 --
--- Co -> So: NewConnectionID(retirePriorTo So)
+-- Co -> So: NewConnectionID(retirePriorTo Co)
 -- Cn <- Sn: RetireConnectionID(Co) (processFrame)
--- Cn -> Sn: NewConnectionID (receiver)
 controlConnection' conn ChangeClientCID = do
     -- checkPeerCIDCapacity is not necessary beucase one CID is
     -- retired.
     cidInfo <- getNewMyCID conn
     retirePriorTo' <- (+ 1) <$> getMyCIDSeqNum conn
     setMyRetirePriorTo conn retirePriorTo' -- just for record
+    writeIORef (sentRetirePriorTo conn) True
     -- Client tells "My CIDs less than retirePriorTo should be retired".
     sendFrames conn RTT1Level [NewConnectionID cidInfo retirePriorTo']
     return True
@@ -205,12 +205,11 @@ controlConnection' conn NATRebinding = do
 -- ActiveMigration (-A)
 --
 -- <local port change>
--- Co -> Sn: RetireConnectionID(So), PathChallenge (validatePath)
+-- Co -> Sn: NewConnectionID(retirePriorTo Co), RetireConnectionID(So), PathChallenge (validatePath)
 -- Cn <- Sn: RetireConnectionID(Co), PathChallenge (validatePath)
--- Cn -> Sn: NewConnectionID (receiver)
--- Sn -> Cn: NewConnectionID (receiver)
--- Sn -> Cn: PathResponse (processFrame)
+-- Cn <- Sn: NewConnectionID (receiver)
 -- Cn -> Sn: PathResponse (processFrame)
+-- Cn <- Sn: PathResponse (processFrame)
 controlConnection' conn ActiveMigration = do
     -- Changing peer CID
     mn <- timeout (Microseconds 1000000) "controlConnection' 2" $ waitPeerCID conn -- fixme
@@ -218,7 +217,7 @@ controlConnection' conn ActiveMigration = do
         Nothing -> return False
         mcidinfo -> do
             rebind conn $ Microseconds 5000000
-            -- Sending PathChallenge pdat and RetireConnectionID
+            -- Sending PathChallenge, RetireConnectionID and NewConnectionID RPT
             validatePath conn mcidinfo
             return True
 

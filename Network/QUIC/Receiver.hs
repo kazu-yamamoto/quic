@@ -70,7 +70,10 @@ receiver conn = handleLogT logAction body
                     when (isServer conn) $ do
                         register <- getRegister conn
                         register (cidInfoCID cidInfo) conn
-                    sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
+                    sent <- readIORef (sentRetirePriorTo conn)
+                    writeIORef (sentRetirePriorTo conn) False
+                    unless sent $
+                        sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
                 processReceivedPacket conn rpkt
                 shouldUpdatePeer <-
                     if shouldUpdate
