@@ -172,8 +172,10 @@ controlConnection' conn ChangeServerCID = do
     case mn of
         Nothing -> return False
         Just cidInfo -> do
+            let seqNum = cidInfoSeq cidInfo
+            retirePeerCID conn seqNum
             -- Client tells "I don't use this CID of yours".
-            sendFrames conn RTT1Level [RetireConnectionID (cidInfoSeq cidInfo)]
+            sendFrames conn RTT1Level [RetireConnectionID seqNum]
             return True
 ----------------------------------------------------------------
 -- ChangeClientCID (-N)

@@ -318,13 +318,13 @@ validatePath conn (Just cidInfo) = do
     pdat <- newPathData
     setChallenges conn pdat
     let retiredSeqNum = cidInfoSeq cidInfo
+    retirePeerCID conn retiredSeqNum
     putOutput conn
         $ OutControl
             RTT1Level
             [PathChallenge pdat, RetireConnectionID retiredSeqNum]
         $ return ()
     waitResponse conn
-    retirePeerCID conn retiredSeqNum
 
 setChallenges :: Connection -> PathData -> IO ()
 setChallenges Connection{..} pdat =
