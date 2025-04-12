@@ -12,7 +12,7 @@ module Network.QUIC.Client.Reader (
 import Control.Concurrent
 import qualified Control.Exception as E
 import Data.List (intersect)
-import Network.Socket (Socket, close, getSocketName)
+import Network.Socket (Socket, close, connect, getSocketName)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Common
@@ -33,7 +33,14 @@ readerClient :: Socket -> Connection -> IO ()
 readerClient s0 conn = handleLogUnit logAction $ do
     labelMe "readerClient"
     wait
-    loop
+    connected <- getSockConnected conn
+    peersa0 <- getPeerInfo conn
+    let recv
+            | connected = NSB.recv s0 2048
+            | otherwise = do
+                (bs, peersa) <- NSB.recvFrom s0 2048
+                if peersa /= peersa0 then recv else return bs
+    loop recv
   where
     wait = do
         bound <- E.handle (throughAsync (return False)) $ do
@@ -42,19 +49,17 @@ readerClient s0 conn = handleLogUnit logAction $ do
         unless bound $ do
             yield
             wait
-    loop = do
+    loop recv = do
         ito <- readMinIdleTimeout conn
-        mbs <- timeout ito "readeClient" $ NSB.recvFrom s0 2048
+        mbs <- timeout ito "readeClient" recv
         case mbs of
             Nothing -> close s0
-            Just (bs, peersa) -> do
-                mem <- elemPeerInfo conn peersa
-                when mem $ do
-                    now <- getTimeMicrosecond
-                    let quicBit = greaseQuicBit $ getMyParameters conn
-                    pkts <- decodePackets bs (not quicBit)
-                    mapM_ (putQ now) pkts
-                loop
+            Just bs -> do
+                now <- getTimeMicrosecond
+                let quicBit = greaseQuicBit $ getMyParameters conn
+                pkts <- decodePackets bs (not quicBit)
+                mapM_ (putQ now) pkts
+                loop recv
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ (PacketIB BrokenPacket _) = return ()
     putQ t (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
@@ -225,6 +230,8 @@ rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
     peersa <- getPeerInfo conn
     newSock <- natRebinding peersa
+    connected <- getSockConnected conn
+    when connected $ connect newSock peersa
     oldSock <- setSocket conn newSock
     let reader = readerClient newSock conn
     forkManaged conn reader

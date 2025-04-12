@@ -45,6 +45,7 @@ data RoleInfo
         { clientInitialToken :: Token -- new or retry token
         , resumptionInfo :: ResumptionInfo
         , incompatibleVN :: Bool
+        , sockConnected :: Bool
         }
     | ServerInfo
         { tokenManager :: ~CT.TokenManager
@@ -61,6 +62,7 @@ defaultClientRoleInfo =
         { clientInitialToken = emptyToken
         , resumptionInfo = defaultResumptionInfo
         , incompatibleVN = False
+        , sockConnected = False
         }
 
 defaultServerRoleInfo :: RoleInfo

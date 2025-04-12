@@ -107,13 +107,18 @@ runClient conf client0 isICVN verInfo = do
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
     (sock, peersa) <- clientSocket ccServerName ccPortName
+    when (not ccAutoMigration) $ NS.connect sock peersa
     q <- newRecvQ
     sref <- newIORef sock
     piref <- newIORef $ PeerInfo peersa Nothing
-    let send buf siz = do
-            s <- readIORef sref
-            PeerInfo sa _ <- readIORef piref
-            void $ NS.sendBufTo s buf siz sa
+    let send buf siz
+            | ccAutoMigration = do
+                s <- readIORef sref
+                PeerInfo sa _ <- readIORef piref
+                void $ NS.sendBufTo s buf siz sa
+            | otherwise = do
+                s <- readIORef sref
+                void $ NS.sendBuf s buf siz
         recv = recvClient q
     myCID <- newCID
     -- Creating peer's CIDDB with the temporary CID.  This is
@@ -144,6 +149,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             send
             recv
             genSRT
+    setSockConnected conn $ not ccAutoMigration
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
@@ -157,6 +163,8 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     return $ ConnRes conn myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation
---   with a new connection ID.
+--   with a new connection ID. Typically, this is used
+--   for migration in the case where 'ccAutoMigration' is 'False'.
+--   But this can also be used even when the value is 'True'.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration

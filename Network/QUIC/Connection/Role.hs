@@ -20,6 +20,8 @@ module Network.QUIC.Connection.Role (
     getStopServer,
     setCertificateChain,
     getCertificateChain,
+    setSockConnected,
+    getSockConnected,
 ) where
 
 import qualified Crypto.Token as CT
@@ -148,3 +150,16 @@ setCertificateChain Connection{..} mcc = atomicModifyIORef'' roleInfo $
 
 getCertificateChain :: Connection -> IO (Maybe CertificateChain)
 getCertificateChain Connection{..} = certChain <$> readIORef roleInfo
+
+----------------------------------------------------------------
+
+setSockConnected :: Connection -> Bool -> IO ()
+setSockConnected Connection{..} b = atomicModifyIORef'' roleInfo $
+    \ci -> ci{sockConnected = b}
+
+getSockConnected :: Connection -> IO Bool
+getSockConnected Connection{..} = do
+    ri <- readIORef roleInfo
+    case ri of
+        ClientInfo{..} -> return sockConnected
+        _ -> return False

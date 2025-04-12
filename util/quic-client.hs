@@ -44,6 +44,7 @@ data Options = Options
     , optPacketSize :: Maybe Int
     , optPerformance :: Word64
     , optNumOfReqs :: Int
+    , optUnconSock :: Bool
     }
     deriving (Show)
 
@@ -67,6 +68,7 @@ defaultOptions =
         , optPacketSize = Nothing
         , optPerformance = 0
         , optNumOfReqs = 1
+        , optUnconSock = True
         }
 
 usage :: String
@@ -174,6 +176,11 @@ options =
         ["number-of-requests"]
         (ReqArg (\n o -> o{optNumOfReqs = read n}) "<n>")
         "specify the number of requests"
+    , Option
+        ['m']
+        ["use-connected-socket"]
+        (NoArg (\o -> o{optUnconSock = False}))
+        "use connected sockets instead of unconnected sockets"
     ]
 
 showUsageAndExit :: String -> IO a
@@ -232,6 +239,7 @@ main = do
                     defaultHooks
                         { onCloseCompleted = putMVar cmvar ()
                         }
+                , ccAutoMigration = optUnconSock
                 }
         debug
             | optDebugLog = putStrLn
