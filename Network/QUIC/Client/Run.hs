@@ -144,6 +144,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             send
             recv
             genSRT
+    setSockConnected conn $ not ccAutoMigration
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
