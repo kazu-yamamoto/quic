@@ -41,10 +41,13 @@ closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
     sock <- getSocket conn
     peersa <- getPeerInfo conn
+    connected <- getSockConnected conn
     -- send
     let sbuf@(SizedBuffer sendbuf _) = encryptRes conn
     siz <- encodeCC conn sbuf frame
-    let send = void $ NS.sendBufTo sock sendbuf siz peersa
+    let send
+            | connected = void $ NS.sendBuf sock sendbuf siz
+            | otherwise = void $ NS.sendBufTo sock sendbuf siz peersa
     -- recv and clos
     killReaders conn -- client only
     (recv, freeRecvBuf, clos) <-

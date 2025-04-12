@@ -158,4 +158,8 @@ setSockConnected Connection{..} b = atomicModifyIORef'' roleInfo $
     \ci -> ci{sockConnected = b}
 
 getSockConnected :: Connection -> IO Bool
-getSockConnected Connection{..} = sockConnected <$> readIORef roleInfo
+getSockConnected Connection{..} = do
+    ri <- readIORef roleInfo
+    case ri of
+        ClientInfo{..} -> return sockConnected
+        _ -> return False

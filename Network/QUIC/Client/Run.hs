@@ -107,13 +107,18 @@ runClient conf client0 isICVN verInfo = do
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
     (sock, peersa) <- clientSocket ccServerName ccPortName
+    when (not ccAutoMigration) $ NS.connect sock peersa
     q <- newRecvQ
     sref <- newIORef sock
     piref <- newIORef $ PeerInfo peersa Nothing
-    let send buf siz = do
-            s <- readIORef sref
-            PeerInfo sa _ <- readIORef piref
-            void $ NS.sendBufTo s buf siz sa
+    let send buf siz
+            | ccAutoMigration = do
+                s <- readIORef sref
+                PeerInfo sa _ <- readIORef piref
+                void $ NS.sendBufTo s buf siz sa
+            | otherwise = do
+                s <- readIORef sref
+                void $ NS.sendBuf s buf siz
         recv = recvClient q
     myCID <- newCID
     -- Creating peer's CIDDB with the temporary CID.  This is
