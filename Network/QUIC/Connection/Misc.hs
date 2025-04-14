@@ -10,9 +10,9 @@ module Network.QUIC.Connection.Misc (
     getSocket,
     setSocket,
     clearSocket,
-    getPeerInfo,
-    addPeerInfo,
-    elemPeerInfo,
+    getPathInfo,
+    addPathInfo,
+    findPathInfo,
     getPeerAuthCIDs,
     setPeerAuthCIDs,
     getClientDstCID,
@@ -79,18 +79,26 @@ setSocket Connection{..} sock = atomicModifyIORef' connSocket (sock,)
 clearSocket :: Connection -> IO Socket
 clearSocket Connection{..} = atomicModifyIORef' connSocket (undefined,)
 
-getPeerInfo :: Connection -> IO SockAddr
-getPeerInfo Connection{..} = currSockAddr <$> readIORef peerInfo
+----------------------------------------------------------------
 
-addPeerInfo :: Connection -> SockAddr -> IO ()
-addPeerInfo Connection{..} newsa = atomicModifyIORef'' peerInfo add
+getPathInfo :: Connection -> IO PathInfo
+getPathInfo Connection{..} = currPathInfo <$> readIORef peerInfo
+
+addPathInfo :: Connection -> PathInfo -> IO ()
+addPathInfo Connection{..} newpi = atomicModifyIORef'' peerInfo add
   where
-    add (PeerInfo oldsa _) = PeerInfo newsa $ Just oldsa
+    add (PeerInfo oldpi _) = PeerInfo newpi $ Just oldpi
 
-elemPeerInfo :: Connection -> SockAddr -> IO Bool
-elemPeerInfo Connection{..} sa = do
-    PeerInfo currsa mprevsa <- readIORef peerInfo
-    return (currsa == sa || mprevsa == Just sa)
+findPathInfo :: Connection -> SockAddr -> IO (Maybe PathInfo)
+findPathInfo Connection{..} sa = do
+    PeerInfo currpi mprevpi <- readIORef peerInfo
+    return $
+        if peerSockAddr currpi == sa
+            then Just currpi
+            else
+                if (peerSockAddr <$> mprevpi) == Just sa
+                    then mprevpi
+                    else Nothing
 
 ----------------------------------------------------------------
 

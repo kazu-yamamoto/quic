@@ -309,15 +309,15 @@ isStatelessRestTokenValid Connection{..} srt = srtCheck <$> readTVarIO peerCIDDB
 
 ----------------------------------------------------------------
 
-validatePath :: Connection -> Maybe CIDInfo -> IO ()
-validatePath conn Nothing = do
+validatePath :: Connection -> PathInfo -> Maybe CIDInfo -> IO ()
+validatePath conn pathInfo Nothing = do
     pdat <- newPathData
-    setChallenges conn pdat
+    setChallenges conn pathInfo pdat
     putOutput conn $ OutControl RTT1Level [PathChallenge pdat] $ return ()
     waitResponse conn
-validatePath conn (Just cidInfo) = do
+validatePath conn pathInfo (Just cidInfo) = do
     pdat <- newPathData
-    setChallenges conn pdat
+    setChallenges conn pathInfo pdat
     let retiredSeqNum = cidInfoSeq cidInfo
     retirePeerCID conn retiredSeqNum
     extra <-
@@ -336,9 +336,9 @@ validatePath conn (Just cidInfo) = do
     putOutput conn $ OutControl RTT1Level frames $ return ()
     waitResponse conn
 
-setChallenges :: Connection -> PathData -> IO ()
-setChallenges Connection{..} pdat =
-    atomically $ writeTVar migrationState $ SendChallenge pdat
+setChallenges :: Connection -> PathInfo -> PathData -> IO ()
+setChallenges Connection{..} pathInfo pdat =
+    atomically $ writeTVar migrationState $ SendChallenge pathInfo pdat
 
 setMigrationStarted :: Connection -> IO ()
 setMigrationStarted Connection{..} =
@@ -348,7 +348,7 @@ isPathValidating :: Connection -> IO Bool
 isPathValidating Connection{..} = do
     s <- readTVarIO migrationState
     case s of
-        SendChallenge _ -> return True
+        SendChallenge{} -> return True
         MigrationStarted -> return True
         _ -> return False
 
@@ -362,6 +362,8 @@ checkResponse :: Connection -> PathData -> IO ()
 checkResponse Connection{..} pdat = do
     state <- readTVarIO migrationState
     case state of
-        SendChallenge pdat'
-            | pdat == pdat' -> atomically $ writeTVar migrationState RecvResponse
+        SendChallenge pathInfo pdat'
+            | pdat == pdat' -> atomically $ do
+                writeTVar migrationState RecvResponse
+                writeTVar (addressValidated pathInfo) True
         _ -> return ()

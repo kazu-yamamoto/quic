@@ -399,10 +399,12 @@ dispatch
                     -- setMyCID is not called here since setMyCID is
                     -- done in Receiver.
                     let cidChanged = curCID /= dCID
-                    mem <- elemPeerInfo conn peersa
-                    unless mem $
-                        forkManaged conn $
-                            onClientMigration conn dCID peersa cidChanged
+                    mPathInfo <- findPathInfo conn peersa
+                    case mPathInfo of
+                        Nothing -> do
+                            forkManaged conn $
+                                onClientMigration conn dCID peersa cidChanged
+                        _ -> return ()
                     writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 ----------------------------------------------------------------
 dispatch
@@ -421,9 +423,12 @@ dispatch
         case mconn of
             Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
             Just conn -> do
-                void $ setSocket conn mysock -- fixme
-                mem <- elemPeerInfo conn peersa
-                unless mem $ addPeerInfo conn peersa
+                -- fixme: is this block necessary?
+                void $ setSocket conn mysock
+                mPathInfo <- findPathInfo conn peersa
+                when (isNothing mPathInfo) $ do
+                    pathInfo <- newPathInfo peersa
+                    addPathInfo conn pathInfo
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 
 recvServer :: RecvQ -> IO ReceivedPacket
@@ -442,7 +447,8 @@ onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
         let msg = "Migration: " <> bhow peersa <> " (" <> bhow newdCID <> ")"
         qlogDebug conn $ Debug $ toLogStr msg
         connDebugLog conn $ "debug: onClientMigration: " <> msg
-        addPeerInfo conn peersa
-        validatePath conn mcidinfo
+        pathInfo <- newPathInfo peersa
+        addPathInfo conn pathInfo
+        validatePath conn pathInfo mcidinfo
   where
     logAction msg = connDebugLog conn ("debug: onClientMigration: " <> msg)

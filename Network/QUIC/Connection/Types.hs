@@ -106,9 +106,16 @@ newCIDDB cid =
 data MigrationState
     = NonMigration
     | MigrationStarted
-    | SendChallenge PathData
+    | SendChallenge PathInfo PathData
     | RecvResponse
-    deriving (Eq, Show)
+
+{- FOURMOLU_DISABLE -}
+instance Eq MigrationState where
+    NonMigration     == NonMigration     = True
+    MigrationStarted == MigrationStarted = True
+    RecvResponse     == RecvResponse     = True
+    _                == _                = False
+{- FOURMOLU_ENABLE -}
 
 ----------------------------------------------------------------
 
@@ -194,10 +201,19 @@ type Recv = IO ReceivedPacket
 
 -- For migration, two SockAddr for the peer are contained.
 data PeerInfo = PeerInfo
-    { currSockAddr :: SockAddr
-    , prevSockAddr :: Maybe SockAddr
+    { currPathInfo :: PathInfo
+    , prevPathInfo :: Maybe PathInfo
     }
-    deriving (Eq, Show)
+
+data PathInfo = PathInfo
+    { peerSockAddr :: SockAddr
+    , pathBytesTx :: TVar Int -- TVar for anti amplification
+    , pathBytesRx :: TVar Int -- TVar for anti amplification
+    , addressValidated :: TVar Bool
+    }
+
+newPathInfo :: SockAddr -> IO PathInfo
+newPathInfo sa = PathInfo sa <$> newTVarIO 0 <*> newTVarIO 0 <*> newTVarIO False
 
 ----------------------------------------------------------------
 
@@ -250,9 +266,8 @@ data Connection = Connection
     , migrationState :: TVar MigrationState
     , sentRetirePriorTo :: IORef Bool
     , minIdleTimeout :: IORef Microseconds
-    , bytesTx :: TVar Int -- TVar for anti amplification
-    , bytesRx :: TVar Int -- TVar for anti amplification
-    , addressValidated :: TVar Bool
+    , bytesTx :: IORef Int
+    , bytesRx :: IORef Int
     , -- TLS
       pendingQ :: Array EncryptionLevel (TVar [ReceivedPacket])
     , ciphers :: IOArray EncryptionLevel Cipher
@@ -356,9 +371,8 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newTVarIO NonMigration
         <*> newIORef False
         <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
-        <*> newTVarIO 0
-        <*> newTVarIO 0
-        <*> newTVarIO False
+        <*> newIORef 0
+        <*> newIORef 0
         -- TLS
         <*> makePendingQ
         <*> newArray (InitialLevel, RTT1Level) defaultCipher

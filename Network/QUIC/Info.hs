@@ -14,7 +14,7 @@ getConnectionInfo conn = do
     sock <- getSocket conn
     -- fixme: this is undefined
     mysa <- NS.getSocketName sock
-    peersa <- getPeerInfo conn
+    peersa <- peerSockAddr <$> getPathInfo conn
     mycid <- getMyCID conn
     peercid <- getPeerCID conn
     c <- getCipher conn RTT1Level

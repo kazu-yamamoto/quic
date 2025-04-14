@@ -49,7 +49,8 @@ makeConnections conf v = do
     (sock, peersa) <- clientSocket "127.0.0.1" "2000"
     q <- newRecvQ
     sref <- newIORef sock
-    piref <- newIORef $ PeerInfo peersa Nothing
+    pathInfo <- newPathInfo peersa
+    piref <- newIORef $ PeerInfo pathInfo Nothing
     let ver = v
         verInfo = VersionInfo ver [ver]
     genSRT <- makeGenStatelessReset

@@ -57,10 +57,13 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
                 when (isJust mx) $ qlogDebug conn $ Debug "probe new"
                 (sentPackets, leftsiz) <- buildPackets buf0 bufsiz0 maxSiz spkts0 id
                 let bytes = bufsiz0 - leftsiz
-                when (isServer conn) $ waitAntiAmplificationFree conn bytes
+                pathInfo <- getPathInfo conn
+                when (isServer conn) $
+                    waitAntiAmplificationFree conn pathInfo bytes
                 now <- getTimeMicrosecond
                 connSend conn buf0 bytes
                 addTxBytes conn bytes
+                addPathTxBytes pathInfo bytes
                 forM_ sentPackets $ \sentPacket0 -> do
                     let sentPacket = sentPacket0{spTimeSent = now}
                     qlogSent conn sentPacket now
@@ -92,11 +95,12 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
 
 sendPingPacket :: Connection -> EncryptionLevel -> IO ()
 sendPingPacket conn lvl = do
+    pathInfo <- getPathInfo conn
     maxSiz <- getMaxPacketSize conn
     ok <-
         if isClient conn
             then return True
-            else checkAntiAmplificationFree conn maxSiz
+            else checkAntiAmplificationFree pathInfo maxSiz
     when ok $ do
         let ldcc = connLDCC conn
         mp <- releaseOldest ldcc lvl
@@ -120,6 +124,7 @@ sendPingPacket conn lvl = do
                     now <- getTimeMicrosecond
                     connSend conn buf bytes
                     addTxBytes conn bytes
+                    addPathTxBytes pathInfo bytes
                     let sentPacket0 = fixSentPacket spkt bytes padlen
                         sentPacket = sentPacket0{spTimeSent = now}
                     qlogSent conn sentPacket now

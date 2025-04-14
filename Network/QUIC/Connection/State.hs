@@ -21,6 +21,8 @@ module Network.QUIC.Connection.State (
     getTxBytes,
     addRxBytes,
     getRxBytes,
+    addPathTxBytes,
+    addPathRxBytes,
     setAddressValidated,
     waitAntiAmplificationFree,
     checkAntiAmplificationFree,
@@ -122,42 +124,48 @@ checkRxMaxData Connection{..} len =
 ----------------------------------------------------------------
 
 addTxBytes :: Connection -> Int -> IO ()
-addTxBytes Connection{..} n = atomically $ modifyTVar' bytesTx (+ n)
+addTxBytes Connection{..} n = modifyIORef' bytesTx (+ n)
 
 getTxBytes :: Connection -> IO Int
-getTxBytes Connection{..} = readTVarIO bytesTx
+getTxBytes Connection{..} = readIORef bytesTx
 
 addRxBytes :: Connection -> Int -> IO ()
-addRxBytes Connection{..} n = atomically $ modifyTVar' bytesRx (+ n)
+addRxBytes Connection{..} n = modifyIORef' bytesRx (+ n)
 
 getRxBytes :: Connection -> IO Int
-getRxBytes Connection{..} = readTVarIO bytesRx
+getRxBytes Connection{..} = readIORef bytesRx
+
+addPathTxBytes :: PathInfo -> Int -> IO ()
+addPathTxBytes PathInfo{..} n = atomically $ modifyTVar' pathBytesTx (+ n)
+
+addPathRxBytes :: PathInfo -> Int -> IO ()
+addPathRxBytes PathInfo{..} n = atomically $ modifyTVar' pathBytesRx (+ n)
 
 ----------------------------------------------------------------
 
-setAddressValidated :: Connection -> IO ()
-setAddressValidated Connection{..} = atomically $ writeTVar addressValidated True
+setAddressValidated :: PathInfo -> IO ()
+setAddressValidated PathInfo{..} = atomically $ writeTVar addressValidated True
 
 -- Three times rule for anti amplification
-waitAntiAmplificationFree :: Connection -> Int -> IO ()
-waitAntiAmplificationFree conn@Connection{..} siz = do
-    ok <- checkAntiAmplificationFree conn siz
+waitAntiAmplificationFree :: Connection -> PathInfo -> Int -> IO ()
+waitAntiAmplificationFree Connection{..} pathInfo siz = do
+    ok <- checkAntiAmplificationFree pathInfo siz
     unless ok $ do
         beforeAntiAmp connLDCC
-        atomically (checkAntiAmplificationFreeSTM conn siz >>= check)
+        atomically (checkAntiAmplificationFreeSTM pathInfo siz >>= check)
 
 -- setLossDetectionTimer is called eventually.
 
-checkAntiAmplificationFreeSTM :: Connection -> Int -> STM Bool
-checkAntiAmplificationFreeSTM Connection{..} siz = do
+checkAntiAmplificationFreeSTM :: PathInfo -> Int -> STM Bool
+checkAntiAmplificationFreeSTM PathInfo{..} siz = do
     validated <- readTVar addressValidated
     if validated
         then return True
         else do
-            tx <- readTVar bytesTx
-            rx <- readTVar bytesRx
+            tx <- readTVar pathBytesTx
+            rx <- readTVar pathBytesRx
             return (tx + siz <= 3 * rx)
 
-checkAntiAmplificationFree :: Connection -> Int -> IO Bool
-checkAntiAmplificationFree conn siz =
-    atomically $ checkAntiAmplificationFreeSTM conn siz
+checkAntiAmplificationFree :: PathInfo -> Int -> IO Bool
+checkAntiAmplificationFree pathInfo siz =
+    atomically $ checkAntiAmplificationFreeSTM pathInfo siz

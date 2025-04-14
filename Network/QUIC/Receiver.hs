@@ -126,7 +126,7 @@ processReceivedPacketHandshake conn rpkt = do
                         || (lvl == InitialLevel && mycid == headerMyCID hdr)
                     )
                     $ do
-                        setAddressValidated conn
+                        getPathInfo conn >>= setAddressValidated
                 when (lvl == HandshakeLevel) $ do
                     let ldcc = connLDCC conn
                     discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
@@ -156,6 +156,8 @@ processReceivedPacket conn rpkt = do
     case mplain of
         Just plain@Plain{..} -> do
             addRxBytes conn $ rpReceivedBytes rpkt
+            pathInfo <- getPathInfo conn
+            addPathRxBytes pathInfo $ rpReceivedBytes rpkt
             when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
                 closeConnection conn ProtocolViolation "Non 0 RR bits or no frames"
             when (isUnknownFrame plainMarks) $

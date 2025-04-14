@@ -110,12 +110,13 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     when (not ccAutoMigration) $ NS.connect sock peersa
     q <- newRecvQ
     sref <- newIORef sock
-    piref <- newIORef $ PeerInfo peersa Nothing
+    pathInfo <- newPathInfo peersa
+    piref <- newIORef $ PeerInfo pathInfo Nothing
     let send buf siz
             | ccAutoMigration = do
                 s <- readIORef sref
-                PeerInfo sa _ <- readIORef piref
-                void $ NS.sendBufTo s buf siz sa
+                PeerInfo pinfo _ <- readIORef piref
+                void $ NS.sendBufTo s buf siz $ peerSockAddr pinfo
             | otherwise = do
                 s <- readIORef sref
                 void $ NS.sendBuf s buf siz
@@ -158,7 +159,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
         pktSiz = (defaultPacketSize peersa `max` pktSiz0) `min` maximumPacketSize peersa
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
-    setAddressValidated conn
+    setAddressValidated pathInfo
     let reader = readerClient sock conn -- dies when s0 is closed.
     return $ ConnRes conn myAuthCIDs reader
 

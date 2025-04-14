@@ -156,11 +156,12 @@ createServerConnection
     -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
     sref <- newIORef accMySocket
-    piref <- newIORef $ PeerInfo accPeerSockAddr Nothing
+    pathInfo <- newPathInfo accPeerSockAddr
+    piref <- newIORef $ PeerInfo pathInfo Nothing
     let send buf siz = void $ do
             sock <- readIORef sref
-            PeerInfo sa _ <- readIORef piref
-            NS.sendBufTo sock buf siz sa
+            PeerInfo pinfo _ <- readIORef piref
+            NS.sendBufTo sock buf siz $ peerSockAddr pinfo
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs
         ocid = fromJust $ origDstCID accMyAuthCIDs
@@ -195,7 +196,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"
-    when accAddressValidated $ setAddressValidated conn
+    when accAddressValidated $ setAddressValidated pathInfo
     --
     let retried = isJust $ retrySrcCID accMyAuthCIDs
     when retried $ do
