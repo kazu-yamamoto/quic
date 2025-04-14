@@ -274,6 +274,7 @@ makeLossDetection = do
         arr = array (InitialLevel, RTT1Level) lst
     return arr
 
+-- Loss Detection and Congestion Control
 data LDCC = LDCC
     { ldccState :: ConnState
     , ldccQlogger :: QLogger
