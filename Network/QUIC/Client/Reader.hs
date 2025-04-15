@@ -12,7 +12,7 @@ module Network.QUIC.Client.Reader (
 import Control.Concurrent
 import qualified Control.Exception as E
 import Data.List (intersect)
-import Network.Socket (SockAddr, Socket, close, connect, getSocketName)
+import Network.Socket (Socket, close, connect, getSocketName)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Common
@@ -204,7 +204,7 @@ controlConnection' conn ChangeClientCID = do
 -- So -> Co: PathChallenge (validatePath)
 -- Co -> So: PathResponse (processFrame)
 controlConnection' conn NATRebinding = do
-    _ <- rebind conn $ Microseconds 5000 -- nearly 0
+    rebind conn $ Microseconds 5000 -- nearly 0
     return True
 ----------------------------------------------------------------
 -- ActiveMigration (-A)
@@ -221,14 +221,15 @@ controlConnection' conn ActiveMigration = do
     case mn of
         Nothing -> return False
         mcidinfo -> do
-            peersa <- rebind conn $ Microseconds 5000000
+            peersa <- peerSockAddr <$> getPathInfo conn
+            rebind conn $ Microseconds 5000000
             -- Sending PathChallenge, RetireConnectionID and NewConnectionID RPT
             pathInfo <- newPathInfo peersa
             addPathInfo conn pathInfo
             validatePath conn pathInfo mcidinfo
             return True
 
-rebind :: Connection -> Microseconds -> IO SockAddr
+rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
     peersa <- peerSockAddr <$> getPathInfo conn
     newSock <- natRebinding peersa
@@ -238,4 +239,3 @@ rebind conn microseconds = do
     let reader = readerClient newSock conn
     forkManaged conn reader
     fire conn microseconds $ close oldSock
-    getSocketName newSock
