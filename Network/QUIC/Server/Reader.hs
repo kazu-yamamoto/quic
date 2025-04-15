@@ -448,6 +448,7 @@ onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
         qlogDebug conn $ Debug $ toLogStr msg
         connDebugLog conn $ "debug: onClientMigration: " <> msg
         pathInfo <- newPathInfo peersa
+        -- assumed that this PathInfo is not stored in PeerInfo
         addPathInfo conn pathInfo
         validatePath conn pathInfo mcidinfo
   where
