@@ -1,5 +1,15 @@
 # ChangeLog
 
+## 0.2.10
+
+* Cleaning up the code for migration.
+* Anti-amplification for migration.
+* Respecting active_connection_id_limit.
+* Getting back ccAutoMigration whose default value is True, which means
+  unconnected sockets are used.
+* Connected sockets again for clients. Set ccAutoMigration to False.
+* Fixing time representation of qlog.
+
 ## 0.2.9
 
 * Don't send Fin if connection is already closed.
