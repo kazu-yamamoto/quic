@@ -18,7 +18,7 @@ module Network.QUIC.Client (
     ccVersions,
     --  , ccCredentials
     ccValidate,
-    ccAutoMigration,
+    ccSockConnected,
 
     -- * Resumption
     ResumptionInfo,

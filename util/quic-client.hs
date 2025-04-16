@@ -44,7 +44,7 @@ data Options = Options
     , optPacketSize :: Maybe Int
     , optPerformance :: Word64
     , optNumOfReqs :: Int
-    , optUnconSock :: Bool
+    , optSockConnected :: Bool
     }
     deriving (Show)
 
@@ -68,7 +68,7 @@ defaultOptions =
         , optPacketSize = Nothing
         , optPerformance = 0
         , optNumOfReqs = 1
-        , optUnconSock = True
+        , optSockConnected = False
         }
 
 usage :: String
@@ -179,7 +179,7 @@ options =
     , Option
         ['m']
         ["use-connected-socket"]
-        (NoArg (\o -> o{optUnconSock = False}))
+        (NoArg (\o -> o{optSockConnected = True}))
         "use connected sockets instead of unconnected sockets"
     ]
 
@@ -239,7 +239,7 @@ main = do
                     defaultHooks
                         { onCloseCompleted = putMVar cmvar ()
                         }
-                , ccAutoMigration = optUnconSock
+                , ccSockConnected = optSockConnected
                 }
         debug
             | optDebugLog = putStrLn

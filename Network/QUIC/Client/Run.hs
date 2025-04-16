@@ -36,8 +36,8 @@ import Network.QUIC.Types
 -- | Running a QUIC client.
 --   A UDP socket is created according to 'ccServerName' and 'ccPortName'.
 --
---   If 'ccAutoMigration' is 'True', a unconnected socket is made.
---   Otherwise, a connected socket is made.
+--   If 'ccSockConnected' is 'True', a connected socket is made.
+--   Otherwise, a unconnected socket is made.
 --   Use the 'migrate' API for the connected socket.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
@@ -112,19 +112,19 @@ runClient conf client0 isICVN verInfo = do
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
     (sock, peersa) <- clientSocket ccServerName ccPortName
-    when (not ccAutoMigration) $ NS.connect sock peersa
+    when ccSockConnected $ NS.connect sock peersa
     q <- newRecvQ
     sref <- newIORef sock
     pathInfo <- newPathInfo peersa
     piref <- newIORef $ PeerInfo pathInfo Nothing
     let send buf siz
-            | ccAutoMigration = do
+            | ccSockConnected = do
+                s <- readIORef sref
+                void $ NS.sendBuf s buf siz
+            | otherwise = do
                 s <- readIORef sref
                 PeerInfo pinfo _ <- readIORef piref
                 void $ NS.sendBufTo s buf siz $ peerSockAddr pinfo
-            | otherwise = do
-                s <- readIORef sref
-                void $ NS.sendBuf s buf siz
         recv = recvClient q
     myCID <- newCID
     -- Creating peer's CIDDB with the temporary CID.  This is
@@ -155,7 +155,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             send
             recv
             genSRT
-    setSockConnected conn $ not ccAutoMigration
+    setSockConnected conn ccSockConnected
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
@@ -170,8 +170,8 @@ createClientConnection conf@ClientConfig{..} verInfo = do
 
 -- | Creating a new socket and execute a path validation
 --   with a new connection ID. Typically, this is used
---   for migration in the case where 'ccAutoMigration' is 'False'.
---   But this can also be used even when the value is 'True'.
+--   for migration in the case where 'ccSockConnected' is 'True'.
+--   But this can also be used even when the value is 'False'.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration
 
