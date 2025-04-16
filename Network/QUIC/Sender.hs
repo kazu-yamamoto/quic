@@ -234,7 +234,7 @@ sendP conn = do
         atomically
             ( (SwPing <$> takePingSTM (connLDCC conn))
                 `orElse` (SwOut <$> takeOutputSTM conn)
-                `orElse` (SwOut <$> takeOutput1STM conn)
+                `orElse` (SwOut <$> takeOutputLimSTM conn)
                 `orElse` (SwStrm <$> takeSendStreamQSTM conn)
             )
     case x of

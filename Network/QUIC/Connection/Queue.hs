@@ -40,8 +40,8 @@ putOutputLim conn out = atomically $ do
     -- unless ok, the frames are intentionally dropped.
     when (len < outputLimit) $ writeTBQueue (outputQLim conn) out
 
-takeOutput1STM :: Connection -> STM Output
-takeOutput1STM conn = readTBQueue (outputQLim conn)
+takeOutputLimSTM :: Connection -> STM Output
+takeOutputLimSTM conn = readTBQueue (outputQLim conn)
 
 ----------------------------------------------------------------
 
