@@ -19,6 +19,7 @@ module Network.QUIC.Client (
     --  , ccCredentials
     ccValidate,
     ccSockConnected,
+    ccWatchDog,
 
     -- * Resumption
     ResumptionInfo,
