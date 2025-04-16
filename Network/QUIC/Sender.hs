@@ -269,7 +269,13 @@ discardClientInitialPacketNumberSpace conn
 
 sendOutput :: Connection -> Output -> IO ()
 sendOutput conn (OutControl lvl frames) = do
-    construct conn lvl frames >>= sendPacket conn
+    mout <- tryPeekOutput conn
+    case mout of
+        Just (OutControl lvl' frames')
+            | lvl == lvl' -> do
+                construct conn lvl (frames ++ frames') >>= sendPacket conn
+                void $ atomically $ takeOutputSTM conn
+        _ -> construct conn lvl frames >>= sendPacket conn
     when (lvl == HandshakeLevel) $ discardClientInitialPacketNumberSpace conn
 sendOutput conn (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
