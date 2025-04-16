@@ -1,3 +1,5 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE InterruptibleFFI #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,8 +9,10 @@ module Network.QUIC.Client.Run (
     migrate,
 ) where
 
+import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
+import Foreign.C.Types
 import qualified Network.Socket as NS
 
 import Network.QUIC.Client.Reader
@@ -32,9 +36,13 @@ import Network.QUIC.Types
 -- | Running a QUIC client.
 --   A UDP socket is created according to 'ccServerName' and 'ccPortName'.
 --
---   If 'ccAutoMigration' is 'True', a unconnected socket is made.
---   Otherwise, a connected socket is made.
---   Use the 'migrate' API for the connected socket.
+--   If 'ccSockConnected' is 'True', a connected socket is made.
+--   Otherwise, a unconnected socket is made.
+--
+--   Use the 'migrate' API for the connected socket.  If 'ccWatchDog'
+--   is 'True' on Linux and macOS, a watch dog thread is spawned and
+--   it calls 'migrate' when network-related events are observed. This
+--   is an experimental feature.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = do
@@ -93,6 +101,7 @@ runClient conf client0 isICVN verInfo = do
                 case er of
                     Left () -> E.throwIO MustNotReached
                     Right r -> return r
+        when (ccWatchDog conf) $ forkManaged conn $ watchDog conn
         ex <- E.try runThreads
         sendFinal conn
         closure conn ldcc ex
@@ -107,19 +116,19 @@ runClient conf client0 isICVN verInfo = do
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
     (sock, peersa) <- clientSocket ccServerName ccPortName
-    when (not ccAutoMigration) $ NS.connect sock peersa
+    when ccSockConnected $ NS.connect sock peersa
     q <- newRecvQ
     sref <- newIORef sock
     pathInfo <- newPathInfo peersa
     piref <- newIORef $ PeerInfo pathInfo Nothing
     let send buf siz
-            | ccAutoMigration = do
+            | ccSockConnected = do
+                s <- readIORef sref
+                void $ NS.sendBuf s buf siz
+            | otherwise = do
                 s <- readIORef sref
                 PeerInfo pinfo _ <- readIORef piref
                 void $ NS.sendBufTo s buf siz $ peerSockAddr pinfo
-            | otherwise = do
-                s <- readIORef sref
-                void $ NS.sendBuf s buf siz
         recv = recvClient q
     myCID <- newCID
     -- Creating peer's CIDDB with the temporary CID.  This is
@@ -150,7 +159,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             send
             recv
             genSRT
-    setSockConnected conn $ not ccAutoMigration
+    setSockConnected conn ccSockConnected
     addResource conn qclean
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
@@ -165,7 +174,30 @@ createClientConnection conf@ClientConfig{..} verInfo = do
 
 -- | Creating a new socket and execute a path validation
 --   with a new connection ID. Typically, this is used
---   for migration in the case where 'ccAutoMigration' is 'False'.
---   But this can also be used even when the value is 'True'.
+--   for migration in the case where 'ccSockConnected' is 'True'.
+--   But this can also be used even when the value is 'False'.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration
+
+watchDog :: Connection -> IO ()
+watchDog conn = E.bracket c_open_socket c_close_socket loop
+  where
+    loop s = do
+        ret <- c_watch_socket s
+        case ret of
+            -1 -> loop s
+            -2 -> return ()
+            _ -> do
+                _ <- migrate conn
+                -- prevent calling "migrate" frequently
+                threadDelay 100000
+                loop s
+
+foreign import ccall unsafe "open_socket"
+    c_open_socket :: IO CInt
+
+foreign import ccall interruptible "watch_socket"
+    c_watch_socket :: CInt -> IO CInt
+
+foreign import ccall unsafe "close_socket"
+    c_close_socket :: CInt -> IO CInt

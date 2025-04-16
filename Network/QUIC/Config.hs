@@ -86,8 +86,10 @@ data ClientConfig = ClientConfig
     , ccPacketSize :: Maybe Int
     -- ^ QUIC packet size (UDP payload size)
     , ccDebugLog :: Bool
-    , ccAutoMigration :: Bool
-    -- ^ If 'True', use a unconnected socket for auto migration. Otherwise, use a connected socket.
+    , ccSockConnected :: Bool
+    -- ^ If 'True', use a connected socket. Otherwise, use a unconnected socket.
+    , ccWatchDog :: Bool
+    -- ^ If 'True', a watch dog thread is spawned and 'migrate' is called when network events are observed.
     }
 
 -- | The default value for client configuration.
@@ -113,7 +115,8 @@ defaultClientConfig =
         , ccResumption = defaultResumptionInfo
         , ccPacketSize = Nothing
         , ccDebugLog = False
-        , ccAutoMigration = True
+        , ccSockConnected = False
+        , ccWatchDog = False
         }
 
 ----------------------------------------------------------------
