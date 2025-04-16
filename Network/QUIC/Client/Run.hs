@@ -39,10 +39,14 @@ import Network.QUIC.Types
 --   If 'ccSockConnected' is 'True', a connected socket is made.
 --   Otherwise, a unconnected socket is made.
 --
---   Use the 'migrate' API for the connected socket.  If 'ccWatchDog'
---   is 'True' on Linux and macOS, a watch dog thread is spawned and
---   it calls 'migrate' when network-related events are observed. This
---   is an experimental feature.
+--   For unconnected sockets, a preferred network IF is used according
+--   to packet routing.  Use the 'migrate' API for the connected
+--   socket when a better network IF is available.
+--
+--   If 'ccWatchDog' is 'True' on Linux and macOS, a watch dog thread
+--   is spawned and it calls 'migrate' when network-related events
+--   (e.g. a new network IF is attached or the default route is
+--   changed) are observed. This is an experimental feature.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = do
