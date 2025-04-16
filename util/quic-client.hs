@@ -240,6 +240,7 @@ main = do
                         { onCloseCompleted = putMVar cmvar ()
                         }
                 , ccSockConnected = optSockConnected
+                , ccWatchDog = optSockConnected
                 }
         debug
             | optDebugLog = putStrLn

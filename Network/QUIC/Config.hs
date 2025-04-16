@@ -88,6 +88,8 @@ data ClientConfig = ClientConfig
     , ccDebugLog :: Bool
     , ccSockConnected :: Bool
     -- ^ If 'True', use a connected socket. Otherwise, use a unconnected socket.
+    , ccWatchDog :: Bool
+    -- ^ If 'True', a watch dog thread is spawned and 'migrate' is called when network events are observed.
     }
 
 -- | The default value for client configuration.
@@ -114,6 +116,7 @@ defaultClientConfig =
         , ccPacketSize = Nothing
         , ccDebugLog = False
         , ccSockConnected = False
+        , ccWatchDog = False
         }
 
 ----------------------------------------------------------------

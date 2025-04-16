@@ -38,7 +38,11 @@ import Network.QUIC.Types
 --
 --   If 'ccSockConnected' is 'True', a connected socket is made.
 --   Otherwise, a unconnected socket is made.
---   Use the 'migrate' API for the connected socket.
+--
+--   Use the 'migrate' API for the connected socket.  If 'ccWatchDog'
+--   is 'True' on Linux and macOS, a watch dog thread is spawned and
+--   it calls 'migrate' when network-related events are observed. This
+--   is an experimental feature.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = do
@@ -97,7 +101,7 @@ runClient conf client0 isICVN verInfo = do
                 case er of
                     Left () -> E.throwIO MustNotReached
                     Right r -> return r
-        forkManaged conn $ watchDog conn
+        when (ccWatchDog conf) $ forkManaged conn $ watchDog conn
         ex <- E.try runThreads
         sendFinal conn
         closure conn ldcc ex
