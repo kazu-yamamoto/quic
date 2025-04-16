@@ -1,3 +1,5 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE InterruptibleFFI #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,8 +9,10 @@ module Network.QUIC.Client.Run (
     migrate,
 ) where
 
+import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
+import Foreign.C.Types
 import qualified Network.Socket as NS
 
 import Network.QUIC.Client.Reader
@@ -93,6 +97,7 @@ runClient conf client0 isICVN verInfo = do
                 case er of
                     Left () -> E.throwIO MustNotReached
                     Right r -> return r
+        forkManaged conn $ watchDog conn
         ex <- E.try runThreads
         sendFinal conn
         closure conn ldcc ex
@@ -169,3 +174,26 @@ createClientConnection conf@ClientConfig{..} verInfo = do
 --   But this can also be used even when the value is 'True'.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration
+
+watchDog :: Connection -> IO ()
+watchDog conn = E.bracket c_open_socket c_close_socket loop
+  where
+    loop s = do
+        ret <- c_watch_socket s
+        case ret of
+            -1 -> loop s
+            -2 -> return ()
+            _ -> do
+                _ <- migrate conn
+                -- prevent calling "migrate" frequently
+                threadDelay 100000
+                loop s
+
+foreign import ccall unsafe "open_socket"
+    c_open_socket :: IO CInt
+
+foreign import ccall interruptible "watch_socket"
+    c_watch_socket :: CInt -> IO CInt
+
+foreign import ccall unsafe "close_socket"
+    c_close_socket :: CInt -> IO CInt

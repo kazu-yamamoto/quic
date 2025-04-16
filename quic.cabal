@@ -37,6 +37,7 @@ library
         Network.QUIC.Internal
         Network.QUIC.Server
 
+    c-sources:          cbits/sysevent.c
     other-modules:
         Network.QUIC.Client.Reader
         Network.QUIC.Client.Run
@@ -150,6 +151,12 @@ library
         stm >=2.5 && <2.6,
         tls >=2.1.6 && <2.2,
         unix-time >=0.4.12 && <0.5
+
+    if os(linux)
+        cc-options: -DOS_Linux
+
+    if os(osx)
+        cc-options: -DOS_MacOS
 
     if os(windows)
         cc-options: -D_WINDOWS
