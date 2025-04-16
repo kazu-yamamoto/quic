@@ -82,8 +82,7 @@ recvTLS conn hsr level =
                             -- Sending ACKs for three times rule
                             when ((n `mod` 3) == 1) $
                                 sendCryptoData conn $
-                                    OutControl HandshakeLevel [] $
-                                        return ()
+                                    OutControl HandshakeLevel []
                         return $ Right bs
 
 sendTLS :: Connection -> IORef HndState -> [(CryptLevel, ByteString)] -> IO ()

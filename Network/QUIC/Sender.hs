@@ -268,10 +268,9 @@ discardClientInitialPacketNumberSpace conn
     | otherwise = return ()
 
 sendOutput :: Connection -> Output -> IO ()
-sendOutput conn (OutControl lvl frames action) = do
+sendOutput conn (OutControl lvl frames) = do
     construct conn lvl frames >>= sendPacket conn
     when (lvl == HandshakeLevel) $ discardClientInitialPacketNumberSpace conn
-    action
 sendOutput conn (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
         (lcs, wait) = convert lcs0

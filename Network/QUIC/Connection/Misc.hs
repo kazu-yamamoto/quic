@@ -147,7 +147,7 @@ delayedAck conn@Connection{..} = do
         join $ atomicModifyIORef' delayedAckCancel (new,)
         sendAck
   where
-    sendAck = putOutput conn $ OutControl RTT1Level [] $ return ()
+    sendAck = putOutput conn $ OutControl RTT1Level []
     check 1 = (0, (1, True))
     check n = (n + 1, (n, False))
 
@@ -220,10 +220,10 @@ setMinIdleTimeout Connection{..} us
 ----------------------------------------------------------------
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
-sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames $ return ()
+sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames
 
 sendFramesLim :: Connection -> EncryptionLevel -> [Frame] -> IO ()
-sendFramesLim conn lvl frames = putOutputLim conn $ OutControl lvl frames $ return ()
+sendFramesLim conn lvl frames = putOutputLim conn $ OutControl lvl frames
 
 -- | Closing a connection with/without a transport error.
 --   Internal threads should use this.

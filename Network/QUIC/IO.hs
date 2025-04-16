@@ -213,7 +213,7 @@ resetStream s aerr = do
         setRxStreamClosed s
         lvl <- getEncryptionLevel conn
         let frame = ResetStream sid aerr 0
-        putOutput conn $ OutControl lvl [frame] $ return ()
+        putOutput conn $ OutControl lvl [frame]
     delStream conn s
 
 -- | Asking the peer to stop sending.
@@ -229,4 +229,4 @@ stopStream s aerr = do
         setRxStreamClosed s
         lvl <- getEncryptionLevel conn
         let frame = StopSending sid aerr
-        putOutput conn $ OutControl lvl [frame] $ return ()
+        putOutput conn $ OutControl lvl [frame]

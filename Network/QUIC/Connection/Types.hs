@@ -450,7 +450,7 @@ newtype Input = InpStream Stream deriving (Show)
 data Crypto = InpHandshake EncryptionLevel ByteString deriving (Show)
 
 data Output
-    = OutControl EncryptionLevel [Frame] (IO ())
+    = OutControl EncryptionLevel [Frame]
     | OutHandshake [(EncryptionLevel, ByteString)]
     | OutRetrans PlainPacket
 

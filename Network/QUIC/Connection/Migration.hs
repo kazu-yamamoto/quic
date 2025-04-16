@@ -313,7 +313,7 @@ validatePath :: Connection -> PathInfo -> Maybe CIDInfo -> IO ()
 validatePath conn pathInfo Nothing = do
     pdat <- newPathData
     setChallenges conn pathInfo pdat
-    putOutput conn $ OutControl RTT1Level [PathChallenge pdat] $ return ()
+    putOutput conn $ OutControl RTT1Level [PathChallenge pdat]
     waitResponse conn
 validatePath conn pathInfo (Just cidInfo) = do
     pdat <- newPathData
@@ -333,7 +333,7 @@ validatePath conn pathInfo (Just cidInfo) = do
             else
                 return []
     let frames = extra ++ [PathChallenge pdat, RetireConnectionID retiredSeqNum]
-    putOutput conn $ OutControl RTT1Level frames $ return ()
+    putOutput conn $ OutControl RTT1Level frames
     waitResponse conn
 
 setChallenges :: Connection -> PathInfo -> PathData -> IO ()
