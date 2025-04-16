@@ -59,6 +59,8 @@ data ClientConfig = ClientConfig
     -- ^ The version to start with.
     , ccVersions :: [Version]
     -- ^ Compatible versions with 'ccVersion' in the preferred order.
+    --
+    -- Default: @[Version2, Version1]@
     , ccCiphers :: [Cipher]
     -- ^ Cipher candidates defined in TLS 1.3.
     , ccGroups :: [Group]
@@ -73,6 +75,8 @@ data ClientConfig = ClientConfig
     , ccUse0RTT :: Bool
     -- ^ Use 0-RTT on the 2nd connection if possible.
     -- client original
+    --
+    -- Default: 'False'
     , ccServerName :: HostName
     -- ^ Used to create a socket and SNI for TLS.
     , ccPortName :: ServiceName
@@ -81,15 +85,25 @@ data ClientConfig = ClientConfig
     -- ^ An ALPN provider.
     , ccValidate :: Bool
     -- ^ Authenticating a server based on its certificate.
+    --
+    -- Default: 'True'
     , ccResumption :: ResumptionInfo
     -- ^ Use resumption on the 2nd connection if possible.
     , ccPacketSize :: Maybe Int
     -- ^ QUIC packet size (UDP payload size)
+    --
+    -- Default: 'Nothing'
     , ccDebugLog :: Bool
     , ccSockConnected :: Bool
-    -- ^ If 'True', use a connected socket. Otherwise, use a unconnected socket.
+    -- ^ If 'True', use a connected socket. Otherwise, use a
+    -- unconnected socket.
+    --
+    -- Default: 'False'
     , ccWatchDog :: Bool
-    -- ^ If 'True', a watch dog thread is spawned and 'migrate' is called when network events are observed.
+    -- ^ If 'True', a watch dog thread is spawned and 'migrate' is
+    -- called when network events are observed.
+    --
+    -- Default: 'False'
     }
 
 -- | The default value for client configuration.
