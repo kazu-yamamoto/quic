@@ -249,8 +249,7 @@ data Connection = Connection
       inputQ :: InputQ
     , cryptoQ :: CryptoQ
     , outputQ :: OutputQ
-    , outputQLim :: OutputQLim
-    , migrationQ :: MigrationQ
+    , outputLimQ :: OutputLimQ
     , shared :: Shared
     , delayedAckCount :: IORef Int
     , delayedAckCancel :: IORef (IO ())
@@ -355,7 +354,6 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newTQueueIO
         <*> return outQ
         <*> newTBQueueIO 1
-        <*> newTQueueIO
         <*> newShared
         <*> newIORef 0
         <*> newIORef (return ())
@@ -450,15 +448,14 @@ newtype Input = InpStream Stream deriving (Show)
 data Crypto = InpHandshake EncryptionLevel ByteString deriving (Show)
 
 data Output
-    = OutControl EncryptionLevel [Frame] (IO ())
+    = OutControl EncryptionLevel [Frame]
     | OutHandshake [(EncryptionLevel, ByteString)]
     | OutRetrans PlainPacket
 
 type InputQ = TQueue Input
 type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
-type OutputQLim = TBQueue Output
-type MigrationQ = TQueue ReceivedPacket
+type OutputLimQ = TBQueue Output
 
 ----------------------------------------------------------------
 

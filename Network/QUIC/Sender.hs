@@ -268,10 +268,23 @@ discardClientInitialPacketNumberSpace conn
     | otherwise = return ()
 
 sendOutput :: Connection -> Output -> IO ()
-sendOutput conn (OutControl lvl frames action) = do
-    construct conn lvl frames >>= sendPacket conn
+sendOutput conn (OutControl RTT1Level []) = do
+    exist <- atomically $ do
+        b1 <- not <$> isEmptyCryptoSTM conn
+        b2 <- not <$> isEmptyOutputSTM conn
+        b3 <- not <$> isEmptyOutputLimSTM conn
+        b4 <- not <$> isEmptyStreamSTM conn
+        return $ or [b1, b2, b3, b4]
+    unless exist $ construct conn RTT1Level [] >>= sendPacket conn
+sendOutput conn (OutControl lvl frames) = do
+    mout <- tryPeekOutput conn
+    case mout of
+        Just (OutControl lvl' frames')
+            | lvl == lvl' -> do
+                construct conn lvl (frames ++ frames') >>= sendPacket conn
+                void $ atomically $ takeOutputSTM conn
+        _ -> construct conn lvl frames >>= sendPacket conn
     when (lvl == HandshakeLevel) $ discardClientInitialPacketNumberSpace conn
-    action
 sendOutput conn (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
         (lcs, wait) = convert lcs0
