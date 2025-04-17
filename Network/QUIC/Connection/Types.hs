@@ -249,7 +249,7 @@ data Connection = Connection
       inputQ :: InputQ
     , cryptoQ :: CryptoQ
     , outputQ :: OutputQ
-    , outputQLim :: OutputQLim
+    , outputLimQ :: OutputLimQ
     , shared :: Shared
     , delayedAckCount :: IORef Int
     , delayedAckCancel :: IORef (IO ())
@@ -455,7 +455,7 @@ data Output
 type InputQ = TQueue Input
 type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
-type OutputQLim = TBQueue Output
+type OutputLimQ = TBQueue Output
 
 ----------------------------------------------------------------
 

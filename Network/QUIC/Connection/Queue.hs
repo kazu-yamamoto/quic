@@ -49,15 +49,15 @@ outputLimit = 10
 
 putOutputLim :: Connection -> Output -> IO ()
 putOutputLim conn out = atomically $ do
-    len <- fromIntegral <$> lengthTBQueue (outputQLim conn)
+    len <- fromIntegral <$> lengthTBQueue (outputLimQ conn)
     -- unless ok, the frames are intentionally dropped.
-    when (len < outputLimit) $ writeTBQueue (outputQLim conn) out
+    when (len < outputLimit) $ writeTBQueue (outputLimQ conn) out
 
 takeOutputLimSTM :: Connection -> STM Output
-takeOutputLimSTM conn = readTBQueue (outputQLim conn)
+takeOutputLimSTM conn = readTBQueue (outputLimQ conn)
 
 isEmptyOutputLimSTM :: Connection -> STM Bool
-isEmptyOutputLimSTM conn = isEmptyTBQueue $ outputQLim conn
+isEmptyOutputLimSTM conn = isEmptyTBQueue $ outputLimQ conn
 
 ----------------------------------------------------------------
 
