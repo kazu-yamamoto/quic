@@ -22,6 +22,9 @@ takeCrypto conn = atomically $ readTQueue (cryptoQ conn)
 putCrypto :: Connection -> Crypto -> IO ()
 putCrypto conn inp = atomically $ writeTQueue (cryptoQ conn) inp
 
+isEmptyCryptoSTM :: Connection -> STM Bool
+isEmptyCryptoSTM conn = isEmptyTQueue $ cryptoQ conn
+
 ----------------------------------------------------------------
 
 takeOutputSTM :: Connection -> STM Output
@@ -35,6 +38,9 @@ tryPeekOutput conn = atomically $ tryPeekTQueue (outputQ conn)
 
 putOutput :: Connection -> Output -> IO ()
 putOutput conn out = atomically $ writeTQueue (outputQ conn) out
+
+isEmptyOutputSTM :: Connection -> STM Bool
+isEmptyOutputSTM conn = isEmptyTQueue $ outputQ conn
 
 ----------------------------------------------------------------
 
@@ -50,6 +56,9 @@ putOutputLim conn out = atomically $ do
 takeOutputLimSTM :: Connection -> STM Output
 takeOutputLimSTM conn = readTBQueue (outputQLim conn)
 
+isEmptyOutputLimSTM :: Connection -> STM Bool
+isEmptyOutputLimSTM conn = isEmptyTBQueue $ outputQLim conn
+
 ----------------------------------------------------------------
 
 takeSendStreamQ :: Connection -> IO TxStreamData
@@ -63,3 +72,6 @@ tryPeekSendStreamQ conn = atomically $ tryPeekTQueue $ sharedSendStreamQ $ share
 
 putSendStreamQ :: Connection -> TxStreamData -> IO ()
 putSendStreamQ conn out = atomically $ writeTQueue (sharedSendStreamQ $ shared conn) out
+
+isEmptyStreamSTM :: Connection -> STM Bool
+isEmptyStreamSTM conn = isEmptyTQueue $ sharedSendStreamQ $ shared conn
