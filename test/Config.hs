@@ -43,6 +43,10 @@ testServerConfig =
     defaultServerConfig
         { -- Don't use "0.0.0.0" and "::" for Windows (UDP dispatching bug)
           scAddresses = [("127.0.0.1", 50003)]
+        , scParameters =
+            (scParameters defaultServerConfig)
+                { maxIdleTimeout = Milliseconds 3000
+                }
         }
 
 makeTestServerConfigR :: IO ServerConfig
@@ -62,6 +66,10 @@ testServerConfigR =
     defaultServerConfig
         { -- Don't use "0.0.0.0" and "::" for Windows (UDP dispatching bug)
           scAddresses = [("127.0.0.1", 50003)]
+        , scParameters =
+            (scParameters defaultServerConfig)
+                { maxIdleTimeout = Milliseconds 3000
+                }
         }
 
 testClientConfig :: ClientConfig
@@ -71,6 +79,10 @@ testClientConfig =
         , ccPortName = "50003"
         , ccValidate = False
         , ccDebugLog = True
+        , ccParameters =
+            (ccParameters defaultClientConfig)
+                { maxIdleTimeout = Milliseconds 3000
+                }
         }
 
 testClientConfigR :: ClientConfig
@@ -80,6 +92,10 @@ testClientConfigR =
         , ccPortName = "50002"
         , ccValidate = False
         , ccDebugLog = True
+        , ccParameters =
+            (ccParameters defaultClientConfig)
+                { maxIdleTimeout = Milliseconds 3000
+                }
         }
 
 setServerQlog :: ServerConfig -> ServerConfig
