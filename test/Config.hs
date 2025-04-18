@@ -16,6 +16,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.IORef
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
@@ -131,18 +132,18 @@ withPipe scenario body = do
                 dropPacket0 <- shouldDrop scenario True n0
                 unless dropPacket0 $ void $ send sockS bs
                 forever $ do
-                    bs1 <-
-                        recv sockC 2048
+                    bs1 <- recv sockC 2048
                     n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
                     dropPacket <- shouldDrop scenario True n
-                    unless dropPacket $ void $ send sockS bs1
+                    let isCC = BS.length bs1 < 200
+                    when (isCC || not dropPacket) $ void $ send sockS bs1
             -- from server
             tid1 <- forkIO $ forever $ do
-                bs <-
-                    recv sockS 2048
+                bs <- recv sockS 2048
                 n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
                 dropPacket <- shouldDrop scenario False n
-                unless dropPacket $ void $ send sockC bs
+                let isCC = BS.length bs < 200
+                when (isCC || not dropPacket) $ void $ send sockC bs
             body
             killThread tid0
             killThread tid1
