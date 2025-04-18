@@ -293,6 +293,8 @@ setPeerParams conn _ctx peerExts = do
         setPeerParameters conn params
         mapM_ (setPeerStatelessResetToken conn) $ statelessResetToken params
         setTxMaxData conn $ initialMaxData params
+        -- My 'maxIdleTimeout' is already set 'minIdleTimeout'
+        -- This selects the minimum of mine and peer's.
         setMinIdleTimeout conn $ milliToMicro $ maxIdleTimeout params
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
         setTxMaxStreams conn $ initialMaxStreamsBidi params

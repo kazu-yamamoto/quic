@@ -293,7 +293,7 @@ decodeParameterList bs = unsafeDupablePerformIO $ withReadBuffer bs (`go` id)
 defaultParameters :: Parameters
 defaultParameters =
     baseParameters
-        { maxIdleTimeout = microToMilli idleTimeout -- 30000
+        { maxIdleTimeout = idleTimeout -- 30000
         , maxUdpPayloadSize = maximumUdpPayloadSize -- 2048
         , initialMaxData = defaultMaxData -- !M
         , initialMaxStreamDataBidiLocal = defaultMaxStreamData -- 256K
