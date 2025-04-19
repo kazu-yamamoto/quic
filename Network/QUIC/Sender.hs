@@ -353,7 +353,8 @@ sendCryptoFragments conn lcs = do
         frame1 <- cryptoFrame conn target lvl
         spkts1 <- construct conn lvl [frame1] multilevel
         sendPacket conn $ build0 spkts1
-        loop limitationC id ((lvl, rest) : xs)
+        -- to calculate multilevel again, let's call sendCryptoFragments
+        sendCryptoFragments conn ((lvl, rest) : xs)
     loop _ build0 [(lvl, bs)] = do
         frame1 <- cryptoFrame conn bs lvl
         spkts1 <- construct conn lvl [frame1] multilevel
