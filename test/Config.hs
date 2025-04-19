@@ -46,7 +46,7 @@ testServerConfig =
           scAddresses = [("127.0.0.1", 50003)]
         , scParameters =
             (scParameters defaultServerConfig)
-                { maxIdleTimeout = Milliseconds 3000
+                { maxIdleTimeout = Milliseconds 4000
                 }
         }
 
@@ -69,7 +69,7 @@ testServerConfigR =
           scAddresses = [("127.0.0.1", 50003)]
         , scParameters =
             (scParameters defaultServerConfig)
-                { maxIdleTimeout = Milliseconds 3000
+                { maxIdleTimeout = Milliseconds 4000
                 }
         }
 
@@ -82,7 +82,7 @@ testClientConfig =
         , ccDebugLog = True
         , ccParameters =
             (ccParameters defaultClientConfig)
-                { maxIdleTimeout = Milliseconds 3000
+                { maxIdleTimeout = Milliseconds 4000
                 }
         }
 
@@ -95,7 +95,7 @@ testClientConfigR =
         , ccDebugLog = True
         , ccParameters =
             (ccParameters defaultClientConfig)
-                { maxIdleTimeout = Milliseconds 3000
+                { maxIdleTimeout = Milliseconds 4000
                 }
         }
 
