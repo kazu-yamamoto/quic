@@ -9,6 +9,7 @@ import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Network.Control
 import Network.TLS (AlertDescription (..))
+import System.Log.FastLogger
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -43,6 +44,7 @@ receiver conn = handleLogT logAction body
                         | isClient conn = "Client"
                         | otherwise = "Server"
                     msg = msg0 ++ " " ++ show st
+                qlogDebug conn $ Debug "recv timeout"
                 E.throwIO $ ConnectionIsTimeout msg
             Just x -> return x
     loopHandshake = do
@@ -81,7 +83,7 @@ receiver conn = handleLogT logAction body
                         else return False
                 when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
             _ -> do
-                qlogDropped conn hdr
+                qlogDropped conn (hdr, "unknown_connection_id" :: String)
                 connDebugLog conn $ bhow cid <> " is unknown"
     logAction msg = connDebugLog conn ("debug: receiver: " <> msg)
 
@@ -98,7 +100,7 @@ processReceivedPacketHandshake conn rpkt = do
             putOffCrypto conn lvl rpkt
             when (isClient conn) $ do
                 lvl' <- getEncryptionLevel conn
-                speedup (connLDCC conn) lvl' "not decryptable"
+                speedup (connLDCC conn) lvl' ("not decryptable: " <> toLogStr (show lvl))
         Just ()
             | isClient conn -> do
                 when (lvl == InitialLevel) $ do
@@ -189,7 +191,7 @@ processReceivedPacket conn rpkt = do
                             qlogDebug conn $ Debug "ping for speedup"
                             sendFrames conn lvl [Ping]
         Nothing -> do
-            qlogDropped conn hdr
+            qlogDropped conn (hdr, "decrypt_error" :: String)
             connDebugLog conn $
                 "debug: cannot decrypt: "
                     <> bhow lvl

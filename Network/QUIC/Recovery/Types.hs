@@ -409,7 +409,7 @@ packetNumberSpace HandshakeLevel = "handshake"
 packetNumberSpace RTT1Level = "application_data"
 
 delta :: Microseconds -> LogStr
-delta (Microseconds n) = sw n
+delta (Microseconds n) = sw (n `div` 1000)
 
 qlogSent :: (KeepQlog q, Qlog pkt) => q -> pkt -> TimeMicrosecond -> IO ()
 qlogSent q pkt tim = keepQlog q $ QSent (qlog pkt) tim

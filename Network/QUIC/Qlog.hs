@@ -58,6 +58,14 @@ instance Qlog VersionNegotiationPacket where
 instance Qlog Header where
     qlog hdr = "{\"header\":{\"packet_type\":\"" <> packetType hdr <> "\"}}"
 
+instance Qlog (Header, String) where
+    qlog (hdr, str) =
+        "{\"header\":{\"packet_type\":\""
+            <> packetType hdr
+            <> "\", \"trigger\":\""
+            <> toLogStr str
+            <> "\"}}"
+
 instance Qlog CryptPacket where
     qlog (CryptPacket hdr _) = qlog hdr
 
