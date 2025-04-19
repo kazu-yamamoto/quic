@@ -112,7 +112,7 @@ sendPingPacket conn lvl = do
                 qlogDebug conn $ Debug "probe old"
                 let PlainPacket _ plain0 = spPlainPacket spkt
                 adjustForRetransmit conn $ plainFrames plain0
-        xs <- construct conn lvl frames
+        xs <- construct conn lvl frames False
         if null xs
             then qlogDebug conn $ Debug "ping NULL"
             else do
@@ -136,14 +136,15 @@ construct
     :: Connection
     -> EncryptionLevel
     -> [Frame]
+    -> Bool
     -> IO [SentPacket]
-construct conn lvl frames = do
+construct conn lvl frames multilevel = do
     discarded <- getPacketNumberSpaceDiscarded ldcc lvl
     if discarded
         then return []
         else do
             established <- isConnectionEstablished conn
-            if established || (isServer conn && lvl == HandshakeLevel)
+            if established || multilevel
                 then do
                     constructTargetPacket
                 else do
@@ -275,15 +276,15 @@ sendOutput conn (OutControl RTT1Level []) = do
         b3 <- not <$> isEmptyOutputLimSTM conn
         b4 <- not <$> isEmptyStreamSTM conn
         return $ or [b1, b2, b3, b4]
-    unless exist $ construct conn RTT1Level [] >>= sendPacket conn
+    unless exist $ construct conn RTT1Level [] False >>= sendPacket conn
 sendOutput conn (OutControl lvl frames) = do
     mout <- tryPeekOutput conn
     case mout of
         Just (OutControl lvl' frames')
             | lvl == lvl' -> do
-                construct conn lvl (frames ++ frames') >>= sendPacket conn
+                construct conn lvl (frames ++ frames') False >>= sendPacket conn
                 void $ atomically $ takeOutputSTM conn
-        _ -> construct conn lvl frames >>= sendPacket conn
+        _ -> construct conn lvl frames False >>= sendPacket conn
     when (lvl == HandshakeLevel) $ discardClientInitialPacketNumberSpace conn
 sendOutput conn (OutHandshake lcs0) = do
     let convert = onTLSHandshakeCreated $ connHooks conn
@@ -296,7 +297,7 @@ sendOutput conn (OutHandshake lcs0) = do
 sendOutput conn (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0
     let lvl = levelFromHeader hdr0
-    construct conn lvl frames >>= sendPacket conn
+    construct conn lvl frames False >>= sendPacket conn
 
 levelFromHeader :: Header -> EncryptionLevel
 levelFromHeader hdr
@@ -338,6 +339,7 @@ sendCryptoFragments _ [] = return ()
 sendCryptoFragments conn lcs = do
     loop limitationC id lcs
   where
+    multilevel = length lcs >= 2
     loop
         :: Int
         -> ([SentPacket] -> [SentPacket])
@@ -349,21 +351,21 @@ sendCryptoFragments conn lcs = do
     loop len0 build0 ((lvl, bs) : xs) | BS.length bs > len0 = do
         let (target, rest) = BS.splitAt len0 bs
         frame1 <- cryptoFrame conn target lvl
-        spkts1 <- construct conn lvl [frame1]
+        spkts1 <- construct conn lvl [frame1] multilevel
         sendPacket conn $ build0 spkts1
         loop limitationC id ((lvl, rest) : xs)
     loop _ build0 [(lvl, bs)] = do
         frame1 <- cryptoFrame conn bs lvl
-        spkts1 <- construct conn lvl [frame1]
+        spkts1 <- construct conn lvl [frame1] multilevel
         sendPacket conn $ build0 spkts1
     loop len0 build0 ((lvl, bs) : xs) | len0 - BS.length bs < thresholdC = do
         frame1 <- cryptoFrame conn bs lvl
-        spkts1 <- construct conn lvl [frame1]
+        spkts1 <- construct conn lvl [frame1] multilevel
         sendPacket conn $ build0 spkts1
         loop limitationC id xs
     loop len0 build0 ((lvl, bs) : xs) = do
         frame1 <- cryptoFrame conn bs lvl
-        spkts1 <- construct conn lvl [frame1]
+        spkts1 <- construct conn lvl [frame1] multilevel
         let len1 = len0 - BS.length bs
             build1 = build0 . (spkts1 ++)
         loop len1 build1 xs
@@ -405,7 +407,7 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
     let lvl
             | ready = RTT1Level
             | otherwise = RTT0Level
-    construct conn lvl frames >>= sendPacket conn
+    construct conn lvl frames False >>= sendPacket conn
     mapM_ syncFinTx streams
   where
     tryPeek = do
@@ -467,7 +469,7 @@ sendStreamLarge conn s dats0 fin0 = do
         let lvl
                 | ready = RTT1Level
                 | otherwise = RTT0Level
-        construct conn lvl [frame] >>= sendPacket conn
+        construct conn lvl [frame] False >>= sendPacket conn
         loop dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]
