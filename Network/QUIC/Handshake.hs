@@ -313,6 +313,7 @@ setPeerParams conn _ctx peerExts = do
                     setVersionInfo conn $ VersionInfo serverVer vers
                     dcid <- getClientDstCID conn
                     initializeCoder conn InitialLevel $ initialSecrets serverVer dcid
+                    qlogDebug conn $ Debug "Version changed"
             _ -> return ()
 
 storeNegotiated :: Connection -> TLS.Context -> ApplicationSecretInfo -> IO ()

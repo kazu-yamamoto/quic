@@ -119,6 +119,7 @@ processReceivedPacketHandshake conn rpkt = do
                             setVersion conn peerVer
                             dcid <- getClientDstCID conn
                             initializeCoder conn InitialLevel $ initialSecrets peerVer dcid
+                            qlogDebug conn $ Debug "Version changed"
                     _ -> return ()
                 processReceivedPacket conn rpkt
             | otherwise -> do
