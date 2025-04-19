@@ -49,9 +49,7 @@ releaseOldest ldcc@LDCC{..} lvl = do
     mr <- atomicModifyIORef' (sentPackets ! lvl) oldest
     case mr of
         Nothing -> return ()
-        Just spkt -> do
-            delPeerPacketNumbers ldcc lvl $ spPacketNumber spkt
-            decreaseCC ldcc [spkt]
+        Just spkt -> decreaseCC ldcc [spkt]
     return mr
   where
     oldest (SentPackets db) = case Seq.viewl db2 of
