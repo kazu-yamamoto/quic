@@ -29,7 +29,6 @@ module Network.QUIC.Connection.Misc (
     readMinIdleTimeout,
     setMinIdleTimeout,
     sendFrames,
-    sendFramesLim,
     closeConnection,
     abortConnection,
 ) where
@@ -221,9 +220,6 @@ setMinIdleTimeout Connection{..} us
 
 sendFrames :: Connection -> EncryptionLevel -> [Frame] -> IO ()
 sendFrames conn lvl frames = putOutput conn $ OutControl lvl frames
-
-sendFramesLim :: Connection -> EncryptionLevel -> [Frame] -> IO ()
-sendFramesLim conn lvl frames = putOutputLim conn $ OutControl lvl frames
 
 -- | Closing a connection with/without a transport error.
 --   Internal threads should use this.

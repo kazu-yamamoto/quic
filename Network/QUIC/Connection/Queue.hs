@@ -1,9 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Network.QUIC.Connection.Queue where
 
 import Control.Concurrent.STM
+import Network.Control (getRate)
 
 import Network.QUIC.Connection.Types
-import Network.QUIC.Imports
 import Network.QUIC.Stream
 
 ----------------------------------------------------------------
@@ -44,23 +46,6 @@ isEmptyOutputSTM conn = isEmptyTQueue $ outputQ conn
 
 ----------------------------------------------------------------
 
-outputLimit :: Int
-outputLimit = 10
-
-putOutputLim :: Connection -> Output -> IO ()
-putOutputLim conn out = atomically $ do
-    len <- fromIntegral <$> lengthTBQueue (outputLimQ conn)
-    -- unless ok, the frames are intentionally dropped.
-    when (len < outputLimit) $ writeTBQueue (outputLimQ conn) out
-
-takeOutputLimSTM :: Connection -> STM Output
-takeOutputLimSTM conn = readTBQueue (outputLimQ conn)
-
-isEmptyOutputLimSTM :: Connection -> STM Bool
-isEmptyOutputLimSTM conn = isEmptyTBQueue $ outputLimQ conn
-
-----------------------------------------------------------------
-
 takeSendStreamQ :: Connection -> IO TxStreamData
 takeSendStreamQ conn = atomically $ readTQueue $ sharedSendStreamQ $ shared conn
 
@@ -75,3 +60,13 @@ putSendStreamQ conn out = atomically $ writeTQueue (sharedSendStreamQ $ shared c
 
 isEmptyStreamSTM :: Connection -> STM Bool
 isEmptyStreamSTM conn = isEmptyTQueue $ sharedSendStreamQ $ shared conn
+
+----------------------------------------------------------------
+
+outputLimit :: Int
+outputLimit = 10
+
+rateOK :: Connection -> IO Bool
+rateOK conn = do
+    rate <- getRate $ outputRate conn
+    return $ rate < outputLimit

@@ -235,7 +235,6 @@ sendP conn = do
         atomically
             ( (SwPing <$> takePingSTM (connLDCC conn))
                 `orElse` (SwOut <$> takeOutputSTM conn)
-                `orElse` (SwOut <$> takeOutputLimSTM conn)
                 `orElse` (SwStrm <$> takeSendStreamQSTM conn)
             )
     case x of
@@ -273,9 +272,8 @@ sendOutput conn (OutControl RTT1Level []) = do
     exist <- atomically $ do
         b1 <- not <$> isEmptyCryptoSTM conn
         b2 <- not <$> isEmptyOutputSTM conn
-        b3 <- not <$> isEmptyOutputLimSTM conn
-        b4 <- not <$> isEmptyStreamSTM conn
-        return $ or [b1, b2, b3, b4]
+        b3 <- not <$> isEmptyStreamSTM conn
+        return $ or [b1, b2, b3]
     unless exist $ construct conn RTT1Level [] False >>= sendPacket conn
 sendOutput conn (OutControl lvl frames) = do
     mout <- tryPeekOutput conn

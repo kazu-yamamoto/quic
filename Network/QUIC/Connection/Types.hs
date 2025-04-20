@@ -17,7 +17,14 @@ import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr (nullPtr)
-import Network.Control (Rate, RxFlow, TxFlow, newRate, newRxFlow, newTxFlow)
+import Network.Control (
+    Rate,
+    RxFlow,
+    TxFlow,
+    newRate,
+    newRxFlow,
+    newTxFlow,
+ )
 import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC
 import System.Mem.Weak (Weak)
@@ -249,7 +256,7 @@ data Connection = Connection
       inputQ :: InputQ
     , cryptoQ :: CryptoQ
     , outputQ :: OutputQ
-    , outputLimQ :: OutputLimQ
+    , outputRate :: Rate
     , shared :: Shared
     , delayedAckCount :: IORef Int
     , delayedAckCancel :: IORef (IO ())
@@ -353,7 +360,7 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
         <*> newTQueueIO
         <*> newTQueueIO
         <*> return outQ
-        <*> newTBQueueIO 1
+        <*> newRate
         <*> newShared
         <*> newIORef 0
         <*> newIORef (return ())
@@ -455,7 +462,6 @@ data Output
 type InputQ = TQueue Input
 type CryptoQ = TQueue Crypto
 type OutputQ = TQueue Output
-type OutputLimQ = TBQueue Output
 
 ----------------------------------------------------------------
 
