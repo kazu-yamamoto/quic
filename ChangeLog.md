@@ -2,12 +2,18 @@
 
 ## 0.2.10
 
+* Fix a bug of ACK on retransmission.
+* New scheme to pack ACK on handshake.
+* Fix a race condition in closure. CC is broken sometime.
+* Using Rate instead of TBQueue against DOS.
+* Enhancing qlog.
 * Cleaning up the code for migration.
 * Anti-amplification for migration.
 * Respecting active_connection_id_limit.
-* Getting back ccAutoMigration whose default value is True, which means
-  unconnected sockets are used.
-* Connected sockets again for clients. Set ccAutoMigration to False.
+* If `ccWatchDog` is `True`, a watch dog thread is spawn to call
+  `migration` when network configuration changes.
+* Connected sockets again for clients. Set `ccSockConnected` to `True`
+  to use connected sockets.
 * Fixing time representation of qlog.
 
 ## 0.2.9
