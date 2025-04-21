@@ -30,5 +30,21 @@ import Network.QUIC.Types.Queue
 import Network.QUIC.Types.Resumption
 import Network.QUIC.Types.Time
 
+{-
+import Foreign.Ptr
+import Foreign.Storable
+import System.IO.Unsafe
+import Text.Printf
+
+instance Show SizedBuffer where
+    show (SizedBuffer ptr _) = unsafePerformIO $ loop 0 id
+      where
+        loop 16 b = return $ b []
+        loop n b = do
+            x <- peek (ptr `plusPtr` n) :: IO Word8
+            let b' = b . (printf "%02x " x ++)
+            loop (n + 1) b'
+-}
+
 type Close = IO ()
 data SizedBuffer = SizedBuffer Buffer BufferSize
