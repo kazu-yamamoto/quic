@@ -43,8 +43,9 @@ closure' conn ldcc frame = do
     peersa <- peerSockAddr <$> getPathInfo conn
     connected <- getSockConnected conn
     -- send
-    let sbuf@(SizedBuffer sendbuf _) = encryptRes conn
-    siz <- encodeCC conn sbuf frame
+    let bufsiz = maximumUdpPayloadSize
+    sendbuf <- mallocBytes bufsiz
+    siz <- encodeCC conn sendbuf bufsiz frame
     let send
             | connected = void $ NS.sendBuf sock sendbuf siz
             | otherwise = void $ NS.sendBufTo sock sendbuf siz peersa
@@ -52,12 +53,11 @@ closure' conn ldcc frame = do
     killReaders conn -- client only
     (recv, freeRecvBuf, clos) <-
         if isServer conn
-            then return (void $ connRecv conn, return (), return ())
+            then return (void $ connRecv conn, free sendbuf, return ())
             else do
-                let bufsiz = maximumUdpPayloadSize
                 recvbuf <- mallocBytes bufsiz
                 let recv' = void $ NS.recvBuf sock recvbuf bufsiz
-                    free' = free recvbuf
+                    free' = free recvbuf >> free sendbuf
                     clos' = do
                         NS.close sock
                         -- This is just in case.
@@ -73,28 +73,28 @@ closure' conn ldcc frame = do
         freeRecvBuf
         clos
 
-encodeCC :: Connection -> SizedBuffer -> Frame -> IO Int
-encodeCC conn res0@(SizedBuffer sendbuf0 bufsiz0) frame = do
+encodeCC :: Connection -> Buffer -> BufferSize -> Frame -> IO Int
+encodeCC conn sendbuf0 bufsiz0 frame = do
     lvl0 <- getEncryptionLevel conn
     let lvl
             | lvl0 == RTT0Level = InitialLevel
             | otherwise = lvl0
     if lvl == HandshakeLevel
         then do
-            siz0 <- encCC res0 InitialLevel
+            siz0 <- encCC sendbuf0 bufsiz0 InitialLevel
             let sendbuf1 = sendbuf0 `plusPtr` siz0
                 bufsiz1 = bufsiz0 - siz0
-                res1 = SizedBuffer sendbuf1 bufsiz1
-            siz1 <- encCC res1 HandshakeLevel
+            siz1 <- encCC sendbuf1 bufsiz1 HandshakeLevel
             return (siz0 + siz1)
         else
-            encCC res0 lvl
+            encCC sendbuf0 bufsiz0 lvl
   where
-    encCC res lvl = do
+    encCC sendbuf bufsiz lvl = do
         header <- mkHeader conn lvl
         mypn <- nextPacketNumber conn
         let plain = Plain (Flags 0) mypn [frame] 0
             ppkt = PlainPacket header plain
+            res = SizedBuffer sendbuf bufsiz
         siz <- fst <$> encodePlainPacket conn res ppkt Nothing
         if siz >= 0
             then do
