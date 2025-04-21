@@ -45,6 +45,7 @@ closure' conn ldcc frame = do
     -- send
     let bufsiz = maximumUdpPayloadSize
     sendbuf <- mallocBytes bufsiz
+    -- This must be called before freeResourcesin runClient.
     siz <- encodeCC conn sendbuf bufsiz frame
     let send
             | connected = void $ NS.sendBuf sock sendbuf siz
@@ -56,7 +57,11 @@ closure' conn ldcc frame = do
             then return (void $ connRecv conn, free sendbuf, return ())
             else do
                 recvbuf <- mallocBytes bufsiz
-                let recv' = void $ NS.recvBuf sock recvbuf bufsiz
+                let recv'
+                        | connected = void $ NS.recvBuf sock recvbuf bufsiz
+                        | otherwise = do
+                            (_, sa) <- NS.recvBufFrom sock recvbuf bufsiz
+                            when (sa /= peersa) recv'
                     free' = free recvbuf >> free sendbuf
                     clos' = do
                         NS.close sock
