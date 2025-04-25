@@ -10,7 +10,7 @@ import Network.QUIC.Types.Packet
 
 -- | User level exceptions for QUIC.
 data QUICException
-    = ConnectionIsClosed -- NoError
+    = ConnectionIsClosed ReasonPhrase
     | TransportErrorIsReceived TransportError ReasonPhrase
     | TransportErrorIsSent TransportError ReasonPhrase
     | ApplicationProtocolErrorIsReceived ApplicationProtocolError ReasonPhrase
