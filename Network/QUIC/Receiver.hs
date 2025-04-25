@@ -447,8 +447,8 @@ processFrame conn RTT1Level (PathChallenge dat) = do
 processFrame conn RTT1Level (PathResponse dat) =
     -- RTT0Level falls intentionally
     checkResponse conn dat
-processFrame conn _lvl (ConnectionClose NoError _ftyp _reason) =
-    when (isServer conn) $ E.throwIO ConnectionIsClosed
+processFrame conn lvl (ConnectionClose NoError _ftyp _reason) =
+    when (isServer conn || lvl /= RTT1Level) $ E.throwIO ConnectionIsClosed
 processFrame _conn _lvl (ConnectionClose err _ftyp reason) = do
     let quicexc = TransportErrorIsReceived err reason
     E.throwIO quicexc
