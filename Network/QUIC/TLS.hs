@@ -6,12 +6,12 @@ module Network.QUIC.TLS (
     serverHandshaker,
 ) where
 
-import Control.Applicative ((<|>))
 import Network.TLS hiding (Version, defaultSupported)
 import Network.TLS.QUIC
 import System.X509
 
 import Network.QUIC.Config
+import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Types
 
@@ -30,8 +30,9 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
     caStore <- if ccValidate then getSystemCertificateStore else return mempty
     tlsQUICClient (cparams caStore) callbacks
   where
+    sni = fromMaybe ccServerName ccServerNameOverride
     cparams caStore =
-        (defaultParamsClient ccServerName "")
+        (defaultParamsClient sni "")
             { clientShared = cshared caStore
             , clientHooks = hook
             , clientSupported = supported

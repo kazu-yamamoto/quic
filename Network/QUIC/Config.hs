@@ -103,6 +103,8 @@ data ClientConfig = ClientConfig
     -- called when network events are observed.
     --
     -- Default: 'False'
+    , ccServerNameOverride :: Maybe HostName
+    -- ^ Used to specify SNI for TLS intead of `ccServerName`.
     }
 
 -- | The default value for client configuration.
@@ -130,6 +132,7 @@ defaultClientConfig =
         , ccDebugLog = False
         , ccSockConnected = False
         , ccWatchDog = False
+        , ccServerNameOverride = Nothing
         }
 
 ----------------------------------------------------------------
