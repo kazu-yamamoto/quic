@@ -138,7 +138,6 @@ library
         crypton >=0.34,
         crypton-x509 >=1.7.6 && <1.8,
         crypton-x509-system >=1.6.7 && <1.7,
-        data-default,
         fast-logger >=3.2.2 && <3.3,
         filepath,
         iproute >=1.7.12 && <1.8,

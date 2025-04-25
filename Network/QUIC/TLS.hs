@@ -7,7 +7,6 @@ module Network.QUIC.TLS (
 ) where
 
 import Control.Applicative ((<|>))
-import Data.Default
 import Network.TLS hiding (Version, defaultSupported)
 import Network.TLS.QUIC
 import System.X509
@@ -45,8 +44,9 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
     convExt = onTLSExtensionCreated ccHooks
     skipValidation = ValidationCache (\_ _ _ -> return ValidationCachePass) (\_ _ _ -> return ())
     cshared caStore =
-        def
-            { sharedValidationCache = if ccValidate then def else skipValidation
+        defaultShared
+            { sharedValidationCache =
+                if ccValidate then sharedValidationCache defaultShared else skipValidation
             , sharedCAStore = caStore
             , sharedHelloExtensions = convExt $ parametersToExtensionRaw ver params
             , sharedSessionManager = sessionManager establish
@@ -61,7 +61,7 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
             , supportedGroups = ccGroups
             }
     debug =
-        def
+        defaultDebugParams
             { debugKeyLogger = ccKeyLog
             }
 
@@ -81,7 +81,7 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
     tlsQUICServer sparams callbacks
   where
     sparams =
-        def
+        defaultParamsServer
             { serverShared = sshared
             , serverHooks = hook
             , serverSupported = supported
@@ -92,7 +92,7 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
     convTP = onTransportParametersCreated scHooks
     convExt = onTLSExtensionCreated scHooks
     sshared =
-        def
+        defaultShared
             { sharedCredentials = scCredentials
             , sharedSessionManager = scSessionManager
             }
@@ -108,12 +108,12 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
                 return $ exts ++ exts0'
             }
     supported =
-        def
+        defaultSupported
             { supportedVersions = [TLS13]
             , supportedCiphers = scCiphers
             , supportedGroups = scGroups
             }
     debug =
-        def
+        defaultDebugParams
             { debugKeyLogger = scKeyLog
             }

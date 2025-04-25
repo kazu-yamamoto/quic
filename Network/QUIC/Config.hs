@@ -3,7 +3,6 @@
 
 module Network.QUIC.Config where
 
-import Data.Default
 import Data.IP
 import Network.Socket
 import Network.TLS hiding (
@@ -119,7 +118,7 @@ defaultClientConfig =
         , ccQLog = Nothing
         , ccCredentials = mempty
         , ccHooks = defaultHooks
-        , ccTlsHooks = def
+        , ccTlsHooks = defaultClientHooks
         , ccUse0RTT = False
         , -- client original
           ccServerName = "127.0.0.1"
@@ -178,7 +177,7 @@ defaultServerConfig =
         , scQLog = Nothing
         , scCredentials = mempty
         , scHooks = defaultHooks
-        , scTlsHooks = def
+        , scTlsHooks = defaultServerHooks
         , scUse0RTT = False
         , -- server original
           scAddresses = [("0.0.0.0", 4433), ("::", 4433)]
