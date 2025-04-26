@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.2.11
+
+* `ConnectionIsClosed` now takes reason.
+* `ConnectionClose NoError` is treated as an error if level is not RTT1.
+* Defining `ccServerNameOverride`.
+* Removing data-default.
+
 ## 0.2.10
 
 * Fix a bug of ACK on retransmission.
