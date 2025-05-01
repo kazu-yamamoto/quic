@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.12
+
+* Dont' send UDP packets of size 0. (Cloudfare)
+* Retransmitted NewConnectionID does not reach the limit. (AdGuard)
+
 ## 0.2.11
 
 * `ConnectionIsClosed` now takes reason.
