@@ -60,14 +60,17 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
                 pathInfo <- getPathInfo conn
                 when (isServer conn) $
                     waitAntiAmplificationFree conn pathInfo bytes
-                now <- getTimeMicrosecond
-                connSend conn buf0 bytes
-                addTxBytes conn bytes
-                addPathTxBytes pathInfo bytes
-                forM_ sentPackets $ \sentPacket0 -> do
-                    let sentPacket = sentPacket0{spTimeSent = now}
-                    qlogSent conn sentPacket now
-                    onPacketSent ldcc sentPacket
+                -- If the secret of this level (e.g. HandshakeLevel)
+                -- is already dropped, bytes is 0.
+                when (bytes > 0) $ do
+                    now <- getTimeMicrosecond
+                    connSend conn buf0 bytes
+                    addTxBytes conn bytes
+                    addPathTxBytes pathInfo bytes
+                    forM_ sentPackets $ \sentPacket0 -> do
+                        let sentPacket = sentPacket0{spTimeSent = now}
+                        qlogSent conn sentPacket now
+                        onPacketSent ldcc sentPacket
     buildPackets _ _ _ [] _ = error "sendPacket: buildPackets"
     buildPackets buf bufsiz siz [spkt] build0 = do
         let pkt = spPlainPacket spkt
@@ -120,7 +123,7 @@ sendPingPacket conn lvl = do
                     ping = spPlainPacket spkt
                 let sizbuf@(SizedBuffer buf _) = encryptRes conn
                 (bytes, padlen) <- encodePlainPacket conn sizbuf ping (Just maxSiz)
-                when (bytes >= 0) $ do
+                when (bytes > 0) $ do
                     now <- getTimeMicrosecond
                     connSend conn buf bytes
                     addTxBytes conn bytes
