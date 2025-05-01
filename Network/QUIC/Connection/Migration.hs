@@ -94,14 +94,15 @@ addPeerCID conn@Connection{..} cidInfo = do
     let lim = activeConnectionIdLimit $ getMyParameters conn
     atomically $ do
         db <- readTVar peerCIDDB
-        let n = Map.size $ revInfos db
-        if n >= lim
-            then return False
-            else do
-                case Map.lookup (cidInfoCID cidInfo) (revInfos db) of
-                    Nothing -> modifyTVar' peerCIDDB $ add cidInfo
-                    Just _ -> return ()
-                return True
+        case Map.lookup (cidInfoCID cidInfo) (revInfos db) of
+            Nothing -> do
+                let n = Map.size $ revInfos db
+                if n >= lim
+                    then return False
+                    else do
+                        modifyTVar' peerCIDDB $ add cidInfo
+                        return True
+            Just _ -> return True -- maybe retransmitted
 
 shouldUpdatePeerCID :: Connection -> IO Bool
 shouldUpdatePeerCID Connection{..} =
