@@ -19,6 +19,13 @@ data ResumptionInfo = ResumptionInfo
     , resumptionSession :: [(SessionID, SessionData)]
     , resumptionToken :: Token
     , resumptionRetry :: Bool
+    , resumptionActiveConnectionIdLimit :: Int
+    , resumptionInitialMaxData :: Int
+    , resumptionInitialMaxStreamDataBidiLocal :: Int
+    , resumptionInitialMaxStreamDataBidiRemote :: Int
+    , resumptionInitialMaxStreamDataUni :: Int
+    , resumptionInitialMaxStreamsBidi :: Int
+    , resumptionInitialMaxStreamsUni :: Int
     }
     deriving (Eq, Show, Generic)
 
@@ -31,6 +38,13 @@ defaultResumptionInfo =
         , resumptionSession = []
         , resumptionToken = emptyToken
         , resumptionRetry = False
+        , resumptionActiveConnectionIdLimit = 2 -- see baseParameters
+        , resumptionInitialMaxData = 0
+        , resumptionInitialMaxStreamDataBidiLocal = 0
+        , resumptionInitialMaxStreamDataBidiRemote = 0
+        , resumptionInitialMaxStreamDataUni = 0
+        , resumptionInitialMaxStreamsBidi = 0
+        , resumptionInitialMaxStreamsUni = 0
         }
 
 -- | Is 0RTT possible?
