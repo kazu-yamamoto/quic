@@ -153,6 +153,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             genSRT
     setSockConnected conn ccSockConnected
     addResource conn qclean
+    modifytPeerParameters conn ccResumption
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup

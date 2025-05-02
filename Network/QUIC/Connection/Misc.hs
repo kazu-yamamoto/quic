@@ -19,6 +19,7 @@ module Network.QUIC.Connection.Misc (
     getMyParameters,
     getPeerParameters,
     setPeerParameters,
+    modifytPeerParameters,
     delayedAck,
     resetDealyedAck,
     setMaxPacketSize,
@@ -132,6 +133,22 @@ getPeerParameters Connection{..} = readIORef peerParameters
 
 setPeerParameters :: Connection -> Parameters -> IO ()
 setPeerParameters Connection{..} params = writeIORef peerParameters params
+
+modifytPeerParameters :: Connection -> ResumptionInfo -> IO ()
+modifytPeerParameters Connection{..} ri =
+    atomicModifyIORef'' peerParameters $ resumptionToParameters ri
+
+resumptionToParameters :: ResumptionInfo -> Parameters -> Parameters
+resumptionToParameters ResumptionInfo{..} params =
+    params
+        { activeConnectionIdLimit = resumptionActiveConnectionIdLimit
+        , initialMaxData = resumptionInitialMaxData
+        , initialMaxStreamDataBidiLocal = resumptionInitialMaxStreamDataBidiLocal
+        , initialMaxStreamDataBidiRemote = resumptionInitialMaxStreamDataBidiRemote
+        , initialMaxStreamDataUni = resumptionInitialMaxStreamDataUni
+        , initialMaxStreamsBidi = resumptionInitialMaxStreamsBidi
+        , initialMaxStreamsUni = resumptionInitialMaxStreamsUni
+        }
 
 ----------------------------------------------------------------
 
