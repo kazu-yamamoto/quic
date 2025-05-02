@@ -11,6 +11,7 @@ module Network.QUIC.Connection.Role (
     getIncompatibleVN,
     setResumptionSession,
     setNewToken,
+    setResumptionParameters,
     setRegister,
     getRegister,
     getUnregister,
@@ -31,6 +32,7 @@ import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -107,6 +109,25 @@ setNewToken conn@Connection{..} token = do
                     , resumptionToken = token
                     }
             }
+
+setResumptionParameters :: Connection -> Parameters -> IO ()
+setResumptionParameters Connection{..} params = do
+    atomicModifyIORef'' roleInfo $ \ci ->
+        ci
+            { resumptionInfo = parametersToResumption (resumptionInfo ci) params
+            }
+
+parametersToResumption :: ResumptionInfo -> Parameters -> ResumptionInfo
+parametersToResumption ri Parameters{..} =
+    ri
+        { resumptionActiveConnectionIdLimit = activeConnectionIdLimit
+        , resumptionInitialMaxData = initialMaxData
+        , resumptionInitialMaxStreamDataBidiLocal = initialMaxStreamDataBidiLocal
+        , resumptionInitialMaxStreamDataBidiRemote = initialMaxStreamDataBidiRemote
+        , resumptionInitialMaxStreamDataUni = initialMaxStreamDataUni
+        , resumptionInitialMaxStreamsBidi = initialMaxStreamsBidi
+        , resumptionInitialMaxStreamsUni = initialMaxStreamsUni
+        }
 
 ----------------------------------------------------------------
 

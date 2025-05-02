@@ -248,9 +248,11 @@ setPeerParams conn _ctx peerExts = do
             checkInvalid params
             setParams params
             qlogParamsSet conn (params, "remote")
-            when (isServer conn) $
-                serverVersionNegotiation $
-                    versionInformation params
+            if isClient conn
+                then
+                    setResumptionParameters conn params
+                else
+                    serverVersionNegotiation $ versionInformation params
 
     checkAuthCIDs params = do
         peerAuthCIDs <- getPeerAuthCIDs conn
