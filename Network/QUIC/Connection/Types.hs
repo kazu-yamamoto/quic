@@ -224,74 +224,76 @@ newPathInfo sa = PathInfo sa <$> newTVarIO 0 <*> newTVarIO 0 <*> newTVarIO False
 
 ----------------------------------------------------------------
 
+{- FOURMOLU_DISABLE -}
 -- | A quic connection to carry multiple streams.
 data Connection = Connection
-    { connState :: ConnState
+    { connState         :: ConnState
     , -- Actions
-      connDebugLog :: DebugLogger
+      connDebugLog      :: DebugLogger
     -- ^ A logger for debugging.
-    , connQLog :: QLogger
-    , connHooks :: Hooks
-    , connSend :: ~Send -- ~ for testing
-    , connRecv :: ~Recv -- ~ for testing
+    , connQLog          :: QLogger
+    , connHooks         :: Hooks
+    , connSend          :: ~Send -- ~ for testing
+    , connRecv          :: ~Recv -- ~ for testing
     -- Manage
-    , connRecvQ :: RecvQ
-    , connSocket :: IORef Socket
+    , connRecvQ         :: RecvQ
+    , connSocket        :: IORef Socket
     , genStatelessResetToken :: CID -> StatelessResetToken
-    , readers :: IORef (Map Word64 (Weak ThreadId))
-    , mainThreadId :: ThreadId
-    , controlRate :: Rate
+    , readers           :: IORef (Map Word64 (Weak ThreadId))
+    , mainThreadId      :: ThreadId
+    , controlRate       :: Rate
     , -- Info
-      roleInfo :: IORef RoleInfo
-    , quicVersionInfo :: IORef VersionInfo
-    , origVersionInfo :: VersionInfo -- chosenVersion is client's ver in Initial
+      roleInfo          :: IORef RoleInfo
+    , quicVersionInfo   :: IORef VersionInfo
+    , origVersionInfo   :: VersionInfo -- chosenVersion is client's ver in Initial
     -- Mine
-    , myParameters :: Parameters
-    , myCIDDB :: IORef CIDDB
+    , myParameters      :: Parameters
+    , myCIDDB           :: IORef CIDDB
     , -- Peer
-      peerParameters :: IORef Parameters
-    , peerCIDDB :: TVar CIDDB
-    , peerInfo :: IORef PeerInfo
+      peerParameters    :: IORef Parameters
+    , peerCIDDB         :: TVar CIDDB
+    , peerInfo          :: IORef PeerInfo
     , -- Queues
-      inputQ :: InputQ
-    , cryptoQ :: CryptoQ
-    , outputQ :: OutputQ
-    , outputRate :: Rate
-    , shared :: Shared
-    , delayedAckCount :: IORef Int
-    , delayedAckCancel :: IORef (IO ())
+      inputQ            :: InputQ
+    , cryptoQ           :: CryptoQ
+    , outputQ           :: OutputQ
+    , outputRate        :: Rate
+    , shared            :: Shared
+    , delayedAckCount   :: IORef Int
+    , delayedAckCancel  :: IORef (IO ())
     , -- State
-      peerPacketNumber :: IORef PacketNumber -- for RTT1
-    , streamTable :: IORef StreamTable
-    , myStreamId :: TVar Concurrency -- C:0 S:1
-    , myUniStreamId :: TVar Concurrency -- C:2 S:3
-    , peerStreamId :: IORef Concurrency -- C:1 S:0
-    , peerUniStreamId :: IORef Concurrency -- C:3 S:2
-    , flowTx :: TVar TxFlow
-    , flowRx :: IORef RxFlow
-    , migrationState :: TVar MigrationState
+      peerPacketNumber  :: IORef PacketNumber -- for RTT1
+    , streamTable       :: IORef StreamTable
+    , myStreamId        :: TVar Concurrency -- C:0 S:1
+    , myUniStreamId     :: TVar Concurrency -- C:2 S:3
+    , peerStreamId      :: IORef Concurrency -- C:1 S:0
+    , peerUniStreamId   :: IORef Concurrency -- C:3 S:2
+    , flowTx            :: TVar TxFlow
+    , flowRx            :: IORef RxFlow
+    , migrationState    :: TVar MigrationState
     , sentRetirePriorTo :: IORef Bool
-    , minIdleTimeout :: IORef Microseconds
-    , bytesTx :: IORef Int
-    , bytesRx :: IORef Int
+    , minIdleTimeout    :: IORef Microseconds
+    , bytesTx           :: IORef Int
+    , bytesRx           :: IORef Int
     , -- TLS
-      pendingQ :: Array EncryptionLevel (TVar [ReceivedPacket])
-    , ciphers :: IOArray EncryptionLevel Cipher
-    , coders :: IOArray EncryptionLevel Coder
-    , coders1RTT :: IOArray Bool Coder1RTT
-    , protectors :: IOArray EncryptionLevel Protector
-    , currentKeyPhase :: IORef (Bool, PacketNumber)
-    , negotiated :: IORef Negotiated
-    , connMyAuthCIDs :: IORef AuthCIDs
-    , connPeerAuthCIDs :: IORef AuthCIDs
+      pendingQ          :: Array EncryptionLevel (TVar [ReceivedPacket])
+    , ciphers           :: IOArray EncryptionLevel Cipher
+    , coders            :: IOArray EncryptionLevel Coder
+    , coders1RTT        :: IOArray Bool Coder1RTT
+    , protectors        :: IOArray EncryptionLevel Protector
+    , currentKeyPhase   :: IORef (Bool, PacketNumber)
+    , negotiated        :: IORef Negotiated
+    , connMyAuthCIDs    :: IORef AuthCIDs
+    , connPeerAuthCIDs  :: IORef AuthCIDs
     , -- Resources
-      connResources :: IORef (IO ())
-    , encodeBuf :: Buffer
-    , encryptRes :: SizedBuffer
-    , decryptBuf :: Buffer
+      connResources     :: IORef (IO ())
+    , encodeBuf         :: Buffer
+    , encryptRes        :: SizedBuffer
+    , decryptBuf        :: Buffer
     , -- Recovery
-      connLDCC :: LDCC
+      connLDCC          :: LDCC
     }
+{- FOURMOLU_ENABLE -}
 
 instance KeepQlog Connection where
     keepQlog conn = connQLog conn
