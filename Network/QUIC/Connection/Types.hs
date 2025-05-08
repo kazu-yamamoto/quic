@@ -286,10 +286,10 @@ data Connection = Connection
     , connMyAuthCIDs    :: IORef AuthCIDs
     , connPeerAuthCIDs  :: IORef AuthCIDs
     , -- Resources
-      connResources     :: IORef (IO ())
-    , encodeBuf         :: Buffer
+      encodeBuf         :: Buffer
     , encryptRes        :: SizedBuffer
     , decryptBuf        :: Buffer
+    , connResources     :: IORef (IO ())
     , -- Recovery
       connLDCC          :: LDCC
     }
@@ -318,6 +318,7 @@ makePendingQ = do
         arr = array (RTT0Level, RTT1Level) lst
     return arr
 
+{- FOURMOLU_DISABLE -}
 newConnection
     :: Role
     -> Parameters
@@ -334,72 +335,65 @@ newConnection
     -> Recv
     -> (CID -> StatelessResetToken)
     -> IO Connection
-newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sref piref recvQ ~send ~recv genSRT = do
-    -- ~ for testing
-    outQ <- newTQueueIO
-    let put x = atomically $ writeTQueue outQ $ OutRetrans x
-    connstate <- newConnState rl
-    let bufsiz = maximumUdpPayloadSize
-    encBuf <- mallocBytes bufsiz
-    ecrptBuf <- mallocBytes bufsiz
-    dcrptBuf <- mallocBytes bufsiz
-    Connection connstate debugLog qLog hooks send recv recvQ sref genSRT
-        <$> newIORef Map.empty
-        <*> myThreadId
-        <*> newRate
-        -- Info
-        <*> newIORef initialRoleInfo
-        <*> newIORef verInfo
-        <*> return verInfo
-        -- Mine
-        <*> return myparams
-        <*> newIORef (newCIDDB myCID)
-        -- Peer
-        <*> newIORef baseParameters
-        <*> newTVarIO (newCIDDB peerCID)
-        <*> return piref
-        -- Queues
-        <*> newTQueueIO
-        <*> newTQueueIO
-        <*> return outQ
-        <*> newRate
-        <*> newShared
-        <*> newIORef 0
-        <*> newIORef (return ())
-        -- State
-        <*> newIORef 0
-        <*> newIORef emptyStreamTable
-        <*> newTVarIO (newConcurrency rl Bidirectional 0)
-        <*> newTVarIO (newConcurrency rl Unidirectional 0)
-        <*> newIORef peerConcurrency
-        <*> newIORef peerUniConcurrency
-        <*> newTVarIO (newTxFlow 0) -- limit is set in Handshake
-        <*> newIORef (newRxFlow $ initialMaxData myparams)
-        <*> newTVarIO NonMigration
-        <*> newIORef False
-        <*> newIORef (milliToMicro $ maxIdleTimeout myparams)
-        <*> newIORef 0
-        <*> newIORef 0
-        -- TLS
-        <*> makePendingQ
-        <*> newArray (InitialLevel, RTT1Level) defaultCipher
-        <*> newArray (InitialLevel, HandshakeLevel) initialCoder
-        <*> newArray (False, True) initialCoder1RTT
-        <*> newArray (InitialLevel, RTT1Level) initialProtector
-        <*> newIORef (False, 0)
-        <*> newIORef initialNegotiated
-        <*> newIORef myAuthCIDs
-        <*> newIORef peerAuthCIDs
-        -- Resources
-        <*> newIORef (free encBuf >> free ecrptBuf >> free dcrptBuf)
-        <*> return encBuf -- used sender or closere
-        <*> return (SizedBuffer ecrptBuf bufsiz) -- used sender
-        <*> return dcrptBuf -- used receiver
-        -- Recovery
-        <*> newLDCC connstate qLog put
+newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugLog connQLog connHooks connSocket peerInfo connRecvQ ~connSend ~connRecv genStatelessResetToken = do
+    connState         <- newConnState rl
+    -- Manage
+    readers           <- newIORef Map.empty
+    mainThreadId      <- myThreadId
+    controlRate       <- newRate
+    -- Info
+    roleInfo          <- newIORef roleinfo
+    quicVersionInfo   <- newIORef origVersionInfo
+    -- Mine
+    myCIDDB           <- newIORef (newCIDDB myCID)
+    -- Peer
+    peerParameters    <- newIORef baseParameters
+    peerCIDDB         <- newTVarIO (newCIDDB peerCID)
+    -- Queus
+    inputQ            <- newTQueueIO
+    cryptoQ           <- newTQueueIO
+    outputQ           <- newTQueueIO
+    outputRate        <- newRate
+    shared            <- newShared
+    delayedAckCount   <- newIORef 0
+    delayedAckCancel  <- newIORef (return ())
+    -- State
+    peerPacketNumber  <- newIORef 0
+    streamTable       <- newIORef emptyStreamTable
+    myStreamId        <- newTVarIO (newConcurrency rl Bidirectional 0)
+    myUniStreamId     <- newTVarIO (newConcurrency rl Unidirectional 0)
+    peerStreamId      <- newIORef peerConcurrency
+    peerUniStreamId   <- newIORef peerUniConcurrency
+    flowTx            <- newTVarIO (newTxFlow 0) -- limit is set in Handshake
+    flowRx            <- newIORef (newRxFlow $ initialMaxData myParameters)
+    migrationState    <- newTVarIO NonMigration
+    sentRetirePriorTo <- newIORef False
+    minIdleTimeout    <- newIORef (milliToMicro $ maxIdleTimeout myParameters)
+    bytesTx           <- newIORef 0
+    bytesRx           <- newIORef 0
+    -- TLS
+    pendingQ          <- makePendingQ
+    ciphers           <- newArray (InitialLevel, RTT1Level) defaultCipher
+    coders            <- newArray (InitialLevel, HandshakeLevel) initialCoder
+    coders1RTT        <- newArray (False, True) initialCoder1RTT
+    protectors        <- newArray (InitialLevel, RTT1Level) initialProtector
+    currentKeyPhase   <- newIORef (False, 0)
+    negotiated        <- newIORef initialNegotiated
+    connMyAuthCIDs    <- newIORef myAuthCIDs
+    connPeerAuthCIDs  <- newIORef peerAuthCIDs
+    -- Resources
+    encodeBuf         <- mallocBytes bufsiz -- used sender or closere
+    encryptBuf        <- mallocBytes bufsiz
+    let encryptRes = SizedBuffer encryptBuf bufsiz -- used sender
+    decryptBuf        <- mallocBytes bufsiz -- used receiver
+    connResources     <- newIORef (free encodeBuf >> free encryptBuf >> free decryptBuf)
+    -- Recovery
+    let put x = atomically $ writeTQueue outputQ $ OutRetrans x
+    connLDCC          <- newLDCC connState connQLog put
+    return Connection{..}
   where
     isclient = rl == Client
-    initialRoleInfo
+    roleinfo
         | isclient = defaultClientRoleInfo
         | otherwise = defaultServerRoleInfo
     myCID = fromJust $ initSrcCID myAuthCIDs
@@ -407,8 +401,10 @@ newConnection rl myparams verInfo myAuthCIDs peerAuthCIDs debugLog qLog hooks sr
     peer
         | isclient = Server
         | otherwise = Client
-    peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myparams)
-    peerUniConcurrency = newConcurrency peer Unidirectional (initialMaxStreamsUni myparams)
+    peerConcurrency = newConcurrency peer Bidirectional (initialMaxStreamsBidi myParameters)
+    peerUniConcurrency = newConcurrency peer Unidirectional (initialMaxStreamsUni myParameters)
+    bufsiz = maximumUdpPayloadSize
+{- FOURMOLU_ENABLE -}
 
 defaultTrafficSecrets :: (ClientTrafficSecret a, ServerTrafficSecret a)
 defaultTrafficSecrets = (ClientTrafficSecret "", ServerTrafficSecret "")
