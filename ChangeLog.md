@@ -3,6 +3,7 @@
 ## 0.2.13
 
 * Necessary transport parameters are now stored in ResumptionInfo.
+  [#76](https://github.com/kazu-yamamoto/quic/pull/76)
 
 ## 0.2.12
 
