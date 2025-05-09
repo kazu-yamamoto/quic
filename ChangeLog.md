@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.13
+
+* Necessary transport parameters are now stored in ResumptionInfo.
+
 ## 0.2.12
 
 * Dont' send UDP packets of size 0. (Cloudfare)
