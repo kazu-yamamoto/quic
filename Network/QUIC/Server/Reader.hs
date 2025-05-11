@@ -111,11 +111,12 @@ recvQDictSize = 100
 newRecvQDict :: IO RecvQDict
 newRecvQDict = RecvQDict <$> LRUCache.newLRUCacheRef recvQDictSize
 
-lookupRecvQDict :: RecvQDict -> CID -> IO (RecvQ, Bool)
-lookupRecvQDict (RecvQDict ref) dcid = LRUCache.cached ref dcid newRecvQ
+-- Looking up and insert a new RecvQ if not exist.
+lookupInsertRecvQDict :: RecvQDict -> CID -> IO (RecvQ, Bool)
+lookupInsertRecvQDict (RecvQDict ref) dcid = LRUCache.cached ref dcid newRecvQ
 
-lookupRecvQDict' :: RecvQDict -> CID -> IO (Maybe RecvQ)
-lookupRecvQDict' (RecvQDict ref) dcid = LRUCache.cached' ref dcid
+lookupRecvQDict :: RecvQDict -> CID -> IO (Maybe RecvQ)
+lookupRecvQDict (RecvQDict ref) dcid = LRUCache.cached' ref dcid
 
 ----------------------------------------------------------------
 
@@ -262,7 +263,7 @@ dispatch
       where
         myVersions = scVersions
         pushToAcceptQ myAuthCIDs peerAuthCIDs addrValid = do
-            (q, exist) <- lookupRecvQDict srcTable sCID
+            (q, exist) <- lookupInsertRecvQDict srcTable sCID
             writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             unless exist $ do
                 let reg = registerConnectionDict dstTable
@@ -360,7 +361,7 @@ dispatch
     _
     tim
     (cpkt@(CryptPacket (RTT0 _ _dCID sCID) _), lvl, siz) = do
-        mq <- lookupRecvQDict' srcTable sCID
+        mq <- lookupRecvQDict srcTable sCID
         case mq of
             Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             Nothing -> return ()
