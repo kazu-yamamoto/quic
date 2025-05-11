@@ -263,7 +263,8 @@ dispatch
       where
         myVersions = scVersions
         pushToAcceptQ myAuthCIDs peerAuthCIDs addrValid = do
-            (q, exist) <- lookupInsertRecvQDict srcTable sCID
+            let key = nonZeroLengthCID sCID peersa
+            (q, exist) <- lookupInsertRecvQDict srcTable key
             writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             unless exist $ do
                 let reg = registerConnectionDict dstTable
@@ -356,12 +357,13 @@ dispatch
     _
     _
     _mysock
-    _peersa
+    peersa
     _
     _
     tim
     (cpkt@(CryptPacket (RTT0 _ _dCID sCID) _), lvl, siz) = do
-        mq <- lookupRecvQDict srcTable sCID
+        let key = nonZeroLengthCID sCID peersa
+        mq <- lookupRecvQDict srcTable key
         case mq of
             Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
             Nothing -> return ()

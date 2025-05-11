@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Types.CID (
     CID (..),
@@ -8,6 +9,7 @@ module Network.QUIC.Types.CID (
     toCID,
     makeCID,
     unpackCID,
+    nonZeroLengthCID,
     StatelessResetToken (..),
     fromStatelessResetToken,
     makeGenStatelessReset,
@@ -23,8 +25,10 @@ module Network.QUIC.Types.CID (
 import Codec.Serialise
 import Crypto.Hash
 import Crypto.KDF.HKDF
+import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
 import GHC.Generics
+import Network.Socket (SockAddr)
 import System.Random (getStdRandom, uniformByteString)
 
 import Network.QUIC.Imports
@@ -57,6 +61,10 @@ unpackCID :: CID -> (ShortByteString, Word8)
 unpackCID (CID sbs) = (sbs, len)
   where
     len = fromIntegral $ Short.length sbs
+
+nonZeroLengthCID :: CID -> SockAddr -> CID
+nonZeroLengthCID (CID "") sa = toCID $ C8.pack $ show sa
+nonZeroLengthCID x _ = x
 
 -- 16 bytes
 newtype StatelessResetToken = StatelessResetToken Bytes deriving (Eq, Ord)
