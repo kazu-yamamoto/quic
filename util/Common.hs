@@ -41,7 +41,7 @@ split c s = case break (c ==) s of
     (s', r) -> s' : split c (drop 1 r)
 
 getLogger :: Maybe FilePath -> (String -> IO ())
-getLogger Nothing = \_ -> return ()
+getLogger Nothing = defaultKeyLogger
 getLogger (Just file) = \msg -> appendFile file (msg ++ "\n")
 
 makeProtos :: Version -> (ByteString, ByteString)
