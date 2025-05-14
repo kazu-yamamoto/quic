@@ -1,5 +1,11 @@
 # ChangeLog
 
+## 0.2.14
+
+* Supporting SSLKEYLOGFILE.
+* Supporting zer-length CID in the server side.
+  [#78](https://github.com/kazu-yamamoto/quic/pull/78)
+
 ## 0.2.13
 
 * Necessary transport parameters are now stored in ResumptionInfo.
