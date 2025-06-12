@@ -4,6 +4,7 @@
 module Network.QUIC.Config where
 
 import Data.IP
+import Data.X509.Validation (validateDefault)
 import Network.Socket
 import Network.TLS hiding (
     Hooks,
@@ -86,6 +87,7 @@ data ClientConfig = ClientConfig
     -- ^ Authenticating a server based on its certificate.
     --
     -- Default: 'True'
+    , ccOnServerCertificate :: OnServerCertificate
     , ccResumption :: ResumptionInfo
     -- ^ Use resumption on the 2nd connection if possible.
     , ccPacketSize :: Maybe Int
@@ -127,6 +129,7 @@ defaultClientConfig =
         , ccPortName = "4433"
         , ccALPN = \_ -> return Nothing
         , ccValidate = True
+        , ccOnServerCertificate = validateDefault
         , ccResumption = defaultResumptionInfo
         , ccPacketSize = Nothing
         , ccDebugLog = False

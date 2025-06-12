@@ -55,6 +55,7 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
     hook =
         ccTlsHooks
             { onSuggestALPN = (<|>) <$> ccALPN ver <*> onSuggestALPN ccTlsHooks
+            , onServerCertificate = ccOnServerCertificate
             }
     supported =
         defaultSupported
