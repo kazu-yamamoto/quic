@@ -39,6 +39,7 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
             , clientDebug = debug
             , clientWantSessionResumeList = resumptionSession ccResumption
             , clientUseEarlyData = use0RTT
+            , clientUseServerNameIndication = ccUseServerNameIndication
             }
     convTP = onTransportParametersCreated ccHooks
     params = convTP $ setCIDsToParameters myAuthCIDs ccParameters

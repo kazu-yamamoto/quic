@@ -8,6 +8,7 @@ module Network.QUIC.Client (
     defaultClientConfig,
     ccServerName,
     ccServerNameOverride,
+    ccUseServerNameIndication,
     ccPortName,
     ccALPN,
     ccUse0RTT,

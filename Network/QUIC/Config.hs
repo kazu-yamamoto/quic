@@ -107,6 +107,10 @@ data ClientConfig = ClientConfig
     -- Default: 'False'
     , ccServerNameOverride :: Maybe HostName
     -- ^ Used to specify SNI for TLS intead of `ccServerName`.
+    , ccUseServerNameIndication :: Bool
+    -- ^ If 'True', SNI is used. Otherwise, the SNI extension is not sent.
+    --
+    -- Default: 'True'
     }
 
 -- | The default value for client configuration.
@@ -136,6 +140,7 @@ defaultClientConfig =
         , ccSockConnected = False
         , ccWatchDog = False
         , ccServerNameOverride = Nothing
+        , ccUseServerNameIndication = True
         }
 
 ----------------------------------------------------------------
