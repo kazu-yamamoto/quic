@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.15
+
+* Defining `ccUseServerNameIndication`.
+* Defining `ccOnServerCertificate`.
+
 ## 0.2.14
 
 * Supporting SSLKEYLOGFILE.
