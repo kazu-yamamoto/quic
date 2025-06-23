@@ -15,6 +15,7 @@ module Network.QUIC.Connection.Stream (
 ) where
 
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Types
@@ -93,13 +94,13 @@ checkRxMaxStreams conn@Connection{..} sid = do
         1 -> readIORef peerStreamId
         2 -> readTVarIO myUniStreamId
         3 -> readIORef peerUniStreamId
-        _ -> error "never reach"
+        _ -> E.throwIO MustNotReached
     readForServer = case streamType of
         0 -> readIORef peerStreamId
         1 -> readTVarIO myStreamId
         2 -> readIORef peerUniStreamId
         3 -> readTVarIO myUniStreamId
-        _ -> error "never reach"
+        _ -> E.throwIO MustNotReached
 
 checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int)
 checkStreamIdRoom conn dir = do
