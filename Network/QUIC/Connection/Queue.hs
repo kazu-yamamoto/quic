@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Network.QUIC.Connection.Queue where
 
 import Control.Concurrent.STM

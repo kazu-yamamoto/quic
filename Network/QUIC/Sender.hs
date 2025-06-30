@@ -276,7 +276,7 @@ sendOutput conn (OutControl RTT1Level []) = do
         b1 <- not <$> isEmptyCryptoSTM conn
         b2 <- not <$> isEmptyOutputSTM conn
         b3 <- not <$> isEmptyStreamSTM conn
-        return $ or [b1, b2, b3]
+        return (b1 || b2 || b3)
     unless exist $ construct conn RTT1Level [] False >>= sendPacket conn
 sendOutput conn (OutControl lvl frames) = do
     mout <- tryPeekOutput conn

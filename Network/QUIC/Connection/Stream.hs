@@ -1,5 +1,4 @@
 {-# LANGUAGE BinaryLiterals #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.Stream (
