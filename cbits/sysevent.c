@@ -1,8 +1,7 @@
+#if defined(OS_MacOS)
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#if defined(OS_MacOS)
 #include <sys/ioctl.h>
 #include <sys/kern_event.h>
 
@@ -34,6 +33,9 @@ int close_socket (int s) {
   return ret;
 }
 #elif defined(OS_Linux)
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 
