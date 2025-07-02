@@ -2,6 +2,11 @@
 
 ## 0.2.15
 
+* Fixing build on Windows.
+  [#80](https://github.com/kazu-yamamoto/quic/pull/80)
+
+## 0.2.15
+
 * Defining `ccUseServerNameIndication`.
 * Defining `ccOnServerCertificate`.
 
