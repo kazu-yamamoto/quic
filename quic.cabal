@@ -122,7 +122,6 @@ library
         Network.QUIC.Types.Resumption
         Network.QUIC.Types.Time
         Network.QUIC.Utils
-        Network.QUIC.Windows
 
     default-language:   Haskell2010
     default-extensions: Strict StrictData
