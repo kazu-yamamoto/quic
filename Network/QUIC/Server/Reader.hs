@@ -147,15 +147,20 @@ runDispatcher d conf stvar forkConn mysock = forkIO $ dispatcher d conf stvar fo
 
 data ServerState = Running | Stopped deriving (Eq, Show)
 
-checkLoop :: TVar ServerState -> STM () -> IO Bool
-checkLoop stvar waitsock = atomically $ do
-    st <- readTVar stvar
-    if st == Stopped
-        then
-            return False
+checkLoop :: TVar ServerState -> Socket -> IO Bool
+checkLoop stvar mysock = do
+    st0 <- readTVarIO stvar
+    if st0 == Stopped
+        then return False
         else do
-            waitsock -- blocking is retry
-            return True
+            wait <- waitReadSocketSTM mysock
+            atomically $ do
+                st <- readTVar stvar
+                if st == Stopped
+                    then return False
+                    else do
+                        wait -- blocking is retry
+                        return True
 
 dispatcher
     :: Dispatch
@@ -166,11 +171,10 @@ dispatcher
     -> IO ()
 dispatcher d conf stvar forkConnection mysock = do
     labelMe "QUIC dispatcher"
-    wait <- waitReadSocketSTM mysock
-    handleLogUnit logAction $ loop wait
+    handleLogUnit logAction loop
   where
-    loop wait = do
-        cont <- checkLoop stvar wait
+    loop = do
+        cont <- checkLoop stvar mysock
         when cont $ do
             (bs, peersa) <- safeRecv $ NSB.recvFrom mysock 2048
             now <- getTimeMicrosecond
@@ -181,7 +185,7 @@ dispatcher d conf stvar forkConnection mysock = do
             let bytes = BS.length bs
                 switch = dispatch d conf forkConnection logAction mysock peersa send' bytes now
             mapM_ switch cpckts
-            loop wait
+            loop
 
     doDebug = isJust $ scDebugLog conf
     logAction msg
