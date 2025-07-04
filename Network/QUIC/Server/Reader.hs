@@ -46,7 +46,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Types
-import Network.QUIC.Windows
 
 ----------------------------------------------------------------
 
@@ -193,7 +192,7 @@ dispatcher d conf stvar forkConnection mysock = do
         | otherwise = return ()
 
     safeRecv rcv = do
-        ex <- E.try $ windowsThreadBlockHack rcv
+        ex <- E.try rcv
         case ex of
             Right x -> return x
             Left se | isAsyncException se -> E.throwIO (se :: E.SomeException)
