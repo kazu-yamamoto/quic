@@ -1,6 +1,10 @@
 # ChangeLog
 
-## 0.2.15
+## 0.2.17
+
+* Using waitReadSocketSTM properly.
+
+## 0.2.16
 
 * Fixing build on Windows.
   [#80](https://github.com/kazu-yamamoto/quic/pull/80)
