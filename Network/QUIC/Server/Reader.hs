@@ -187,10 +187,7 @@ dispatcher d conf stvar forkConnection mysock = do
             mapM_ switch cpckts
             loop
 
-    doDebug = isJust $ scDebugLog conf
-    logAction msg
-        | doDebug = stdoutLogger ("dispatch(er): " <> msg)
-        | otherwise = return ()
+    logAction _msg = return ()
 
     safeRecv rcv = do
         ex <- E.try $ windowsThreadBlockHack rcv

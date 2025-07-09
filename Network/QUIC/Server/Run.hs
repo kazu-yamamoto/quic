@@ -13,7 +13,6 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Network.Socket as NS
-import System.Log.FastLogger hiding (check)
 
 import Network.QUIC.Closer
 import Network.QUIC.Common
@@ -50,10 +49,7 @@ run conf server = handleLogUnit debugLog $ do
             st <- readTVar stvar
             check $ st == Stopped
   where
-    doDebug = isJust $ scDebugLog conf
-    debugLog msg
-        | doDebug = stdoutLogger ("run: " <> msg)
-        | otherwise = return ()
+    debugLog _msg = return ()
     setup stvar = do
         dispatch <- newDispatch conf
         let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
@@ -79,10 +75,7 @@ runWithSockets ssas conf server = handleLogUnit debugLog $ do
             st <- readTVar stvar
             check $ st == Stopped
   where
-    doDebug = isJust $ scDebugLog conf
-    debugLog msg
-        | doDebug = stdoutLogger ("run: " <> msg)
-        | otherwise = return ()
+    debugLog _msg = return ()
     setup stvar = do
         dispatch <- newDispatch conf
         let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
@@ -144,9 +137,7 @@ runServer conf server0 dispatch stvar acc = do
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
-    debugLog conn msg = do
-        connDebugLog conn ("runServer: " <> msg)
-        qlogDebug conn $ Debug $ toLogStr msg
+    debugLog _conn _msg = return ()
 
 createServerConnection
     :: ServerConfig
