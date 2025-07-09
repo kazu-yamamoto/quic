@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.18
+
+* Don't print debug information on stdout as a daemon has already
+  closed it.
+
 ## 0.2.17
 
 * Using waitReadSocketSTM properly.
