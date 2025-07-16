@@ -4,6 +4,7 @@
 module Network.QUIC.Config where
 
 import Data.IP
+import Data.X509.CertificateStore (CertificateStore)
 import Data.X509.Validation (validateDefault)
 import Network.Socket
 import Network.TLS hiding (
@@ -88,6 +89,7 @@ data ClientConfig = ClientConfig
     --
     -- Default: 'True'
     , ccOnServerCertificate :: OnServerCertificate
+    , ccCAStore :: CertificateStore
     , ccResumption :: ResumptionInfo
     -- ^ Use resumption on the 2nd connection if possible.
     , ccPacketSize :: Maybe Int
@@ -134,6 +136,7 @@ defaultClientConfig =
         , ccALPN = \_ -> return Nothing
         , ccValidate = True
         , ccOnServerCertificate = validateDefault
+        , ccCAStore = mempty
         , ccResumption = defaultResumptionInfo
         , ccPacketSize = Nothing
         , ccDebugLog = False

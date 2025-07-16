@@ -137,6 +137,7 @@ library
         crypto-token >=0.1.2 && <0.2,
         crypton >=0.34,
         crypton-x509 >=1.7.6 && <1.8,
+        crypton-x509-store >=1.6.11 && <1.7,
         crypton-x509-system >=1.6.7 && <1.7,
         crypton-x509-validation >=1.6 && <1.7,
         fast-logger >=3.2.2 && <3.3,
