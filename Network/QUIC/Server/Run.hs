@@ -181,8 +181,14 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
     initializeCoder conn InitialLevel $ initialSecrets ver cid
     setupCryptoStreams conn -- fixme: cleanup
     let peersa = accPeerSockAddr
+        -- RFC9000 \S14.2
+        -- "In the absence of these mechanisms, QUIC endpoints SHOULD
+        -- NOT send datagrams larger than the smallest allowed maximum
+        -- datagram size."
+        --
+        -- Thus use 1200 bytes for minimum packet size.
         pktSiz =
-            (defaultPacketSize peersa `max` accPacketSize)
+            (defaultQUICPacketSize `max` accPacketSize)
                 `min` maximumPacketSize peersa
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz

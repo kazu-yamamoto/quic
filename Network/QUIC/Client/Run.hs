@@ -158,8 +158,14 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
-    let pktSiz0 = fromMaybe 0 ccPacketSize
-        pktSiz = (defaultPacketSize peersa `max` pktSiz0) `min` maximumPacketSize peersa
+      -- RFC9000 \S14.2
+      -- "In the absence of these mechanisms, QUIC endpoints SHOULD
+      -- NOT send datagrams larger than the smallest allowed maximum
+      -- datagram size."
+      --
+      -- Thus use 1200 bytes for minimum packet size.
+    let pktSiz0 = fromMaybe (defaultPacketSize peersa) ccPacketSize
+        pktSiz = (defaultQUICPacketSize `max` pktSiz0) `min` maximumPacketSize peersa
     setMaxPacketSize conn pktSiz
     setInitialCongestionWindow (connLDCC conn) pktSiz
     setAddressValidated pathInfo
