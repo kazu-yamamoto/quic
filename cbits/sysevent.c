@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/kern_event.h>
+#include <netinet/in.h>
 
 int open_socket () {
    struct kev_request filter = { 0 };
@@ -32,6 +33,14 @@ int close_socket (int s) {
   int ret = close(s);
   return ret;
 }
+
+int set_dont_fragment_sockopt (int s) {
+  int val = 1;
+  int ret = setsockopt(s, IPPROTO_IP, IP_DONTFRAG, &val, sizeof(val));
+
+  return ret;
+}
+
 #elif defined(OS_Linux)
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -65,10 +74,18 @@ int close_socket (int s) {
   int ret = close(s);
   return ret;
 }
+
+int set_dont_fragment_sockopt (int s) {
+  // linux set DF bit by default
+  return 0;
+}
+
 #else
 int open_socket () { return 0; }
 
 int watch_socket(int s) { return -2; }
 
 int close_socket (int s) { return 0; }
+
+int set_dont_fragment_sockopt (int s) { return 0; }
 #endif
