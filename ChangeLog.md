@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.19
+
+* Compare the minimum packet size on packet size determination.
+  [#81](https://github.com/kazu-yamamoto/quic/pull/81)
+
 ## 0.2.18
 
 * Don't print debug information on stdout as a daemon has already
