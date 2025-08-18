@@ -13,8 +13,6 @@ import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
 
 import Network.QUIC.Imports
-
--- import Network.QUIC.Logger
 import Network.QUIC.Stream.Frag
 import Network.QUIC.Stream.Misc
 import Network.QUIC.Stream.Queue
@@ -160,9 +158,7 @@ tryReassemble Stream{..} x@(RxStreamData dat off len True) put putFin = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0{streamFin = True}
     if fin0
-        then do
-            -- stdoutLogger "Illegal Fin" -- fixme
-            return True
+        then return True
         else case off `compare` off0 of
             LT -> return True
             EQ -> do
