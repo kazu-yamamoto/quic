@@ -29,3 +29,8 @@ maximumQUICHeaderSize = 256
 
 idleTimeout :: Milliseconds
 idleTimeout = Milliseconds 30000
+
+----------------------------------------------------------------
+
+reassembleQueueLimit :: Int
+reassembleQueueLimit = 256 * 1024
