@@ -211,7 +211,13 @@ data LossDetection = LossDetection
     deriving (Show)
 
 initialLossDetection :: LossDetection
-initialLossDetection = LossDetection (-1) ackInfo0 timeMicrosecond0 Nothing
+initialLossDetection =
+    LossDetection
+        { largestAckedPacket = (-1)
+        , previousAckInfo = ackInfo0
+        , timeOfLastAckElicitingPacket = timeMicrosecond0
+        , lossTime = Nothing
+        }
 
 ----------------------------------------------------------------
 

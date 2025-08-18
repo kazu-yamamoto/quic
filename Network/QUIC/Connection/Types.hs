@@ -194,12 +194,13 @@ data Concurrency = Concurrency
     deriving (Show)
 
 newConcurrency :: Role -> Direction -> Int -> Concurrency
-newConcurrency rl dir n = Concurrency ini $ StreamIdBase n
+newConcurrency rl dir n = Concurrency{..}
   where
     bidi = dir == Bidirectional
-    ini
+    currentStream
         | rl == Client = if bidi then 0 else 2
         | otherwise = if bidi then 1 else 3
+    maxStreams = StreamIdBase n
 
 ----------------------------------------------------------------
 
@@ -220,7 +221,11 @@ data PathInfo = PathInfo
     }
 
 newPathInfo :: SockAddr -> IO PathInfo
-newPathInfo sa = PathInfo sa <$> newTVarIO 0 <*> newTVarIO 0 <*> newTVarIO False
+newPathInfo peerSockAddr = do
+    pathBytesTx <- newTVarIO 0
+    pathBytesRx <- newTVarIO 0
+    addressValidated <- newTVarIO False
+    return PathInfo{..}
 
 ----------------------------------------------------------------
 
@@ -473,9 +478,9 @@ data Shared = Shared
     }
 
 newShared :: IO Shared
-newShared =
-    Shared
-        <$> newIORef False
-        <*> newIORef False
-        <*> newIORef False
-        <*> newTQueueIO
+newShared = do
+    sharedCloseSent <- newIORef False
+    sharedCloseReceived <- newIORef False
+    shared1RTTReady <- newIORef False
+    sharedSendStreamQ <- newTQueueIO
+    return Shared{..}

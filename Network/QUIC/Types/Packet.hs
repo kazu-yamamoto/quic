@@ -59,7 +59,11 @@ data VersionInfo = VersionInfo
     deriving (Eq, Show)
 
 brokenVersionInfo :: VersionInfo
-brokenVersionInfo = VersionInfo Negotiation []
+brokenVersionInfo =
+    VersionInfo
+        { chosenVersion = Negotiation
+        , otherVersions = []
+        }
 
 ----------------------------------------------------------------
 

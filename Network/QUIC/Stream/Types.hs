@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Network.QUIC.Stream.Types (
     Stream (..),
     newStream,
@@ -43,16 +45,18 @@ data Stream = Stream
 instance Show Stream where
     show s = show $ streamId s
 
+{- FOURMOLU_DISABLE -}
 newStream :: Connection -> Int -> Int -> StreamId -> IO Stream
-newStream conn sid txLim rxLim =
-    Stream sid conn
-        <$> newTVarIO (newTxFlow txLim)
-        <*> newIORef (newRxFlow rxLim)
-        <*> newIORef emptyStreamState
-        <*> newIORef emptyStreamState
-        <*> newRecvStreamQ
-        <*> newIORef Skew.empty
-        <*> newEmptyMVar
+newStream streamConnection streamId txLim rxLim = do
+    streamFlowTx    <- newTVarIO $ newTxFlow txLim
+    streamFlowRx    <- newIORef  $ newRxFlow rxLim
+    streamStateTx   <- newIORef emptyStreamState
+    streamStateRx   <- newIORef emptyStreamState
+    streamRecvQ     <- newRecvStreamQ
+    streamReass     <- newIORef Skew.empty
+    streamSyncFinTx <- newEmptyMVar
+    return Stream{..}
+{- FOURMOLU_ENABLE -}
 
 syncFinTx :: Stream -> IO ()
 syncFinTx s = void $ tryPutMVar (streamSyncFinTx s) ()
@@ -81,7 +85,12 @@ instance Frag RxStreamData where
         let n = off' - off
             bs' = BS.drop n bs
             len' = len - n
-         in RxStreamData bs' off' len' fin
+         in RxStreamData
+                { rxstrmData = bs'
+                , rxstrmOff = off'
+                , rxstrmLen = len'
+                , rxstrmFin = fin
+                }
 
 ----------------------------------------------------------------
 
@@ -92,7 +101,11 @@ data StreamState = StreamState
     deriving (Eq, Show)
 
 emptyStreamState :: StreamState
-emptyStreamState = StreamState 0 False
+emptyStreamState =
+    StreamState
+        { streamOffset = 0
+        , streamFin = False
+        }
 
 ----------------------------------------------------------------
 
@@ -103,4 +116,8 @@ data RecvStreamQ = RecvStreamQ
     }
 
 newRecvStreamQ :: IO RecvStreamQ
-newRecvStreamQ = RecvStreamQ <$> newTQueueIO <*> newIORef Nothing <*> newIORef False
+newRecvStreamQ = do
+    recvStreamQ <- newTQueueIO
+    pendingData <- newIORef Nothing
+    endOfStream <- newIORef False
+    return RecvStreamQ{..}
