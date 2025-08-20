@@ -184,6 +184,8 @@ insertReassQ :: Stream -> RxStreamData -> IO ()
 insertReassQ Stream{..} x@(RxStreamData _ _ len _) = do
     qsiz <- atomicModifyIORef' streamReassSize inc
     when (qsiz > reassembleQueueLimit) $ do
+        -- cf closeConnection which cannot call here
+        -- due to cycling imports.
         E.throwIO $
             TransportErrorIsSent StreamLimitError "reassemble error"
     atomicModifyIORef'' streamReass $ Skew.insert x

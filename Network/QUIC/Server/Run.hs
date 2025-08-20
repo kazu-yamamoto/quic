@@ -130,6 +130,7 @@ runServer conf server0 dispatch stvar acc = do
                         Right r -> return r
             ex <- E.try runThreads
             sendFinal conn
+            setConnectionClosed conn
             closure conn ldcc ex
   where
     open = createServerConnection conf dispatch acc stvar

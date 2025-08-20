@@ -97,6 +97,7 @@ runClient conf client0 isICVN verInfo = do
         when (ccWatchDog conf) $ forkManaged conn $ watchDog conn
         ex <- E.try runThreads
         sendFinal conn
+        setConnectionClosed conn
         closure conn ldcc ex
   where
     open = createClientConnection conf verInfo
@@ -158,12 +159,12 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     let ver = chosenVersion verInfo
     initializeCoder conn InitialLevel $ initialSecrets ver peerCID
     setupCryptoStreams conn -- fixme: cleanup
-      -- RFC9000 \S14.2
-      -- "In the absence of these mechanisms, QUIC endpoints SHOULD
-      -- NOT send datagrams larger than the smallest allowed maximum
-      -- datagram size."
-      --
-      -- Thus use 1200 bytes for minimum packet size.
+    -- RFC9000 \S14.2
+    -- "In the absence of these mechanisms, QUIC endpoints SHOULD
+    -- NOT send datagrams larger than the smallest allowed maximum
+    -- datagram size."
+    --
+    -- Thus use 1200 bytes for minimum packet size.
     let pktSiz0 = fromMaybe (defaultPacketSize peersa) ccPacketSize
         pktSiz = (defaultQUICPacketSize `max` pktSiz0) `min` maximumPacketSize peersa
     setMaxPacketSize conn pktSiz
