@@ -39,7 +39,6 @@ data Stream = Stream
     , streamStateRx :: IORef StreamState -- offset, fin
     , streamRecvQ :: RecvStreamQ -- input bytestring
     , streamReass :: IORef (Skew RxStreamData) -- input stream fragments to streamQ
-    , streamReassSize :: IORef Int
     , streamSyncFinTx :: MVar ()
     }
 
@@ -56,7 +55,6 @@ newStream streamConnection streamId txLim rxLim = do
     streamRecvQ     <- newRecvStreamQ
     streamReass     <- newIORef Skew.empty
     streamSyncFinTx <- newEmptyMVar
-    streamReassSize <- newIORef 0
     return Stream{..}
 {- FOURMOLU_ENABLE -}
 

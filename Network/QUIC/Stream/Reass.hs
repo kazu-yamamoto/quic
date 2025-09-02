@@ -8,7 +8,6 @@ module Network.QUIC.Stream.Reass (
     tryReassemble,
 ) where
 
-import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
@@ -129,9 +128,9 @@ tryReassemble Stream{..} x@(RxStreamData "" off _ True) _ putFin = do
                 return False
             GT -> do
                 writeIORef streamStateRx si1
-                atomicModifyIORef'' streamReass $ Skew.insert x
+                atomicModifyIORef'' streamReass (Skew.insert x)
                 return False
-tryReassemble strm@Stream{..} x@(RxStreamData dat off len False) put putFin = do
+tryReassemble Stream{..} x@(RxStreamData dat off len False) put putFin = do
     si0@(StreamState off0 _) <- readIORef streamStateRx
     case off `compare` off0 of
         LT -> return True
@@ -140,24 +139,22 @@ tryReassemble strm@Stream{..} x@(RxStreamData dat off len False) put putFin = do
             loop si0 (off0 + len)
             return False
         GT -> do
-            insertReassQ strm x
+            atomicModifyIORef'' streamReass (Skew.insert x)
             return False
   where
     loop si0 xff = do
-        mrxs <- atomicModifyIORef' streamReass $ Skew.deleteMinIf xff
+        mrxs <- atomicModifyIORef' streamReass (Skew.deleteMinIf xff)
         case mrxs of
             Nothing -> writeIORef streamStateRx si0{streamOffset = xff}
             Just rxs -> do
                 mapM_ (put . rxstrmData) rxs
-                let datsiz = sum $ fmap rxstrmLen rxs
-                atomicModifyIORef'' streamReassSize $ subtract datsiz
                 let xff1 = nextOff rxs
                 if hasFin rxs
                     then do
                         putFin
                     else do
                         loop si0 xff1
-tryReassemble strm@Stream{..} x@(RxStreamData dat off len True) put putFin = do
+tryReassemble Stream{..} x@(RxStreamData dat off len True) put putFin = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0{streamFin = True}
     if fin0
@@ -172,24 +169,10 @@ tryReassemble strm@Stream{..} x@(RxStreamData dat off len True) put putFin = do
                 return False
             GT -> do
                 writeIORef streamStateRx si1
-                insertReassQ strm x
+                atomicModifyIORef'' streamReass (Skew.insert x)
                 return False
 
 hasFin :: Seq RxStreamData -> Bool
 hasFin s = case Seq.viewr s of
     Seq.EmptyR -> False
     _ Seq.:> x -> rxstrmFin x
-
-insertReassQ :: Stream -> RxStreamData -> IO ()
-insertReassQ Stream{..} x@(RxStreamData _ _ len _) = do
-    qsiz <- atomicModifyIORef' streamReassSize inc
-    when (qsiz > reassembleQueueLimit) $ do
-        -- cf closeConnection which cannot call here
-        -- due to cycling imports.
-        E.throwIO $
-            TransportErrorIsSent StreamLimitError "reassemble error"
-    atomicModifyIORef'' streamReass $ Skew.insert x
-  where
-    inc n =
-        let n' = n + len
-         in (n', n')
