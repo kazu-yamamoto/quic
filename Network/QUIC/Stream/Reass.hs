@@ -39,7 +39,10 @@ clearPendingData Stream{..} = writeIORef (pendingData streamRecvQ) Nothing
 
 ----------------------------------------------------------------
 
-takeRecvStreamQwithSize :: Stream -> Int -> IO ByteString
+takeRecvStreamQwithSize
+    :: Stream
+    -> Int -- ^ Number of bytes to receive.
+    -> IO ByteString
 takeRecvStreamQwithSize strm siz0 = do
     eos <- getEndOfStream strm
     if eos
@@ -53,20 +56,20 @@ takeRecvStreamQwithSize strm siz0 = do
                         then do
                             setEndOfStream strm
                             return ""
-                        else do
-                            let len = BS.length b0
-                            case len `compare` siz0 of
-                                LT -> tryRead (siz0 - len) (b0 :)
-                                EQ -> return b0
-                                GT -> do
-                                    let (b1, b2) = BS.splitAt siz0 b0
-                                    writePendingData strm b2
-                                    return b1
+                        else handleBytes b0
                 Just b0 -> do
                     clearPendingData strm
-                    let len = BS.length b0
-                    tryRead (siz0 - len) (b0 :)
+                    handleBytes b0
   where
+    handleBytes b0 =
+        let len = BS.length b0
+         in case len `compare` siz0 of
+                LT -> tryRead (siz0 - len) (b0 :)
+                EQ -> return b0
+                GT -> do
+                    let (b1, b2) = BS.splitAt siz0 b0
+                    writePendingData strm b2
+                    return b1
     tryRead siz build = do
         mb <- tryTakeRecvStreamQ strm
         case mb of
