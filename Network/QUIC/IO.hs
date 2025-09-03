@@ -180,7 +180,11 @@ acceptStream conn = do
 
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned.
-recvStream :: Stream -> Int -> IO ByteString
+recvStream
+    :: Stream
+    -> Int -- ^ Number of bytes to receive. In certain cases, `recvStream` can return
+           -- fewer bytes than requested, but never more bytes than requested..
+    -> IO ByteString
 recvStream s n = do
     bs <- takeRecvStreamQwithSize s n
     let len = BS.length bs
