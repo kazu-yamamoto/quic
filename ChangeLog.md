@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.20
+
+* Fix recvStream overflow on pending data.
+  [#84](https://github.com/kazu-yamamoto/quic/pull/84)
+
 ## 0.2.19
 
 * Compare the minimum packet size on packet size determination.
