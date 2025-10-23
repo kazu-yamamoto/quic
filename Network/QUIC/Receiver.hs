@@ -219,7 +219,9 @@ guardStream conn sid Nothing =
     streamNotCreatedYet
         conn
         sid
-        "a locally-initiated stream that has not yet been created"
+        ( "a locally-initiated stream that has not yet been created, sid = "
+            <> shortpack (show sid)
+        )
 guardStream _ _ _ = return ()
 
 -- fixme: what about unidirection stream?
