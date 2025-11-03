@@ -16,7 +16,8 @@ module Network.QUIC.Crypto.Nite (
 
 import Crypto.Cipher.AES
 import Crypto.Cipher.Types hiding (Cipher, IV)
-import Crypto.Error (maybeCryptoError)
+import Crypto.Error (maybeCryptoError, CryptoFailable (..))
+import qualified Crypto.Cipher.ChaChaPoly1305 as ChaChaPoly
 import qualified Data.ByteArray as Byte (convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
@@ -43,6 +44,7 @@ cipherEncrypt cipher
     | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmEncrypt
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmEncrypt
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = chacha20poly1305Encrypt
     | otherwise = error "cipherEncrypt"
 
 cipherDecrypt
@@ -51,6 +53,7 @@ cipherDecrypt cipher
     | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmDecrypt
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmDecrypt
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = chacha20poly1305Decrypt
     | otherwise = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
@@ -100,6 +103,34 @@ aes256gcmDecrypt (Key key) = case maybeCryptoError $ cipherInit key of
                     authtag = AuthTag $ Byte.convert tag
                  in aeadSimpleDecrypt aead ad ciphertext authtag
 
+chacha20poly1305Encrypt
+    :: Key -> (Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText))
+chacha20poly1305Encrypt (Key key) (Nonce nonce) plaintext (AssDat ad) =
+    case ChaChaPoly.nonce12 nonce of
+        CryptoFailed _ -> Nothing
+        CryptoPassed chachaNonce -> case ChaChaPoly.initialize key chachaNonce of
+            CryptoFailed _ -> Nothing
+            CryptoPassed st0 ->
+                let st1 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st0)
+                    (ciphertext, st2) = ChaChaPoly.encrypt plaintext st1
+                    authTag = ChaChaPoly.finalize st2
+                    tag = Byte.convert authTag
+                in Just (ciphertext, tag)
+
+chacha20poly1305Decrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
+chacha20poly1305Decrypt (Key key) (Nonce nonce) ciphertag (AssDat ad) =
+    case ChaChaPoly.nonce12 nonce of
+        CryptoFailed _ -> Nothing
+        CryptoPassed chachaNonce -> case ChaChaPoly.initialize key chachaNonce of
+            CryptoFailed _ -> Nothing
+            CryptoPassed st0 ->
+                let (ciphertext, expectedTag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
+                    st1 = ChaChaPoly.finalizeAAD (ChaChaPoly.appendAAD ad st0)
+                    (plaintext, st2) = ChaChaPoly.decrypt ciphertext st1
+                    actualTag = ChaChaPoly.finalize st2
+                in if Byte.convert actualTag == expectedTag
+                    then Just plaintext
+                    else Nothing
 ----------------------------------------------------------------
 
 makeNonce :: IV -> ByteString -> Nonce
@@ -228,6 +259,7 @@ cipherHeaderProtection cipher key
     | cipher == cipher13_AES_128_GCM_SHA256 = aes128ecbEncrypt key
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256 "
     | cipher == cipher13_AES_256_GCM_SHA384 = aes256ecbEncrypt key
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = chacha20HeaderProtection key
     | otherwise =
         error "cipherHeaderProtection"
 
@@ -248,6 +280,58 @@ aes256ecbEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
          in \(Sample sample) ->
                 let mask = encrypt sample
                  in Mask mask
+
+chacha20HeaderProtection :: Key -> (Sample -> Mask)
+chacha20HeaderProtection (Key keyBytes) (Sample sample) =
+    -- RFC 9001 §5.4: sample is 16 bytes: 4-byte LE block counter + 12-byte nonce.
+    -- We only need first 5 bytes of keystream for that block.
+    if BS.length sample < 16 then Mask (BS.replicate 5 0) else
+        let (counterBytes, nonceBytes) = BS.splitAt 4 sample
+            counter = fromIntegral (BS.index counterBytes 0)
+                    .|. (fromIntegral (BS.index counterBytes 1) `shiftL` 8)
+                    .|. (fromIntegral (BS.index counterBytes 2) `shiftL` 16)
+                    .|. (fromIntegral (BS.index counterBytes 3) `shiftL` 24)
+            (maskBytes, _) = chacha20BlockFirstBytes keyBytes nonceBytes counter 5
+        in Mask maskBytes
+
+-- Produce first 'n' keystream bytes of the ChaCha20 block for given key (32), nonce (12) and counter.
+chacha20BlockFirstBytes :: ByteString -> ByteString -> Word32 -> Int -> (ByteString, ())
+chacha20BlockFirstBytes key nonce ctr n = (BS.take n (serialize $ zipWith (+) state working), ())
+    where
+        state :: [Word32]
+        state = constWords ++ keyWords ++ [ctr] ++ nonceWords
+        working = doRounds 10 state
+        constWords = [0x61707865,0x3320646e,0x79622d32,0x6b206574]
+        keyWords   = toWords 8 key
+        nonceWords = toWords 3 nonce
+        doRounds :: Int -> [Word32] -> [Word32]
+        doRounds 0 s = s
+        doRounds i s = doRounds (i-1) (diag (cols s))
+        cols s = qr 0 4 8 12 (qr 1 5 9 13 (qr 2 6 10 14 (qr 3 7 11 15 s)))
+        diag s = qr 0 5 10 15 (qr 1 6 11 12 (qr 2 7 8 13 (qr 3 4 9 14 s)))
+        qr a b c d s = replace d d' (replace c c' (replace b b' (replace a a' s)))
+            where
+                a0 = s !! a; b0 = s !! b; c0 = s !! c; d0 = s !! d
+                a1 = a0 + b0; d1 = rotl (d0 `xor` a1) 16
+                c1 = c0 + d1; b1 = rotl (b0 `xor` c1) 12
+                a2 = a1 + b1; d2 = rotl (d1 `xor` a2) 8
+                c2 = c1 + d2; b2 = rotl (b1 `xor` c2) 7
+                a' = a2; b' = b2; c' = c2; d' = d2
+        rotl w s = (w `shiftL` s) .|. (w `shiftR` (32 - s))
+        replace i x s = take i s ++ [x] ++ drop (i+1) s
+        serialize = BS.concat . map word32LE
+        word32LE w = BS.pack [ fromIntegral (w .&. 0xff)
+                                                 , fromIntegral ((w `shiftR` 8) .&. 0xff)
+                                                 , fromIntegral ((w `shiftR` 16) .&. 0xff)
+                                                 , fromIntegral ((w `shiftR` 24) .&. 0xff) ]
+        toWords count bs = map wordLE (take count (chunks bs))
+        wordLE bs4 = fromIntegral (BS.index bs4 0)
+                            .|. (fromIntegral (BS.index bs4 1) `shiftL` 8)
+                            .|. (fromIntegral (BS.index bs4 2) `shiftL` 16)
+                            .|. (fromIntegral (BS.index bs4 3) `shiftL` 24)
+        chunks b | BS.null b = []
+                         | otherwise = let (h,t) = BS.splitAt 4 b in h : chunks t
+            
 
 ----------------------------------------------------------------
 
