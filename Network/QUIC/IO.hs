@@ -182,8 +182,9 @@ acceptStream conn = do
 --   an empty bytestring is returned.
 recvStream
     :: Stream
-    -> Int -- ^ Number of bytes to receive. In certain cases, `recvStream` can return
-           -- fewer bytes than requested, but never more bytes than requested..
+    -> Int
+    -- ^ Number of bytes to receive. In certain cases, `recvStream` can return
+    -- fewer bytes than requested, but never more bytes than requested..
     -> IO ByteString
 recvStream s n = do
     bs <- takeRecvStreamQwithSize s n

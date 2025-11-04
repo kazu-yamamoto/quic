@@ -41,7 +41,8 @@ clearPendingData Stream{..} = writeIORef (pendingData streamRecvQ) Nothing
 
 takeRecvStreamQwithSize
     :: Stream
-    -> Int -- ^ Number of bytes to receive.
+    -> Int
+    -- ^ Number of bytes to receive.
     -> IO ByteString
 takeRecvStreamQwithSize strm siz0 = do
     eos <- getEndOfStream strm
