@@ -5,6 +5,7 @@
 module Main where
 
 import Control.Concurrent
+import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -428,9 +429,10 @@ console aux paths client conn = do
     putStrLn "N -- change client CID"
     putStrLn "B -- NAT rebinding"
     putStrLn "A -- address mobility"
-    loop
+    mvar <- newEmptyMVar
+    loop mvar `E.catch` \(E.SomeException _) -> return ()
   where
-    loop = do
+    loop mvar = do
         hSetBuffering stdout NoBuffering
         putStr "> "
         hSetBuffering stdout LineBuffering
@@ -439,24 +441,25 @@ console aux paths client conn = do
             "q" -> putStrLn "bye"
             "g" -> do
                 mapM_ (\p -> putStrLn $ "GET " ++ C8.unpack p) paths
-                _ <- forkIO $ client aux paths conn
-                loop
+                _ <- forkIO $ client aux paths conn >> putMVar mvar ()
+                takeMVar mvar
+                loop mvar
             "p" -> do
                 putStrLn "Ping"
                 sendFrames conn RTT1Level [Ping]
-                loop
+                loop mvar
             "M" -> do
                 controlConnection conn ChangeServerCID >>= print
-                loop
+                loop mvar
             "N" -> do
                 controlConnection conn ChangeClientCID >>= print
-                loop
+                loop mvar
             "B" -> do
                 controlConnection conn NATRebinding >>= print
-                loop
+                loop mvar
             "A" -> do
                 controlConnection conn ActiveMigration >>= print
-                loop
+                loop mvar
             _ -> do
                 putStrLn "No such command"
-                loop
+                loop mvar
