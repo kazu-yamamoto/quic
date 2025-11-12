@@ -11,7 +11,9 @@ module ClientX (
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Monad
 import qualified Data.ByteString as BS
+import Data.IORef
 import Network.ByteOrder
 
 import H3
@@ -22,6 +24,7 @@ data Aux = Aux
     , auxDebug :: String -> IO ()
     , auxShow :: ByteString -> IO ()
     , auxCheckClose :: IO Bool
+    , auxH3NegoDone :: IORef Bool
     }
 
 type Cli = Aux -> [ByteString] -> Connection -> IO ()
@@ -51,15 +54,18 @@ clientHQ' n0 aux@Aux{..} conn path = loop n0
 
 clientH3 :: Int -> Cli
 clientH3 n0 aux paths conn = do
-    s2 <- unidirectionalStream conn
-    s6 <- unidirectionalStream conn
-    s10 <- unidirectionalStream conn
-    -- 0: control, 4 settings
-    sendStream s2 (BS.pack [0, 4, 8, 1, 80, 0, 6, 128, 0, 128, 0])
-    -- 2: from encoder to decoder
-    sendStream s6 (BS.pack [2])
-    -- 3: from decoder to encoder
-    sendStream s10 (BS.pack [3])
+    done <- readIORef $ auxH3NegoDone aux
+    unless done $ do
+        s2 <- unidirectionalStream conn
+        s6 <- unidirectionalStream conn
+        s10 <- unidirectionalStream conn
+        -- 0: control, 4 settings
+        sendStream s2 (BS.pack [0, 4, 8, 1, 80, 0, 6, 128, 0, 128, 0])
+        -- 2: from encoder to decoder
+        sendStream s6 (BS.pack [2])
+        -- 3: from decoder to encoder
+        sendStream s10 (BS.pack [3])
+        writeIORef (auxH3NegoDone aux) True
     foldr1 concurrently_ $ map (clientH3' n0 aux conn) paths
 
 clientH3' :: Int -> Aux -> Connection -> ByteString -> IO ()

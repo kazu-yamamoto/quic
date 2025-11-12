@@ -10,6 +10,7 @@ import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
+import Data.IORef
 import Data.UnixTime
 import Data.Word
 import Foreign.C.Types
@@ -249,7 +250,8 @@ main = do
         showContent
             | optShow = C8.putStrLn
             | otherwise = \_ -> return ()
-        aux =
+    h3NegoDone <- newIORef False
+    let aux =
             Aux
                 { auxAuthority = host
                 , auxDebug = debug
@@ -259,6 +261,7 @@ main = do
                     case mx of
                         Nothing -> return False
                         _ -> return True
+                , auxH3NegoDone = h3NegoDone
                 }
     runClient cc opts aux paths
 
