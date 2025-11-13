@@ -5,7 +5,6 @@
 module Main where
 
 import Control.Concurrent
-import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -18,7 +17,6 @@ import Network.TLS.QUIC
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
-import System.IO
 import qualified System.Timeout as T
 import Text.Printf
 
@@ -262,6 +260,7 @@ main = do
                         Nothing -> return False
                         _ -> return True
                 , miscH3NegoDone = h3NegoDone
+                , miscInteractive = optInteractive
                 }
     runClient cc opts misc paths
 
@@ -282,11 +281,7 @@ runClient cc opts@Options{..} misc@Misc{..} paths = do
                 miscDebug $ "Migration by " ++ show mtyp
                 return x
         t1 <- getUnixTime
-        if optInteractive
-            then do
-                console misc paths client conn
-            else do
-                client misc paths conn
+        client misc paths conn
         stats <- getConnectionStats conn
         print stats
         t2 <- getUnixTime
@@ -421,48 +416,3 @@ printThroughput t1 t2 stats =
             / fromIntegral millisecs
             / 1024
             / 1024
-
-console :: Misc -> [ByteString] -> Cli -> Connection -> IO ()
-console misc paths client conn = do
-    waitEstablished conn
-    putStrLn "q -- quit"
-    putStrLn "g -- get"
-    putStrLn "p -- ping"
-    putStrLn "M -- change server CID"
-    putStrLn "N -- change client CID"
-    putStrLn "B -- NAT rebinding"
-    putStrLn "A -- address mobility"
-    mvar <- newEmptyMVar
-    loop mvar `E.catch` \(E.SomeException _) -> return ()
-  where
-    loop mvar = do
-        hSetBuffering stdout NoBuffering
-        putStr "> "
-        hSetBuffering stdout LineBuffering
-        l <- getLine
-        case l of
-            "q" -> putStrLn "bye"
-            "g" -> do
-                mapM_ (\p -> putStrLn $ "GET " ++ C8.unpack p) paths
-                _ <- forkIO $ client misc paths conn >> putMVar mvar ()
-                takeMVar mvar
-                loop mvar
-            "p" -> do
-                putStrLn "Ping"
-                sendFrames conn RTT1Level [Ping]
-                loop mvar
-            "M" -> do
-                controlConnection conn ChangeServerCID >>= print
-                loop mvar
-            "N" -> do
-                controlConnection conn ChangeClientCID >>= print
-                loop mvar
-            "B" -> do
-                controlConnection conn NATRebinding >>= print
-                loop mvar
-            "A" -> do
-                controlConnection conn ActiveMigration >>= print
-                loop mvar
-            _ -> do
-                putStrLn "No such command"
-                loop mvar
