@@ -270,7 +270,7 @@ dispatch
             unless exist $ do
                 let reg = registerConnectionDict dstTable
                     unreg cid =
-                        fire' (Microseconds 10000000) $ unregisterConnectionDict dstTable cid
+                        fire' (Microseconds 1000000) $ unregisterConnectionDict dstTable cid
                     acc =
                         Accept
                             { accVersionInfo = VersionInfo peerVer myVersions
