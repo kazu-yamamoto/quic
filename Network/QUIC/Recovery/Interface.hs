@@ -27,9 +27,7 @@ checkWindowOpenSTM LDCC{..} siz = do
     check (siz <= congestionWindow - bytesInFlight)
 
 isEmptyPingSTM :: LDCC -> STM Bool
-isEmptyPingSTM LDCC{..} = do
-    mx <- readTVar ptoPing
-    return $ isNothing mx
+isEmptyPingSTM LDCC{..} = isNothing <$> readTVar ptoPing
 
 takePingSTM :: LDCC -> STM EncryptionLevel
 takePingSTM LDCC{..} = do
