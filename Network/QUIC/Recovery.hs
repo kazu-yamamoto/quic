@@ -1,6 +1,7 @@
 module Network.QUIC.Recovery (
     -- Interface
     checkWindowOpenSTM,
+    isEmptyPingSTM,
     takePingSTM,
     speedup,
     resender,
