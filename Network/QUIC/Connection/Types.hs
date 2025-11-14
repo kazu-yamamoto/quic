@@ -280,6 +280,7 @@ data Connection = Connection
     , minIdleTimeout    :: IORef Microseconds
     , bytesTx           :: IORef Int
     , bytesRx           :: IORef Int
+    , connDone          :: TVar Bool
     , -- TLS
       pendingQ          :: Array EncryptionLevel (TVar [ReceivedPacket])
     , ciphers           :: IOArray EncryptionLevel Cipher
@@ -376,6 +377,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     minIdleTimeout    <- newIORef (milliToMicro $ maxIdleTimeout myParameters)
     bytesTx           <- newIORef 0
     bytesRx           <- newIORef 0
+    connDone          <- newTVarIO False
     -- TLS
     pendingQ          <- makePendingQ
     ciphers           <- newArray (InitialLevel, RTT1Level) defaultCipher

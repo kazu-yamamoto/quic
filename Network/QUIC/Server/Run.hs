@@ -112,22 +112,20 @@ runServer conf server0 dispatch stvar acc = do
                     wait1RTTReady conn
                     afterHandshakeServer conf conn
                     server0 conn
+                    atomically $ writeTVar (connDone conn) True
                 ldcc = connLDCC conn
             let s1 = labelMe "handshaker" >> handshaker
                 s2 = labelMe "sender" >> sender conn
                 s3 = labelMe "receiver" >> receiver conn
                 s4 = labelMe "resender" >> resender ldcc
                 s5 = labelMe "ldccTimer" >> ldccTimer ldcc
+                s6 = labelMe "QUIC server" >> server
                 c1 = labelMe "concurrently1" >> concurrently_ s1 s2
                 c2 = labelMe "concurrently2" >> concurrently_ c1 s3
                 c3 = labelMe "concurrently3" >> concurrently_ c2 s4
                 c4 = labelMe "concurrently4" >> concurrently_ c3 s5
-                supporters = c4
-                runThreads = do
-                    er <- race supporters (labelMe "QUIC server" >> server)
-                    case er of
-                        Left () -> E.throwIO MustNotReached
-                        Right r -> return r
+                c5 = labelMe "concurrently5" >> concurrently_ c4 s6
+                runThreads = c5
             ex <- E.try runThreads
             sendFinal conn
             setConnectionClosed conn

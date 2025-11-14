@@ -228,8 +228,16 @@ data Switch
     | SwStrm TxStreamData
 
 sender :: Connection -> IO ()
-sender conn = handleLogT logAction $ forever $ sendP conn
+sender conn = handleLogT logAction loop
   where
+    loop = do
+        done <- readTVarIO $ connDone conn
+        if done
+            then
+                E.throwIO $ ConnectionIsClosed "Server is done"
+            else do
+                sendP conn
+                loop
     logAction msg = connDebugLog conn ("debug: sender: " <> msg)
 
 sendP :: Connection -> IO ()
