@@ -124,7 +124,9 @@ runServer conf server0 dispatch stvar acc = do
                 c2 = labelMe "concurrently2" >> concurrently_ c1 s3
                 c3 = labelMe "concurrently3" >> concurrently_ c2 s4
                 c4 = labelMe "concurrently4" >> concurrently_ c3 s5
-                c5 = labelMe "concurrently5" >> concurrently_ c4 s6
+                c5 =
+                    labelMe "concurrently5"
+                        >> concurrently_ (c4 `E.catch` \(_ :: InternalControl) -> return ()) s6
                 runThreads = c5
             ex <- E.try runThreads
             sendFinal conn

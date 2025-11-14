@@ -234,7 +234,7 @@ sender conn = handleLogT logAction loop
         done <- readTVarIO $ connDone conn
         if done
             then
-                E.throwIO $ ConnectionIsClosed "Server is done"
+                E.throwIO ExitConnection
             else do
                 sendP conn
                 loop
