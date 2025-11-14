@@ -231,8 +231,15 @@ sender :: Connection -> IO ()
 sender conn = handleLogT logAction loop
   where
     loop = do
-        done <- readTVarIO $ connDone conn
-        if done
+        exit <- atomically $ do
+            done <- readTVar $ connDone conn
+            a <- isEmptyPingSTM (connLDCC conn)
+            b <- isEmptyOutputSTM conn
+            c <- isEmptyStreamSTM conn
+            if done
+                then return (a && b && c)
+                else if (not a || not b || not c) then return False else retry
+        if exit
             then
                 E.throwIO ExitConnection
             else do

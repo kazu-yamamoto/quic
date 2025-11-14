@@ -3,6 +3,7 @@
 module Network.QUIC.Recovery.Interface (
     checkWindowOpenSTM,
     takePingSTM,
+    isEmptyPingSTM,
     speedup,
     resender,
 ) where
@@ -24,6 +25,9 @@ checkWindowOpenSTM :: LDCC -> Int -> STM ()
 checkWindowOpenSTM LDCC{..} siz = do
     CC{..} <- readTVar recoveryCC
     check (siz <= congestionWindow - bytesInFlight)
+
+isEmptyPingSTM :: LDCC -> STM Bool
+isEmptyPingSTM LDCC{..} = isNothing <$> readTVar ptoPing
 
 takePingSTM :: LDCC -> STM EncryptionLevel
 takePingSTM LDCC{..} = do
