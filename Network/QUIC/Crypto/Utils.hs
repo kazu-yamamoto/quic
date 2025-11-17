@@ -30,6 +30,7 @@ tagLength cipher
     | cipher == cipher13_AES_128_GCM_SHA256 = 16
     | cipher == cipher13_AES_128_CCM_SHA256 = 16
     | cipher == cipher13_AES_256_GCM_SHA384 = 16
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = 16
     | otherwise = error "tagLength"
 
 sampleLength :: Cipher -> Int
@@ -37,6 +38,7 @@ sampleLength cipher
     | cipher == cipher13_AES_128_GCM_SHA256 = 16
     | cipher == cipher13_AES_128_CCM_SHA256 = 16
     | cipher == cipher13_AES_256_GCM_SHA384 = 16
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = 16
     | otherwise = error "sampleLength"
 
 ----------------------------------------------------------------
