@@ -11,6 +11,7 @@ module Network.QUIC.Client.Run (
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Foreign.C.Types
 import qualified Network.Socket as NS
@@ -77,23 +78,24 @@ runClient conf client0 isICVN verInfo = do
                 if ccUse0RTT conf
                     then wait0RTTReady conn
                     else wait1RTTReady conn
-                client0 conn
+                r <- client0 conn
+                atomically $ writeTVar (connDone conn) True
+                return r
             ldcc = connLDCC conn
         let s1 = labelMe "handshaker" >> handshaker
             s2 = labelMe "sender" >> sender conn
             s3 = labelMe "receiver" >> receiver conn
             s4 = labelMe "resender" >> resender ldcc
             s5 = labelMe "ldccTimer" >> ldccTimer ldcc
+            s6 = labelMe "QUIC client" >> client
             c1 = labelMe "concurrently1" >> concurrently_ s1 s2
             c2 = labelMe "concurrently2" >> concurrently_ c1 s3
             c3 = labelMe "concurrently3" >> concurrently_ c2 s4
             c4 = labelMe "concurrently4" >> concurrently_ c3 s5
-            supporters = c4
-            runThreads = do
-                er <- race supporters (labelMe "QUIC client" >> client)
-                case er of
-                    Left () -> E.throwIO MustNotReached
-                    Right r -> return r
+            c5 =
+                labelMe "concurrently5"
+                    >> concurrently (c4 `E.catch` \(_ :: InternalControl) -> return ()) s6
+            runThreads = snd <$> c5
         when (ccWatchDog conf) $ forkManaged conn $ watchDog conn
         ex <- E.try runThreads
         sendFinal conn
