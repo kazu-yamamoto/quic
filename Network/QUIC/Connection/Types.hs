@@ -486,3 +486,8 @@ newShared = do
     shared1RTTReady <- newIORef False
     sharedSendStreamQ <- newTQueueIO
     return Shared{..}
+
+----------------------------------------------------------------
+
+mainDone :: Connection -> IO ()
+mainDone conn = atomically $ writeTVar (connDone conn) True

@@ -11,7 +11,6 @@ module Network.QUIC.Client.Run (
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Foreign.C.Types
 import qualified Network.Socket as NS
@@ -79,7 +78,7 @@ runClient conf client0 isICVN verInfo = do
                     then wait0RTTReady conn
                     else wait1RTTReady conn
                 r <- client0 conn
-                atomically $ writeTVar (connDone conn) True
+                mainDone conn
                 return r
             ldcc = connLDCC conn
         let s1 = labelMe "handshaker" >> handshaker

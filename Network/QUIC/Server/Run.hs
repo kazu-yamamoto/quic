@@ -112,7 +112,7 @@ runServer conf server0 dispatch stvar acc = do
                     wait1RTTReady conn
                     afterHandshakeServer conf conn
                     server0 conn
-                    atomically $ writeTVar (connDone conn) True
+                    mainDone conn
                 ldcc = connLDCC conn
             let s1 = labelMe "handshaker" >> handshaker
                 s2 = labelMe "sender" >> sender conn
