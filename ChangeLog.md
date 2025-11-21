@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.21
+
+* Terminating threads properly with event-poll model.
+
 ## 0.2.20
 
 * Fix recvStream overflow on pending data.
