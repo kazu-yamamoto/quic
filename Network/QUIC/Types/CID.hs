@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -29,7 +30,11 @@ import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
 import GHC.Generics
 import Network.Socket (SockAddr)
+#if MIN_VERSION_random(1,3,0)
 import System.Random (getStdRandom, uniformByteString)
+#else
+import System.Random (getStdRandom, genByteString)
+#endif
 
 import Network.QUIC.Imports
 
@@ -77,8 +82,13 @@ fromStatelessResetToken (StatelessResetToken srt) = Short.fromShort srt
 
 makeGenStatelessReset :: IO (CID -> StatelessResetToken)
 makeGenStatelessReset = do
+#if MIN_VERSION_random(1,3,0)
     salt <- getStdRandom $ uniformByteString 20
     ikm <- getStdRandom $ uniformByteString 20
+#else
+    salt <- getStdRandom $ genByteString 20
+    ikm <- getStdRandom $ genByteString 20
+#endif
     let prk = extract salt ikm :: PRK SHA256
         makeStatelessReset dcid = StatelessResetToken $ Short.toShort $ expand prk (fromCID dcid) 16
     return makeStatelessReset

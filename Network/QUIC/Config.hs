@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -124,7 +125,11 @@ defaultClientConfig =
         , ccCiphers = supportedCiphers defaultSupported
         , ccGroups = supportedGroups defaultSupported
         , ccParameters = defaultParameters
+#if MIN_VERSION_tls(2,1,10)
         , ccKeyLog = defaultKeyLogger
+#else
+        , ccKeyLog = \ ~_ -> return ()
+#endif
         , ccQLog = Nothing
         , ccCredentials = mempty
         , ccHooks = defaultHooks
@@ -187,7 +192,11 @@ defaultServerConfig =
         , scCiphers = supportedCiphers defaultSupported
         , scGroups = supportedGroups defaultSupported
         , scParameters = defaultParameters
+#if MIN_VERSION_tls(2,1,10)
         , scKeyLog = defaultKeyLogger
+#else
+        , scKeyLog = \ ~_ -> return ()
+#endif
         , scQLog = Nothing
         , scCredentials = mempty
         , scHooks = defaultHooks

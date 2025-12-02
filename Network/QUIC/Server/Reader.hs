@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -33,7 +34,11 @@ import Network.Socket (SockAddr, Socket, waitReadSocketSTM)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import System.Log.FastLogger
+#if MIN_VERSION_random(1,3,0)
 import System.Random (getStdRandom, randomRIO, uniformByteString)
+#else
+import System.Random (getStdRandom, randomRIO, genByteString)
+#endif
 
 import Network.QUIC.Common
 import Network.QUIC.Config
@@ -390,7 +395,11 @@ dispatch
                     -- fixme: hard coding
                     when (srRate < statelessResetLimit) $ do
                         flag <- randomRIO (0, 127)
+#if MIN_VERSION_random(1,3,0)
                         body <- getStdRandom $ uniformByteString 1263
+#else
+                        body <- getStdRandom $ genByteString 1263
+#endif
                         let srt = genStatelessReset dCID
                             statelessReset = BS.concat [BS.singleton flag, body, fromStatelessResetToken srt]
                         send' statelessReset
