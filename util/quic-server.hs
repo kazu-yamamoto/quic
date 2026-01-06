@@ -92,7 +92,7 @@ options =
     ]
 
 usage :: String
-usage = "Usage: server [OPTION] addr [addrs] port"
+usage = "Usage: quic-server [OPTION] addr [addrs] port"
 
 showUsageAndExit :: String -> IO a
 showUsageAndExit msg = do
