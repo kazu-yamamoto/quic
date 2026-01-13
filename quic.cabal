@@ -136,10 +136,10 @@ library
         containers,
         crypto-token >=0.1.2 && <0.2,
         crypton >=0.34,
-        crypton-x509 >=1.7.6 && <1.8,
-        crypton-x509-store >=1.6.11 && <1.7,
-        crypton-x509-system >=1.6.7 && <1.7,
-        crypton-x509-validation >=1.6 && <1.7,
+        crypton-x509 >=1.8.0 && <1.9,
+        crypton-x509-store >=1.8.0 && <1.9,
+        crypton-x509-system >=1.8.0 && <1.9,
+        crypton-x509-validation >=1.8.0 && <1.9,
         fast-logger >=3.2.2 && <3.3,
         filepath,
         iproute >=1.7.12 && <1.8,
@@ -150,7 +150,7 @@ library
         random >=1.2 && <1.4,
         serialise,
         stm >=2.5 && <2.6,
-        tls >=2.1.8 && <2.2,
+        tls >=2.1.8 && <2.3,
         unix-time >=0.4.12 && <0.5
 
     if os(linux)
