@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.2.22
+
+* Using tls v2.2 and crypton-x509* v1.8.
+
 ## 0.2.21
 
 * Terminating threads properly with event-poll model.
