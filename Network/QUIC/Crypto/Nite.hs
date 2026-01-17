@@ -40,26 +40,26 @@ import Network.QUIC.Types
 -- it's impossible.
 cipherEncrypt
     :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
-cipherEncrypt cipher key@(Key key') nonce@(Nonce nonce')
+cipherEncrypt cipher (Key key) (Nonce nonce)
     | cipher == cipher13_AES_128_GCM_SHA256 =
         quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 =
         quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES256))
     | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
-        quicAeadEncrypt (maybeCryptoError $ aeadChacha20poly1305Init key' nonce')
+        quicAeadEncrypt (maybeCryptoError $ aeadChacha20poly1305Init key nonce)
     | otherwise = error "cipherEncrypt"
 
 cipherDecrypt
     :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
-cipherDecrypt cipher key@(Key key') nonce@(Nonce nonce')
+cipherDecrypt cipher (Key key) (Nonce nonce)
     | cipher == cipher13_AES_128_GCM_SHA256 =
         quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 =
         quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
     | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
-        quicAeadDecrypt (maybeCryptoError $ aeadChacha20poly1305Init key' nonce') 16
+        quicAeadDecrypt (maybeCryptoError $ aeadChacha20poly1305Init key nonce) 16
     | otherwise = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
@@ -79,15 +79,17 @@ quicAeadDecrypt (Just aead) tagLen = \ciphertag (AssDat ad) ->
         authtag = AuthTag $ Byte.convert tag
      in aeadSimpleDecrypt aead ad ciphertext authtag
 
-aesGCMInit :: BlockCipher cipher => Key -> Nonce -> Maybe (AEAD cipher)
-aesGCMInit (Key key) (Nonce nonce) =
+aesGCMInit
+    :: BlockCipher cipher => ByteString -> ByteString -> Maybe (AEAD cipher)
+aesGCMInit key nonce =
     case maybeCryptoError $ cipherInit key of
         Nothing -> Nothing
         Just aes -> maybeCryptoError $ aeadInit AEAD_GCM aes nonce
 
 aes128gcmEncrypt
     :: Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
-aes128gcmEncrypt key nonce = quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
+aes128gcmEncrypt (Key key) (Nonce nonce) =
+    quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
 
 ----------------------------------------------------------------
 
