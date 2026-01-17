@@ -43,12 +43,12 @@ cipherEncrypt
     :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
 cipherEncrypt cipher (Key key) (Nonce nonce)
     | cipher == cipher13_AES_128_GCM_SHA256 =
-        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
+        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 =
-        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES256))
+        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
     | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
-        quicAeadEncrypt (maybeCryptoError $ aeadChacha20poly1305Init key nonce)
+        quicAeadEncrypt (maybeCryptoError $ aeadChacha20poly1305Init key nonce) 16
     | otherwise = error "cipherEncrypt"
 
 cipherDecrypt
@@ -65,10 +65,14 @@ cipherDecrypt cipher (Key key) (Nonce nonce)
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
 quicAeadEncrypt
-    :: Maybe (AEAD cipher) -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
-quicAeadEncrypt Nothing = \_ _ -> Nothing
-quicAeadEncrypt (Just aead) = \plaintext (AssDat ad) ->
-    let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+    :: Maybe (AEAD cipher)
+    -> Int
+    -> PlainText
+    -> AssDat
+    -> Maybe (CipherText, CipherText)
+quicAeadEncrypt Nothing _ = \_ _ -> Nothing
+quicAeadEncrypt (Just aead) tagLen = \plaintext (AssDat ad) ->
+    let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext tagLen
         tag = Byte.convert tag0
      in Just (ciphertext, tag)
 
@@ -90,7 +94,7 @@ aesGCMInit key nonce =
 aes128gcmEncrypt
     :: Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
 aes128gcmEncrypt (Key key) (Nonce nonce) =
-    quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
+    quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
 
 ----------------------------------------------------------------
 
