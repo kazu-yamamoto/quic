@@ -15,6 +15,7 @@ module Network.QUIC.Crypto.Nite (
 ) where
 
 import Crypto.Cipher.AES
+import qualified Crypto.Cipher.ChaCha as ChaCha
 import Crypto.Cipher.ChaChaPoly1305 (aeadChacha20poly1305Init)
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (maybeCryptoError)
@@ -219,6 +220,7 @@ cipherHeaderProtection cipher key
     | cipher == cipher13_AES_128_GCM_SHA256 = aes128ecbEncrypt key
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256 "
     | cipher == cipher13_AES_256_GCM_SHA384 = aes256ecbEncrypt key
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = chacha20HeaderProtection key
     | otherwise =
         error "cipherHeaderProtection"
 
@@ -239,6 +241,15 @@ aes256ecbEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
          in \(Sample sample) ->
                 let mask = encrypt sample
                  in Mask mask
+
+chacha20HeaderProtection :: Key -> (Sample -> Mask)
+chacha20HeaderProtection (Key key) (Sample sample) =
+    Mask $ fst $ ChaCha.combine st "\x00\x00\x00\x00\x00"
+  where
+    st = ChaCha.setCounter32 counter $ ChaCha.initialize 20 key nonce
+    nonce = BS.drop 4 sample
+    counter = idx 0 + idx 1 * 256 + idx 2 * 65536 + idx 3 * 16777216
+    idx i = fromIntegral (sample `BS.index` i)
 
 ----------------------------------------------------------------
 
