@@ -15,6 +15,7 @@ module Network.QUIC.Crypto.Nite (
 ) where
 
 import Crypto.Cipher.AES
+import Crypto.Cipher.ChaChaPoly1305 (aeadChacha20poly1305Init)
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (maybeCryptoError)
 import qualified Data.ByteArray as Byte (convert)
@@ -39,26 +40,29 @@ import Network.QUIC.Types
 -- it's impossible.
 cipherEncrypt
     :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
-cipherEncrypt cipher key nonce
+cipherEncrypt cipher key@(Key key') nonce@(Nonce nonce')
     | cipher == cipher13_AES_128_GCM_SHA256 =
         quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 =
         quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES256))
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
+        quicAeadEncrypt (maybeCryptoError $ aeadChacha20poly1305Init key' nonce')
     | otherwise = error "cipherEncrypt"
 
 cipherDecrypt
     :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
-cipherDecrypt cipher key nonce
+cipherDecrypt cipher key@(Key key') nonce@(Nonce nonce')
     | cipher == cipher13_AES_128_GCM_SHA256 =
         quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 =
         quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
+        quicAeadDecrypt (maybeCryptoError $ aeadChacha20poly1305Init key' nonce') 16
     | otherwise = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
-
 quicAeadEncrypt
     :: Maybe (AEAD cipher) -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
 quicAeadEncrypt Nothing = \_ _ -> Nothing
