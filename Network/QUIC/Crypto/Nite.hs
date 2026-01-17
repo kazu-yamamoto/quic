@@ -39,66 +39,51 @@ import Network.QUIC.Types
 -- it's impossible.
 cipherEncrypt
     :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
-cipherEncrypt cipher
-    | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmEncrypt
+cipherEncrypt cipher key nonce
+    | cipher == cipher13_AES_128_GCM_SHA256 =
+        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
-    | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmEncrypt
+    | cipher == cipher13_AES_256_GCM_SHA384 =
+        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES256))
     | otherwise = error "cipherEncrypt"
 
 cipherDecrypt
     :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
-cipherDecrypt cipher
-    | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmDecrypt
+cipherDecrypt cipher key nonce
+    | cipher == cipher13_AES_128_GCM_SHA256 =
+        quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
-    | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmDecrypt
+    | cipher == cipher13_AES_256_GCM_SHA384 =
+        quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
     | otherwise = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
+
+quicAeadEncrypt
+    :: Maybe (AEAD cipher) -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
+quicAeadEncrypt Nothing = \_ _ -> Nothing
+quicAeadEncrypt (Just aead) = \plaintext (AssDat ad) ->
+    let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
+        tag = Byte.convert tag0
+     in Just (ciphertext, tag)
+
+quicAeadDecrypt
+    :: Maybe (AEAD cipher) -> Int -> CipherText -> AssDat -> Maybe PlainText
+quicAeadDecrypt Nothing _ = \_ _ -> Nothing
+quicAeadDecrypt (Just aead) tagLen = \ciphertag (AssDat ad) ->
+    let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - tagLen) ciphertag
+        authtag = AuthTag $ Byte.convert tag
+     in aeadSimpleDecrypt aead ad ciphertext authtag
+
+aesGCMInit :: BlockCipher cipher => Key -> Nonce -> Maybe (AEAD cipher)
+aesGCMInit (Key key) (Nonce nonce) =
+    case maybeCryptoError $ cipherInit key of
+        Nothing -> Nothing
+        Just aes -> maybeCryptoError $ aeadInit AEAD_GCM aes nonce
+
 aes128gcmEncrypt
-    :: Key -> (Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText))
-aes128gcmEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES128) -> \(Nonce nonce) plaintext (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-                    tag = Byte.convert tag0
-                 in Just (ciphertext, tag)
-
-aes128gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
-aes128gcmDecrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES128) -> \(Nonce nonce) ciphertag (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
-                    authtag = AuthTag $ Byte.convert tag
-                 in aeadSimpleDecrypt aead ad ciphertext authtag
-
-aes256gcmEncrypt
-    :: Key -> (Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText))
-aes256gcmEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES256) -> \(Nonce nonce) plaintext (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-                    tag = Byte.convert tag0
-                 in Just (ciphertext, tag)
-
-aes256gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
-aes256gcmDecrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES256) -> \(Nonce nonce) ciphertag (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
-                    authtag = AuthTag $ Byte.convert tag
-                 in aeadSimpleDecrypt aead ad ciphertext authtag
+    :: Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
+aes128gcmEncrypt key nonce = quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128))
 
 ----------------------------------------------------------------
 
