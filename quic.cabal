@@ -266,3 +266,10 @@ test-suite spec
 
     if os(windows)
         ghc-options: -with-rtsopts=--io-manager=native
+
+    if (flag(fusion) && arch(x86_64))
+        cpp-options: -DUSE_FUSION
+        cc-options:  -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq
+        c-sources:
+            cbits/fusion.c
+            cbits/picotls.c

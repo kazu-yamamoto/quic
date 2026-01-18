@@ -55,11 +55,17 @@ defaultHooks =
         }
 
 defaultCiphers :: [Cipher]
-defaultCiphers = [
-    cipher13_CHACHA20_POLY1305_SHA256
+defaultCiphers =
+#ifdef USE_FUSION
+  [ cipher13_AES_256_GCM_SHA384
+  , cipher13_AES_128_GCM_SHA256
+  ]
+#else
+  [ cipher13_CHACHA20_POLY1305_SHA256
   , cipher13_AES_256_GCM_SHA384
   , cipher13_AES_128_GCM_SHA256
   ]
+#endif
 
 ----------------------------------------------------------------
 
