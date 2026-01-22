@@ -25,6 +25,7 @@ module Network.QUIC.Connection.Crypto (
 ) where
 
 import Control.Concurrent.STM
+import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Misc
@@ -114,7 +115,9 @@ initializeCoder conn lvl sec = do
     cipher <- getCipher conn lvl
     avail <- isFusionAvailable
     (coder, protector) <-
-        if useFusion && avail
+        if useFusion
+            && avail
+            && cipher `elem` [cipher13_AES_128_GCM_SHA256, cipher13_AES_256_GCM_SHA384]
             then genFusionCoder (isClient conn) ver cipher sec
             else genNiteCoder (isClient conn) ver cipher sec
     writeArray (coders conn) lvl coder
