@@ -16,6 +16,7 @@ import Network.TLS hiding (
     defaultSupported,
  )
 import Network.TLS.QUIC
+import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
@@ -52,6 +53,19 @@ defaultHooks =
         , onServerReady = return ()
         , onConnectionEstablished = \_ -> return ()
         }
+
+defaultCiphers :: [Cipher]
+defaultCiphers =
+#ifdef USE_FUSION
+  [ cipher13_AES_256_GCM_SHA384
+  , cipher13_AES_128_GCM_SHA256
+  ]
+#else
+  [ cipher13_CHACHA20_POLY1305_SHA256
+  , cipher13_AES_256_GCM_SHA384
+  , cipher13_AES_128_GCM_SHA256
+  ]
+#endif
 
 ----------------------------------------------------------------
 
@@ -122,7 +136,7 @@ defaultClientConfig =
     ClientConfig
         { ccVersion = Version1
         , ccVersions = [Version2, Version1]
-        , ccCiphers = supportedCiphers defaultSupported
+        , ccCiphers = defaultCiphers
         , ccGroups = supportedGroups defaultSupported
         , ccParameters = defaultParameters
 #if MIN_VERSION_tls(2,1,10)
@@ -189,7 +203,7 @@ defaultServerConfig :: ServerConfig
 defaultServerConfig =
     ServerConfig
         { scVersions = [Version2, Version1]
-        , scCiphers = supportedCiphers defaultSupported
+        , scCiphers = defaultCiphers
         , scGroups = supportedGroups defaultSupported
         , scParameters = defaultParameters
 #if MIN_VERSION_tls(2,1,10)

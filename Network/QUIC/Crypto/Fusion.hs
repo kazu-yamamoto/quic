@@ -36,9 +36,9 @@ fusionNewContext = FC <$> (c_aead_context_new >>= newForeignPtr p_aead_context_f
 
 fusionSetup :: Cipher -> FusionContext -> Key -> IV -> IO ()
 fusionSetup cipher
-  | cipher == cipher_TLS13_AES128GCM_SHA256        = fusionSetupAES128
-  | cipher == cipher_TLS13_AES256GCM_SHA384        = fusionSetupAES256
-  | otherwise                                      = error "fusionSetup"
+  | cipher == cipher13_AES_128_GCM_SHA256 = fusionSetupAES128
+  | cipher == cipher13_AES_256_GCM_SHA384 = fusionSetupAES256
+  | otherwise                             = error "fusionSetup"
 
 fusionSetupAES128 :: FusionContext -> Key -> IV -> IO ()
 fusionSetupAES128 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
@@ -88,8 +88,8 @@ fusionSetupSupplement cipher (Key hpkey) = withByteString hpkey $ \hpkeyp ->
   SP <$> (c_supplement_new hpkeyp keylen >>= newForeignPtr p_supplement_free)
  where
   keylen
-    | cipher == cipher_TLS13_AES128GCM_SHA256 = 16
-    | otherwise                               = 32
+    | cipher == cipher13_AES_128_GCM_SHA256 = 16
+    | otherwise                             = 32
 
 fusionSetSample :: Supplement -> Buffer -> IO ()
 fusionSetSample (SP fsupp) p = withForeignPtr fsupp $ \psupp ->

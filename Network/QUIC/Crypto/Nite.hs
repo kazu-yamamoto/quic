@@ -15,6 +15,8 @@ module Network.QUIC.Crypto.Nite (
 ) where
 
 import Crypto.Cipher.AES
+import qualified Crypto.Cipher.ChaCha as ChaCha
+import Crypto.Cipher.ChaChaPoly1305 (aeadChacha20poly1305Init)
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (maybeCryptoError)
 import qualified Data.ByteArray as Byte (convert)
@@ -39,66 +41,60 @@ import Network.QUIC.Types
 -- it's impossible.
 cipherEncrypt
     :: Cipher -> Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
-cipherEncrypt cipher
-    | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmEncrypt
+cipherEncrypt cipher (Key key) (Nonce nonce)
+    | cipher == cipher13_AES_128_GCM_SHA256 =
+        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
-    | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmEncrypt
+    | cipher == cipher13_AES_256_GCM_SHA384 =
+        quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
+        quicAeadEncrypt (maybeCryptoError $ aeadChacha20poly1305Init key nonce) 16
     | otherwise = error "cipherEncrypt"
 
 cipherDecrypt
     :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
-cipherDecrypt cipher
-    | cipher == cipher13_AES_128_GCM_SHA256 = aes128gcmDecrypt
+cipherDecrypt cipher (Key key) (Nonce nonce)
+    | cipher == cipher13_AES_128_GCM_SHA256 =
+        quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
-    | cipher == cipher13_AES_256_GCM_SHA384 = aes256gcmDecrypt
+    | cipher == cipher13_AES_256_GCM_SHA384 =
+        quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
+        quicAeadDecrypt (maybeCryptoError $ aeadChacha20poly1305Init key nonce) 16
     | otherwise = error "cipherDecrypt"
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
+quicAeadEncrypt
+    :: Maybe (AEAD cipher)
+    -> Int
+    -> PlainText
+    -> AssDat
+    -> Maybe (CipherText, CipherText)
+quicAeadEncrypt Nothing _ = \_ _ -> Nothing
+quicAeadEncrypt (Just aead) tagLen = \plaintext (AssDat ad) ->
+    let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext tagLen
+        tag = Byte.convert tag0
+     in Just (ciphertext, tag)
+
+quicAeadDecrypt
+    :: Maybe (AEAD cipher) -> Int -> CipherText -> AssDat -> Maybe PlainText
+quicAeadDecrypt Nothing _ = \_ _ -> Nothing
+quicAeadDecrypt (Just aead) tagLen = \ciphertag (AssDat ad) ->
+    let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - tagLen) ciphertag
+        authtag = AuthTag $ Byte.convert tag
+     in aeadSimpleDecrypt aead ad ciphertext authtag
+
+aesGCMInit
+    :: BlockCipher cipher => ByteString -> ByteString -> Maybe (AEAD cipher)
+aesGCMInit key nonce =
+    case maybeCryptoError $ cipherInit key of
+        Nothing -> Nothing
+        Just aes -> maybeCryptoError $ aeadInit AEAD_GCM aes nonce
+
 aes128gcmEncrypt
-    :: Key -> (Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText))
-aes128gcmEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES128) -> \(Nonce nonce) plaintext (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-                    tag = Byte.convert tag0
-                 in Just (ciphertext, tag)
-
-aes128gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
-aes128gcmDecrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES128) -> \(Nonce nonce) ciphertag (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
-                    authtag = AuthTag $ Byte.convert tag
-                 in aeadSimpleDecrypt aead ad ciphertext authtag
-
-aes256gcmEncrypt
-    :: Key -> (Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText))
-aes256gcmEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES256) -> \(Nonce nonce) plaintext (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (AuthTag tag0, ciphertext) = aeadSimpleEncrypt aead ad plaintext 16
-                    tag = Byte.convert tag0
-                 in Just (ciphertext, tag)
-
-aes256gcmDecrypt :: Key -> (Nonce -> CipherText -> AssDat -> Maybe PlainText)
-aes256gcmDecrypt (Key key) = case maybeCryptoError $ cipherInit key of
-    Nothing -> \_ _ _ -> Nothing
-    Just (aes :: AES256) -> \(Nonce nonce) ciphertag (AssDat ad) ->
-        case maybeCryptoError $ aeadInit AEAD_GCM aes nonce of
-            Nothing -> Nothing
-            Just aead ->
-                let (ciphertext, tag) = BS.splitAt (BS.length ciphertag - 16) ciphertag
-                    authtag = AuthTag $ Byte.convert tag
-                 in aeadSimpleDecrypt aead ad ciphertext authtag
+    :: Key -> Nonce -> PlainText -> AssDat -> Maybe (CipherText, CipherText)
+aes128gcmEncrypt (Key key) (Nonce nonce) =
+    quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
 
 ----------------------------------------------------------------
 
@@ -228,6 +224,7 @@ cipherHeaderProtection cipher key
     | cipher == cipher13_AES_128_GCM_SHA256 = aes128ecbEncrypt key
     | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256 "
     | cipher == cipher13_AES_256_GCM_SHA384 = aes256ecbEncrypt key
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = chacha20HeaderProtection key
     | otherwise =
         error "cipherHeaderProtection"
 
@@ -248,6 +245,15 @@ aes256ecbEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
          in \(Sample sample) ->
                 let mask = encrypt sample
                  in Mask mask
+
+chacha20HeaderProtection :: Key -> (Sample -> Mask)
+chacha20HeaderProtection (Key key) (Sample sample) =
+    Mask $ fst $ ChaCha.combine st "\x00\x00\x00\x00\x00"
+  where
+    st = ChaCha.setCounter32 counter $ ChaCha.initialize 20 key nonce
+    nonce = BS.drop 4 sample
+    counter = idx 0 + idx 1 * 256 + idx 2 * 65536 + idx 3 * 16777216
+    idx i = fromIntegral (sample `BS.index` i)
 
 ----------------------------------------------------------------
 
