@@ -106,6 +106,9 @@ dropSecrets Connection{..} lvl = do
 
 ----------------------------------------------------------------
 
+fusionCiphers :: [Cipher]
+fusionCiphers = [cipher13_AES_128_GCM_SHA256, cipher13_AES_256_GCM_SHA384]
+
 initializeCoder :: Connection -> EncryptionLevel -> TrafficSecrets a -> IO ()
 initializeCoder conn lvl sec = do
     ver <-
@@ -115,9 +118,7 @@ initializeCoder conn lvl sec = do
     cipher <- getCipher conn lvl
     avail <- isFusionAvailable
     (coder, protector) <-
-        if useFusion
-            && avail
-            && cipher `elem` [cipher13_AES_128_GCM_SHA256, cipher13_AES_256_GCM_SHA384]
+        if useFusion && avail && cipher `elem` fusionCiphers
             then genFusionCoder (isClient conn) ver cipher sec
             else genNiteCoder (isClient conn) ver cipher sec
     writeArray (coders conn) lvl coder
@@ -129,7 +130,7 @@ initializeCoder1RTT conn sec = do
     cipher <- getCipher conn RTT1Level
     avail <- isFusionAvailable
     (coder, protector) <-
-        if useFusion && avail
+        if useFusion && avail && cipher `elem` fusionCiphers
             then genFusionCoder (isClient conn) ver cipher sec
             else genNiteCoder (isClient conn) ver cipher sec
     let coder1 = Coder1RTT coder sec
@@ -145,7 +146,7 @@ updateCoder1RTT conn nextPhase = do
     let secN1 = updateSecret ver cipher secN
     avail <- isFusionAvailable
     coderN1 <-
-        if useFusion && avail
+        if useFusion && avail && cipher `elem` fusionCiphers
             then genFusionCoder1RTT (isClient conn) ver cipher secN1 coder
             else genNiteCoder1RTT (isClient conn) ver cipher secN1 coder
     let nextCoder = Coder1RTT coderN1 secN1
