@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.2.23
+
+* Supporting ChaCha20Poly1305 for crypton (not for Fusion)
+  [#89](https://github.com/kazu-yamamoto/quic/pull/89)
+
 ## 0.2.22
 
 * Using tls v2.2 and crypton-x509* v1.8.
