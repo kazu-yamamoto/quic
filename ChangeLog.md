@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.3.0
+
+* Using "ram" instead of "memory".
+
 ## 0.2.23
 
 * Supporting ChaCha20Poly1305 for crypton (not for Fusion)
