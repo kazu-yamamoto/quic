@@ -1,6 +1,6 @@
 cabal-version:      >=1.10
 name:               quic
-version:            0.3.0
+version:            0.3.1
 license:            BSD3
 license-file:       LICENSE
 maintainer:         kazu@iij.ad.jp
@@ -150,7 +150,7 @@ library
         random >=1.2 && <1.4,
         serialise,
         stm >=2.5 && <2.6,
-        tls >=2.3.0 && <2.4,
+        tls >=2.4.0 && <2.5,
         unix-time >=0.4.12 && <0.5
 
     if os(linux)
@@ -261,6 +261,7 @@ test-suite spec
         hspec,
         network >=3.2.2,
         quic,
+        ram,
         tls,
         unix-time
 

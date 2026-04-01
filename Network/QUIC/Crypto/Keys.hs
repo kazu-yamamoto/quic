@@ -13,6 +13,7 @@ module Network.QUIC.Crypto.Keys (
 ) where
 
 import qualified Control.Exception as E
+import Data.ByteArray (ScrubbedBytes, convert)
 import Network.TLS hiding (Version)
 import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
@@ -46,18 +47,18 @@ clientInitialSecret v c = ClientTrafficSecret $ initialSecret v c $ Label "clien
 serverInitialSecret :: Version -> CID -> ServerTrafficSecret InitialSecret
 serverInitialSecret v c = ServerTrafficSecret $ initialSecret v c $ Label "server in"
 
-initialSecret :: Version -> CID -> Label -> ByteString
+initialSecret :: Version -> CID -> Label -> ScrubbedBytes
 initialSecret Draft29 = initialSecret' $ initialSalt Draft29
 initialSecret Version1 = initialSecret' $ initialSalt Version1
 initialSecret Version2 = initialSecret' $ initialSalt Version2
 initialSecret _ = \_ _ -> "not supported"
 
-initialSecret' :: ByteString -> CID -> Label -> ByteString
+initialSecret' :: ByteString -> CID -> Label -> ScrubbedBytes
 initialSecret' salt cid (Label label) = secret
   where
     cipher = defaultCipher
     hash = cipherHash cipher
-    iniSecret = hkdfExtract hash salt $ fromCID cid
+    iniSecret = hkdfExtract hash (convert salt) (convert $ fromCID cid)
     hashSize = hashDigestSize hash
     secret = hkdfExpandLabel hash iniSecret label "" hashSize
 
