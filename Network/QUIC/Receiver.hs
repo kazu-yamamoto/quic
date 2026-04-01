@@ -140,7 +140,7 @@ processReceivedPacketHandshake conn rpkt = do
                 processReceivedPacket conn rpkt
 
 rateLimit :: Int
-rateLimit = 10
+rateLimit = 32
 
 checkRate :: [Frame] -> Int
 checkRate fs0 = go fs0 0
