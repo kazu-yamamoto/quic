@@ -174,7 +174,9 @@ data ServerConfig = ServerConfig
     , scCiphers :: [Cipher]
     -- ^ Cipher candidates defined in TLS 1.3.
     , scGroups :: [Group]
-    -- ^ Key exchange group candidates defined in TLS 1.3.
+    -- ^ Key exchange group candidates defined in TLS 1.3 (tls <2.4).
+    , scGroupsTLS13 :: [[Group]]
+    -- ^ Key exchange group candidates defined in TLS 1.3 (tls >= 2.4).
     , scParameters :: Parameters
     , scKeyLog :: String -> IO ()
     , scQLog :: Maybe FilePath
@@ -205,6 +207,7 @@ defaultServerConfig =
         { scVersions = [Version2, Version1]
         , scCiphers = defaultCiphers
         , scGroups = supportedGroups defaultSupported
+        , scGroupsTLS13 = supportedGroupsTLS13 defaultSupported
         , scParameters = defaultParameters
 #if MIN_VERSION_tls(2,1,10)
         , scKeyLog = defaultKeyLogger
