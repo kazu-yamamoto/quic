@@ -19,6 +19,7 @@ module Network.QUIC.Crypto.Types (
     ServerTrafficSecret (..),
 ) where
 
+import Data.ByteArray (ScrubbedBytes, convert)
 import qualified Data.ByteString.Char8 as C8
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
@@ -32,9 +33,9 @@ type PlainText = ByteString
 type CipherText = ByteString
 type Salt = ByteString
 
-newtype Key = Key ByteString deriving (Eq)
+newtype Key = Key ScrubbedBytes deriving (Eq)
 newtype IV = IV ByteString deriving (Eq)
-newtype Secret = Secret ByteString deriving (Eq)
+newtype Secret = Secret ScrubbedBytes deriving (Eq)
 newtype AssDat = AssDat ByteString deriving (Eq)
 newtype Sample = Sample ByteString deriving (Eq)
 newtype Mask = Mask ByteString deriving (Eq)
@@ -42,11 +43,11 @@ newtype Label = Label ByteString deriving (Eq)
 newtype Nonce = Nonce ByteString deriving (Eq)
 
 instance Show Key where
-    show (Key x) = "Key=" ++ C8.unpack (enc16 x)
+    show (Key x) = "Key=" ++ C8.unpack (enc16 $ convert x)
 instance Show IV where
     show (IV x) = "IV=" ++ C8.unpack (enc16 x)
 instance Show Secret where
-    show (Secret x) = "Secret=" ++ C8.unpack (enc16 x)
+    show (Secret x) = "Secret=" ++ C8.unpack (enc16 $ convert x)
 instance Show AssDat where
     show (AssDat x) = "AssDat=" ++ C8.unpack (enc16 x)
 instance Show Sample where

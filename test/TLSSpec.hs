@@ -5,6 +5,7 @@
 module TLSSpec where
 
 import Data.Bits
+import Data.ByteArray (ScrubbedBytes, convert)
 import qualified Data.ByteString as BS
 import Data.Maybe
 import Network.TLS.Extra.Cipher
@@ -36,23 +37,23 @@ spec = do
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret ver dcID
             client_initial_secret
                 `shouldBe` ClientTrafficSecret
-                    (dec16 "c00cf151ca5be075ed0ebfb5c80323c42d6b7db67881289af4008f1f6c357aea")
+                    (dec16' "c00cf151ca5be075ed0ebfb5c80323c42d6b7db67881289af4008f1f6c357aea")
             let ckey = aeadKey ver defaultCipher (Secret cis)
-            ckey `shouldBe` Key (dec16 "1f369613dd76d5467730efcbe3b1a22d")
+            ckey `shouldBe` Key (dec16' "1f369613dd76d5467730efcbe3b1a22d")
             let civ = initialVector ver defaultCipher (Secret cis)
             civ `shouldBe` IV (dec16 "fa044b2f42a3fd3b46fb255c")
             let chp = headerProtectionKey ver defaultCipher (Secret cis)
-            chp `shouldBe` Key (dec16 "9f50449e04a0e810283a1e9933adedd2")
+            chp `shouldBe` Key (dec16' "9f50449e04a0e810283a1e9933adedd2")
             let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret ver dcID
             server_initial_secret
                 `shouldBe` ServerTrafficSecret
-                    (dec16 "3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b")
+                    (dec16' "3c199828fd139efd216c155ad844cc81fb82fa8d7446fa7d78be803acdda951b")
             let skey = aeadKey ver defaultCipher (Secret sis)
-            skey `shouldBe` Key (dec16 "cf3a5331653c364c88f0f379b6067e37")
+            skey `shouldBe` Key (dec16' "cf3a5331653c364c88f0f379b6067e37")
             let siv = initialVector ver defaultCipher (Secret sis)
             siv `shouldBe` IV (dec16 "0ac1493ca1905853b0bba03e")
             let shp = headerProtectionKey ver defaultCipher (Secret sis)
-            shp `shouldBe` Key (dec16 "c206b8d9b9f0f37644430b490eeaa314")
+            shp `shouldBe` Key (dec16' "c206b8d9b9f0f37644430b490eeaa314")
 
         it "describes the examples of Client Initial (RFC 9001: A.2)" $ do
             let dcID = makeCID (dec16s "8394c8f03e515708")
@@ -159,7 +160,7 @@ spec = do
                 let cipher = cipher13_CHACHA20_POLY1305_SHA256
                     secret =
                         Secret $
-                            dec16 "9ac312a7f877468ebe69422748ad00a15443f18203a07d6060f688f30f21632b"
+                            dec16' "9ac312a7f877468ebe69422748ad00a15443f18203a07d6060f688f30f21632b"
                     key = aeadKey ver cipher secret
                     iv = initialVector ver cipher secret
                     hp = headerProtectionKey ver cipher secret
@@ -168,14 +169,14 @@ spec = do
                     sample = Sample $ dec16 "5e5cd55c41f69080575d7999c25a5bfb"
                     mask = protectionMask cipher hp sample
                 key
-                    `shouldBe` Key (dec16 "c6d98ff3441c3fe1b2182094f69caa2ed4b716b65488960a7a984979fb23e1c8")
+                    `shouldBe` Key (dec16' "c6d98ff3441c3fe1b2182094f69caa2ed4b716b65488960a7a984979fb23e1c8")
                 iv
                     `shouldBe` IV (dec16 "e0459b3474bdd0e44a41c144")
                 hp
-                    `shouldBe` Key (dec16 "25a282b9e82f06f21f488917a4fc8f1b73573685608597d0efcb076b0ab7a7a4")
+                    `shouldBe` Key (dec16' "25a282b9e82f06f21f488917a4fc8f1b73573685608597d0efcb076b0ab7a7a4")
                 ku
                     `shouldBe` Secret
-                        (dec16 "1223504755036d556342ee9361d253421a826c9ecdf3c7148684b36b714881f9")
+                        (dec16' "1223504755036d556342ee9361d253421a826c9ecdf3c7148684b36b714881f9")
                 payloadCipherText
                     `shouldBe` Just (dec16 "65", dec16 "5e5cd55c41f69080575d7999c25a5bfb")
                 mask `shouldBe` Mask (dec16 "aefefe7d03")
@@ -194,23 +195,23 @@ spec = do
             let client_initial_secret@(ClientTrafficSecret cis) = clientInitialSecret ver dcID
             client_initial_secret
                 `shouldBe` ClientTrafficSecret
-                    (dec16 "14ec9d6eb9fd7af83bf5a668bc17a7e283766aade7ecd0891f70f9ff7f4bf47b")
+                    (dec16' "14ec9d6eb9fd7af83bf5a668bc17a7e283766aade7ecd0891f70f9ff7f4bf47b")
             let ckey = aeadKey ver defaultCipher (Secret cis)
-            ckey `shouldBe` Key (dec16 "8b1a0bc121284290a29e0971b5cd045d")
+            ckey `shouldBe` Key (dec16' "8b1a0bc121284290a29e0971b5cd045d")
             let civ = initialVector ver defaultCipher (Secret cis)
             civ `shouldBe` IV (dec16 "91f73e2351d8fa91660e909f")
             let chp = headerProtectionKey ver defaultCipher (Secret cis)
-            chp `shouldBe` Key (dec16 "45b95e15235d6f45a6b19cbcb0294ba9")
+            chp `shouldBe` Key (dec16' "45b95e15235d6f45a6b19cbcb0294ba9")
             let server_initial_secret@(ServerTrafficSecret sis) = serverInitialSecret ver dcID
             server_initial_secret
                 `shouldBe` ServerTrafficSecret
-                    (dec16 "0263db1782731bf4588e7e4d93b7463907cb8cd8200b5da55a8bd488eafc37c1")
+                    (dec16' "0263db1782731bf4588e7e4d93b7463907cb8cd8200b5da55a8bd488eafc37c1")
             let skey = aeadKey ver defaultCipher (Secret sis)
-            skey `shouldBe` Key (dec16 "82db637861d55e1d011f19ea71d5d2a7")
+            skey `shouldBe` Key (dec16' "82db637861d55e1d011f19ea71d5d2a7")
             let siv = initialVector ver defaultCipher (Secret sis)
             siv `shouldBe` IV (dec16 "dd13c276499c0249d3310652")
             let shp = headerProtectionKey ver defaultCipher (Secret sis)
-            shp `shouldBe` Key (dec16 "edf6d05c83121201b436e16877593c3a")
+            shp `shouldBe` Key (dec16' "edf6d05c83121201b436e16877593c3a")
 
         it "describes the examples of Client Initial (RFC 9369: A2)" $ do
             let dcID = makeCID (dec16s "8394c8f03e515708")
@@ -317,7 +318,7 @@ spec = do
                 let cipher = cipher13_CHACHA20_POLY1305_SHA256
                     secret =
                         Secret $
-                            dec16 "9ac312a7f877468ebe69422748ad00a15443f18203a07d6060f688f30f21632b"
+                            dec16' "9ac312a7f877468ebe69422748ad00a15443f18203a07d6060f688f30f21632b"
                     key = aeadKey ver cipher secret
                     iv = initialVector ver cipher secret
                     hp = headerProtectionKey ver cipher secret
@@ -326,14 +327,14 @@ spec = do
                     sample = Sample $ dec16 "e7b6b932bc27d786f4bc2bb20f2162ba"
                     mask = protectionMask cipher hp sample
                 key
-                    `shouldBe` Key (dec16 "3bfcddd72bcf02541d7fa0dd1f5f9eeea817e09a6963a0e6c7df0f9a1bab90f2")
+                    `shouldBe` Key (dec16' "3bfcddd72bcf02541d7fa0dd1f5f9eeea817e09a6963a0e6c7df0f9a1bab90f2")
                 iv
                     `shouldBe` IV (dec16 "a6b5bc6ab7dafce30ffff5dd")
                 hp
-                    `shouldBe` Key (dec16 "d659760d2ba434a226fd37b35c69e2da8211d10c4f12538787d65645d5d1b8e2")
+                    `shouldBe` Key (dec16' "d659760d2ba434a226fd37b35c69e2da8211d10c4f12538787d65645d5d1b8e2")
                 ku
                     `shouldBe` Secret
-                        (dec16 "c69374c49e3d2a9466fa689e49d476db5d0dfbc87d32ceeaa6343fd0ae4c7d88")
+                        (dec16' "c69374c49e3d2a9466fa689e49d476db5d0dfbc87d32ceeaa6343fd0ae4c7d88")
                 payloadCipherText
                     `shouldBe` Just (dec16 "0a", dec16 "e7b6b932bc27d786f4bc2bb20f2162ba")
                 mask `shouldBe` Mask (dec16 "97580e32bf")
@@ -363,3 +364,6 @@ clientCRYPTOframe =
             , "3900320408ffffffffffffffff05048000ffff07048000ffff08011001048000"
             , "75300901100f088394c8f03e51570806048000ffff"
             ]
+
+dec16' :: BS.ByteString -> ScrubbedBytes
+dec16' = convert . dec16

@@ -122,6 +122,7 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
             { supportedVersions = [TLS13]
             , supportedCiphers = scCiphers
             , supportedGroups = scGroups
+            , supportedGroupsTLS13 = scGroupsTLS13
             }
     debug =
         defaultDebugParams

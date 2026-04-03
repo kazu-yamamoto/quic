@@ -38,7 +38,7 @@ spec = do
             testHandshake cc sc waitS FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
             let cc = testClientConfig
-                sc = sc0{scGroups = [P256]}
+                sc = sc0{scGroups = [P256], scGroupsTLS13 = [[P256]]}
             testHandshake cc sc waitS HelloRetryRequest
         it "can handshake in the case of QUIC retry" $ do
             let cc = testClientConfig
@@ -67,7 +67,7 @@ spec = do
         it "fails with no group in common" $ do
             let cc1 = testClientConfig{ccGroups = [X25519]}
                 cc2 = testClientConfig{ccGroups = [P256]}
-                sc = sc0{scGroups = [P256]}
+                sc = sc0{scGroups = [P256], scGroupsTLS13 = [[P256]]}
                 handshakeFailure e
                     | TransportErrorIsReceived te@(TransportError _) _ <- e =
                         te == cryptoError TLS.HandshakeFailure
