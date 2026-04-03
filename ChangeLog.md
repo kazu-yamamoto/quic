@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.3.1
+
+* Using tls v2.4.0.
+* rateLimit is now 32.
+
 ## 0.3.0
 
 * Using "ram" instead of "memory".
