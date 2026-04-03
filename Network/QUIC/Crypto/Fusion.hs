@@ -15,6 +15,7 @@ module Network.QUIC.Crypto.Fusion (
 
 #ifdef USE_FUSION
 import qualified Data.ByteString as BS
+import Data.ByteArray (convert)
 import Foreign.C.Types
 import Foreign.ForeignPtr
 import Foreign.Ptr
@@ -42,12 +43,12 @@ fusionSetup cipher
 
 fusionSetupAES128 :: FusionContext -> Key -> IV -> IO ()
 fusionSetupAES128 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
-    withByteString key $ \keyp ->
+    withByteString (convert key) $ \keyp ->
         withByteString iv $ \ivp -> void $ c_aes128gcm_setup pctx 0 keyp ivp
 
 fusionSetupAES256 :: FusionContext -> Key -> IV -> IO ()
 fusionSetupAES256 (FC fctx) (Key key) (IV iv) = withForeignPtr fctx $ \pctx ->
-    withByteString key $ \keyp ->
+    withByteString (convert key) $ \keyp ->
         withByteString iv $ \ivp -> void $ c_aes256gcm_setup pctx 0 keyp ivp
 
 ----------------------------------------------------------------
@@ -84,7 +85,7 @@ data SupplementOpaque
 newtype Supplement = SP (ForeignPtr SupplementOpaque)
 
 fusionSetupSupplement :: Cipher -> Key -> IO Supplement
-fusionSetupSupplement cipher (Key hpkey) = withByteString hpkey $ \hpkeyp ->
+fusionSetupSupplement cipher (Key hpkey) = withByteString (convert hpkey) $ \hpkeyp ->
   SP <$> (c_supplement_new hpkeyp keylen >>= newForeignPtr p_supplement_free)
  where
   keylen
