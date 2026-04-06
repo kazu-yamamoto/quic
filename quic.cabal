@@ -1,6 +1,6 @@
 cabal-version:      >=1.10
 name:               quic
-version:            0.3.1
+version:            0.3.2
 license:            BSD3
 license-file:       LICENSE
 maintainer:         kazu@iij.ad.jp
@@ -237,6 +237,7 @@ test-suite spec
     hs-source-dirs:     test
     other-modules:
         Config
+        DatagramSpec
         ErrorSpec
         FrameSpec
         HandshakeSpec
@@ -262,6 +263,7 @@ test-suite spec
         network >=3.2.2,
         quic,
         ram,
+        stm,
         tls,
         unix-time
 

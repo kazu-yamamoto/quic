@@ -4,6 +4,7 @@ import Data.ByteString ()
 import Network.QUIC.Connection
 import Network.QUIC.Types
 import Network.QUIC.Types.Info
+import qualified Network.QUIC.Parameters as P
 import qualified Network.Socket as NS
 
 ----------------------------------------------------------------
@@ -17,6 +18,7 @@ getConnectionInfo conn = do
     peersa <- peerSockAddr <$> getPathInfo conn
     mycid <- getMyCID conn
     peercid <- getPeerCID conn
+    peerdgsize <- P.maxDatagramFrameSize <$> getPeerParameters conn
     c <- getCipher conn RTT1Level
     mproto <- getApplicationProtocol conn
     mode <- getTLSMode conn
@@ -33,6 +35,7 @@ getConnectionInfo conn = do
             , remoteSockAddr = peersa
             , localCID = mycid
             , remoteCID = peercid
+            , remoteDatagramFrameSize = peerdgsize
             }
 
 ----------------------------------------------------------------

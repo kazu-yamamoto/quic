@@ -31,6 +31,7 @@ data InternalControl
     = MustNotReached
     | ExitConnection
     | WrongTransportParameter
+    | WrongDatagramSizeParameter
     | WrongVersionInformation
     | BreakForever
     deriving (Eq, Show)

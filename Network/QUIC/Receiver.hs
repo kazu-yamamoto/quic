@@ -23,6 +23,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
+import Control.Concurrent.STM
 import Network.QUIC.Stream
 import Network.QUIC.Types as QUIC
 
@@ -474,6 +475,16 @@ processFrame conn lvl HandshakeDone = do
     getConnectionInfo conn >>= onConnectionEstablished (connHooks conn)
     -- to receive NewSessionTicket
     fire conn (Microseconds 1000000) $ killHandshaker conn lvl
+processFrame conn lvl (Datagram hasLen dat) = do
+    when (lvl /= RTT0Level && lvl /= RTT1Level) $
+        closeConnection conn ProtocolViolation "DATAGRAM in Initial or Handshake"
+    let limitBytes = maxDatagramFrameSize (getMyParameters conn)
+    let lenSize = if hasLen then BS.length (encodeInt . fromIntegral $ BS.length dat) else 0
+    when (limitBytes == 0) $
+        closeConnection conn ProtocolViolation "DATAGRAM not supported"
+    when (1 + lenSize + BS.length dat > limitBytes) $
+        closeConnection conn ProtocolViolation "DATAGRAM size violation"
+    atomically $ writeTQueue (connRecvDatagramQ conn) dat
 processFrame conn _ _ = closeConnection conn ProtocolViolation "Frame is not allowed"
 
 -- Return value indicates duplication.

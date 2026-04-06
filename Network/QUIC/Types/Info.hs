@@ -24,6 +24,7 @@ data ConnectionInfo = ConnectionInfo
     , remoteSockAddr :: NS.SockAddr
     , localCID :: CID
     , remoteCID :: CID
+    , remoteDatagramFrameSize :: Int
     }
 
 instance Show ConnectionInfo where
@@ -51,4 +52,7 @@ instance Show ConnectionInfo where
             ++ "\n"
             ++ "Remote SockAddr: "
             ++ show remoteSockAddr
+            ++ "\n"
+            ++ "Remote DatagramFrameSize: "
+            ++ show remoteDatagramFrameSize
             ++ if retry then "\nQUIC retry" else ""

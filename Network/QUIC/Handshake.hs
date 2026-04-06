@@ -104,7 +104,13 @@ internalError msg = TLS.Error_Protocol msg TLS.InternalError
 handshakeClient :: ClientConfig -> Connection -> AuthCIDs -> IO (IO ())
 handshakeClient conf conn myAuthCIDs = do
     qlogParamsSet conn (ccParameters conf, "local") -- fixme
-    handshakeClient' conf conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
+    handshakeClient' conf' conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
+  where
+    conf' = conf
+      { ccParameters = (ccParameters conf)
+        { maxDatagramFrameSize = ccMaxDatagramFrameSize conf
+        }
+      }
 
 handshakeClient'
     :: ClientConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
@@ -167,6 +173,7 @@ handshakeServer conf conn myAuthCIDs srt =
     params =
         (setCIDsToParameters myAuthCIDs $ scParameters conf)
             { statelessResetToken = Just srt
+            , maxDatagramFrameSize = scMaxDatagramFrameSize conf
             }
 
 handshakeServer'
@@ -292,6 +299,15 @@ setPeerParams conn _ctx peerExts = do
                 _ -> sendCCVNError
 
     setParams params = do
+        when (isClient conn) $ do
+            is0RTT <- isConnection0RTTReady conn
+            when is0RTT $ do
+                storedParams <- getPeerParameters conn
+                let storedMaxDatagram = maxDatagramFrameSize storedParams
+                    newMaxDatagram = maxDatagramFrameSize params
+                when (storedMaxDatagram > 0 && newMaxDatagram < storedMaxDatagram) $
+                    E.throwIO WrongDatagramSizeParameter
+
         setPeerParameters conn params
         mapM_ (setPeerStatelessResetToken conn) $ statelessResetToken params
         setTxMaxData conn $ initialMaxData params
@@ -336,6 +352,7 @@ sendCCVNError = E.throwIO WrongVersionInformation
 sendCCTLSError :: Connection -> TLS.TLSException -> IO ()
 sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection conn TransportParameterError "Transport parameter error"
 sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongVersionInformation")) = closeConnection conn VersionNegotiationError "Version negotiation error"
+sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongDatagramSizeParameter")) = closeConnection conn ProtocolViolation "0-RTT datagram size violation"
 sendCCTLSError conn e = closeConnection conn err msg
   where
     tlserr = getErrorCause e

@@ -115,6 +115,7 @@ frameType PathResponse{} = "path_response"
 frameType ConnectionClose{} = "connection_close"
 frameType ConnectionCloseApp{} = "connection_close"
 frameType HandshakeDone{} = "handshake_done"
+frameType Datagram{} = "datagram"
 frameType UnknownFrame{} = "unknown"
 
 {-# INLINE frameExtra #-}
@@ -169,6 +170,7 @@ frameExtra (ConnectionCloseApp err reason) =
         <> toLogStr (Short.fromShort reason)
         <> "\"" -- fixme
 frameExtra HandshakeDone{} = ""
+frameExtra (Datagram _ dat) = ",\"length\":" <> sw (BS.length dat)
 frameExtra (UnknownFrame _Int) = ""
 
 transportError :: TransportError -> LogStr

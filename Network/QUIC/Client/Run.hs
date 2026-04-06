@@ -10,6 +10,7 @@ module Network.QUIC.Client.Run (
 ) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Foreign.C.Types
@@ -139,6 +140,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     let myAuthCIDs = defaultAuthCIDs{initSrcCID = Just myCID}
         peerAuthCIDs = defaultAuthCIDs{initSrcCID = Just peerCID, origDstCID = Just peerCID}
     genSRT <- makeGenStatelessReset
+    connRecvDatagramQ <- newTQueueIO
     conn <-
         clientConnection
             conf
@@ -151,6 +153,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             sref
             piref
             q
+            connRecvDatagramQ
             send
             recv
             genSRT

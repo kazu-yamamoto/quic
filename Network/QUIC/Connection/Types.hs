@@ -242,6 +242,7 @@ data Connection = Connection
     , connRecv          :: ~Recv -- ~ for testing
     -- Manage
     , connRecvQ         :: RecvQ
+    , connRecvDatagramQ :: DatagramQ
     , connSocket        :: IORef Socket
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: IORef (Map Word64 (Weak ThreadId))
@@ -337,11 +338,12 @@ newConnection
     -> IORef Socket
     -> IORef PeerInfo
     -> RecvQ
+    -> DatagramQ
     -> Send
     -> Recv
     -> (CID -> StatelessResetToken)
     -> IO Connection
-newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugLog connQLog connHooks connSocket peerInfo connRecvQ ~connSend ~connRecv genStatelessResetToken = do
+newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugLog connQLog connHooks connSocket peerInfo connRecvQ connRecvDatagramQ ~connSend ~connRecv genStatelessResetToken = do
     connState         <- newConnState rl
     -- Manage
     readers           <- newIORef Map.empty
@@ -355,7 +357,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     -- Peer
     peerParameters    <- newIORef baseParameters
     peerCIDDB         <- newTVarIO (newCIDDB peerCID)
-    -- Queus
+    -- Queues
     inputQ            <- newTQueueIO
     cryptoQ           <- newTQueueIO
     outputQ           <- newTQueueIO
@@ -429,12 +431,17 @@ clientConnection
     -> IORef Socket
     -> IORef PeerInfo
     -> RecvQ
+    -> DatagramQ
     -> Send
     -> Recv
     -> (CID -> StatelessResetToken)
     -> IO Connection
 clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
-    newConnection Client ccParameters verInfo myAuthCIDs peerAuthCIDs
+    newConnection Client ccParameters' verInfo myAuthCIDs peerAuthCIDs
+  where
+    ccParameters' = ccParameters
+      { maxDatagramFrameSize = ccMaxDatagramFrameSize
+      }
 
 serverConnection
     :: ServerConfig
@@ -447,12 +454,17 @@ serverConnection
     -> IORef Socket
     -> IORef PeerInfo
     -> RecvQ
+    -> DatagramQ
     -> Send
     -> Recv
     -> (CID -> StatelessResetToken)
     -> IO Connection
 serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
-    newConnection Server scParameters verInfo myAuthCIDs peerAuthCIDs
+    newConnection Server scParameters' verInfo myAuthCIDs peerAuthCIDs
+  where
+    scParameters' = scParameters
+      { maxDatagramFrameSize = scMaxDatagramFrameSize
+      }
 
 ----------------------------------------------------------------
 
@@ -471,6 +483,8 @@ type OutputQ = TQueue Output
 ----------------------------------------------------------------
 
 type SendStreamQ = TQueue TxStreamData
+
+type DatagramQ = TQueue ByteString
 
 data Shared = Shared
     { sharedCloseSent :: IORef Bool

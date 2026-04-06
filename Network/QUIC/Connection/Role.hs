@@ -127,6 +127,7 @@ parametersToResumption ri Parameters{..} =
         , resumptionInitialMaxStreamDataUni = initialMaxStreamDataUni
         , resumptionInitialMaxStreamsBidi = initialMaxStreamsBidi
         , resumptionInitialMaxStreamsUni = initialMaxStreamsUni
+        , resumptionMaxDatagramFrameSize = maxDatagramFrameSize
         }
 
 ----------------------------------------------------------------

@@ -340,6 +340,7 @@ adjustForRetransmit conn (MaxData{} : xs) = do
     let r = MaxData newMax
     rs <- adjustForRetransmit conn xs
     return (r : rs)
+adjustForRetransmit conn (Datagram{} : xs) = adjustForRetransmit conn xs
 adjustForRetransmit conn (x : xs) = do
     rs <- adjustForRetransmit conn xs
     return (x : rs)
