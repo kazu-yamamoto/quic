@@ -10,6 +10,7 @@ import Data.Tuple (swap)
 import Test.Hspec
 
 import Network.QUIC.Internal
+import Control.Concurrent.STM
 
 import Config
 
@@ -54,6 +55,7 @@ makeConnections conf v = do
     let ver = v
         verInfo = VersionInfo ver [ver]
     genSRT <- makeGenStatelessReset
+    dq <- newTQueueIO
     ----
     clientConn <-
         clientConnection
@@ -67,8 +69,9 @@ makeConnections conf v = do
             sref
             piref
             q
-            undefined
-            undefined
+            dq
+            (\_ _ -> return ())
+            (return undefined)
             genSRT
     initializeCoder clientConn InitialLevel $ initialSecrets ver serverCID
     serverConn <-
@@ -83,8 +86,9 @@ makeConnections conf v = do
             sref
             piref -- dummy
             q
-            undefined
-            undefined
+            dq
+            (\_ _ -> return ())
+            (return undefined)
             genSRT
     initializeCoder serverConn InitialLevel $ initialSecrets ver serverCID
     ----

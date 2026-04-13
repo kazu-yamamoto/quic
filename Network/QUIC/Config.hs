@@ -90,6 +90,7 @@ data ClientConfig = ClientConfig
     , ccTlsHooks :: ClientHooks
     , ccUse0RTT :: Bool
     -- ^ Use 0-RTT on the 2nd connection if possible.
+    , ccMaxDatagramFrameSize :: Int
     -- client original
     --
     -- Default: 'False'
@@ -149,6 +150,7 @@ defaultClientConfig =
         , ccHooks = defaultHooks
         , ccTlsHooks = defaultClientHooks
         , ccUse0RTT = False
+        , ccMaxDatagramFrameSize = 0
         , -- client original
           ccServerName = "127.0.0.1"
         , ccPortName = "4433"
@@ -185,6 +187,7 @@ data ServerConfig = ServerConfig
     , scHooks :: Hooks
     , scTlsHooks :: ServerHooks
     , scUse0RTT :: Bool
+    , scMaxDatagramFrameSize :: Int
     -- ^ Use 0-RTT on the 2nd connection if possible.
     -- server original
     , scAddresses :: [(IP, PortNumber)]
@@ -219,6 +222,7 @@ defaultServerConfig =
         , scHooks = defaultHooks
         , scTlsHooks = defaultServerHooks
         , scUse0RTT = False
+        , scMaxDatagramFrameSize = 0
         , -- server original
           scAddresses = [("0.0.0.0", 4433), ("::", 4433)]
         , scALPN = Nothing

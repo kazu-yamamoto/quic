@@ -160,6 +160,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
     (qLog, qclean) <- dirQLogger scQLog accTime ocid "server"
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
     debugLog $ "Original CID: " <> bhow ocid
+    connRecvDatagramQ <- newTQueueIO
     conn <-
         serverConnection
             conf
@@ -172,6 +173,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
             sref
             piref
             accRecvQ
+            connRecvDatagramQ
             send
             recv
             (genStatelessReset dispatch)

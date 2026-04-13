@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Network.QUIC.IO where
 
 import Control.Concurrent.STM
@@ -8,6 +10,7 @@ import Network.Control
 import Network.QUIC.Connection
 import Network.QUIC.Connector
 import Network.QUIC.Imports
+import Network.QUIC.Parameters
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
@@ -235,3 +238,41 @@ stopStream s aerr = do
         lvl <- getEncryptionLevel conn
         let frame = StopSending sid aerr
         putOutput conn $ OutControl lvl [frame]
+
+-- | Sending a DATAGRAM frame to the peer.
+--   If the datagram is larger than the peer's `max_datagram_frame_size`
+--   an exception is thrown.
+sendDatagram :: Connection -> ByteString -> IO ()
+sendDatagram conn dat = do
+    -- Determine the send level from connection readiness state rather than
+    -- the encryptionLevel TVar, which is not set to RTT0Level during 0-RTT.
+    ready1rtt <- isConnection1RTTReady conn
+    lvl <- if ready1rtt
+        then return RTT1Level
+        else do
+            ready0rtt <- isConnection0RTTReady conn
+            if ready0rtt
+                then return RTT0Level
+                else E.throwIO $ ConnectionIsClosed "Cannot send DATAGRAM"
+    limitBytes <- maxDatagramFrameSize <$> getPeerParameters conn
+    when (limitBytes == 0) $
+      E.throwIO $ ConnectionIsClosed "DATAGRAM not supported by peer"
+    let frameOverhead = 1 + BS.length (encodeInt (fromIntegral $ BS.length dat))
+    when (BS.length dat + frameOverhead > limitBytes) $
+        E.throwIO $ ConnectionIsClosed "DATAGRAM size violation"
+    let frame = Datagram False dat
+    putOutput conn $ OutControl lvl [frame]
+
+-- | Receiving a DATAGRAM frame.
+--   This blocks until a DATAGRAM frame is received.
+recvDatagram :: Connection -> IO ByteString
+recvDatagram = atomically . recvDatagramSTM
+
+-- | Receive all available DATAGRAM frames.
+--   This function is non-blocking.
+recvDatagramMany :: Connection -> IO [ByteString]
+recvDatagramMany = atomically . flushTQueue . connRecvDatagramQ
+
+-- | Receiving a DATAGRAM frame in STM.
+recvDatagramSTM :: Connection -> STM ByteString
+recvDatagramSTM = readTQueue . connRecvDatagramQ

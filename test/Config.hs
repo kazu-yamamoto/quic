@@ -150,7 +150,7 @@ withPipe scenario body = do
   where
     hints =
         defaultHints
-            { addrSocketType = Datagram
+            { addrSocketType = Network.Socket.Datagram
             , addrFlags = [AI_NUMERICHOST]
             , addrFamily = AF_INET
             }

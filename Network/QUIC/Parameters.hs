@@ -70,6 +70,8 @@ pattern RetrySourceConnectionId         :: Key
 pattern RetrySourceConnectionId          = Key 0x10
 pattern VersionInformation              :: Key
 pattern VersionInformation               = Key 0x11
+pattern MaxDatagramFrameSize            :: Key
+pattern MaxDatagramFrameSize             = Key 0x20
 pattern Grease                          :: Key
 pattern Grease                           = Key 0xff
 pattern GreaseQuicBit                   :: Key
@@ -98,6 +100,7 @@ data Parameters = Parameters
     , grease :: Maybe ByteString
     , greaseQuicBit :: Bool
     , versionInformation :: Maybe VersionInfo
+    , maxDatagramFrameSize :: Int
     }
     deriving (Eq, Show)
 
@@ -125,6 +128,7 @@ baseParameters =
         , grease = Nothing
         , greaseQuicBit = False
         , versionInformation = Nothing
+        , maxDatagramFrameSize = 0
         }
 
 decInt :: ByteString -> Int
@@ -205,6 +209,8 @@ fromParameterList kvs = foldl' update params kvs
         x{greaseQuicBit = True}
     update x (VersionInformation, v) =
         x{versionInformation = toVersionInfo v}
+    update x (MaxDatagramFrameSize, v) =
+        x{maxDatagramFrameSize = decInt v}
     update x _ = x
 
 diff
@@ -256,6 +262,7 @@ toParameterList p =
         , diff p greaseQuicBit GreaseQuicBit (const "")
         , diff p grease Grease fromJust
         , diff p versionInformation VersionInformation fromVersionInfo
+        , diff p maxDatagramFrameSize MaxDatagramFrameSize encInt
         ]
 
 encSRT :: Maybe StatelessResetToken -> ByteString
@@ -289,7 +296,7 @@ decodeParameterList bs = unsafeDupablePerformIO $ withReadBuffer bs (`go` id)
 -- | An example parameters obsoleted in the near future.
 --
 -- >>> defaultParameters
--- Parameters {originalDestinationConnectionId = Nothing, maxIdleTimeout = 30000, statelessResetToken = Nothing, maxUdpPayloadSize = 2048, initialMaxData = 16777216, initialMaxStreamDataBidiLocal = 262144, initialMaxStreamDataBidiRemote = 262144, initialMaxStreamDataUni = 262144, initialMaxStreamsBidi = 64, initialMaxStreamsUni = 3, ackDelayExponent = 3, maxAckDelay = 25, disableActiveMigration = False, preferredAddress = Nothing, activeConnectionIdLimit = 5, initialSourceConnectionId = Nothing, retrySourceConnectionId = Nothing, grease = Nothing, greaseQuicBit = True, versionInformation = Nothing}
+-- Parameters {originalDestinationConnectionId = Nothing, maxIdleTimeout = 30000, statelessResetToken = Nothing, maxUdpPayloadSize = 2048, initialMaxData = 16777216, initialMaxStreamDataBidiLocal = 262144, initialMaxStreamDataBidiRemote = 262144, initialMaxStreamDataUni = 262144, initialMaxStreamsBidi = 64, initialMaxStreamsUni = 3, ackDelayExponent = 3, maxAckDelay = 25, disableActiveMigration = False, preferredAddress = Nothing, activeConnectionIdLimit = 5, initialSourceConnectionId = Nothing, retrySourceConnectionId = Nothing, grease = Nothing, greaseQuicBit = True, versionInformation = Nothing, maxDatagramFrameSize = 0}
 defaultParameters :: Parameters
 defaultParameters =
     baseParameters
@@ -303,6 +310,7 @@ defaultParameters =
         , initialMaxStreamsUni = 3
         , activeConnectionIdLimit = 5
         , greaseQuicBit = True
+        , maxDatagramFrameSize = 0
         }
 
 data AuthCIDs = AuthCIDs

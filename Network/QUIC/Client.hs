@@ -12,6 +12,7 @@ module Network.QUIC.Client (
     ccPortName,
     ccALPN,
     ccUse0RTT,
+    ccMaxDatagramFrameSize,
     ccResumption,
     ccCiphers,
     ccGroups,

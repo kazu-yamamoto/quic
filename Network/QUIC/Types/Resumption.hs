@@ -26,6 +26,7 @@ data ResumptionInfo = ResumptionInfo
     , resumptionInitialMaxStreamDataUni :: Int
     , resumptionInitialMaxStreamsBidi :: Int
     , resumptionInitialMaxStreamsUni :: Int
+    , resumptionMaxDatagramFrameSize :: Int
     }
     deriving (Eq, Show, Generic)
 
@@ -45,6 +46,7 @@ defaultResumptionInfo =
         , resumptionInitialMaxStreamDataUni = 0
         , resumptionInitialMaxStreamsBidi = 0
         , resumptionInitialMaxStreamsUni = 0
+        , resumptionMaxDatagramFrameSize = 0
         }
 
 -- | Is 0RTT possible?

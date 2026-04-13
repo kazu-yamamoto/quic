@@ -19,7 +19,11 @@ import Network.QUIC.Types
 
 encodeFrames :: [Frame] -> IO ByteString
 encodeFrames frames = withWriteBuffer 2048 $ \wbuf ->
-    mapM_ (encodeFrame wbuf) frames
+    let loop [] = return ()
+        loop [Datagram _ dat] = encodeDatagramFinal wbuf dat
+        loop [f] = encodeFrame wbuf f
+        loop (f:fs) = encodeFrame wbuf f >> loop fs
+    in loop frames
 
 encodeFramesWithPadding
     :: Buffer
@@ -134,8 +138,18 @@ encodeFrame wbuf (ConnectionCloseApp (ApplicationProtocolError err) reason) = do
     copyShortByteString wbuf reason
 encodeFrame wbuf HandshakeDone =
     write8 wbuf 0x1e
+encodeFrame wbuf (Datagram _ dat) = do
+    write8 wbuf 0x31
+    encodeInt' wbuf $ fromIntegral $ BS.length dat
+    copyByteString wbuf dat
 encodeFrame wbuf (UnknownFrame typ) =
     write8 wbuf $ fromIntegral typ
+
+-- only valid when the datagram is the last frame and there's no padding
+encodeDatagramFinal :: WriteBuffer -> ByteString -> IO ()
+encodeDatagramFinal wbuf dat = do
+    write8 wbuf 0x30
+    copyByteString wbuf dat
 
 ----------------------------------------------------------------
 
@@ -190,6 +204,8 @@ decodeFrame rbuf = do
         0x1c -> decodeConnectionClose rbuf
         0x1d -> decodeConnectionCloseApp rbuf
         0x1e -> return HandshakeDone
+        0x30 -> decodeDatagram rbuf False
+        0x31 -> decodeDatagram rbuf True
         x -> return $ UnknownFrame x
 
 decodePadding :: ReadBuffer -> IO Frame
@@ -360,3 +376,10 @@ decodePathChallenge rbuf =
 decodePathResponse :: ReadBuffer -> IO Frame
 decodePathResponse rbuf =
     PathResponse . PathData <$> extractShortByteString rbuf 8
+
+decodeDatagram :: ReadBuffer -> Bool -> IO Frame
+decodeDatagram rbuf hasLen = do
+    len <- if hasLen
+             then fromIntegral <$> decodeInt' rbuf
+             else remainingSize rbuf
+    Datagram hasLen <$> extractByteString rbuf len

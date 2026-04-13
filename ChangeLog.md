@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.3.2
+
+* Support Unreliable Datagrams extension (RFC9221)
+
 ## 0.3.1
 
 * Using tls v2.4.0.
