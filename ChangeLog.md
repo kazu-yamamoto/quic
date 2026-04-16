@@ -3,6 +3,7 @@
 ## 0.3.2
 
 * Support Unreliable Datagrams extension (RFC9221)
+  [#92](https://github.com/kazu-yamamoto/quic/pull/92)
 
 ## 0.3.1
 
