@@ -265,7 +265,9 @@ processFrame conn lvl (StopSending sid err) = do
         mstrm <- findStream conn sid
         case mstrm of
             Nothing -> streamNotCreatedYet conn sid "No such stream for STOP_SENDING"
-            Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
+            Just strm -> do
+                finalSize <- getTxStreamFinalSize strm
+                sendFrames conn lvl [ResetStream sid err finalSize]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $

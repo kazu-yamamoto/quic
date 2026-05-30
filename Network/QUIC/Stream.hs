@@ -13,6 +13,7 @@ module Network.QUIC.Stream (
     waitFinTx,
 
     -- * Misc
+    getTxStreamFinalSize,
     getTxStreamOffset,
     isTxStreamClosed,
     setTxStreamClosed,

@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Misc (
+    getTxStreamFinalSize,
     getTxStreamOffset,
     isTxStreamClosed,
     setTxStreamClosed,
@@ -26,6 +27,9 @@ import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Types
 
 ----------------------------------------------------------------
+
+getTxStreamFinalSize :: Stream -> IO Offset
+getTxStreamFinalSize Stream{..} = streamOffset <$> readIORef streamStateTx
 
 getTxStreamOffset :: Stream -> Int -> IO Offset
 getTxStreamOffset Stream{..} len = atomicModifyIORef' streamStateTx get

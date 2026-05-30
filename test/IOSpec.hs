@@ -7,6 +7,9 @@ import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
+import Data.Foldable (for_)
+import System.IO.Unsafe (unsafePerformIO)
+import qualified System.Timeout as Timeout
 import Test.Hspec
 
 import Network.QUIC
@@ -86,6 +89,12 @@ spec = do
             withPipe (Randomly 20) $ testRecvStreamClientStopFirst cc sc waitS
         it "don't block if server stop sending first" $ do
             withPipe (Randomly 20) $ testRecvStreamServerStopFirst cc sc waitS
+        -- RFC 9000: https://www.rfc-editor.org/rfc/rfc9000.html
+        -- Section 3.5 says STOP_SENDING asks the peer to send RESET_STREAM.
+        -- Sections 4.5 and 19.4 define RESET_STREAM Final Size as the
+        -- number of bytes sent by the RESET_STREAM sender.
+        it "sends RESET_STREAM with the bytes sent as final size" $ do
+            withPipe (DropClientPacket []) $ testResetStreamFinalSize cc sc waitS
     describe "concurrency" $ do
         it "can handle multiple clients" $ do
             withPipe (Randomly 20) $ testMultiSendRecv cc sc waitS 500
@@ -104,6 +113,44 @@ consumeBytes strm left = do
 
 assertEndOfStream :: Stream -> IO ()
 assertEndOfStream strm = recvStream strm 1024 `shouldReturn` ""
+
+testResetStreamFinalSize
+    :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testResetStreamFinalSize cc sc0 waitS = do
+    finalSize <- newEmptyMVar
+    done <- newEmptyMVar
+    let request = "open"
+        payload = BS.replicate 1234 0
+        hooks = (scHooks sc0){onPlainCreated = record finalSize}
+        sc = sc0{scHooks = hooks}
+    E.bracket (forkIO $ server sc request payload done) killThread $ \_ ->
+        client request payload finalSize done
+  where
+    aerr = ApplicationProtocolError 0
+
+    record mvar lvl plain = unsafePerformIO $ do
+        when (lvl == RTT1Level) $
+            for_ (plainFrames plain) $ \frame -> case frame of
+                ResetStream _ _ finalSize -> void $ tryPutMVar mvar finalSize
+                _ -> return ()
+        return plain
+
+    client request payload finalSize done = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm request
+            consumeBytes strm (BS.length payload)
+            stopStream strm aerr
+            mres <- Timeout.timeout 5000000 $ takeMVar finalSize
+            mres `shouldBe` Just (BS.length payload)
+            putMVar done ()
+
+    server sc request payload done = run sc $ \conn -> do
+        strm <- acceptStream conn
+        consumeBytes strm (BS.length request)
+        sendStream strm payload
+        takeMVar done
 
 testRecvStreamClientStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
