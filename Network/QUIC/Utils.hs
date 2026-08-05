@@ -3,7 +3,7 @@
 
 module Network.QUIC.Utils where
 
-import Control.Exception
+import qualified Control.Exception as E
 import Control.Monad (replicateM)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base16
@@ -60,18 +60,18 @@ withByteString (PS fptr off _) f = withForeignPtr fptr $ \ptr ->
 shortpack :: String -> ShortByteString
 shortpack = Short.toShort . C8.pack
 
-ignore :: SomeException -> IO ()
+ignore :: E.SomeException -> IO ()
 ignore se
-    | isAsyncException se = throwIO se
+    | isAsyncException se = E.throwIO se
     | otherwise = return ()
 
-isAsyncException :: Exception e => e -> Bool
+isAsyncException :: E.Exception e => e -> Bool
 isAsyncException e =
-    case fromException (toException e) of
-        Just (SomeAsyncException _) -> True
+    case E.fromException (E.toException e) of
+        Just (E.SomeAsyncException _) -> True
         Nothing -> False
 
-throughAsync :: IO a -> SomeException -> IO a
-throughAsync action (SomeException e)
-    | isAsyncException e = throwIO e
+throughAsync :: IO a -> E.SomeException -> IO a
+throughAsync action (E.SomeException e)
+    | isAsyncException e = E.throwIO e
     | otherwise = action
