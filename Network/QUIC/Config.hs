@@ -35,7 +35,8 @@ data Hooks = Hooks
     , onTLSHandshakeCreated
         :: [(EncryptionLevel, CryptoData)]
         -> ([(EncryptionLevel, CryptoData)], Bool)
-    , onResetStreamReceived :: Stream -> ApplicationProtocolError -> Int -> IO ()
+    , onResetStreamReceived :: Stream -> ApplicationProtocolError -> IO ()
+    , onResetStreamReceived2 :: Maybe Stream -> ApplicationProtocolError -> Int -> IO ()
     , onServerReady :: IO ()
     , onConnectionEstablished :: ConnectionInfo -> IO ()
     }
@@ -49,7 +50,8 @@ defaultHooks =
         , onTransportParametersCreated = id
         , onTLSExtensionCreated = id
         , onTLSHandshakeCreated = (,False)
-        , onResetStreamReceived = \_ _ _ -> return ()
+        , onResetStreamReceived = \_ _ -> return ()
+        , onResetStreamReceived2 = \_ _ _ -> return ()
         , onServerReady = return ()
         , onConnectionEstablished = \_ -> return ()
         }

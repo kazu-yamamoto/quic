@@ -119,7 +119,7 @@ testResetStreamFinalSize cc0 sc waitS = do
     done <- newEmptyMVar
     let request = "open"
         payload = BS.replicate 1234 0
-        hooks = (ccHooks cc0){onResetStreamReceived = record finalSize}
+        hooks = (ccHooks cc0){onResetStreamReceived2 = record finalSize}
         cc = cc0{ccHooks = hooks}
     E.bracket (forkIO $ server request payload done) killThread $ \_ ->
         client cc request payload finalSize done

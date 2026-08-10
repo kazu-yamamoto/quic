@@ -248,10 +248,11 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
     when (isSendOnly conn sid) $
         closeConnection conn StreamStateError "Received in a send-only stream"
     mstrm <- findStream conn sid
+    onResetStreamReceived2 (connHooks conn) mstrm aerr finlen
     case mstrm of
         Nothing -> return ()
         Just strm -> do
-            onResetStreamReceived (connHooks conn) strm aerr finlen
+            onResetStreamReceived (connHooks conn) strm aerr
             setTxStreamClosed strm
             setRxStreamClosed strm
             delStream conn strm
