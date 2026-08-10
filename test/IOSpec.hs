@@ -115,35 +115,35 @@ assertEndOfStream strm = recvStream strm 1024 `shouldReturn` ""
 testResetStreamFinalSize
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testResetStreamFinalSize cc0 sc waitS = do
-    finalSize <- newEmptyMVar
-    done <- newEmptyMVar
+    finalSizeVar <- newEmptyMVar
+    doneVar <- newEmptyMVar
     let request = "open"
         payload = BS.replicate 1234 0
-        hooks = (ccHooks cc0){onResetStreamReceived2 = record finalSize}
+        hooks = (ccHooks cc0){onResetStreamReceived2 = record finalSizeVar}
         cc = cc0{ccHooks = hooks}
-    E.bracket (forkIO $ server request payload done) killThread $ \_ ->
-        client cc request payload finalSize done
+    E.bracket (forkIO $ server request payload doneVar) killThread $ \_ ->
+        client cc request payload finalSizeVar doneVar
   where
     aerr = ApplicationProtocolError 0
 
-    record mvar _strm _aerr finalSize = void $ tryPutMVar mvar finalSize
+    record finalSizeVar _strm _aerr finalSize = void $ tryPutMVar finalSizeVar finalSize
 
-    client cc request payload finalSize done = do
+    client cc request payload finalSizeVar doneVar = do
         waitS
         C.run cc $ \conn -> do
             strm <- stream conn
             sendStream strm request
             consumeBytes strm (BS.length payload)
             stopStream strm aerr
-            mres <- Timeout.timeout 5000000 $ takeMVar finalSize
+            mres <- Timeout.timeout 5000000 $ takeMVar finalSizeVar
             mres `shouldBe` Just (BS.length payload)
-            putMVar done ()
+            putMVar doneVar ()
 
-    server request payload done = run sc $ \conn -> do
+    server request payload doneVar = run sc $ \conn -> do
         strm <- acceptStream conn
         consumeBytes strm (BS.length request)
         sendStream strm payload
-        takeMVar done
+        takeMVar doneVar
 
 testRecvStreamClientStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
