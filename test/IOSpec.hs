@@ -7,8 +7,6 @@ import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
-import Data.Foldable (for_)
-import System.IO.Unsafe (unsafePerformIO)
 import qualified System.Timeout as Timeout
 import Test.Hspec
 
@@ -121,19 +119,14 @@ testResetStreamFinalSize cc sc0 waitS = do
     done <- newEmptyMVar
     let request = "open"
         payload = BS.replicate 1234 0
-        hooks = (scHooks sc0){onPlainCreated = record finalSize}
+        hooks = (scHooks sc0){onResetStreamReceived = record finalSize}
         sc = sc0{scHooks = hooks}
     E.bracket (forkIO $ server sc request payload done) killThread $ \_ ->
         client request payload finalSize done
   where
     aerr = ApplicationProtocolError 0
 
-    record mvar lvl plain = unsafePerformIO $ do
-        when (lvl == RTT1Level) $
-            for_ (plainFrames plain) $ \frame -> case frame of
-                ResetStream _ _ finalSize -> void $ tryPutMVar mvar finalSize
-                _ -> return ()
-        return plain
+    record mvar _strm _aerr finalSize = void $ tryPutMVar mvar finalSize
 
     client request payload finalSize done = do
         waitS

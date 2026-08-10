@@ -11,6 +11,7 @@ import Network.Control
 import Network.TLS (AlertDescription (..))
 import System.Log.FastLogger
 
+import Control.Concurrent.STM
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -23,7 +24,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
-import Control.Concurrent.STM
 import Network.QUIC.Stream
 import Network.QUIC.Types as QUIC
 
@@ -242,7 +242,7 @@ processFrame conn lvl Ping = do
 processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ closeConnection conn ProtocolViolation "ACK"
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
-processFrame conn lvl (ResetStream sid aerr _finlen) = do
+processFrame conn lvl (ResetStream sid aerr finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "RESET_STREAM"
     when (isSendOnly conn sid) $
@@ -251,7 +251,7 @@ processFrame conn lvl (ResetStream sid aerr _finlen) = do
     case mstrm of
         Nothing -> return ()
         Just strm -> do
-            onResetStreamReceived (connHooks conn) strm aerr
+            onResetStreamReceived (connHooks conn) strm aerr finlen
             setTxStreamClosed strm
             setRxStreamClosed strm
             delStream conn strm
