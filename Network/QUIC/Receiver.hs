@@ -11,6 +11,7 @@ import Network.Control
 import Network.TLS (AlertDescription (..))
 import System.Log.FastLogger
 
+import Control.Concurrent.STM
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -23,7 +24,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
-import Control.Concurrent.STM
 import Network.QUIC.Stream
 import Network.QUIC.Types as QUIC
 
@@ -242,12 +242,13 @@ processFrame conn lvl Ping = do
 processFrame conn lvl (Ack ackInfo ackDelay) = do
     when (lvl == RTT0Level) $ closeConnection conn ProtocolViolation "ACK"
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
-processFrame conn lvl (ResetStream sid aerr _finlen) = do
+processFrame conn lvl (ResetStream sid aerr finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "RESET_STREAM"
     when (isSendOnly conn sid) $
         closeConnection conn StreamStateError "Received in a send-only stream"
     mstrm <- findStream conn sid
+    onResetStreamReceived2 (connHooks conn) mstrm aerr finlen
     case mstrm of
         Nothing -> return ()
         Just strm -> do
@@ -265,7 +266,9 @@ processFrame conn lvl (StopSending sid err) = do
         mstrm <- findStream conn sid
         case mstrm of
             Nothing -> streamNotCreatedYet conn sid "No such stream for STOP_SENDING"
-            Just _strm -> sendFrames conn lvl [ResetStream sid err 0]
+            Just strm -> do
+                finalSize <- getTxStreamFinalSize strm
+                sendFrames conn lvl [ResetStream sid err finalSize]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $

@@ -217,10 +217,11 @@ resetStream s aerr = do
     let sid = streamId s
     sclosed <- isTxStreamClosed s
     unless sclosed $ do
+        finalSize <- getTxStreamFinalSize s
         setTxStreamClosed s
         setRxStreamClosed s
         lvl <- getEncryptionLevel conn
-        let frame = ResetStream sid aerr 0
+        let frame = ResetStream sid aerr finalSize
         putOutput conn $ OutControl lvl [frame]
     delStream conn s
 
