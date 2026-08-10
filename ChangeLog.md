@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.3.3
+
+* RST_STREAM now contains a proper final size.
+  [#93](https://github.com/kazu-yamamoto/quic/pull/93)
+
 ## 0.3.2
 
 * Support Unreliable Datagrams extension (RFC9221)
