@@ -87,4 +87,4 @@ jobs:
     - name: Run doctest
       if: ${{ runner.os == 'Linux' }}
       run: |
-        cabal repl --build-depends=QuickCheck --with-ghc=doctest ${{ env.target-config }}
+        cabal repl --build-depends=QuickCheck --with-repl=doctest ${{ env.target-config }}
