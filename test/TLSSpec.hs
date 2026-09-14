@@ -25,6 +25,15 @@ instance Eq (ServerTrafficSecret a) where
 
 spec :: Spec
 spec = do
+    describe "server configuration" $ do
+        it "does not request client certificates by default" $
+            scRequireClientCert defaultServerConfig `shouldBe` False
+
+        it "allows client certificates to be required" $
+            scRequireClientCert
+                defaultServerConfig{scRequireClientCert = True}
+                `shouldBe` True
+
     ----------------------------------------------------------------
     -- RFC 9001
     --

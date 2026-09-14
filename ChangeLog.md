@@ -1,5 +1,9 @@
 # ChangeLog
 
+## unreleased
+
+* Add a server option to require client certificates.
+
 ## 0.3.3
 
 * RST_STREAM now contains a proper final size.
