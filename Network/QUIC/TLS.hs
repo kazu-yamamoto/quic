@@ -92,7 +92,7 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
   where
     sparams =
         defaultParamsServer
-            { serverWantClientCert = scRequireClientCert
+            { serverWantClientCert = scWantClientCert
             , serverShared = sshared
             , serverHooks = hook
             , serverSupported = supported

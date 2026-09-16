@@ -2,7 +2,7 @@
 
 ## unreleased
 
-* Add a server option to require client certificates.
+* Add a server option to request client certificates.
 
 ## 0.3.3
 

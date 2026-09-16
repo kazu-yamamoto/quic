@@ -27,11 +27,11 @@ spec :: Spec
 spec = do
     describe "server configuration" $ do
         it "does not request client certificates by default" $
-            scRequireClientCert defaultServerConfig `shouldBe` False
+            scWantClientCert defaultServerConfig `shouldBe` False
 
-        it "allows client certificates to be required" $
-            scRequireClientCert
-                defaultServerConfig{scRequireClientCert = True}
+        it "allows client certificates to be requested" $
+            scWantClientCert
+                defaultServerConfig{scWantClientCert = True}
                 `shouldBe` True
 
     ----------------------------------------------------------------

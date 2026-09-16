@@ -196,7 +196,7 @@ data ServerConfig = ServerConfig
     -- ^ Server addresses assigned to used network interfaces.
     , scALPN :: Maybe (Version -> [ByteString] -> IO ByteString)
     -- ^ ALPN handler.
-    , scRequireClientCert :: Bool
+    , scWantClientCert :: Bool
     -- ^ Request a certificate from clients.
     , scRequireRetry :: Bool
     -- ^ Requiring QUIC retry.
@@ -230,7 +230,7 @@ defaultServerConfig =
         , -- server original
           scAddresses = [("0.0.0.0", 4433), ("::", 4433)]
         , scALPN = Nothing
-        , scRequireClientCert = False
+        , scWantClientCert = False
         , scRequireRetry = False
         , scSessionManager = noSessionManager
         , scDebugLog = Nothing

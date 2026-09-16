@@ -36,7 +36,7 @@ spec = do
             let cc = testClientConfig
                 sc = sc0
             testHandshake cc sc waitS FullHandshake
-        it "can require and accept a client certificate" $ do
+        it "can request and accept a client certificate" $ do
             let TLS.Credentials credentials = scCredentials sc0
             credential <- case credentials of
                 [] -> expectationFailure "test server has no credentials" >> fail "missing credentials"
@@ -53,7 +53,7 @@ spec = do
                 cc = testClientConfig{ccTlsHooks = clientHooks}
                 sc =
                     sc0
-                        { scRequireClientCert = True
+                        { scWantClientCert = True
                         , scTlsHooks = serverHooks
                         }
             testHandshake cc sc waitS FullHandshake
