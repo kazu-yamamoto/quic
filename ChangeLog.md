@@ -1,8 +1,9 @@
 # ChangeLog
 
-## unreleased
+## 0.3.4
 
 * Add a server option to request client certificates.
+  [#94](https://github.com/kazu-yamamoto/quic/pull/94)
 
 ## 0.3.3
 
