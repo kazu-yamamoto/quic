@@ -36,6 +36,27 @@ spec = do
             let cc = testClientConfig
                 sc = sc0
             testHandshake cc sc waitS FullHandshake
+        it "can request and accept a client certificate" $ do
+            let TLS.Credentials credentials = scCredentials sc0
+            credential <- case credentials of
+                [] -> expectationFailure "test server has no credentials" >> fail "missing credentials"
+                cred : _ -> pure cred
+            let clientHooks =
+                    (ccTlsHooks testClientConfig)
+                        { TLS.onCertificateRequest = const (pure (Just credential))
+                        }
+                serverHooks =
+                    (scTlsHooks sc0)
+                        { TLS.onClientCertificate = const (pure TLS.CertificateUsageAccept)
+                        , TLS.onUnverifiedClientCert = pure True
+                        }
+                cc = testClientConfig{ccTlsHooks = clientHooks}
+                sc =
+                    sc0
+                        { scWantClientCert = True
+                        , scTlsHooks = serverHooks
+                        }
+            testHandshake cc sc waitS FullHandshake
         it "can handshake in the case of TLS hello retry" $ do
             let cc = testClientConfig
                 sc = sc0{scGroups = [P256], scGroupsTLS13 = [[P256]]}

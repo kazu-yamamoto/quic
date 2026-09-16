@@ -10,6 +10,7 @@ module Network.QUIC.Server (
     defaultServerConfig,
     scAddresses,
     scALPN,
+    scWantClientCert,
     scRequireRetry,
     scUse0RTT,
     scMaxDatagramFrameSize,
