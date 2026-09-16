@@ -1,4 +1,4 @@
-cabal-version:      >=1.10
+cabal-version:      2.0
 name:               quic
 version:            0.3.3
 license:            BSD3
