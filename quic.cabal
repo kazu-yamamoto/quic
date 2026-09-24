@@ -243,6 +243,7 @@ test-suite spec
         HandshakeSpec
         IOSpec
         PacketSpec
+        QLoggerSpec
         RecoverySpec
         TLSSpec
         TransportError
@@ -259,6 +260,8 @@ test-suite spec
         bytestring,
         containers,
         crypton,
+        directory,
+        filepath,
         hspec,
         network >=3.2.2,
         quic,

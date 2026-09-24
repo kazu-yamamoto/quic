@@ -7,6 +7,7 @@ module Network.QUIC.Internal (
     module Network.QUIC.Packet,
     module Network.QUIC.Parameters,
     module Network.QUIC.Qlog,
+    module Network.QUIC.QLogger,
     module Network.QUIC.Stream,
     module Network.QUIC.TLS,
     module Network.QUIC.Types,
@@ -25,6 +26,7 @@ import Network.QUIC.Crypto
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
+import Network.QUIC.QLogger
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Socket
