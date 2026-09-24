@@ -103,6 +103,11 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated $ rrBits HandshakeLevel
                 runCnoOp cc ms `shouldThrow` transportError
         it
+            "MUST send CRYPTO_BUFFER_EXCEEDED if CRYPTO data is buffered beyond the limit [Transport 7.5]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated cryptoBeyondBuffer
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [CryptoBufferExceeded]
+        it
             "MUST send PROTOCOL_VIOLATION if PATH_CHALLENGE in Handshake is received [Transport 17.2.4]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated handshakePathChallenge
@@ -315,6 +320,16 @@ unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
     | lvl == RTT1Level =
         plain{plainFrames = UnknownFrame 0x20 : plainFrames plain}
+    | otherwise = plain
+
+-- CRYPTO frames are outside flow control, so nothing but the buffer limit
+-- stops a peer from parking a fragment far past where the stream has got to
+-- and having it held.  One octet at this offset is enough to ask for more
+-- than any bound the receiver could sensibly hold.
+cryptoBeyondBuffer :: EncryptionLevel -> Plain -> Plain
+cryptoBeyondBuffer lvl plain
+    | lvl == HandshakeLevel =
+        plain{plainFrames = CryptoF 100000000 "x" : plainFrames plain}
     | otherwise = plain
 
 handshakePathChallenge :: EncryptionLevel -> Plain -> Plain

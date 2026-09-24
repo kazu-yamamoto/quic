@@ -29,6 +29,7 @@ module Network.QUIC.Stream (
     -- * Reass
     takeRecvStreamQwithSize,
     putRxStreamData,
+    putRxCryptoData,
     FlowCntl (..),
     tryReassemble,
 

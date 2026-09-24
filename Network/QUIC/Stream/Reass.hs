@@ -4,6 +4,7 @@
 module Network.QUIC.Stream.Reass (
     takeRecvStreamQwithSize,
     putRxStreamData,
+    putRxCryptoData,
     FlowCntl (..),
     tryReassemble,
 ) where
@@ -111,6 +112,25 @@ putRxStreamData s rx@(RxStreamData _ off len _) = do
         addRxStreamData s $ BS.length d
         putRecvStreamQ s d
     putFin = putRecvStreamQ s ""
+
+-- | Feed a CRYPTO frame to the reassembly of its stream, refusing anything
+--   that would leave us holding more than @lim@ octets past the point the
+--   stream has reached in order.
+--
+-- CRYPTO frames sit outside the flow control that bounds stream data -- they
+-- have to, since they carry the handshake that settles those limits -- so
+-- this is the only thing standing between a peer and an unbounded pile of
+-- fragments at scattered offsets.  Bounding the window bounds the pile: every
+-- fragment we keep lies within it.
+putRxCryptoData
+    :: Stream -> Int -> RxStreamData -> (StreamData -> IO ()) -> IO FlowCntl
+putRxCryptoData s lim rx@(RxStreamData _ off len _) put = do
+    StreamState off0 _ <- readIORef $ streamStateRx s
+    if off + len > off0 + lim
+        then return OverLimit
+        else do
+            dup <- tryReassemble s rx put (return ())
+            return $ if dup then Duplicated else Reassembled
 
 -- fin of StreamState off fin means see-fin-already.
 -- return value indicates duplication
