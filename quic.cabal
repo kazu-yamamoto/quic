@@ -243,6 +243,7 @@ test-suite spec
         HandshakeSpec
         IOSpec
         PacketSpec
+        ParametersSpec
         QLoggerSpec
         RecoverySpec
         TLSSpec

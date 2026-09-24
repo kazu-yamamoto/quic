@@ -75,6 +75,11 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setStatelessResetToken
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it
+            "MUST send TRANSPORT_PARAMETER_ERROR if a parameter value is malformed [Transport 18]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnTLSExtensionCreated danglingParameter
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
+        it
             "MUST send TRANSPORT_PARAMETER_ERROR if max_udp_payload_size < 1200 [Transport 7.4 and 18.2]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
@@ -237,6 +242,14 @@ setOnPlainCreated f hooks = hooks{onPlainCreated = f}
 
 setOnTransportParametersCreated :: (Parameters -> Parameters) -> Hooks -> Hooks
 setOnTransportParametersCreated f hooks = hooks{onTransportParametersCreated = f}
+
+-- initial_max_data announcing a zero-length value.  Everything the peer
+-- really sent is left in front of it, so this is the value alone being wrong
+-- rather than the list being cut short.  The value of an integer parameter is
+-- one variable-length integer, and there is no such thing in no octets.
+danglingParameter :: [ExtensionRaw] -> [ExtensionRaw]
+danglingParameter [ExtensionRaw eid v] = [ExtensionRaw eid (v <> "\x04\x00")]
+danglingParameter xs = xs
 
 setOnTLSExtensionCreated :: ([ExtensionRaw] -> [ExtensionRaw]) -> Hooks -> Hooks
 setOnTLSExtensionCreated f params = params{onTLSExtensionCreated = f}
