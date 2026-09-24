@@ -15,6 +15,17 @@ jobs:
       matrix:
         os:  [ 'ubuntu-latest', 'macOS-latest' ]
         ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12' ]
+        # GitHub runs at most five macOS jobs at once, so the sixth sat
+        # waiting for one of the others to finish and by itself decided when
+        # the workflow ended.  Nothing in this package is macOS-specific
+        # beyond the syscalls the network code makes, and those do not vary
+        # by compiler; keep the oldest and newest there and let Linux cover
+        # the range in between.
+        exclude:
+          - { os: macOS-latest, ghc: '9.4'  }
+          - { os: macOS-latest, ghc: '9.6'  }
+          - { os: macOS-latest, ghc: '9.8'  }
+          - { os: macOS-latest, ghc: '9.10' }
 
     env:
       cache-name: cabal-ghc
