@@ -2,6 +2,7 @@
 
 module PacketSpec where
 
+import Control.Monad (forM_)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
@@ -30,6 +31,27 @@ spec = do
         it "describes example of Server Initial version 2" $ do
             conns <- swap <$> makeConnections serverConf Version2
             checkBinary conns 1 serverInitialPacketBinaryV2
+    describe "decryptCrypt" $ do
+        it "drops a packet whose header protection sample is not whole" $ do
+            (_, serverConn) <- makeConnections serverConf Version1
+            -- The sample is 16 octets taken from 4 past the packet number
+            -- offset, which here is 9, so a Length of L leaves 'L - 4'
+            -- octets of it.  4 was already dropped -- an empty mask is how
+            -- a protector without keys answers too -- and 20 is a whole
+            -- one.  Everything between used to reach the cipher's header
+            -- protection with a partial sample and throw.
+            forM_ [4 .. 20] $ \len -> do
+                [(CryptPacket _ crypt, lvl, _)] <-
+                    decodeCryptPackets (shortSampleInitial len) True
+                decryptCrypt serverConn crypt lvl `shouldReturn` Nothing
+
+-- | An Initial packet in a datagram large enough that a server would not
+--   discard it for being too small, saying its payload is @len@ octets.
+shortSampleInitial :: Int -> ByteString
+shortSampleInitial len = BS.pack $ header ++ replicate (1200 - length header) 0xAA
+  where
+    -- long header, Initial, version 1, no CIDs, no token, then the length
+    header = [0xc0, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, fromIntegral len]
 
 clientChosenCID :: CID
 clientChosenCID = toCID $ dec16 "8394c8f03e515708"
