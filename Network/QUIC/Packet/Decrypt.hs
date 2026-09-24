@@ -27,9 +27,20 @@ decryptCrypt conn Crypt{..} lvl = do
     let proFlags = Flags (cryptPacket `BS.index` 0)
         sampleOffset = cryptPktNumOffset + 4
         sampleLen = sampleLength cipher
-        sample = Sample $ BS.take sampleLen $ BS.drop sampleOffset cryptPacket
+        sample = BS.take sampleLen $ BS.drop sampleOffset cryptPacket
         makeMask = unprotect protector
-        Mask mask = makeMask sample
+        -- The mask is empty when we cannot unprotect, and the packet is
+        -- dropped at the uncons below.  That is already how a protector
+        -- without keys answers; a sample shorter than the cipher asks for
+        -- has to join it *here*, because cipherHeaderProtection is not
+        -- total in the length of its sample: AES refuses anything that is
+        -- not a whole block and ChaCha20 indexes the first four octets.
+        -- A peer chooses that length -- the Length field of a long header
+        -- decides where the packet ends -- so reaching those with a short
+        -- one throws out of here and takes the connection with it.
+        Mask mask
+            | BS.length sample == sampleLen = makeMask $ Sample sample
+            | otherwise = Mask BS.empty
     case BS.uncons mask of
         Nothing -> return Nothing
         Just (mask1, mask2) -> do
