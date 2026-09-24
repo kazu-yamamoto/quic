@@ -498,8 +498,16 @@ putRxCrypto conn lvl rx = do
         Nothing -> return False
         Just strm -> do
             let put = putCrypto conn . InpHandshake lvl
-                putFin = return ()
-            tryReassemble strm rx put putFin
+            fc <- putRxCryptoData strm cryptoBufferSize rx put
+            case fc of
+                -- RFC 9000 Sec 7.5: "If an endpoint does not expand its
+                -- buffer, it MUST close the connection with a
+                -- CRYPTO_BUFFER_EXCEEDED error code."
+                OverLimit -> do
+                    closeConnection conn CryptoBufferExceeded "CRYPTO buffer exceeded"
+                    return False -- not reached: closeConnection throws
+                Duplicated -> return True
+                Reassembled -> return False
 
 killHandshaker :: Connection -> EncryptionLevel -> IO ()
 killHandshaker conn lvl = putCrypto conn $ InpHandshake lvl ""
