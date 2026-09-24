@@ -14,6 +14,7 @@ module Network.QUIC.Parameters (
     getCIDsToParameters,
 ) where
 
+import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Network.Control
@@ -26,7 +27,7 @@ encodeParameters :: Parameters -> ByteString
 encodeParameters = encodeParameterList . toParameterList
 
 decodeParameters :: ByteString -> Maybe Parameters
-decodeParameters bs = fromParameterList <$> decodeParameterList bs
+decodeParameters bs = decodeParameterList bs >>= fromParameterList
 
 newtype Key = Key Word32 deriving (Eq, Show)
 type Value = ByteString
@@ -131,14 +132,28 @@ baseParameters =
         , maxDatagramFrameSize = 0
         }
 
-decInt :: ByteString -> Int
-decInt = fromIntegral . decodeInt
+-- | The value of an integer transport parameter, or 'Nothing' if the octets
+--   given are not one.
+--
+-- RFC 9000 section 18 gives these values as a single variable-length integer,
+-- so anything else is malformed: a value too short to hold the integer it
+-- announces, an empty one, or one with octets left over behind the integer it
+-- does hold.  'decodeInt' answers the first two by reading off the end, which
+-- from inside 'unsafeDupablePerformIO' means an exception out of a pure value
+-- -- raised wherever the field is first forced, which is nowhere near here.
+decInt :: ByteString -> Maybe Int
+decInt bs = unsafeDupablePerformIO $
+    E.handle (\BufferOverrun -> return Nothing) $
+        withReadBuffer bs $ \rbuf -> do
+            n <- decodeInt' rbuf
+            rest <- remainingSize rbuf
+            return $ if rest == 0 then Just (fromIntegral n) else Nothing
 
 encInt :: Int -> ByteString
 encInt = encodeInt . fromIntegral
 
-decMilliseconds :: ByteString -> Milliseconds
-decMilliseconds = Milliseconds . fromIntegral . decodeInt
+decMilliseconds :: ByteString -> Maybe Milliseconds
+decMilliseconds bs = Milliseconds . fromIntegral <$> decInt bs
 
 encMilliseconds :: Milliseconds -> ByteString
 encMilliseconds (Milliseconds n) = encodeInt $ fromIntegral n
@@ -165,53 +180,55 @@ toVersionInfo bs
     len = BS.length bs
     (cnt, remainder) = len `divMod` 4
 
-fromParameterList :: ParameterList -> Parameters
-fromParameterList kvs = foldl' update params kvs
+-- | 'Nothing' if any parameter's value is malformed.  An unknown key is not:
+--   RFC 9000 section 18.1 says to ignore one.
+fromParameterList :: ParameterList -> Maybe Parameters
+fromParameterList kvs = foldM update params kvs
   where
     params = baseParameters
     update x (OriginalDestinationConnectionId, v) =
-        x{originalDestinationConnectionId = Just (toCID v)}
+        Just x{originalDestinationConnectionId = Just (toCID v)}
     update x (MaxIdleTimeout, v) =
-        x{maxIdleTimeout = decMilliseconds v}
+        (\n -> x{maxIdleTimeout = n}) <$> decMilliseconds v
     update x (StateLessResetToken, v) =
-        x{statelessResetToken = Just (StatelessResetToken $ Short.toShort v)}
+        Just x{statelessResetToken = Just (StatelessResetToken $ Short.toShort v)}
     update x (MaxUdpPayloadSize, v) =
-        x{maxUdpPayloadSize = decInt v}
+        (\n -> x{maxUdpPayloadSize = n}) <$> decInt v
     update x (InitialMaxData, v) =
-        x{initialMaxData = decInt v}
+        (\n -> x{initialMaxData = n}) <$> decInt v
     update x (InitialMaxStreamDataBidiLocal, v) =
-        x{initialMaxStreamDataBidiLocal = decInt v}
+        (\n -> x{initialMaxStreamDataBidiLocal = n}) <$> decInt v
     update x (InitialMaxStreamDataBidiRemote, v) =
-        x{initialMaxStreamDataBidiRemote = decInt v}
+        (\n -> x{initialMaxStreamDataBidiRemote = n}) <$> decInt v
     update x (InitialMaxStreamDataUni, v) =
-        x{initialMaxStreamDataUni = decInt v}
+        (\n -> x{initialMaxStreamDataUni = n}) <$> decInt v
     update x (InitialMaxStreamsBidi, v) =
-        x{initialMaxStreamsBidi = decInt v}
+        (\n -> x{initialMaxStreamsBidi = n}) <$> decInt v
     update x (InitialMaxStreamsUni, v) =
-        x{initialMaxStreamsUni = decInt v}
+        (\n -> x{initialMaxStreamsUni = n}) <$> decInt v
     update x (AckDelayExponent, v) =
-        x{ackDelayExponent = decInt v}
+        (\n -> x{ackDelayExponent = n}) <$> decInt v
     update x (MaxAckDelay, v) =
-        x{maxAckDelay = decMilliseconds v}
+        (\n -> x{maxAckDelay = n}) <$> decMilliseconds v
     update x (DisableActiveMigration, _) =
-        x{disableActiveMigration = True}
+        Just x{disableActiveMigration = True}
     update x (PreferredAddress, v) =
-        x{preferredAddress = Just v}
+        Just x{preferredAddress = Just v}
     update x (ActiveConnectionIdLimit, v) =
-        x{activeConnectionIdLimit = decInt v}
+        (\n -> x{activeConnectionIdLimit = n}) <$> decInt v
     update x (InitialSourceConnectionId, v) =
-        x{initialSourceConnectionId = Just (toCID v)}
+        Just x{initialSourceConnectionId = Just (toCID v)}
     update x (RetrySourceConnectionId, v) =
-        x{retrySourceConnectionId = Just (toCID v)}
+        Just x{retrySourceConnectionId = Just (toCID v)}
     update x (Grease, v) =
-        x{grease = Just v}
+        Just x{grease = Just v}
     update x (GreaseQuicBit, _) =
-        x{greaseQuicBit = True}
+        Just x{greaseQuicBit = True}
     update x (VersionInformation, v) =
-        x{versionInformation = toVersionInfo v}
+        Just x{versionInformation = toVersionInfo v}
     update x (MaxDatagramFrameSize, v) =
-        x{maxDatagramFrameSize = decInt v}
-    update x _ = x
+        (\n -> x{maxDatagramFrameSize = n}) <$> decInt v
+    update x _ = Just x
 
 diff
     :: Eq a
@@ -280,8 +297,15 @@ encodeParameterList kvs = unsafeDupablePerformIO $
         encodeInt' wbuf $ fromIntegral $ BS.length v
         copyByteString wbuf v
 
+-- | The transport parameters a peer sent, or 'Nothing' if they are not a
+--   whole list.  A key, a length and that many octets, repeated until the
+--   octets run out; anything that stops in the middle of one of those reads
+--   off the end.
 decodeParameterList :: ByteString -> Maybe ParameterList
-decodeParameterList bs = unsafeDupablePerformIO $ withReadBuffer bs (`go` id)
+decodeParameterList bs =
+    unsafeDupablePerformIO $
+        E.handle (\BufferOverrun -> return Nothing) $
+            withReadBuffer bs (`go` id)
   where
     go rbuf build = do
         rest1 <- remainingSize rbuf
