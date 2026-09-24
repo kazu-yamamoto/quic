@@ -46,20 +46,16 @@ jobs:
         path: ~/.cabal
         key: ${{ steps.params.outputs.cache }}
 
-    # doctest 0.25.0 rejects the --interactive that cabal puts in the GHC
-    # response file it hands the repl program, so the doctest step below dies
-    # before it reads a single example.  Reported as sol/doctest#487; drop the
-    # constraint once that is fixed.
     - name: Install doctest
       id: doctest-dep
       if: ${{ runner.os == 'Linux' }}
       shell: bash
       run: |
-        if cabal install --offline --overwrite-policy=always doctest --constraint='doctest < 0.25'
+        if cabal install --offline --overwrite-policy=always doctest
         then
           echo "installed=false" >> "$GITHUB_OUTPUT"
         else
-          cabal install doctest --overwrite-policy=always --constraint='doctest < 0.25'
+          cabal install doctest --overwrite-policy=always
           echo "installed=true" >> "$GITHUB_OUTPUT"
         fi
 
