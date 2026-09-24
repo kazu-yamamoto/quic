@@ -15,6 +15,17 @@ jobs:
       matrix:
         os:  [ 'ubuntu-latest', 'macOS-latest' ]
         ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12' ]
+        # GitHub runs at most five macOS jobs at once, so the sixth sat
+        # waiting for one of the others to finish and by itself decided when
+        # the workflow ended.  Nothing in this package is macOS-specific
+        # beyond the syscalls the network code makes, and those do not vary
+        # by compiler; keep the oldest and newest there and let Linux cover
+        # the range in between.
+        exclude:
+          - { os: macOS-latest, ghc: '9.4'  }
+          - { os: macOS-latest, ghc: '9.6'  }
+          - { os: macOS-latest, ghc: '9.8'  }
+          - { os: macOS-latest, ghc: '9.10' }
 
     env:
       cache-name: cabal-ghc
@@ -30,12 +41,11 @@ jobs:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: latest
 
-    - name: Hackage index, Cache Key
+    - name: Cache Key
       id: params
       shell: bash
       run: |
         ghc_version=$(ghc --numeric-version)
-        cabal update
         echo "cache=${{ runner.os }}-build-${{ env.cache-name }}-${ghc_version}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}" > "$GITHUB_OUTPUT"
         echo "ghc_version=$ghc_version" >> "$GITHUB_OUTPUT"
 
@@ -45,6 +55,15 @@ jobs:
       with:
         path: ~/.cabal
         key: ${{ steps.params.outputs.cache }}
+
+    # After the restore, not before it.  The cache is ~/.cabal, which is where
+    # the package index lives, so restoring it puts back whatever index was
+    # current when the cache was written -- and a cabal update run first is
+    # simply overwritten.  A job then cannot see anything published since the
+    # cache was made, however long ago that was.
+    - name: Hackage index
+      shell: bash
+      run: cabal update
 
     # doctest 0.25.0 rejects the --interactive that cabal puts in the GHC
     # response file it hands the repl program, so the doctest step below dies
