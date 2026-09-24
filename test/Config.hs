@@ -124,30 +124,37 @@ withPipe scenario body = do
             setSocketOption sockS ReuseAddr 1
             bind sockC saC
             connect sockS saS
-            -- from client
-            tid0 <- forkIO $ do
-                (bs, saO) <- recvFrom sockC 2048
-                connect sockC saO
-                n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
-                dropPacket0 <- shouldDrop scenario True n0
-                unless dropPacket0 $ void $ send sockS bs
-                forever $ do
-                    bs1 <- recv sockC 2048
-                    n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
-                    dropPacket <- shouldDrop scenario True n
-                    let isCC = BS.length bs1 < 200
-                    when (isCC || not dropPacket) $ void $ send sockS bs1
-            -- from server
-            tid1 <- forkIO $ forever $ do
-                bs <- recv sockS 2048
-                n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
-                dropPacket <- shouldDrop scenario False n
-                let isCC = BS.length bs < 200
-                when (isCC || not dropPacket) $ void $ send sockC bs
-            body
-            killThread tid0
-            killThread tid1
+            -- The relaying threads have to stop before the sockets close.
+            -- Run at the end of body instead, the kills are skipped whenever
+            -- body throws, and the threads are then left in recv on a socket
+            -- the bracket has just closed.  That surfaces as "threadWait:
+            -- invalid argument (Bad file descriptor)" from a thread nobody is
+            -- watching, and buries whatever the test was really failing on.
+            E.bracket (startRelay sockC sockS irefC irefS) stopRelay $ \_ -> body
   where
+    startRelay sockC sockS irefC irefS = do
+        -- from client
+        tid0 <- forkIO $ do
+            (bs, saO) <- recvFrom sockC 2048
+            connect sockC saO
+            n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+            dropPacket0 <- shouldDrop scenario True n0
+            unless dropPacket0 $ void $ send sockS bs
+            forever $ do
+                bs1 <- recv sockC 2048
+                n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+                dropPacket <- shouldDrop scenario True n
+                let isCC = BS.length bs1 < 200
+                when (isCC || not dropPacket) $ void $ send sockS bs1
+        -- from server
+        tid1 <- forkIO $ forever $ do
+            bs <- recv sockS 2048
+            n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
+            dropPacket <- shouldDrop scenario False n
+            let isCC = BS.length bs < 200
+            when (isCC || not dropPacket) $ void $ send sockC bs
+        return (tid0, tid1)
+    stopRelay (tid0, tid1) = killThread tid0 >> killThread tid1
     hints =
         defaultHints
             { addrSocketType = Network.Socket.Datagram
