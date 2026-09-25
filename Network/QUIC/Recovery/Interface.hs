@@ -46,7 +46,7 @@ speedup ldcc@LDCC{..} lvl desc = do
     unless (null packets) $ do
         onPacketsLost ldcc packets
         retransmit ldcc packets
-        setLossDetectionTimer ldcc lvl
+        setLossDetectionTimer ldcc
 
 resender :: LDCC -> IO ()
 resender ldcc@LDCC{..} = forever $ do
