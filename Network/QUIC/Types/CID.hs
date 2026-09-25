@@ -5,6 +5,7 @@
 module Network.QUIC.Types.CID (
     CID (..),
     myCIDLength,
+    maxCIDLength,
     newCID,
     fromCID,
     toCID,
@@ -40,6 +41,14 @@ import Network.QUIC.Imports
 
 myCIDLength :: Int
 myCIDLength = 8
+
+-- | The longest connection id this version of QUIC has.
+--
+-- RFC 9000 section 17.2: "This version of QUIC (version 1) does not support
+-- connection IDs longer than 20 bytes", and endpoints that receive a longer
+-- one in a version 1 long header MUST drop the packet.
+maxCIDLength :: Int
+maxCIDLength = 20
 
 -- | A type for conneciton ID.
 newtype CID = CID Bytes deriving (Eq, Ord, Generic)

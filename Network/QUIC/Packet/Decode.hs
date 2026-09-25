@@ -108,11 +108,18 @@ makeLongCrypt bs rbuf = do
 decodeLongHeader :: ReadBuffer -> IO (Version, CID, CID)
 decodeLongHeader rbuf = do
     ver <- Version <$> read32 rbuf
-    dcidlen <- fromIntegral <$> read8 rbuf
-    dCID <- makeCID <$> extractShortByteString rbuf dcidlen
-    scidlen <- fromIntegral <$> read8 rbuf
-    sCID <- makeCID <$> extractShortByteString rbuf scidlen
+    dCID <- getCID
+    sCID <- getCID
     return (ver, dCID, sCID)
+  where
+    -- The length is one octet, so it can say up to 255, but RFC 9000 section
+    -- 17.2 caps a connection id at 20 and tells an endpoint receiving a
+    -- longer one to drop the packet.  Throwing here does that: decodePacket
+    -- catches it and answers BrokenPacket.
+    getCID = do
+        len <- fromIntegral <$> read8 rbuf
+        when (len > maxCIDLength) $ E.throwIO BufferOverrun
+        makeCID <$> extractShortByteString rbuf len
 
 decodeVersionNegotiationPacket :: ReadBuffer -> CID -> CID -> IO PacketI
 decodeVersionNegotiationPacket rbuf dCID sCID = do
@@ -130,6 +137,12 @@ decodeRetryPacket
     :: ReadBuffer -> Flags Protected -> Version -> CID -> CID -> IO PacketI
 decodeRetryPacket rbuf _proFlags version dCID sCID = do
     rsiz <- remainingSize rbuf
+    -- The integrity tag is the last 16 octets and the token is whatever comes
+    -- before it, possibly nothing.  With fewer than 16 octets left this is not
+    -- a Retry packet, and the subtraction below would go negative -- which
+    -- extractByteString does not refuse.  It reads a negative length
+    -- backwards, from before the packet, with no check at all.
+    when (rsiz < 16) $ E.throwIO BufferOverrun
     token <- extractByteString rbuf (rsiz - 16)
     siz <- savingSize rbuf
     pseudo <- extractByteString rbuf $ negate siz
