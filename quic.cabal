@@ -13,8 +13,6 @@ category:           Web
 build-type:         Simple
 extra-source-files:
     ChangeLog.md
-    cbits/*.h
-    cbits/picotls/*.h
     test/servercert.pem
     test/serverkey.pem
 
@@ -25,10 +23,6 @@ source-repository head
 flag devel
     description: Development commands
     default:     False
-
-flag fusion
-    description: Use fusion AES-GCM engine from picotls
-    manual:      True
 
 library
     exposed-modules:
@@ -58,7 +52,6 @@ library
         Network.QUIC.Connection.Types
         Network.QUIC.Connector
         Network.QUIC.Crypto
-        Network.QUIC.Crypto.Fusion
         Network.QUIC.Crypto.Keys
         Network.QUIC.Crypto.Nite
         Network.QUIC.Crypto.Types
@@ -135,7 +128,7 @@ library
         bytestring >=0.10,
         containers,
         crypto-token >=0.2.0 && <0.3,
-        crypton >=2.0.1 && < 2.1,
+        crypton >=2.1.0 && <2.2,
         crypton-x509 >=1.9.0 && <1.10,
         crypton-x509-store >=1.9.0 && <1.10,
         crypton-x509-system >=1.9.0 && <1.10,
@@ -161,13 +154,6 @@ library
 
     if os(windows)
         cc-options: -D_WINDOWS
-
-    if (flag(fusion) && arch(x86_64))
-        cpp-options: -DUSE_FUSION
-        cc-options:  -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq
-        c-sources:
-            cbits/fusion.c
-            cbits/picotls.c
 
 executable quic-server
     main-is:            quic-server.hs
@@ -274,10 +260,3 @@ test-suite spec
 
     if os(windows)
         ghc-options: -with-rtsopts=--io-manager=native
-
-    if (flag(fusion) && arch(x86_64))
-        cpp-options: -DUSE_FUSION
-        cc-options:  -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq
-        c-sources:
-            cbits/fusion.c
-            cbits/picotls.c

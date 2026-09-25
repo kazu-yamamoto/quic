@@ -14,21 +14,26 @@ module Network.QUIC.Crypto.Nite (
     makeNiteEncrypt,
     makeNiteDecrypt,
     makeNiteProtector,
+    makeGcmEncrypt,
+    makeGcmDecrypt,
 ) where
 
 import Crypto.Cipher.AES
+import qualified Crypto.Cipher.AES.GCM as GCM
 import qualified Crypto.Cipher.ChaCha as ChaCha
 import Crypto.Cipher.ChaChaPoly1305 (aeadChacha20poly1305Init)
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (maybeCryptoError)
-import qualified Data.ByteArray as Byte (convert)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import qualified Data.ByteArray as Byte (ByteArrayAccess (..), convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
-import Foreign.ForeignPtr (newForeignPtr_, withForeignPtr)
+import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, newForeignPtr_, withForeignPtr)
 import Foreign.Marshal.Alloc (mallocBytes)
 import Foreign.Marshal.Utils (copyBytes)
-import Foreign.Ptr (Ptr, nullPtr, plusPtr)
-import Foreign.Storable (peek, poke)
+import Foreign.Ptr (Ptr, minusPtr, nullPtr, plusPtr)
+import Foreign.Storable (peek, poke, pokeByteOff)
+import Foreign.Ptr (castPtr)
 import Network.TLS hiding (Version)
 import qualified Network.TLS as TLS
 import Network.TLS.Extra.Cipher
@@ -295,3 +300,115 @@ niteGetMask ref samplelen mkMask dstbuf = do
     let Mask mask = mkMask $ Sample sample
     _len <- copyBS dstbuf mask
     return dstbuf
+
+----------------------------------------------------------------
+
+{-
+ - AES-GCM through crypton's one-call interface.
+ -
+ - What the interface above this costs is not the encryption.  A t'Context'
+ - is built from the key once, where 'aeadInit' rebuilt the key schedule and
+ - the table of multiples of H for every nonce; and the header protection
+ - mask comes back from the same call as the ciphertext, riding in a lane of
+ - the AES pipeline that the packet length leaves idle, where it used to be a
+ - block of its own after the fact.
+ -
+ - The sample offset the mask is taken from is not fixed: QUIC samples four
+ - bytes past the start of the packet number, and the ciphertext starts after
+ - it, so the offset is four less the length of the encoded packet number.
+ - 'setSample' is handed the address, and the offset is what it is from the
+ - output buffer the encryption is given.
+ -}
+
+{-
+ - The nonce, written into a buffer the connection keeps rather than built
+ - fresh.  It is the IV with the packet number exclusive-ored into its low
+ - eight bytes, and the obvious way -- bytestring64 and bsXORpad -- allocates
+ - two ByteStrings for every packet.  At these lengths that is a third of
+ - what the encryption costs.
+ -}
+newtype NoncePtr = NoncePtr (ForeignPtr Word8)
+
+instance Byte.ByteArrayAccess NoncePtr where
+    length _ = 12
+    withByteArray (NoncePtr fp) f = withForeignPtr fp (f . castPtr)
+
+writeNonce :: Ptr Word8 -> Ptr Word8 -> Word64 -> IO ()
+writeNonce dst ivp pn = do
+    copyBytes dst ivp 4
+    go 0
+  where
+    go :: Int -> IO ()
+    go 8 = return ()
+    go j = do
+        b <- peek (ivp `plusPtr` (4 + j)) :: IO Word8
+        pokeByteOff dst (4 + j) (b `xor` fromIntegral (pn `shiftR` (56 - 8 * j)))
+        go (j + 1)
+
+-- | Whether this is one of the two AES-GCM suites, which is what the
+-- interface below covers.  ChaCha20-Poly1305 has no equivalent there and
+-- stays with the code above.
+gcmKeySize :: Cipher -> Maybe Int
+gcmKeySize cipher
+    | cipher == cipher13_AES_128_GCM_SHA256 = Just 16
+    | cipher == cipher13_AES_256_GCM_SHA384 = Just 32
+    | otherwise = Nothing
+
+-- | The encryption side, with the mask.  The two extra actions are the
+-- 'Protector' halves: they and the encryption share the buffer the mask is
+-- written to and the address the sample is taken from.
+makeGcmEncrypt
+    :: Cipher
+    -> Key
+    -> IV
+    -> Key
+    -> IO (Maybe (NiteEncrypt, Buffer -> IO (), IO Buffer))
+makeGcmEncrypt cipher (Key key) iv (Key hpkey) = case gcmKeySize cipher of
+    Nothing -> return Nothing
+    Just _ -> case (mctx, mhk) of
+        (Just ctx, Just hk) -> do
+            ref <- newIORef nullPtr
+            maskBuf <- mallocBytes 16 -- fixme: free
+            ivfp <- mallocForeignPtrBytes 12
+            noncefp <- mallocForeignPtrBytes 12
+            let IV ivbs = iv
+            withForeignPtr ivfp $ \p -> void $ copyBS p ivbs
+            let enc dst plaintext (AssDat ad) pn = do
+                    sample <- readIORef ref
+                    let off = sample `minusPtr` dst
+                    withForeignPtr noncefp $ \np ->
+                        withForeignPtr ivfp $ \ivp ->
+                            writeNonce np ivp (fromIntegral pn)
+                    ok <-
+                        GCM.encryptWithMask
+                            ctx
+                            hk
+                            (NoncePtr noncefp)
+                            ad
+                            plaintext
+                            16
+                            off
+                            dst
+                            maskBuf
+                    return $ if ok then BS.length plaintext + 16 else -1
+            return $ Just (enc, writeIORef ref, return maskBuf)
+        _ -> return Nothing
+  where
+    mctx = maybeCryptoError $ GCM.newContext key
+    mhk = maybeCryptoError $ GCM.newHeaderKey hpkey
+
+-- | The decryption side.  There is no mask here: the receiver takes its
+-- sample from the packet it was given, before anything is decrypted.
+makeGcmDecrypt :: Cipher -> Key -> IV -> Maybe NiteDecrypt
+makeGcmDecrypt cipher (Key key) iv = case gcmKeySize cipher of
+    Nothing -> Nothing
+    Just _ -> case maybeCryptoError $ GCM.newContext key of
+        Nothing -> Nothing
+        Just ctx ->
+            let mk = makeNonce iv
+                dec dst ciphertext (AssDat ad) pn =
+                    let Nonce nonce = mk $ bytestring64 $ fromIntegral pn
+                     in case GCM.decrypt ctx nonce ad ciphertext 16 of
+                            Nothing -> return (-1)
+                            Just plain -> copyBS dst plain
+             in Just dec
