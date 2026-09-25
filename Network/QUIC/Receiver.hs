@@ -239,8 +239,22 @@ processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
     -- see ackEli above
     when (lvl /= InitialLevel && lvl /= RTT1Level) $ sendFrames conn lvl []
-processFrame conn lvl (Ack ackInfo ackDelay) = do
+processFrame conn lvl (Ack ackInfo@(AckInfo largestAcked _ _) ackDelay) = do
     when (lvl == RTT0Level) $ closeConnection conn ProtocolViolation "ACK"
+    -- RFC 9000 Sec 19.3.1: walking the ranges down from the largest
+    -- acknowledged, "if the value of the Gap field or the value calculated is
+    -- negative, an endpoint MUST generate a connection error of type
+    -- FRAME_ENCODING_ERROR".
+    unless (validAckInfo ackInfo) $
+        closeConnection conn FrameEncodingError "Invalid ACK range"
+    -- RFC 9000 Sec 13.1: "An endpoint SHOULD treat receipt of an
+    -- acknowledgment for a packet it did not send as a connection error of
+    -- type PROTOCOL_VIOLATION, if it is able to detect that condition."  We
+    -- are able to: packet numbers come from one counter, so anything at or
+    -- past the next one has never left here.
+    nextPN <- getPacketNumber conn
+    when (largestAcked >= nextPN) $
+        closeConnection conn ProtocolViolation "ACK for a packet never sent"
     onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
 processFrame conn lvl (ResetStream sid aerr finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
