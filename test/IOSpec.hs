@@ -28,7 +28,7 @@ spec = do
                         { onServerReady = putMVar var ()
                         }
                 }
-    let cc = testClientConfigR
+    let cc = setClientQlog testClientConfigR
     let waitS = takeMVar var :: IO ()
     describe "send & recv" $ do
         it "can exchange data on random dropping" $ do
@@ -93,6 +93,9 @@ spec = do
         -- number of bytes sent by the RESET_STREAM sender.
         it "sends RESET_STREAM with the bytes sent as final size" $ do
             withPipe (DropClientPacket []) $ testResetStreamFinalSize cc sc waitS
+    describe "port handover" $ do
+        it "ignores a leftover datagram from the connection that just closed" $
+            withPipeStray (Randomly 20) $ testSendRecv cc sc waitS 20
     describe "concurrency" $ do
         it "can handle multiple clients" $ do
             withPipe (Randomly 20) $ testMultiSendRecv cc sc waitS 500

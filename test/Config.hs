@@ -8,6 +8,7 @@ module Config (
     setServerQlog,
     setClientQlog,
     withPipe,
+    withPipeStray,
     Scenario (..),
     newSessionManager,
 ) where
@@ -17,6 +18,7 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import Data.Bits ((.&.))
 import Data.IORef
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
@@ -56,11 +58,12 @@ makeTestServerConfigR = do
         either error id
             <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
     let credentials = Credentials [cred]
-    return
-        testServerConfigR
-            { scCredentials = credentials
-            , scALPN = Just chooseALPN
-            }
+    return $
+        setServerQlog
+            testServerConfigR
+                { scCredentials = credentials
+                , scALPN = Just chooseALPN
+                }
 
 testServerConfigR :: ServerConfig
 testServerConfigR =
@@ -99,11 +102,20 @@ testClientConfigR =
                 }
         }
 
+-- | Write qlog for the connections that go through 'withPipe'.
+--
+-- These are the tests that lose packets on purpose, and so the ones that
+-- stall.  A stall costs the idle timeout and reports a test name and
+-- \"ConnectionIsTimeout\", which says nothing about why; the qlog says which
+-- packets went where, what the congestion window was doing and when a timer
+-- fired.  Two stalls found at a rate of one run in a few hundred were read
+-- straight off these traces, and neither would have been diagnosable
+-- without them.  CI keeps the directory when a job fails.
 setServerQlog :: ServerConfig -> ServerConfig
-setServerQlog sc = sc
+setServerQlog sc = sc{scQLog = Just "qlog"}
 
 setClientQlog :: ClientConfig -> ClientConfig
-setClientQlog cc = cc
+setClientQlog cc = cc{ccQLog = Just "qlog"}
 
 data Scenario
     = Randomly Int
@@ -111,7 +123,21 @@ data Scenario
     | DropServerPacket [Int]
 
 withPipe :: Scenario -> IO () -> IO ()
-withPipe scenario body = do
+withPipe = withPipeWith False
+
+-- | 'withPipe', with one short-header datagram delivered to the relay's
+-- socket before the relay starts reading.
+--
+-- That is what the CONNECTION_CLOSE of the connection that just closed looks
+-- like when it lands after this socket has taken over the port, and taking it
+-- for the client ties the relay to a peer with nothing left to say.  The test
+-- that uses this fails within the idle timeout if the relay ever goes back to
+-- latching onto the first datagram it sees.
+withPipeStray :: Scenario -> IO () -> IO ()
+withPipeStray = withPipeWith True
+
+withPipeWith :: Bool -> Scenario -> IO () -> IO ()
+withPipeWith stray scenario body = do
     addrC <- resolve "50002"
     let saC = addrAddress addrC
     addrS <- resolve "50003"
@@ -124,6 +150,10 @@ withPipe scenario body = do
             setSocketOption sockS ReuseAddr 1
             bind sockC saC
             connect sockS saS
+            when stray $
+                E.bracket (openSocket addrC) close $ \sock ->
+                    void $ sendTo sock (BS.pack [0x40, 1, 2, 3]) saC
+
             -- The relaying threads have to stop before the sockets close.
             -- Run at the end of body instead, the kills are skipped whenever
             -- body throws, and the threads are then left in recv on a socket
@@ -135,7 +165,22 @@ withPipe scenario body = do
     startRelay sockC sockS irefC irefS = do
         -- from client
         tid0 <- forkIO $ do
-            (bs, saO) <- recvFrom sockC 2048
+            -- Wait for the client to introduce itself, and take the first
+            -- long-header packet rather than the first datagram.
+            --
+            -- These sockets use one fixed port, so the socket for this test
+            -- binds it a fraction of a millisecond after the previous test
+            -- closed its own.  The client of that test signs off with a
+            -- CONNECTION_CLOSE, and when that lands after the handover it is
+            -- this socket that receives it.  Connecting to its sender ties
+            -- the relay to a peer with nothing left to say, and the kernel
+            -- then drops every datagram from the client we are here to
+            -- relay: it sends Initial packets until the idle timeout and
+            -- hears nothing, the server never sees the connection at all.
+            --
+            -- A client always opens with a long header; a leftover from an
+            -- established connection is a short one.  That tells them apart.
+            (bs, saO) <- waitForClientHello sockC
             connect sockC saO
             n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
             dropPacket0 <- shouldDrop scenario True n0
@@ -155,6 +200,11 @@ withPipe scenario body = do
             when (isCC || not dropPacket) $ void $ send sockC bs
         return (tid0, tid1)
     stopRelay (tid0, tid1) = killThread tid0 >> killThread tid1
+    waitForClientHello sockC = do
+        (bs, saO) <- recvFrom sockC 2048
+        if not (BS.null bs) && BS.head bs .&. 0x80 /= 0
+            then return (bs, saO)
+            else waitForClientHello sockC
     hints =
         defaultHints
             { addrSocketType = Network.Socket.Datagram
