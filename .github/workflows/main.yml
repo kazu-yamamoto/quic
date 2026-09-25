@@ -100,8 +100,23 @@ jobs:
     - name: Build
       run: cabal build ${{ env.target-config }} all
 
+    # The IOSpec tests write qlog here -- see setServerQlog in test/Config.hs
+    # for why -- and the step after the run carries it away when a job fails.
+    # A stall in those tests shows up as a test name and
+    # "ConnectionIsTimeout", which does not say why; the trace does.
+    - name: Make room for qlog
+      run: mkdir -p qlog
+
     - name: Run tests
       run: cabal test ${{ env.target-config }} all
+
+    - name: Keep the qlog of a failed run
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: qlog-${{ matrix.os }}-${{ matrix.ghc }}
+        path: qlog
+        retention-days: 7
 
     - name: Run doctest
       if: ${{ runner.os == 'Linux' }}
