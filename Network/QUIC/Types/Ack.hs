@@ -47,50 +47,33 @@ toAckInfo (l : ls) = ack l ls 0
 -- >>> fromAckInfo $ AckInfo 9 2 [(0,1)]
 -- [4,5,7,8,9]
 fromAckInfo :: AckInfo -> [PacketNumber]
-fromAckInfo (AckInfo lpn fr grs) = loop grs [stt .. lpn]
+fromAckInfo (AckInfo lpn fr grs) = loop grs stt [stt .. lpn]
   where
     stt = lpn - fromIntegral fr
-    loop _ [] = error "loop"
-    loop [] acc = acc
-    loop ((g, r) : xs) acc@(s : _) = loop xs ([z - fromIntegral r .. z] ++ acc)
+    -- Carrying the smallest of the range just built, rather than reading it
+    -- back off the front of the accumulator.  Taking it off the front needs a
+    -- clause for the accumulator being empty, which it never is -- and that
+    -- clause was an error call sitting on a path the peer's ACK ranges reach.
+    loop [] _ acc = acc
+    loop ((g, r) : xs) s acc = loop xs lo ([lo .. z] ++ acc)
       where
         z = s - fromIntegral g - 2
-
--- |
--- >>> fromAckInfoWithMin (AckInfo 9 0 []) 1
--- [9]
--- >>> fromAckInfoWithMin (AckInfo 9 2 []) 8
--- [8,9]
--- >>> fromAckInfoWithMin (AckInfo 8 1 [(2,1)]) 3
--- [3,7,8]
--- >>> fromAckInfoWithMin (AckInfo 9 2 [(0,1)]) 8
--- [8,9]
-fromAckInfoWithMin :: AckInfo -> PacketNumber -> [PacketNumber]
-fromAckInfoWithMin (AckInfo lpn fr grs) lim
-    | stt < lim = [lim .. lpn]
-    | otherwise = loop grs [stt .. lpn]
-  where
-    stt = lpn - fromIntegral fr
-    loop _ [] = error "loop"
-    loop [] acc = acc
-    loop ((g, r) : xs) acc@(s : _)
-        | z < lim = acc
-        | otherwise = loop xs ([r' .. z] ++ acc)
-      where
-        z = s - fromIntegral g - 2
-        r' = max lim (z - fromIntegral r)
+        lo = z - fromIntegral r
 
 fromAckInfoToPred :: AckInfo -> (PacketNumber -> Bool)
 fromAckInfoToPred (AckInfo lpn fr grs) =
-    \x -> any (f x) $ loop grs [(stt, lpn)]
+    \x -> any (f x) $ loop grs stt [(stt, lpn)]
   where
     f x (l, u) = l <= x && x <= u
     stt = lpn - fromIntegral fr
-    loop _ [] = error "loop"
-    loop [] acc = acc
-    loop ((g, r) : xs) acc@((s, _) : _) = loop xs $ (z - fromIntegral r, z) : acc
+    -- As in 'fromAckInfo': carry the smallest of the range just built instead
+    -- of reading it back off the accumulator, so there is no empty case to
+    -- answer for.  The peer chooses these ranges.
+    loop [] _ acc = acc
+    loop ((g, r) : xs) s acc = loop xs lo ((lo, z) : acc)
       where
         z = s - fromIntegral g - 2
+        lo = z - fromIntegral r
 
 ----------------------------------------------------------------
 

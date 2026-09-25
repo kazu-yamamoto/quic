@@ -129,11 +129,12 @@ sendPingPacket conn lvl = do
                 let PlainPacket _ plain0 = spPlainPacket spkt
                 adjustForRetransmit conn $ plainFrames plain0
         xs <- construct conn lvl frames False
-        if null xs
-            then qlogDebug conn $ Debug "ping NULL"
-            else do
-                let spkt = last xs
-                    ping = spPlainPacket spkt
+        -- Asking for the last one and asking whether there is one at all are
+        -- the same question, so ask it once.
+        case reverse xs of
+            [] -> qlogDebug conn $ Debug "ping NULL"
+            spkt : _ -> do
+                let ping = spPlainPacket spkt
                 let sizbuf@(SizedBuffer buf _) = encryptRes conn
                 (bytes, padlen) <- encodePlainPacket conn sizbuf ping (Just maxSiz)
                 when (bytes > 0) $ do

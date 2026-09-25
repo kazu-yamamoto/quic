@@ -2,6 +2,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Crypto.Nite (
+    supportedCipher,
+    unsupportedCipher,
     niteEncrypt,
     niteEncrypt',
     niteDecrypt,
@@ -28,6 +30,7 @@ import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr (Ptr, nullPtr, plusPtr)
 import Foreign.Storable (peek, poke)
 import Network.TLS hiding (Version)
+import qualified Network.TLS as TLS
 import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Crypto.Types
@@ -35,6 +38,24 @@ import Network.QUIC.Imports
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
+
+-- | The ciphers this implements.
+--
+-- AES-128-CCM is a TLS 1.3 cipher suite and is deliberately not here: there
+-- is no CCM in cipherEncrypt or cipherDecrypt.  It used to be accepted by the
+-- two length functions below, so configuring it got past them and failed
+-- later, inside encryption, with nothing to say which cipher it meant.
+supportedCipher :: Cipher -> Bool
+supportedCipher cipher =
+    cipher
+        `elem` [ cipher13_AES_128_GCM_SHA256
+               , cipher13_AES_256_GCM_SHA384
+               , cipher13_CHACHA20_POLY1305_SHA256
+               ]
+
+unsupportedCipher :: String -> Cipher -> a
+unsupportedCipher fun cipher =
+    error $ fun ++ ": unsupported cipher " ++ show (TLS.cipherName cipher)
 
 -- It would be nice to take [PlainText] and update AEAD context with
 -- [PlainText]. But since each PlainText is not aligned to cipher block,
@@ -44,24 +65,22 @@ cipherEncrypt
 cipherEncrypt cipher key@(Key key') (Nonce nonce)
     | cipher == cipher13_AES_128_GCM_SHA256 =
         quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
-    | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 =
         quicAeadEncrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
     | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
         quicAeadEncrypt (maybeCryptoError $ aeadChacha20poly1305Init key' nonce) 16
-    | otherwise = error "cipherEncrypt"
+    | otherwise = unsupportedCipher "cipherEncrypt" cipher
 
 cipherDecrypt
     :: Cipher -> Key -> Nonce -> CipherText -> AssDat -> Maybe PlainText
 cipherDecrypt cipher key@(Key key') (Nonce nonce)
     | cipher == cipher13_AES_128_GCM_SHA256 =
         quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES128)) 16
-    | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256"
     | cipher == cipher13_AES_256_GCM_SHA384 =
         quicAeadDecrypt (aesGCMInit key nonce :: Maybe (AEAD AES256)) 16
     | cipher == cipher13_CHACHA20_POLY1305_SHA256 =
         quicAeadDecrypt (maybeCryptoError $ aeadChacha20poly1305Init key' nonce) 16
-    | otherwise = error "cipherDecrypt"
+    | otherwise = unsupportedCipher "cipherDecrypt" cipher
 
 -- IMPORTANT: Using 'let' so that parameters can be memorized.
 quicAeadEncrypt
@@ -222,11 +241,9 @@ protectionMask cipher key =
 cipherHeaderProtection :: Cipher -> Key -> (Sample -> Mask)
 cipherHeaderProtection cipher key
     | cipher == cipher13_AES_128_GCM_SHA256 = aes128ecbEncrypt key
-    | cipher == cipher13_AES_128_CCM_SHA256 = error "cipher13_AES_128_CCM_SHA256 "
     | cipher == cipher13_AES_256_GCM_SHA384 = aes256ecbEncrypt key
     | cipher == cipher13_CHACHA20_POLY1305_SHA256 = chacha20HeaderProtection key
-    | otherwise =
-        error "cipherHeaderProtection"
+    | otherwise = unsupportedCipher "cipherHeaderProtection" cipher
 
 aes128ecbEncrypt :: Key -> (Sample -> Mask)
 aes128ecbEncrypt (Key key) = case maybeCryptoError $ cipherInit key of
