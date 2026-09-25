@@ -1,5 +1,52 @@
 # ChangeLog
 
+## 0.3.5
+
+Security fixes.  The first four can be reached by a peer that has not
+authenticated itself.
+
+* Drop a packet whose header protection sample is not whole.  A sample of 1
+  to 15 octets reached the cipher, which raised rather than answering with a
+  short mask, and the connection went with it.  One conforming datagram did
+  it.
+  [#95](https://github.com/kazu-yamamoto/quic/pull/95)
+* Bound the CRYPTO data held out of order.  CRYPTO frames sit outside the
+  flow control that bounds stream data, so nothing stopped a peer parking
+  fragments at scattered offsets and having every one held.
+  CryptoBufferExceeded had been defined and never used.
+  [#96](https://github.com/kazu-yamamoto/quic/pull/96)
+* Decode the peer's transport parameters to the Maybe the type promises,
+  rather than raising BufferOverrun out of a pure value.
+  [#97](https://github.com/kazu-yamamoto/quic/pull/97)
+* Refuse a transport parameter sent twice, and stream limits past 2^60.
+  [#105](https://github.com/kazu-yamamoto/quic/pull/105)
+* Stop the sender deadlocking on a congestion window it cannot free.
+  Padding an ACK-only packet put it in flight, spending window that nothing
+  would give back once the loss timer had been cancelled, and the loss timer
+  could not be re-armed from another level.
+  [#103](https://github.com/kazu-yamamoto/quic/pull/103)
+* Leave the peer a whole header protection sample when encoding.
+  [#104](https://github.com/kazu-yamamoto/quic/pull/104)
+* Bound a connection id and a Retry packet in the long header decoder.
+  [#106](https://github.com/kazu-yamamoto/quic/pull/106)
+* Bound how many pieces a stream may be held in.  Flow control counts octets,
+  not fragments, and a fragment costs far more than the octet it carries.
+  [#108](https://github.com/kazu-yamamoto/quic/pull/108)
+* Check the ranges an ACK frame carries, and refuse an ACK for a packet never
+  sent.
+  [#109](https://github.com/kazu-yamamoto/quic/pull/109)
+* Give the two ends of a connection their own qlog file.  Pointing both at
+  one directory took the server down.
+  [#100](https://github.com/kazu-yamamoto/quic/pull/100)
+* Remove the partial functions that were worth removing.
+  [#107](https://github.com/kazu-yamamoto/quic/pull/107)
+* Requiring crypton v2.0.1, whose 2.0.0 dispatched an XOP instruction on
+  CPUs without XOP.
+  [crypton#202](https://github.com/kazu-yamamoto/crypton/issues/202)
+* This is a patch release, but `Network.QUIC.Internal` changed:
+  `fromAckInfoWithMin` is gone, `FlowCntl` has `TooFragmented`, and
+  `tryReassemble` returns `FlowCntl` rather than `Bool`.
+
 ## 0.3.4
 
 * Add a server option to request client certificates.
