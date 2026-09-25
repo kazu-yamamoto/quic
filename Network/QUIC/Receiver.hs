@@ -310,6 +310,11 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
         -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
         OverLimit ->
             closeConnection conn FlowControlError "Flow control error for stream in 0-RTT"
+        -- Not a flow control error: the peer is inside its window, it is
+        -- just spending it in more pieces than we will hold.  Rate control
+        -- answers with InternalError too.
+        TooFragmented ->
+            closeConnection conn QUIC.InternalError "Too many stream fragments"
         Duplicated -> return ()
         Reassembled -> do
             ok' <- checkRxMaxData conn len
@@ -344,6 +349,11 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
         -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
         OverLimit ->
             closeConnection conn FlowControlError "Flow control error for stream in 1-RTT"
+        -- Not a flow control error: the peer is inside its window, it is
+        -- just spending it in more pieces than we will hold.  Rate control
+        -- answers with InternalError too.
+        TooFragmented ->
+            closeConnection conn QUIC.InternalError "Too many stream fragments"
         Duplicated -> return ()
         Reassembled -> do
             ok' <- checkRxMaxData conn len
@@ -505,6 +515,9 @@ putRxCrypto conn lvl rx = do
                 -- CRYPTO_BUFFER_EXCEEDED error code."
                 OverLimit -> do
                     closeConnection conn CryptoBufferExceeded "CRYPTO buffer exceeded"
+                    return False -- not reached: closeConnection throws
+                TooFragmented -> do
+                    closeConnection conn QUIC.InternalError "Too many CRYPTO fragments"
                     return False -- not reached: closeConnection throws
                 Duplicated -> return True
                 Reassembled -> return False

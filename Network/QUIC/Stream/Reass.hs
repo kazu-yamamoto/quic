@@ -94,7 +94,14 @@ takeRecvStreamQwithSize strm siz0 = do
 ----------------------------------------------------------------
 ----------------------------------------------------------------
 
-data FlowCntl = OverLimit | Duplicated | Reassembled
+data FlowCntl
+    = -- | Past the octets the peer is allowed to have outstanding.
+      OverLimit
+    | -- | Past the number of separate pieces we will hold for one stream.
+      TooFragmented
+    | Duplicated
+    | Reassembled
+    deriving (Eq, Show)
 
 putRxStreamData :: Stream -> RxStreamData -> IO FlowCntl
 putRxStreamData s rx@(RxStreamData _ off len _) = do
@@ -102,10 +109,7 @@ putRxStreamData s rx@(RxStreamData _ off len _) = do
     if len + off > lim
         then return OverLimit
         else do
-            dup <- tryReassemble s rx put putFin
-            if dup
-                then return Duplicated
-                else return Reassembled
+            tryReassemble s rx put putFin
   where
     put "" = return ()
     put d = do
@@ -128,46 +132,42 @@ putRxCryptoData s lim rx@(RxStreamData _ off len _) put = do
     StreamState off0 _ <- readIORef $ streamStateRx s
     if off + len > off0 + lim
         then return OverLimit
-        else do
-            dup <- tryReassemble s rx put (return ())
-            return $ if dup then Duplicated else Reassembled
+        else tryReassemble s rx put (return ())
 
 -- fin of StreamState off fin means see-fin-already.
--- return value indicates duplication
 tryReassemble
-    :: Stream -> RxStreamData -> (StreamData -> IO ()) -> IO () -> IO Bool
-tryReassemble Stream{} (RxStreamData "" _ _ False) _ _ = return True
+    :: Stream -> RxStreamData -> (StreamData -> IO ()) -> IO () -> IO FlowCntl
+tryReassemble Stream{} (RxStreamData "" _ _ False) _ _ = return Duplicated
 tryReassemble Stream{..} x@(RxStreamData "" off _ True) _ putFin = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0{streamFin = True}
     if fin0
         then do
             -- stdoutLogger "Illegal Fin" -- fixme
-            return True
+            return Duplicated
         else case off `compare` off0 of
-            LT -> return True
+            LT -> return Duplicated
             EQ -> do
                 writeIORef streamStateRx si1
                 putFin
-                return False
+                return Reassembled
             GT -> do
                 writeIORef streamStateRx si1
-                atomicModifyIORef'' streamReass (Skew.insert x)
-                return False
+                hold streamReass x
 tryReassemble Stream{..} x@(RxStreamData dat off len False) put putFin = do
     si0@(StreamState off0 _) <- readIORef streamStateRx
     case off `compare` off0 of
-        LT -> return True
+        LT -> return Duplicated
         EQ -> do
             put dat
             loop si0 (off0 + len)
-            return False
-        GT -> do
-            atomicModifyIORef'' streamReass (Skew.insert x)
-            return False
+            return Reassembled
+        GT -> hold streamReass x
   where
     loop si0 xff = do
-        mrxs <- atomicModifyIORef' streamReass (Skew.deleteMinIf xff)
+        mrxs <- atomicModifyIORef' streamReass $ \(n, sk) ->
+            let (sk', mrxs) = Skew.deleteMinIf xff sk
+             in ((n - maybe 0 length mrxs, sk'), mrxs)
         case mrxs of
             Nothing -> writeIORef streamStateRx si0{streamOffset = xff}
             Just rxs -> do
@@ -182,19 +182,30 @@ tryReassemble Stream{..} x@(RxStreamData dat off len True) put putFin = do
     si0@(StreamState off0 fin0) <- readIORef streamStateRx
     let si1 = si0{streamFin = True}
     if fin0
-        then return True
+        then return Duplicated
         else case off `compare` off0 of
-            LT -> return True
+            LT -> return Duplicated
             EQ -> do
                 let off1 = off0 + len
                 writeIORef streamStateRx si1{streamOffset = off1}
                 put dat
                 putFin
-                return False
+                return Reassembled
             GT -> do
                 writeIORef streamStateRx si1
-                atomicModifyIORef'' streamReass (Skew.insert x)
-                return False
+                hold streamReass x
+
+-- | Keep a fragment that cannot be delivered yet, unless we are already
+--   holding as many as we are willing to.
+--
+-- Flow control bounds the octets, not the pieces, and a peer that sends its
+-- window one octet at a time at scattered offsets pays for the octets while
+-- we pay for the pieces.
+hold :: IORef (Int, Skew.Skew RxStreamData) -> RxStreamData -> IO FlowCntl
+hold ref x = atomicModifyIORef' ref $ \st@(n, sk) ->
+    if n >= maxReassFragments
+        then (st, TooFragmented)
+        else ((n + 1, Skew.insert x sk), Reassembled)
 
 hasFin :: Seq RxStreamData -> Bool
 hasFin s = case Seq.viewr s of

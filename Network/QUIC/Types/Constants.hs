@@ -41,3 +41,18 @@ idleTimeout = Milliseconds 30000
 -- hostile.  This is well above the floor and still a bound.
 cryptoBufferSize :: Int
 cryptoBufferSize = 65536
+
+----------------------------------------------------------------
+
+-- | How many out-of-order fragments one stream will hold.
+--
+-- Flow control bounds the octets a stream may hold, not the pieces they
+-- arrive in, and a piece costs far more than the octet it carries: a
+-- ByteString, a heap node, a place in a sequence.  One-octet fragments at
+-- scattered offsets therefore buy a peer two orders of magnitude on what its
+-- window says it is spending.
+--
+-- Reordering in practice leaves a handful of gaps, not a thousand, so this is
+-- far above anything real and still a bound.
+maxReassFragments :: Int
+maxReassFragments = 1024
