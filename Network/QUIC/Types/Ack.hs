@@ -14,6 +14,29 @@ data AckInfo = AckInfo PacketNumber Range [(Gap, Range)]
 ackInfo0 :: AckInfo
 ackInfo0 = AckInfo (-1) 0 []
 
+-- | Whether the ranges name packet numbers that could exist.
+--
+-- RFC 9000 section 19.3.1 walks the ranges downward from the largest
+-- acknowledged.  Each gap gives the largest of the next range as
+-- @previous_smallest - gap - 2@, and "if the value of the Gap field or the
+-- value calculated is negative, an endpoint MUST generate a connection error
+-- of type FRAME_ENCODING_ERROR".
+--
+-- Nothing checked this.  The ranges were turned into a predicate and asked
+-- about packets we had sent; ones reaching below zero simply matched nothing.
+validAckInfo :: AckInfo -> Bool
+validAckInfo (AckInfo lpn fr grs) = lpn >= 0 && fr >= 0 && stt >= 0 && go stt grs
+  where
+    stt = lpn - fr
+    go _ [] = True
+    go s ((g, r) : xs)
+        | g < 0 || r < 0 = False
+        | z < 0 || lo < 0 = False
+        | otherwise = go lo xs
+      where
+        z = s - g - 2
+        lo = z - r
+
 -- |
 -- >>> toAckInfo [9]
 -- AckInfo 9 0 []

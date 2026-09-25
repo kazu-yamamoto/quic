@@ -105,6 +105,16 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setMaxStreamsUni
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it
+            "MUST send FRAME_ENCODING_ERROR if an ACK range reaches below zero [Transport 19.3.1]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated impossibleAckRange
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [FrameEncodingError]
+        it
+            "SHOULD send PROTOCOL_VIOLATION on an ACK for a packet never sent [Transport 13.1]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated ackForUnsentPacket
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [ProtocolViolation]
+        it
             "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated unknownFrame
@@ -346,6 +356,21 @@ largeStreamId lvl plain
     | otherwise = plain
   where
     fake = StreamF 1000000000 0 ["GET /\r\n"] True
+
+-- Largest acknowledged 5, then a gap of 10: the next range would start at
+-- 5 - 10 - 2, which is not a packet number.
+impossibleAckRange :: EncryptionLevel -> Plain -> Plain
+impossibleAckRange lvl plain
+    | lvl == RTT1Level =
+        plain{plainFrames = Ack (AckInfo 5 0 [(10, 0)]) 0 : plainFrames plain}
+    | otherwise = plain
+
+-- Nobody has sent a million packets down this connection.
+ackForUnsentPacket :: EncryptionLevel -> Plain -> Plain
+ackForUnsentPacket lvl plain
+    | lvl == RTT1Level =
+        plain{plainFrames = Ack (AckInfo 1000000 0 []) 0 : plainFrames plain}
+    | otherwise = plain
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain
 unknownFrame lvl plain
