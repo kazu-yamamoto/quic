@@ -31,6 +31,19 @@ spec = do
         -- RFC 9000 Sec 18.1: an unknown transport parameter is ignored.
         it "accepts an unknown parameter" $
             decodeParameters (BS.pack [0x21, 0x01, 0x00]) `shouldSatisfy` isJust'
+        -- Sec 7.4.2: "An endpoint MUST treat receipt of a duplicate
+        -- transport parameter as a connection error of type
+        -- TRANSPORT_PARAMETER_ERROR."
+        it "refuses a parameter sent twice" $
+            decodeParameters (BS.pack [0x04, 0x01, 0x20, 0x04, 0x01, 0x21])
+                `shouldSatisfy` isNothing'
+        -- Being unknown is not an exemption: ignored once, not allowed twice.
+        it "refuses an unknown parameter sent twice" $
+            decodeParameters (BS.pack [0x21, 0x01, 0x00, 0x21, 0x01, 0x00])
+                `shouldSatisfy` isNothing'
+        it "accepts two different parameters" $
+            decodeParameters (BS.pack [0x04, 0x01, 0x20, 0x05, 0x01, 0x21])
+                `shouldSatisfy` isJust'
 
 -- Parameters has no Eq, so keep only whether one came back.
 isNothing' :: Maybe Parameters -> Bool
