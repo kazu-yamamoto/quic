@@ -44,7 +44,7 @@ onPacketSent ldcc@LDCC{..} sentPacket = do
                     }
         atomicModifyIORef'' (sentPackets ! lvl) $
             \(SentPackets db) -> SentPackets (db |> sentPacket)
-        setLossDetectionTimer ldcc lvl
+        setLossDetectionTimer ldcc
 
 onPacketSentCC :: LDCC -> SentPacket -> IO ()
 onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
@@ -134,7 +134,7 @@ onAckReceived ldcc@LDCC{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
                     atomicModifyIORef'' recoveryRTT $
                         \rtt -> rtt{ptoCount = 0}
 
-            setLossDetectionTimer ldcc lvl
+            setLossDetectionTimer ldcc
 
 releaseLostCandidates
     :: LDCC -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
@@ -196,9 +196,9 @@ onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
 
 onPacketNumberSpaceDiscarded :: LDCC -> EncryptionLevel -> IO ()
 onPacketNumberSpaceDiscarded ldcc lvl = do
-    let (lvl', label) = case lvl of
-            InitialLevel -> (HandshakeLevel, "initial")
-            _ -> (RTT1Level, "handshake")
+    let label = case lvl of
+            InitialLevel -> "initial"
+            _ -> "handshake"
     qlogDebug ldcc $ Debug (label <> " discarded")
     void $ discard ldcc lvl
-    setLossDetectionTimer ldcc lvl'
+    setLossDetectionTimer ldcc

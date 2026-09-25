@@ -147,15 +147,26 @@ updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
 
 ----------------------------------------------------------------
 
-setLossDetectionTimer :: LDCC -> EncryptionLevel -> IO ()
-setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
+-- | Arm, or cancel, the one loss detection timer.
+--
+-- There is one timer for the connection, not one per encryption level: it is
+-- set to the earliest deadline any level has.  So this takes no level, the
+-- way RFC 9002 section A.8 does not.  It used to take the level of whatever
+-- the caller had just done and do nothing unless that matched the level the
+-- deadline belonged to -- which meant a send at one level could not arm the
+-- timer for another, and an arming skipped that way was skipped for good.
+-- Once the timer had been cancelled it then stayed cancelled while packets
+-- went on being sent: bytes in flight climbed to the congestion window, the
+-- sender stopped, and nothing was left to declare the loss that would have
+-- freed it.
+setLossDetectionTimer :: LDCC -> IO ()
+setLossDetectionTimer ldcc@LDCC{..} = do
     mtl <- getLossTimeAndSpace ldcc
     case mtl of
         Just (earliestLossTime, lvl) -> do
-            when (lvl0 == lvl) $ do
-                -- Time threshold loss detection.
-                let tmi = TimerInfo earliestLossTime lvl LossTime
-                updateLossDetectionTimer ldcc tmi
+            -- Time threshold loss detection.
+            let tmi = TimerInfo earliestLossTime lvl LossTime
+            updateLossDetectionTimer ldcc tmi
         Nothing -> do
             -- See beforeAntiAmp
             CC{..} <- readTVarIO recoveryCC
@@ -172,9 +183,8 @@ setLossDetectionTimer ldcc@LDCC{..} lvl0 = do
                     case mx of
                         Nothing -> return ()
                         Just (ptoTime, lvl) -> do
-                            when (lvl0 == lvl) $ do
-                                let tmi = TimerInfo ptoTime lvl PTO
-                                updateLossDetectionTimer ldcc tmi
+                            let tmi = TimerInfo ptoTime lvl PTO
+                            updateLossDetectionTimer ldcc tmi
 
 beforeAntiAmp :: LDCC -> IO ()
 beforeAntiAmp ldcc = cancelLossDetectionTimer ldcc
@@ -208,7 +218,7 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
                 when (null lostPackets') $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: null"
                 onPacketsLost ldcc lostPackets'
                 retransmit ldcc lostPackets'
-                setLossDetectionTimer ldcc lvl
+                setLossDetectionTimer ldcc
             PTO -> do
                 CC{..} <- readTVarIO recoveryCC
                 if bytesInFlight > 0
@@ -228,4 +238,4 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
                 metricsUpdated ldcc $
                     atomicModifyIORef'' recoveryRTT $
                         \rtt -> rtt{ptoCount = ptoCount rtt + 1}
-                setLossDetectionTimer ldcc lvl
+                setLossDetectionTimer ldcc
