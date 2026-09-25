@@ -16,6 +16,8 @@ module Network.QUIC.Parameters (
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 import qualified Data.ByteString.Short as Short
 import Network.Control
 import System.IO.Unsafe (unsafeDupablePerformIO)
@@ -180,12 +182,29 @@ toVersionInfo bs
     len = BS.length bs
     (cnt, remainder) = len `divMod` 4
 
--- | 'Nothing' if any parameter's value is malformed.  An unknown key is not:
---   RFC 9000 section 18.1 says to ignore one.
+-- | 'Nothing' if any parameter's value is malformed, or if any parameter is
+--   sent twice.  An unknown /key/ is neither: RFC 9000 section 18.1 says to
+--   ignore one.
+--
+-- Section 7.4.2 on the repetition: \"An endpoint MUST treat receipt of a
+-- duplicate transport parameter as a connection error of type
+-- TRANSPORT_PARAMETER_ERROR.\"  Being unknown is not an exemption -- an
+-- unknown parameter is ignored once, not permitted twice -- so the check is
+-- on the key as it arrived, before anything decides whether it means
+-- something here.
 fromParameterList :: ParameterList -> Maybe Parameters
-fromParameterList kvs = foldM update params kvs
+fromParameterList kvs0 = go IntSet.empty params kvs0
   where
     params = baseParameters
+    go :: IntSet -> Parameters -> ParameterList -> Maybe Parameters
+    go _ x [] = Just x
+    go seen x (kv@(Key k, _) : kvs)
+        | key `IntSet.member` seen = Nothing
+        | otherwise = do
+            x' <- update x kv
+            go (IntSet.insert key seen) x' kvs
+      where
+        key = fromIntegral k
     update x (OriginalDestinationConnectionId, v) =
         Just x{originalDestinationConnectionId = Just (toCID v)}
     update x (MaxIdleTimeout, v) =

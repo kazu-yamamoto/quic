@@ -5,6 +5,7 @@ module Network.QUIC.Handshake where
 
 import qualified Control.Exception as E
 import Data.List (intersect)
+import qualified Data.ByteString.Short as Short
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
@@ -276,6 +277,19 @@ setPeerParams conn _ctx peerExts = do
         when (ackDelayExponent params > 20) sendCCParamError
         when (maxAckDelay params >= 2 ^ (14 :: Int)) sendCCParamError
         when (activeConnectionIdLimit params < 2) sendCCParamError
+        -- RFC 9000 Sec 18.2: "values above 2^60 are invalid".  A stream id
+        -- has 62 bits with two taken for who opened it and whether it is
+        -- bidirectional, so a count past 2^60 names no stream.  The
+        -- MAX_STREAMS frame is already checked for this; the parameter that
+        -- sets the same limit at the start was not.
+        when (initialMaxStreamsBidi params > 2 ^ (60 :: Int)) sendCCParamError
+        when (initialMaxStreamsUni params > 2 ^ (60 :: Int)) sendCCParamError
+        -- Sec 18.2 gives the token as sixteen octets, and Sec 10.3 reads
+        -- exactly that many from the end of a datagram to compare against.
+        -- A token of some other length could never match one, so it is not
+        -- a token.
+        forM_ (statelessResetToken params) $ \(StatelessResetToken srt) ->
+            when (Short.length srt /= 16) sendCCParamError
         when (isServer conn) $ do
             when (isJust $ originalDestinationConnectionId params) sendCCParamError
             when (isJust $ preferredAddress params) sendCCParamError

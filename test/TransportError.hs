@@ -95,6 +95,16 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setMaxAckDelay
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it
+            "MUST send TRANSPORT_PARAMETER_ERROR if initial_max_streams_bidi > 2^60 [Transport 18.2]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnTransportParametersCreated setMaxStreamsBidi
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
+        it
+            "MUST send TRANSPORT_PARAMETER_ERROR if initial_max_streams_uni > 2^60 [Transport 18.2]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnTransportParametersCreated setMaxStreamsUni
+                runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
+        it
             "MUST send FRAME_ENCODING_ERROR if a frame of unknown type is received [Transport 12.4]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated unknownFrame
@@ -309,6 +319,14 @@ setAckDelayExponent params = params{ackDelayExponent = 30}
 
 setMaxAckDelay :: Parameters -> Parameters
 setMaxAckDelay params = params{maxAckDelay = 2 ^ (15 :: Int)}
+
+-- A stream id has 62 bits, two of them saying who opened it and whether it is
+-- bidirectional, so a count past 2^60 names no stream.
+setMaxStreamsBidi :: Parameters -> Parameters
+setMaxStreamsBidi params = params{initialMaxStreamsBidi = 2 ^ (60 :: Int) + 1}
+
+setMaxStreamsUni :: Parameters -> Parameters
+setMaxStreamsUni params = params{initialMaxStreamsUni = 2 ^ (60 :: Int) + 1}
 
 ----------------------------------------------------------------
 
