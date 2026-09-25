@@ -50,9 +50,30 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
                     `orElse` (Nothing <$ checkWindowOpenSTM ldcc maxSiz)
                 )
         case mx of
-            Just lvl | lvl `elem` [InitialLevel, HandshakeLevel] -> do
-                sendPingPacket conn lvl
-                go maxSiz
+            -- A PTO probe is the one packet allowed past a full congestion
+            -- window.  Normally sendPingPacket is the right way to spend it:
+            -- it retransmits the oldest packet still in flight at this level,
+            -- and falls back to a PING when there is none.
+            --
+            -- But when the packet the peer is waiting for has already been
+            -- declared lost, it is no longer in flight -- it is here, in
+            -- spkts0, waiting for a window that cannot open.  The 1-RTT
+            -- packets holding the window shut cannot be acknowledged until
+            -- the peer has that very frame, and they are not eligible for
+            -- loss detection either, because RFC 9002 section 6.2.1 forbids
+            -- arming a timer for Application Data before the handshake is
+            -- confirmed.  So the bytes stay in flight, the window stays
+            -- full, sendPingPacket finds nothing to retransmit and sends a
+            -- PING, and the handshake never finishes.
+            --
+            -- Hold an ack-eliciting packet at this level and it is a probe in
+            -- its own right, so send it instead -- the branch below does.
+            -- Anything else is not a probe, and the PING still is.
+            Just lvl
+                | lvl `elem` [InitialLevel, HandshakeLevel]
+                , not (any (\p -> spEncryptionLevel p == lvl && spAckEliciting p) spkts0) -> do
+                    sendPingPacket conn lvl
+                    go maxSiz
             _ -> do
                 when (isJust mx) $ qlogDebug conn $ Debug "probe new"
                 (sentPackets, leftsiz) <- buildPackets buf0 bufsiz0 maxSiz spkts0 id
