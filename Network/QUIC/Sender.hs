@@ -74,8 +74,21 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
     buildPackets _ _ _ [] _ = error "sendPacket: buildPackets"
     buildPackets buf bufsiz siz [spkt] build0 = do
         let pkt = spPlainPacket spkt
+            -- Pad only what can be acknowledged.  Padding puts a packet in
+            -- flight (RFC 9002 Sec 2) and so spends congestion window, but it
+            -- does not make the packet ack-eliciting -- and the loss timer is
+            -- cancelled, correctly, when nothing ack-eliciting is in flight.
+            -- An ACK-only packet padded to the full size therefore takes 1350
+            -- bytes of window that nothing will ever give back: no timer, no
+            -- loss declared, no release.  Four of them fill a recovering
+            -- window and the sender never speaks again.  1-RTT only; the
+            -- handshake has its own reasons to pad.
+            mlen
+                | spAckEliciting spkt = Just siz
+                | spEncryptionLevel spkt /= RTT1Level = Just siz
+                | otherwise = Nothing
         (bytes, padlen) <-
-            encodePlainPacket conn (SizedBuffer buf bufsiz) pkt $ Just siz
+            encodePlainPacket conn (SizedBuffer buf bufsiz) pkt mlen
         if bytes < 0
             then return (build0 [], bufsiz)
             else do
