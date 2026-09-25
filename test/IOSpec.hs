@@ -28,7 +28,7 @@ spec = do
                         { onServerReady = putMVar var ()
                         }
                 }
-    let cc = testClientConfigR
+    let cc = setClientQlog testClientConfigR
     let waitS = takeMVar var :: IO ()
     describe "send & recv" $ do
         it "can exchange data on random dropping" $ do

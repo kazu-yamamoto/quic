@@ -100,8 +100,23 @@ jobs:
     - name: Build
       run: cabal build ${{ env.target-config }} all
 
+    # TEMPORARY, for chasing the rare "Client Handshaking" stall in IOSpec.
+    # The test configurations that go through withPipe write qlog here, and
+    # the step below carries it away when a job fails.  Revert both once the
+    # stall is understood.
+    - name: Make room for qlog
+      run: mkdir -p qlog
+
     - name: Run tests
       run: cabal test ${{ env.target-config }} all
+
+    - name: Keep the qlog of a failed run
+      if: ${{ failure() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: qlog-${{ matrix.os }}-${{ matrix.ghc }}
+        path: qlog
+        retention-days: 7
 
     - name: Run doctest
       if: ${{ runner.os == 'Linux' }}

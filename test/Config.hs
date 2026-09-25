@@ -56,11 +56,12 @@ makeTestServerConfigR = do
         either error id
             <$> credentialLoadX509 "test/servercert.pem" "test/serverkey.pem"
     let credentials = Credentials [cred]
-    return
-        testServerConfigR
-            { scCredentials = credentials
-            , scALPN = Just chooseALPN
-            }
+    return $
+        setServerQlog
+            testServerConfigR
+                { scCredentials = credentials
+                , scALPN = Just chooseALPN
+                }
 
 testServerConfigR :: ServerConfig
 testServerConfigR =
@@ -100,10 +101,10 @@ testClientConfigR =
         }
 
 setServerQlog :: ServerConfig -> ServerConfig
-setServerQlog sc = sc
+setServerQlog sc = sc{scQLog = Just "qlog"}
 
 setClientQlog :: ClientConfig -> ClientConfig
-setClientQlog cc = cc
+setClientQlog cc = cc{ccQLog = Just "qlog"}
 
 data Scenario
     = Randomly Int
