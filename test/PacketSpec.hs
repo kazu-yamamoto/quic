@@ -64,6 +64,26 @@ spec = do
                             cryptPacket crypt
             BS.length sample `shouldBe` 16
 
+    describe "decodePacket" $ do
+        -- RFC 9000 Sec 17.2: a connection id is at most 20 octets, and an
+        -- endpoint receiving a longer one in a version 1 long header MUST
+        -- drop the packet.  The length field is one octet and can say 255.
+        it "drops a long header whose connection id is over-long" $ do
+            broken <- fst <$> decodePacket (longHeaderWithCIDLen 21) True
+            broken `shouldSatisfy` isBroken
+        it "keeps a long header at the longest allowed" $ do
+            ok <- fst <$> decodePacket (longHeaderWithCIDLen 20) True
+            ok `shouldSatisfy` (not . isBroken)
+        -- A Retry packet is a token followed by a 16-octet integrity tag.
+        -- With fewer than 16 octets left there is no tag, and the arithmetic
+        -- that separates them goes negative -- which extractByteString reads
+        -- backwards, from before the packet.  The packet was already refused;
+        -- what this pins is that it is refused for every length, the read
+        -- itself being the thing that cannot be observed from here.
+        it "drops a Retry packet with no room for its tag" $
+            forM_ [0 .. 15] $ \n -> do
+                broken <- fst <$> decodePacket (retryWithTrailing n) True
+                broken `shouldSatisfy` isBroken
 
 -- | An Initial packet in a datagram large enough that a server would not
 --   discard it for being too small, saying its payload is @len@ octets.
@@ -72,6 +92,25 @@ shortSampleInitial len = BS.pack $ header ++ replicate (1200 - length header) 0x
   where
     -- long header, Initial, version 1, no CIDs, no token, then the length
     header = [0xc0, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, fromIntegral len]
+
+isBroken :: PacketI -> Bool
+isBroken (PacketIB BrokenPacket _) = True
+isBroken _ = False
+
+-- | An Initial long header whose destination connection id says @n@ octets,
+--   with that many actually there, then enough to look like a packet.
+longHeaderWithCIDLen :: Int -> ByteString
+longHeaderWithCIDLen n =
+    BS.pack $
+        [0xc0, 0x00, 0x00, 0x00, 0x01, fromIntegral n]
+            ++ replicate n 0xAA
+            ++ [0x00, 0x00, 0x44, 0xb0]
+            ++ replicate 1200 0xBB
+
+-- | A Retry long header with no connection ids and @n@ octets behind it.
+retryWithTrailing :: Int -> ByteString
+retryWithTrailing n =
+    BS.pack $ [0xf0, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00] ++ replicate n 0xAA
 
 clientChosenCID :: CID
 clientChosenCID = toCID $ dec16 "8394c8f03e515708"
