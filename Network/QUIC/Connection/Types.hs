@@ -129,7 +129,6 @@ instance Eq MigrationState where
 data Coder = Coder
     { encrypt :: Buffer -> PlainText -> AssDat -> PacketNumber -> IO Int
     , decrypt :: Buffer -> CipherText -> AssDat -> PacketNumber -> IO Int
-    , supplement :: Maybe Supplement
     }
 
 initialCoder :: Coder
@@ -137,7 +136,6 @@ initialCoder =
     Coder
         { encrypt = \_ _ _ _ -> return (-1)
         , decrypt = \_ _ _ _ -> return (-1)
-        , supplement = Nothing
         }
 
 data Coder1RTT = Coder1RTT

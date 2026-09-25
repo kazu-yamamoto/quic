@@ -1,5 +1,25 @@
 # ChangeLog
 
+## Unreleased
+
+* AES-GCM goes through crypton's one-call interface, and the bundled picotls
+  `fusion` engine is gone with the 11,017 lines of C it came in.  What that
+  engine was for is that crypton rebuilt the AES key schedule and the table
+  of multiples of H for every packet, and took the header protection mask in
+  a second call after the encryption; crypton 2.1 builds the first once per
+  key and hands back the mask from the same call as the ciphertext.  Measured
+  on an Apple M4, a 100-byte packet goes from 2.25 to 0.16 microseconds and a
+  1440-byte one from 2.50 to 0.45.  Against `fusion` itself, measured in C on
+  an Intel Haswell where it runs at all, crypton is at 91 to 96 per cent of
+  it for the call this makes -- and in Haskell `fusion` needs three foreign
+  calls to crypton's one.
+
+* ChaCha20-Poly1305 is in `defaultCiphers` on x86-64 again.  It had been left
+  out there because `fusion` did not implement it, so a build with the engine
+  offered two suites where every other build offered three.  The RFC 9001 and
+  RFC 9369 test vectors for it, skipped under the same condition, now run
+  everywhere.
+
 ## 0.3.5
 
 Security fixes.  The first four can be reached by a peer that has not

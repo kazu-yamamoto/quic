@@ -162,7 +162,6 @@ spec = do
                 _ -> error "Retry version 1"
 
 {- FOURMOLU_DISABLE -}
-#ifndef USE_FUSION
         it
             "describes the examples of ChaCha20-Poly1305 Short Header Packet (RFC 9001: A.5)"
             $ do
@@ -189,7 +188,6 @@ spec = do
                 payloadCipherText
                     `shouldBe` Just (dec16 "65", dec16 "5e5cd55c41f69080575d7999c25a5bfb")
                 mask `shouldBe` Mask (dec16 "aefefe7d03")
-#endif
 {- FOURMOLU_ENSABLE -}
 
     ----------------------------------------------------------------
@@ -320,7 +318,6 @@ spec = do
                 _ -> error "Retry version 2"
 
 {- FOURMOLU_DISABLE -}
-#ifndef USE_FUSION
         it
             "describes the examples of ChaCha20-Poly1305 Short Header Packet (RFC 9369: A.5)"
             $ do
@@ -347,7 +344,6 @@ spec = do
                 payloadCipherText
                     `shouldBe` Just (dec16 "0a", dec16 "e7b6b932bc27d786f4bc2bb20f2162ba")
                 mask `shouldBe` Mask (dec16 "97580e32bf")
-#endif
 {- FOURMOLU_ENABLE -}
 
 serverCRYPTOframe :: BS.ByteString
