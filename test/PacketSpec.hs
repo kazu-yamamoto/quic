@@ -44,6 +44,26 @@ spec = do
                 [(CryptPacket _ crypt, lvl, _)] <-
                     decodeCryptPackets (shortSampleInitial len) True
                 decryptCrypt serverConn crypt lvl `shouldReturn` Nothing
+    describe "encodePlainPacket" $ do
+        it "leaves the peer a whole header protection sample" $ do
+            (senderConn, _) <- makeConnections serverConf Version1
+            -- RFC 9001 Sec 5.4.2 asks that the packet number and the payload
+            -- together run four octets past the sample, and Sec 5.4.2 again
+            -- that a receiver discard a packet too short to give one.  A
+            -- single PING is one octet of payload: with a one-octet packet
+            -- number and the tag that comes to eighteen, two short, and the
+            -- encoder has to make up the difference itself.
+            let hdr = Initial Version1 clientChosenCID (toCID "") ""
+                ppkt = PlainPacket hdr $ Plain (Flags 0) 0 [Ping] 0
+            bin <- BS.createAndTrim 4096 $ \buf ->
+                fst <$> encodePlainPacket senderConn (SizedBuffer buf 2048) ppkt Nothing
+            (PacketIC (CryptPacket _ crypt) _ _, _) <- decodePacket bin True
+            let sample =
+                    BS.take 16 $
+                        BS.drop (cryptPktNumOffset crypt + 4) $
+                            cryptPacket crypt
+            BS.length sample `shouldBe` 16
+
 
 -- | An Initial packet in a datagram large enough that a server would not
 --   discard it for being too small, saying its payload is @len@ octets.

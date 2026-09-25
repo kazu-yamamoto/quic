@@ -256,7 +256,19 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
                     + (if lvl /= RTT1Level then 2 else 0)
                     + epnLen
         let tagLen = tagLength cipher
-            plainLen = case mlen of
+            -- RFC 9001 Sec 5.4.2: the packet number and the protected payload
+            -- together have to run at least four octets past the sample
+            -- header protection takes, or the peer cannot take one -- "An
+            -- endpoint MUST discard packets that are not long enough to
+            -- provide a sufficient sample."
+            --
+            -- Nothing else here guarantees it.  The smallest thing we build
+            -- is a CONNECTION_CLOSE with no reason, three octets of payload,
+            -- which with a one-octet packet number and the tag comes to
+            -- exactly the floor -- correct by arithmetic rather than by
+            -- construction, and with no room for a frame to get smaller.
+            minPlainLen = sampleLength cipher + 4 - epnLen - tagLen
+            plainLen = max minPlainLen $ case mlen of
                 Nothing -> payloadWithoutPaddingSiz
                 Just expectedLen -> expectedLen - headerLen - tagLen
             packetLen = headerLen + plainLen + tagLen
