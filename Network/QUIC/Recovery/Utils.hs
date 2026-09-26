@@ -7,6 +7,7 @@ module Network.QUIC.Recovery.Utils (
     mergeLostCandidatesAndClear,
     peerCompletedAddressValidation,
     countAckEli,
+    inFlightBytes,
     inCongestionRecovery,
     delay,
 ) where
@@ -86,6 +87,24 @@ countAckEli :: SentPacket -> Int
 countAckEli sentPacket
     | spAckEliciting sentPacket = 1
     | otherwise = 0
+
+-- | RFC 9002 section 2: "Packets are considered in flight when they are
+-- ack-eliciting or contain a PADDING frame".
+--
+-- Which is what 'inFlight' on a frame already says -- everything but ACK and
+-- the two CONNECTION_CLOSEs -- so a packet is in flight when any frame in it
+-- is.  That predicate has been sitting in Types.Frame unused.
+--
+-- Both places that move bytesInFlight ask this, and they ask it of the same
+-- SentPacket: the one in the sent-packet database, padding included, since
+-- padding is added before 'onPacketSent' stores it.  So the two answers
+-- cannot disagree and the count cannot drift.
+inFlightBytes :: SentPacket -> Int
+inFlightBytes sentPacket
+    | any inFlight $ plainFrames plain = spSentBytes sentPacket
+    | otherwise = 0
+  where
+    PlainPacket _ plain = spPlainPacket sentPacket
 
 ----------------------------------------------------------------
 

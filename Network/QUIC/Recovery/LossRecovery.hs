@@ -51,11 +51,9 @@ onPacketSentCC ldcc@LDCC{..} sentPacket = metricsUpdated ldcc $
     atomically $
         modifyTVar' recoveryCC $ \cc ->
             cc
-                { bytesInFlight = bytesInFlight cc + sentBytes
+                { bytesInFlight = bytesInFlight cc + inFlightBytes sentPacket
                 , numOfAckEliciting = numOfAckEliciting cc + countAckEli sentPacket
                 }
-  where
-    sentBytes = spSentBytes sentPacket
 
 ----------------------------------------------------------------
 
@@ -174,8 +172,14 @@ onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
         (bytes, cwin, acked, _, cnt) .+ sp@SentPacket{..} = (bytes', cwin', acked', mode', cnt')
           where
             isRecovery = inCongestionRecovery spTimeSent congestionRecoveryStartTime
-            bytes' = bytes - spSentBytes
-            ackedA = acked + spSentBytes
+            -- What this packet cost the window, which is nothing unless it
+            -- was in flight.  It has to be the same number that was added
+            -- when the packet was sent, or the count drifts -- and it is the
+            -- right number for the window to grow by, since a packet that
+            -- spent no window is no evidence that more is available.
+            sz = inFlightBytes sp
+            bytes' = bytes - sz
+            ackedA = acked + sz
             cnt' = cnt - countAckEli sp
             (cwin', acked', mode')
                 -- Do not increase congestion window in recovery period.
@@ -184,7 +188,7 @@ onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do
                 -- limited or flow control limited.
                 --
                 -- Slow start.
-                | cwin < ssthresh = (cwin + spSentBytes, acked, SlowStart)
+                | cwin < ssthresh = (cwin + sz, acked, SlowStart)
                 -- Congestion avoidance.
                 -- In this implementation, maxPktSiz == spSentBytes.
                 -- spSentBytes is large enough, so we don't care
