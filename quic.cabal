@@ -1,6 +1,6 @@
 cabal-version:      2.0
 name:               quic
-version:            0.3.5
+version:            0.3.6
 license:            BSD3
 license-file:       LICENSE
 maintainer:         kazu@iij.ad.jp

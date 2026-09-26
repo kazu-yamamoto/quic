@@ -1,6 +1,40 @@
 # ChangeLog
 
-## Unreleased
+## 0.3.6
+
+A security fix and three for a stalled handshake.
+
+* Stop treating a token the server cannot decrypt as a validated address.
+  The dispatcher's wildcard caught the decryption failing and passed
+  `addrValid = True` on, which turns off the three-times
+  anti-amplification limit -- so a peer was better off sending rubbish in
+  the Token field than sending nothing, from any source address, with no
+  keys and no handshake.  RFC 9000 Sec 8.1.3 says to proceed as if the
+  address were not validated.  A token we did issue in NEW_TOKEN now has
+  its lifetime honoured as well; only the Retry path was checking expiry.
+  [#114](https://github.com/kazu-yamamoto/quic/pull/114)
+* Let the PTO probe reach the retransmission that is waiting for the
+  window.  A client that sends 1-RTT before the handshake is confirmed
+  can deadlock its own handshake: RFC 9001 Sec 5.7 stops the peer
+  processing those packets, so they are never acknowledged and never
+  leave the congestion window, and the window cannot open until the
+  CRYPTO frame the peer is waiting for arrives.  The probe may be sent
+  past a full window and was being spent on a bare PING, because a packet
+  already declared lost has left the sent-packet database and
+  `releaseOldest` cannot see it.  An ACK-only packet no longer waits for
+  the window either (RFC 9002 Sec 7), which was blocking the one sender
+  thread and everything queued behind it.
+  [#115](https://github.com/kazu-yamamoto/quic/pull/115)
+* Spend the PTO probe on what is being held back rather than on a PING,
+  when the sender is already holding an ack-eliciting packet at the level
+  the timer fired for.
+  [#113](https://github.com/kazu-yamamoto/quic/pull/113)
+* Count only what is in flight into bytes in flight.  RFC 9002 Sec 2:
+  a packet is in flight when it is ack-eliciting or contains PADDING.
+  Every packet sent was counted, so an ACK-only packet spent congestion
+  window it had no business spending -- 177 of 207 such sends in a
+  measured run.  The predicate was already in `Types.Frame`, unused.
+  [#116](https://github.com/kazu-yamamoto/quic/pull/116)
 
 * AES-GCM goes through crypton's one-call interface, and the bundled picotls
   `fusion` engine is gone with the 11,017 lines of C it came in.  What that
@@ -19,6 +53,16 @@
   offered two suites where every other build offered three.  The RFC 9001 and
   RFC 9369 test vectors for it, skipped under the same condition, now run
   everywhere.
+  [#111](https://github.com/kazu-yamamoto/quic/pull/111)
+
+* The `fusion` cabal flag is gone with the engine.  A build passing
+  `-f fusion` will now fail on an unknown flag rather than quietly
+  selecting something that no longer exists.
+
+* The IOSpec relay no longer latches onto a leftover datagram at the port
+  handover, and qlog is kept for a failed CI job.  Tests and CI only, but
+  the qlog is what made the stalls above findable at all.
+  [#112](https://github.com/kazu-yamamoto/quic/pull/112)
 
 ## 0.3.5
 
