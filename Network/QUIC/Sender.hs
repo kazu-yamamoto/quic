@@ -161,13 +161,24 @@ sendPingPacket conn lvl = do
         let ldcc = connLDCC conn
         mp <- releaseOldest ldcc lvl
         frames <- case mp of
-            Nothing -> do
-                qlogDebug conn $ Debug "probe ping"
-                return [Ping]
             Just spkt -> do
                 qlogDebug conn $ Debug "probe old"
                 let PlainPacket _ plain0 = spPlainPacket spkt
                 adjustForRetransmit conn $ plainFrames plain0
+            Nothing -> do
+                -- Nothing in flight at this level to resend.  That does not
+                -- mean there is nothing to send: a packet already declared
+                -- lost has left the sent-packet database and is waiting in
+                -- the output queue, behind a congestion window that a probe
+                -- is allowed to ignore and it is not.  Spend the probe on it.
+                mr <- atomically $ takeRetransSTM conn lvl
+                case mr of
+                    Just (PlainPacket _ plain0) -> do
+                        qlogDebug conn $ Debug "probe retrans"
+                        adjustForRetransmit conn $ plainFrames plain0
+                    Nothing -> do
+                        qlogDebug conn $ Debug "probe ping"
+                        return [Ping]
         xs <- construct conn lvl frames False
         -- Asking for the last one and asking whether there is one at all are
         -- the same question, so ask it once.
