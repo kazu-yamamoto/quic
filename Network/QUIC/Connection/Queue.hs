@@ -5,6 +5,7 @@ import Network.Control (getRate)
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Stream
+import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
@@ -41,6 +42,32 @@ putOutput conn out = atomically $ writeTQueue (outputQ conn) out
 
 isEmptyOutputSTM :: Connection -> STM Bool
 isEmptyOutputSTM conn = isEmptyTQueue $ outputQ conn
+
+-- | Take the oldest queued retransmission at this level, leaving the rest of
+-- the queue in order.
+--
+-- A PTO probe may be sent past a full congestion window, and this is how it
+-- reaches the packet that needs sending.  Once a packet has been declared
+-- lost it is no longer in the sent-packet database, so 'releaseOldest' cannot
+-- find it; it is here, waiting for a window that may not open until it has
+-- gone out.
+takeRetransSTM :: Connection -> EncryptionLevel -> STM (Maybe PlainPacket)
+takeRetransSTM conn lvl = do
+    outs <- flushTQueue (outputQ conn)
+    let (found, rest) = pick outs
+    mapM_ (writeTQueue (outputQ conn)) rest
+    return found
+  where
+    pick [] = (Nothing, [])
+    pick (o@(OutRetrans ppkt@(PlainPacket hdr _)) : os)
+        | levelOf hdr == lvl = (Just ppkt, os)
+        | otherwise = let (f, r) = pick os in (f, o : r)
+    pick (o : os) = let (f, r) = pick os in (f, o : r)
+    levelOf hdr
+        | l == RTT0Level = RTT1Level
+        | otherwise = l
+      where
+        l = packetEncryptionLevel hdr
 
 ----------------------------------------------------------------
 
