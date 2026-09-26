@@ -43,12 +43,31 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
   where
     SizedBuffer buf0 bufsiz0 = encryptRes conn
     ldcc = connLDCC conn
+    -- RFC 9002 section 7: "packets containing only ACK frames do not count
+    -- toward bytes in flight and are not congestion controlled".  Waiting
+    -- for the window before sending one is therefore wrong on its own terms,
+    -- and it wedges the sender: there is one sender thread, it blocks inside
+    -- here until the window opens, and everything queued behind it waits --
+    -- including the retransmission of a CRYPTO frame the peer needs before
+    -- it can acknowledge anything and let the window open at all.
+    --
+    -- A stalled handshake caught in IOSpec has exactly that shape.  The
+    -- client's Finished is declared lost and queued for retransmission, and
+    -- the queue never moves again because the sender is holding an ACK-only
+    -- Handshake packet against a full window.  The PTO keeps firing and
+    -- keeps sending a bare PING, because what is being held is not
+    -- ack-eliciting and so is not a probe; twenty seconds later the idle
+    -- timeout ends it.
+    ackOnly = all (not . spAckEliciting) spkts0
     go maxSiz = do
         mx <-
-            atomically
-                ( (Just <$> takePingSTM ldcc)
-                    `orElse` (Nothing <$ checkWindowOpenSTM ldcc maxSiz)
-                )
+            if ackOnly
+                then return Nothing
+                else
+                    atomically
+                        ( (Just <$> takePingSTM ldcc)
+                            `orElse` (Nothing <$ checkWindowOpenSTM ldcc maxSiz)
+                        )
         case mx of
             -- A PTO probe is the one packet allowed past a full congestion
             -- window.  Normally sendPingPacket is the right way to spend it:
