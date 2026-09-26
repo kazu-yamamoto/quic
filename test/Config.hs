@@ -149,7 +149,21 @@ withPipeWith stray scenario body = do
             setSocketOption sockC ReuseAddr 1
             setSocketOption sockS ReuseAddr 1
             bind sockC saC
-            connect sockS saS
+            -- Bound, not connected.  A connected UDP socket turns an ICMP
+            -- port-unreachable from the peer into ECONNREFUSED on the next
+            -- operation, and the peers here come and go with every test, so
+            -- the relay was being killed by a reply to something it had sent
+            -- to an address that had just closed.  It surfaced on the
+            -- receive, not the send:
+            --
+            --   DIED C->S: Network.Socket.recvBuf: does not exist
+            --              (Connection refused)
+            --
+            -- and since these are forkIO threads with nobody watching, the
+            -- relay simply stopped.  The client then sent Initial packets
+            -- until the idle timeout and heard nothing.
+            addrAny <- resolve "0"
+            bind sockS $ addrAddress addrAny
             when stray $
                 E.bracket (openSocket addrC) close $ \sock ->
                     void $ sendTo sock (BS.pack [0x40, 1, 2, 3]) saC
@@ -160,9 +174,13 @@ withPipeWith stray scenario body = do
             -- the bracket has just closed.  That surfaces as "threadWait:
             -- invalid argument (Bad file descriptor)" from a thread nobody is
             -- watching, and buries whatever the test was really failing on.
-            E.bracket (startRelay sockC sockS irefC irefS) stopRelay $ \_ -> body
+            E.bracket (startRelay saS sockC sockS irefC irefS) stopRelay $ \_ -> body
   where
-    startRelay sockC sockS irefC irefS = do
+    startRelay saS sockC sockS irefC irefS = do
+        -- Where to send what comes back from the server.  Set once the client
+        -- has introduced itself, which is before the server can have anything
+        -- to say about it.
+        peerRef <- newIORef Nothing
         -- from client
         tid0 <- forkIO $ do
             -- Wait for the client to introduce itself, and take the first
@@ -181,23 +199,30 @@ withPipeWith stray scenario body = do
             -- A client always opens with a long header; a leftover from an
             -- established connection is a short one.  That tells them apart.
             (bs, saO) <- waitForClientHello sockC
-            connect sockC saO
+            writeIORef peerRef $ Just saO
             n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
             dropPacket0 <- shouldDrop scenario True n0
-            unless dropPacket0 $ void $ send sockS bs
+            unless dropPacket0 $ void $ sendTo sockS bs saS
             forever $ do
-                bs1 <- recv sockC 2048
-                n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
-                dropPacket <- shouldDrop scenario True n
-                let isCC = BS.length bs1 < 200
-                when (isCC || not dropPacket) $ void $ send sockS bs1
+                (bs1, sa) <- recvFrom sockC 2048
+                -- Only from the client we latched onto.  The connect this
+                -- replaces did that in the kernel; doing it here keeps
+                -- leftovers from the connection that just closed from being
+                -- counted, which would shift the drop indices.
+                when (sa == saO) $ do
+                    n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+                    dropPacket <- shouldDrop scenario True n
+                    let isCC = BS.length bs1 < 200
+                    when (isCC || not dropPacket) $ void $ sendTo sockS bs1 saS
         -- from server
         tid1 <- forkIO $ forever $ do
-            bs <- recv sockS 2048
+            (bs, _) <- recvFrom sockS 2048
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
             dropPacket <- shouldDrop scenario False n
             let isCC = BS.length bs < 200
-            when (isCC || not dropPacket) $ void $ send sockC bs
+            when (isCC || not dropPacket) $ do
+                mpeer <- readIORef peerRef
+                forM_ mpeer $ \sa -> void $ sendTo sockC bs sa
         return (tid0, tid1)
     stopRelay (tid0, tid1) = killThread tid0 >> killThread tid1
     waitForClientHello sockC = do
