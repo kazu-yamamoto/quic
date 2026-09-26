@@ -264,7 +264,20 @@ dispatch
                             | isRetryToken ct -> do
                                 ok <- isRetryTokenValid ct
                                 if ok then pushToAcceptRetried ct else sendRetry
-                        _ -> pushToAcceptFirst True
+                            | otherwise -> do
+                                -- A token we issued in NEW_TOKEN.  It carries
+                                -- a lifetime, so honour it.
+                                fresh <- isTokenFresh ct
+                                pushToAcceptFirst fresh
+                        -- A token we cannot decrypt is not a token.  RFC 9000
+                        -- section 8.1.3: "If the token is invalid, then the
+                        -- server SHOULD proceed as if the client did not have
+                        -- a validated address".  Treating it as validated
+                        -- instead left a peer better off for sending
+                        -- rubbish than for sending nothing, and turned off
+                        -- the anti-amplification limit for an address that
+                        -- had proved nothing.
+                        Nothing -> pushToAcceptFirst False
                 Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
       where
         myVersions = scVersions
@@ -336,6 +349,9 @@ dispatch
                         }
             pushToAcceptQ myAuthCIDs peerAuthCIDs True
         pushToAcceptRetried _ = return ()
+        isTokenFresh (CryptoToken _ life etim _) = do
+            diff <- getElapsedTimeMicrosecond etim
+            return $ diff <= Microseconds (fromIntegral life * 1000000)
         isRetryTokenValid (CryptoToken _tver life etim (Just (l, r, _))) = do
             diff <- getElapsedTimeMicrosecond etim
             return $
