@@ -340,9 +340,11 @@ setMaxStreamsUni params = params{initialMaxStreamsUni = 2 ^ (60 :: Int) + 1}
 
 ----------------------------------------------------------------
 
--- Stream 0 is not created internally.  It is assumed that a server
--- send CC without sending back Stream 0.  If the server send back any
--- data for Stream 0, `streamNotCreatedYet` throws an exception, sigh.
+-- Stream 0, which the client has not opened.  The server must answer the
+-- offset with FLOW_CONTROL_ERROR and nothing else: anything it sends back on
+-- stream 0 is, to a client that never opened it, a STREAM_STATE_ERROR
+-- (RFC 9000 Sec 19.8), and the client closes the connection before the error
+-- we are waiting for arrives.
 largeOffset :: EncryptionLevel -> Plain -> Plain
 largeOffset lvl plain
     | lvl == RTT1Level = plain{plainFrames = fake : plainFrames plain}

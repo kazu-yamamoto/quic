@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module ErrorSpec where
 
 import Control.Concurrent
@@ -23,7 +25,14 @@ setup = do
     threadDelay 500000 -- give enough time to the server
     return tid
   where
-    loop conn = forever $ void $ acceptStream conn
+    -- Answering on what it is given.  A server that only accepts cannot
+    -- catch a stream handed to the application before the frame that opened
+    -- it was looked over -- the answer is what reaches the peer, for a
+    -- stream the peer never opened, and the peer calls that a
+    -- STREAM_STATE_ERROR before our FLOW_CONTROL_ERROR arrives.
+    loop conn = forever $ do
+        strm <- acceptStream conn
+        void $ forkIO $ sendStream strm "x"
 
 teardown :: ThreadId -> IO ()
 teardown = killThread

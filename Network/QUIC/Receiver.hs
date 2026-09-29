@@ -244,15 +244,28 @@ streamNotCreatedYet conn sid emsg
             closeConnection conn StreamStateError emsg
 streamNotCreatedYet _ _ _ = return ()
 
--- | Opening a stream for a STREAM frame that found none, unless the stream
---   was open once and has been closed since.  'guardStream' has already
---   refused one of ours that we have not created yet.
+-- | Opening a stream for a frame that found none, unless the stream was open
+--   once and has been closed since.  'guardStream' has already refused one of
+--   ours that we have not created yet.
+--
+-- The application is not given the stream here; 'deliverStream' does that,
+-- once the frame that opened it has been looked over.  Handed the stream
+-- first, the application could answer on it in the moment before a first
+-- STREAM frame past the flow control limit closed the connection.  An HTTP/3
+-- server did: it sent a response on a stream the peer had never opened, and
+-- the peer called that a STREAM_STATE_ERROR, as RFC 9000 Sec 19.8 says to,
+-- before our own FLOW_CONTROL_ERROR had reached it.
 openStream :: Connection -> StreamId -> IO (Maybe Stream)
 openStream conn sid
     | isInitiated conn sid = return Nothing
     | otherwise = do
         new <- claimPeerStream conn sid
-        if new then Just <$> createStream conn sid else return Nothing
+        if new then Just <$> addStream conn sid else return Nothing
+
+-- | Handing a stream the peer opened to the application, if it is new to us.
+deliverStream :: Connection -> Maybe Stream -> Stream -> IO ()
+deliverStream conn found strm =
+    when (isNothing found) $ putInput conn $ InpStream strm
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -306,6 +319,7 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
     case mstrm of
         Nothing -> return ()
         Just strm -> do
+            deliverStream conn mstrm0 strm
             onResetStreamReceived (connHooks conn) strm aerr
             -- Before the pseudo FIN below, so that whoever reads it can
             -- tell it was not a real one.
@@ -394,6 +408,7 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
                         conn
                         FlowControlError
                         "Flow control error for connection in 0-RTT"
+        deliverStream conn mstrm strm
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
@@ -438,6 +453,7 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
                         conn
                         FlowControlError
                         "Flow control error for connection in 1-RTT"
+        deliverStream conn mstrm strm
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "MAX_DATA in Initial or Handshake"
