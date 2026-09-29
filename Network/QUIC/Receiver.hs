@@ -234,6 +234,16 @@ streamNotCreatedYet conn sid emsg
             closeConnection conn StreamStateError emsg
 streamNotCreatedYet _ _ _ = return ()
 
+-- | Opening a stream for a STREAM frame that found none, unless the stream
+--   was open once and has been closed since.  'guardStream' has already
+--   refused one of ours that we have not created yet.
+openStream :: Connection -> StreamId -> IO (Maybe Stream)
+openStream conn sid
+    | isInitiated conn sid = return Nothing
+    | otherwise = do
+        new <- claimPeerStream conn sid
+        if new then Just <$> createStream conn sid else return Nothing
+
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
@@ -316,28 +326,33 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
         closeConnection conn StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
-    strm <- maybe (createStream conn sid) return mstrm
-    let len = BS.length dat
-        rx = RxStreamData dat off len fin
-    fc <- putRxStreamData strm rx
-    case fc of
-        -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-        OverLimit ->
-            closeConnection conn FlowControlError "Flow control error for stream in 0-RTT"
-        -- Not a flow control error: the peer is inside its window, it is
-        -- just spending it in more pieces than we will hold.  Rate control
-        -- answers with InternalError too.
-        TooFragmented ->
-            closeConnection conn QUIC.InternalError "Too many stream fragments"
-        Duplicated -> return ()
-        Reassembled -> do
-            ok' <- checkRxMaxData conn len
-            -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-            unless ok' $
-                closeConnection
-                    conn
-                    FlowControlError
-                    "Flow control error for connection in 0-RTT"
+    -- Nothing when the stream has been closed.  What arrives for it now
+    -- is a copy of something already received, sent again because our
+    -- acknowledgement crossed it.  Opening the stream anew would hold
+    -- the copy to the initial window and call it a flow control error.
+    mstrm' <- maybe (openStream conn sid) (return . Just) mstrm
+    forM_ mstrm' $ \strm -> do
+        let len = BS.length dat
+            rx = RxStreamData dat off len fin
+        fc <- putRxStreamData strm rx
+        case fc of
+            -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
+            OverLimit ->
+                closeConnection conn FlowControlError "Flow control error for stream in 0-RTT"
+            -- Not a flow control error: the peer is inside its window, it is
+            -- just spending it in more pieces than we will hold.  Rate control
+            -- answers with InternalError too.
+            TooFragmented ->
+                closeConnection conn QUIC.InternalError "Too many stream fragments"
+            Duplicated -> return ()
+            Reassembled -> do
+                ok' <- checkRxMaxData conn len
+                -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
+                unless ok' $
+                    closeConnection
+                        conn
+                        FlowControlError
+                        "Flow control error for connection in 0-RTT"
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
@@ -355,28 +370,33 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
         closeConnection conn StreamStateError "send-only stream"
     mstrm <- findStream conn sid
     guardStream conn sid mstrm
-    strm <- maybe (createStream conn sid) return mstrm
-    let len = BS.length dat
-        rx = RxStreamData dat off len fin
-    fc <- putRxStreamData strm rx
-    case fc of
-        -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-        OverLimit ->
-            closeConnection conn FlowControlError "Flow control error for stream in 1-RTT"
-        -- Not a flow control error: the peer is inside its window, it is
-        -- just spending it in more pieces than we will hold.  Rate control
-        -- answers with InternalError too.
-        TooFragmented ->
-            closeConnection conn QUIC.InternalError "Too many stream fragments"
-        Duplicated -> return ()
-        Reassembled -> do
-            ok' <- checkRxMaxData conn len
-            -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-            unless ok' $
-                closeConnection
-                    conn
-                    FlowControlError
-                    "Flow control error for connection in 1-RTT"
+    -- Nothing when the stream has been closed.  What arrives for it now
+    -- is a copy of something already received, sent again because our
+    -- acknowledgement crossed it.  Opening the stream anew would hold
+    -- the copy to the initial window and call it a flow control error.
+    mstrm' <- maybe (openStream conn sid) (return . Just) mstrm
+    forM_ mstrm' $ \strm -> do
+        let len = BS.length dat
+            rx = RxStreamData dat off len fin
+        fc <- putRxStreamData strm rx
+        case fc of
+            -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
+            OverLimit ->
+                closeConnection conn FlowControlError "Flow control error for stream in 1-RTT"
+            -- Not a flow control error: the peer is inside its window, it is
+            -- just spending it in more pieces than we will hold.  Rate control
+            -- answers with InternalError too.
+            TooFragmented ->
+                closeConnection conn QUIC.InternalError "Too many stream fragments"
+            Duplicated -> return ()
+            Reassembled -> do
+                ok' <- checkRxMaxData conn len
+                -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
+                unless ok' $
+                    closeConnection
+                        conn
+                        FlowControlError
+                        "Flow control error for connection in 1-RTT"
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "MAX_DATA in Initial or Handshake"

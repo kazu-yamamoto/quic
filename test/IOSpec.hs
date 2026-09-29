@@ -93,6 +93,11 @@ spec = do
         -- number of bytes sent by the RESET_STREAM sender.
         it "sends RESET_STREAM with the bytes sent as final size" $ do
             withPipe (DropClientPacket []) $ testResetStreamFinalSize cc sc waitS
+    describe "closed stream" $ do
+        it "ignores a late copy of the data it received on a stream it opened" $ do
+            withPipe (DelayServerPacket 300) $ testLateCopy False cc sc waitS
+        it "ignores a late copy of the data it received on a stream the peer opened" $ do
+            withPipe (DelayClientPacket 300) $ testLateCopy True cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $ testSendRecv cc sc waitS 20
@@ -147,6 +152,42 @@ testResetStreamFinalSize cc0 sc waitS = do
         consumeBytes strm (BS.length request)
         sendStream strm payload
         takeMVar doneVar
+
+-- | One end has read a stream to its end and closed it while a packet for
+--   it is still on the way.  That packet was taken for lost and its data sent
+--   again, so what arrives late is a copy, well past the initial window of
+--   256K.  It must not open the stream anew: the new stream holds the copy to
+--   that window and calls it a flow control error, or else hands the
+--   application a stream that was never opened.
+testLateCopy :: Bool -> C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testLateCopy upload cc sc waitS =
+    E.bracket (forkIO server) killThread $ \_ -> client
+  where
+    (upLen, downLen)
+        | upload = (1000000, 10)
+        | otherwise = (10, 1000000)
+
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            exchange conn
+            -- The copy arrives while we wait.
+            threadDelay 1500000
+            exchange conn
+    exchange conn = do
+        strm <- stream conn
+        sendStream strm (BS.replicate upLen 0)
+        shutdownStream strm
+        consumeBytes strm downLen
+        assertEndOfStream strm
+        closeStream strm
+
+    server = run sc $ \conn -> forever $ do
+        strm <- acceptStream conn
+        consumeBytes strm upLen
+        assertEndOfStream strm
+        sendStream strm (BS.replicate downLen 0)
+        closeStream strm
 
 testRecvStreamClientStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
