@@ -280,7 +280,11 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
             -- Before the pseudo FIN below, so that whoever reads it can
             -- tell it was not a real one.
             setResetReceived strm aerr
-            setTxStreamClosed strm
+            -- RESET_STREAM ends the peer's sending part alone
+            -- (RFC 9000, section 3.2).  Our own sending part is untouched,
+            -- so that a reply to what the peer sent before the reset can
+            -- still go out.  It used to be closed here as well, and
+            -- 'sendStream' then threw StreamIsClosed.
             setRxStreamClosed strm
             delStream conn strm
 processFrame conn lvl (StopSending sid err) = do
@@ -296,6 +300,10 @@ processFrame conn lvl (StopSending sid err) = do
             Just strm -> do
                 finalSize <- getTxStreamFinalSize strm
                 sendFrames conn lvl [ResetStream sid err finalSize]
+                -- Our sending part is reset now (RFC 9000, section 3.5), so
+                -- no more STREAM frames may go out on it.  Without this,
+                -- 'sendStream' went on working after the RESET_STREAM.
+                setTxStreamClosed strm
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $
