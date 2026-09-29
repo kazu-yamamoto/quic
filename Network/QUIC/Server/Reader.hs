@@ -186,10 +186,21 @@ dispatcher d conf stvar forkConnection mysock = do
             let send' b = void $ NSB.sendTo mysock b peersa
                 -- cf: greaseQuicBit $ getMyParameters conn
                 quicBit = greaseQuicBit $ scParameters conf
-            cpckts <- decodeCryptPackets bs (not quicBit)
             let bytes = BS.length bs
                 switch = dispatch d conf forkConnection logAction mysock peersa send' bytes now
-            mapM_ switch cpckts
+            -- One datagram's failure is one datagram's problem.
+            --
+            -- Letting it out of the loop ends the dispatcher, and nothing
+            -- restarts it.  The socket stays bound, because 'run' holds it
+            -- for as long as the server lives, so the server goes on looking
+            -- like a server and answers nothing for the rest of its life --
+            -- with the handler above logging it to a logger that discards
+            -- what it is given.  Whatever a peer could find that raises in
+            -- here would be one datagram against the whole server, from any
+            -- address, before any handshake.
+            handleLogUnit logAction $ do
+                cpckts <- decodeCryptPackets bs (not quicBit)
+                mapM_ switch cpckts
             loop
 
     logAction _msg = return ()
