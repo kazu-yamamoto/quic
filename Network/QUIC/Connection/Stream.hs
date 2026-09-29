@@ -58,8 +58,18 @@ setTxMaxStreams Connection{..} = set myStreamId
 setTxUniMaxStreams :: Connection -> Int -> IO ()
 setTxUniMaxStreams Connection{..} = set myUniStreamId
 
+-- | Raising the limit on the streams I may open.
+--
+-- A MAX_STREAMS that does not raise it is ignored (RFC 9000, section 4.6).
+-- One of them reordered on the way, or retransmitted after a newer one has
+-- gone out, would otherwise lower the limit.  'setTxMaxData' and
+-- 'setTxMaxStreamData' guard the limits on data the same way.
 set :: TVar Concurrency -> Int -> IO ()
-set tvar mx = atomically $ modifyTVar tvar $ \c -> c{maxStreams = StreamIdBase mx}
+set tvar mx = atomically $ modifyTVar' tvar raise
+  where
+    raise conc@Concurrency{..}
+        | fromStreamIdBase maxStreams < mx = conc{maxStreams = StreamIdBase mx}
+        | otherwise = conc
 
 updatePeerStreamId :: Connection -> StreamId -> IO ()
 updatePeerStreamId conn sid = do

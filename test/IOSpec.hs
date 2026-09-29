@@ -113,9 +113,17 @@ spec = do
             withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
         it "raises the limit on unidirectional streams by their own number" $ do
             withPipe (DropClientPacket []) $ testUniStreams cc sc waitS
+    describe "stream state" $ do
+        it "can still send after the peer's RESET_STREAM" $ do
+            withPipe (DropClientPacket []) $ testSendAfterReset cc sc waitS
+        it "cannot send after the peer's STOP_SENDING" $ do
+            withPipe (DropClientPacket []) $ testStopSending cc sc waitS
+        it "ends the stream for the reader when it is reset" $ do
+            withPipe (DropClientPacket []) $ testRecvAfterReset cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
-            withPipeStray (Randomly 20) $ testSendRecv cc sc waitS 20
+            withPipeStray (Randomly 20) $
+                testSendRecv cc sc waitS 20
     describe "concurrency" $ do
         it "can handle multiple clients" $ do
             withPipe (Randomly 20) $ testMultiSendRecv cc sc waitS 500
@@ -430,3 +438,99 @@ testAbort cc sc waitS = do
                         (ApplicationProtocolError 1)
                         "testing abortConnection"
             loop conn
+
+-- | RESET_STREAM ends the peer's sending part alone (RFC 9000, section 3.2).
+--   What we have to send on a bidirectional stream must still go out.
+testSendAfterReset :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testSendAfterReset cc sc waitS = do
+    res <- newEmptyMVar
+    E.bracket (forkIO $ server res) killThread $ \_ -> do
+        client
+        takeMVar res >>= (`shouldBe` True)
+  where
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            -- The reply says the "ping" has arrived, so that the
+            -- RESET_STREAM cannot overtake it and be dropped as a frame
+            -- for a stream that does not exist yet.
+            _ <- recvStream strm 1024
+            resetStream strm (ApplicationProtocolError 0)
+            threadDelay 300000
+    server res = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        sendStream strm "ack"
+        -- An empty ByteString: the pseudo FIN that the RESET_STREAM left.
+        let recvEOF = do
+                bs <- recvStream strm 1024
+                unless (bs == "") recvEOF
+        recvEOF
+        sent <-
+            (True <$ sendStream strm "pong") `E.catch` \e -> case e of
+                StreamIsClosed -> return False
+                _ -> E.throwIO e
+        putMVar res sent
+
+-- | STOP_SENDING makes us reset our sending part (RFC 9000, section 3.5),
+--   so nothing more may go out on it.
+testStopSending :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testStopSending cc sc waitS =
+    E.bracket (forkIO server) killThread $ \_ -> client
+  where
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            stopped <-
+                ( do
+                    _ <- Timeout.timeout 2000000 $ forever $ do
+                        threadDelay 20000
+                        sendStream strm "x"
+                    return False
+                )
+                    `E.catch` \e -> case e of
+                        StreamIsClosed -> return True
+                        _ -> E.throwIO e
+            stopped `shouldBe` True
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        stopStream strm (ApplicationProtocolError 0)
+        threadDelay 3000000
+
+-- | 'resetStream' leaves nothing to wait for.  An application that resets a
+--   stream because 'sendStream' failed does so with the sending part closed
+--   by the peer's STOP_SENDING already, and 'recvStream' has to end there
+--   rather than block: what the peer sends afterwards is dropped anyway,
+--   the stream being out of the table.
+testRecvAfterReset :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testRecvAfterReset cc sc waitS =
+    E.bracket (forkIO server) killThread $ \_ -> client
+  where
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            _ <-
+                ( do
+                    _ <- Timeout.timeout 2000000 $ forever $ do
+                        threadDelay 20000
+                        sendStream strm "x"
+                    return ()
+                )
+                    `E.catch` \e -> case e of
+                        StreamIsClosed -> return ()
+                        _ -> E.throwIO e
+            resetStream strm (ApplicationProtocolError 0)
+            mbs <- Timeout.timeout 1000000 $ recvStream strm 1024
+            mbs `shouldBe` Just ""
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        stopStream strm (ApplicationProtocolError 0)
+        threadDelay 3000000

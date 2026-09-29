@@ -151,13 +151,13 @@ closeStream s = do
                 || (isServer conn && isClientInitiatedUnidirectional sid)
     closed <- isConnectionClosed conn
     sclosed <- isTxStreamClosed s
-    if receiveOnly
-        then setRxStreamClosed s
-        else unless (closed || sclosed) $ do
-            setTxStreamClosed s
-            setRxStreamClosed s
-            putSendStreamQ conn $ TxStreamData s [] 0 True
-            waitFinTx s
+    unless (receiveOnly || closed || sclosed) $ do
+        setTxStreamClosed s
+        putSendStreamQ conn $ TxStreamData s [] 0 True
+        waitFinTx s
+    -- Outside the guard above: whether or not the FIN goes out, we are done
+    -- with the stream, and 'recvStream' has to say so rather than block.
+    setRxStreamClosed s
     delStream conn s
     releaseStream s
 
@@ -243,10 +243,14 @@ resetStream s aerr = do
     unless sclosed $ do
         finalSize <- getTxStreamFinalSize s
         setTxStreamClosed s
-        setRxStreamClosed s
         lvl <- getEncryptionLevel conn
         let frame = ResetStream sid aerr finalSize
         putOutput conn $ OutControl lvl [frame]
+    -- Outside the guard above: whether or not the RESET_STREAM goes out, we
+    -- are done with the stream, and 'recvStream' has to say so rather than
+    -- block.  The peer's STOP_SENDING has closed the sending part already
+    -- when an application resets a stream because 'sendStream' failed.
+    setRxStreamClosed s
     delStream conn s
     releaseStream s
 
@@ -273,19 +277,22 @@ sendDatagram conn dat = do
     -- Determine the send level from connection readiness state rather than
     -- the encryptionLevel TVar, which is not set to RTT0Level during 0-RTT.
     ready1rtt <- isConnection1RTTReady conn
-    lvl <- if ready1rtt
-        then return RTT1Level
-        else do
-            ready0rtt <- isConnection0RTTReady conn
-            if ready0rtt
-                then return RTT0Level
-                else E.throwIO $ ConnectionIsClosed "Cannot send DATAGRAM"
+    lvl <-
+        if ready1rtt
+            then return RTT1Level
+            else do
+                ready0rtt <- isConnection0RTTReady conn
+                if ready0rtt
+                    then return RTT0Level
+                    else E.throwIO $ ConnectionIsClosed "Cannot send DATAGRAM"
     limitBytes <- maxDatagramFrameSize <$> getPeerParameters conn
     when (limitBytes == 0) $
-      E.throwIO $ ConnectionIsClosed "DATAGRAM not supported by peer"
+        E.throwIO $
+            ConnectionIsClosed "DATAGRAM not supported by peer"
     let frameOverhead = 1 + BS.length (encodeInt (fromIntegral $ BS.length dat))
     when (BS.length dat + frameOverhead > limitBytes) $
-        E.throwIO $ ConnectionIsClosed "DATAGRAM size violation"
+        E.throwIO $
+            ConnectionIsClosed "DATAGRAM size violation"
     let frame = Datagram False dat
     putOutput conn $ OutControl lvl [frame]
 
