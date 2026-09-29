@@ -32,6 +32,7 @@ module Network.QUIC (
 
     -- * IO
     recvStream,
+    resetReceived,
     sendStream,
     sendStreamMany,
     sendDatagram,

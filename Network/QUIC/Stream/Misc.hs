@@ -9,6 +9,8 @@ module Network.QUIC.Stream.Misc (
     getRxStreamOffset,
     isRxStreamClosed,
     setRxStreamClosed,
+    resetReceived,
+    setResetReceived,
     --
     readStreamFlowTx,
     addTxStreamData,
@@ -25,6 +27,7 @@ import Network.Control
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Types
+import Network.QUIC.Types (ApplicationProtocolError)
 
 ----------------------------------------------------------------
 
@@ -66,6 +69,19 @@ setRxStreamClosed strm@Stream{..} = do
     putRecvStreamQ strm ""
   where
     set (StreamState off _) = StreamState off True
+
+-- | The error code of the RESET_STREAM the peer sent for this stream, if it
+--   sent one.
+--
+-- After a RESET_STREAM, 'recvStream' returns an empty 'ByteString', just as
+-- it does at the end of the stream.  This tells the two apart: HTTP/3, for
+-- one, has to tell its QPACK encoder about a request whose reset it saw
+-- (RFC 9204, section 4.4.2), and had no way to know that it was reset.
+resetReceived :: Stream -> IO (Maybe ApplicationProtocolError)
+resetReceived Stream{..} = readIORef streamResetRx
+
+setResetReceived :: Stream -> ApplicationProtocolError -> IO ()
+setResetReceived Stream{..} aerr = writeIORef streamResetRx $ Just aerr
 
 ----------------------------------------------------------------
 

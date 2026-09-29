@@ -41,6 +41,8 @@ data Stream = Stream
     , -- input stream fragments to streamQ, and how many of them
       streamReass :: IORef (Int, Skew RxStreamData)
     , streamSyncFinTx :: MVar ()
+    , streamResetRx :: IORef (Maybe ApplicationProtocolError)
+    -- ^ The error code of a RESET_STREAM from the peer
     }
 
 instance Show Stream where
@@ -56,6 +58,7 @@ newStream streamConnection streamId txLim rxLim = do
     streamRecvQ     <- newRecvStreamQ
     streamReass     <- newIORef (0, Skew.empty)
     streamSyncFinTx <- newEmptyMVar
+    streamResetRx   <- newIORef Nothing
     return Stream{..}
 {- FOURMOLU_ENABLE -}
 
