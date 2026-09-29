@@ -179,7 +179,7 @@ testLateCopy upload cc sc waitS =
         C.run cc $ \conn -> do
             exchange conn
             -- The copy arrives while we wait.
-            threadDelay 1500000
+            threadDelay 200000
             exchange conn
     exchange conn = do
         strm <- stream conn

@@ -292,7 +292,12 @@ withPipeWith stray scenario body = do
     shouldDelay (DelayServerPacket k) fromC pn = not fromC && pn == k
     shouldDelay _ _ _ = False
     -- The packets that follow go ahead of the one held back.
-    delayIf True send_ = void $ forkIO $ threadDelay 1000000 >> send_
+    --
+    -- Long enough for the data to be sent again and the stream closed before
+    -- it lands, which is what the test is about, and no longer: it was a
+    -- second, and a second is two and a half of these tests' worth of
+    -- everything else.
+    delayIf True send_ = void $ forkIO $ threadDelay delayTime >> send_
     delayIf False send_ = send_
 
 chooseALPN :: Version -> [ByteString] -> IO ByteString
@@ -328,3 +333,7 @@ sessionManager ref =
             Just (s, d)
                 | s == sid -> return $ Just d
                 | otherwise -> return Nothing
+
+-- | How long 'DelayClientPacket' and 'DelayServerPacket' hold a datagram.
+delayTime :: Int
+delayTime = 100000
