@@ -190,6 +190,8 @@ newtype StreamIdBase = StreamIdBase {fromStreamIdBase :: Int}
 data Concurrency = Concurrency
     { currentStream :: StreamId
     , maxStreams :: StreamIdBase
+    , closedStreams :: Int
+    -- ^ For the peer's streams: how many of them we are done with
     }
     deriving (Show)
 
@@ -201,6 +203,7 @@ newConcurrency rl dir n = Concurrency{..}
         | rl == Client = if bidi then 0 else 2
         | otherwise = if bidi then 1 else 3
     maxStreams = StreamIdBase n
+    closedStreams = 0
 
 -- | The peer-initiated streams of one type that have been opened so far.
 --

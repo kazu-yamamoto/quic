@@ -11,6 +11,7 @@ module Network.QUIC.Stream.Misc (
     setRxStreamClosed,
     resetReceived,
     setResetReceived,
+    markReleased,
     --
     readStreamFlowTx,
     addTxStreamData,
@@ -82,6 +83,10 @@ resetReceived Stream{..} = readIORef streamResetRx
 
 setResetReceived :: Stream -> ApplicationProtocolError -> IO ()
 setResetReceived Stream{..} aerr = writeIORef streamResetRx $ Just aerr
+
+-- | Marking the stream as done with; 'True' only the first time.
+markReleased :: Stream -> IO Bool
+markReleased Stream{..} = atomicModifyIORef' streamReleased $ \done -> (True, not done)
 
 ----------------------------------------------------------------
 

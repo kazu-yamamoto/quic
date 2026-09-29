@@ -142,31 +142,55 @@ shutdownStream s = do
 closeStream :: Stream -> IO ()
 closeStream s = do
     let conn = streamConnection s
-    let sid = streamId s
+        sid = streamId s
+        -- A unidirectional stream of the peer's has no sending side here.
+        -- Sending a FIN on it anyway made the peer close the connection with
+        -- STREAM_STATE_ERROR, so that one could not be closed at all.
+        receiveOnly =
+            (isClient conn && isServerInitiatedUnidirectional sid)
+                || (isServer conn && isClientInitiatedUnidirectional sid)
     closed <- isConnectionClosed conn
     sclosed <- isTxStreamClosed s
-    unless (closed || sclosed) $ do
-        setTxStreamClosed s
-        setRxStreamClosed s
-        putSendStreamQ conn $ TxStreamData s [] 0 True
-        waitFinTx s
+    if receiveOnly
+        then setRxStreamClosed s
+        else unless (closed || sclosed) $ do
+            setTxStreamClosed s
+            setRxStreamClosed s
+            putSendStreamQ conn $ TxStreamData s [] 0 True
+            waitFinTx s
     delStream conn s
-    when
-        ( (isClient conn && isServerInitiatedBidirectional sid)
-            || (isServer conn && isClientInitiatedBidirectional sid)
-        )
-        $ do
-            -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
-            checkMaxStreams conn Bidirectional
-    when
-        ( (isClient conn && isServerInitiatedUnidirectional sid)
-            || (isServer conn && isClientInitiatedUnidirectional sid)
-        )
-        $ do
-            -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
-            checkMaxStreams conn Unidirectional
+    releaseStream s
+
+-- | Counting a stream of the peer's as done with, once, and announcing a
+--   new MAX_STREAMS if that is due.
+--
+-- Only when the application is done with it: closing it or resetting it.  A
+-- RESET_STREAM from the peer takes the stream out of the table, but whatever
+-- is serving it may be at work yet, and counting it then would let a peer
+-- that opens streams and resets them straight away have any number served
+-- at once.
+releaseStream :: Stream -> IO ()
+releaseStream s = do
+    first <- markReleased s
+    when first $ do
+        when
+            ( (isClient conn && isServerInitiatedBidirectional sid)
+                || (isServer conn && isClientInitiatedBidirectional sid)
+            )
+            $ do
+                -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
+                checkMaxStreams Bidirectional
+        when
+            ( (isClient conn && isServerInitiatedUnidirectional sid)
+                || (isServer conn && isClientInitiatedUnidirectional sid)
+            )
+            $ do
+                -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
+                checkMaxStreams Unidirectional
   where
-    checkMaxStreams conn dir = do
+    conn = streamConnection s
+    sid = streamId s
+    checkMaxStreams dir = do
         mx <- checkStreamIdRoom conn dir
         case mx of
             Nothing -> return ()
@@ -224,6 +248,7 @@ resetStream s aerr = do
         let frame = ResetStream sid aerr finalSize
         putOutput conn $ OutControl lvl [frame]
     delStream conn s
+    releaseStream s
 
 -- | Asking the peer to stop sending.
 --   This sends STOP_SENDING to the peer

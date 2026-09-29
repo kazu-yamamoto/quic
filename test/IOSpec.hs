@@ -7,6 +7,7 @@ import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
+import Data.IORef
 import qualified System.Timeout as Timeout
 import Test.Hspec
 
@@ -107,6 +108,11 @@ spec = do
             withPipe (DelayServerPacket 300) $ testLateCopy False cc sc waitS
         it "ignores a late copy of the data it received on a stream the peer opened" $ do
             withPipe (DelayClientPacket 300) $ testLateCopy True cc sc waitS
+    describe "stream limits" $ do
+        it "keeps the peer's open bidirectional streams within the limit" $ do
+            withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
+        it "raises the limit on unidirectional streams by their own number" $ do
+            withPipe (DropClientPacket []) $ testUniStreams cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $ testSendRecv cc sc waitS 20
@@ -234,6 +240,66 @@ testResetReceived cc sc waitS = do
         r1 <- resetReceived strm1
         putMVar resultVar (r0, r1)
         threadDelay 1000000
+
+-- | The server closes one stream in ten and keeps the others open; the
+-- client opens streams for as long as it is let.  No more than
+-- initial_max_streams_bidi may be open at once (RFC 9000, section 4.6).
+--
+-- The limit used to be raised to the highest stream opened plus the initial
+-- number whenever a stream was closed, so that the client was given a whole
+-- new window each time: over three thousand were held open within seconds.
+testOpenStreams :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testOpenStreams cc sc waitS = do
+    maxOpen <- newIORef (0 :: Int)
+    E.bracket (forkIO $ server maxOpen) killThread $ \_ -> do
+        client
+        readIORef maxOpen
+            >>= (`shouldSatisfy` (<= initialMaxStreamsBidi (scParameters sc)))
+  where
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            _ <- Timeout.timeout 1500000 $ forever $ do
+                strm <- stream conn
+                sendStream strm "x"
+            return ()
+    server maxOpen = run sc $ \conn -> do
+        openRef <- newIORef (0 :: Int)
+        forM_ [0 :: Int ..] $ \n -> do
+            strm <- acceptStream conn
+            _ <- recvStream strm 1
+            if n `mod` 10 == 0
+                then closeStream strm
+                else do
+                    o <- atomicModifyIORef' openRef $ \x -> (x + 1, x + 1)
+                    atomicModifyIORef' maxOpen $ \m -> (max m o, ())
+
+-- | The server closes the first unidirectional stream and keeps the rest.
+-- The client may then have initial_max_streams_uni plus one.  The limit was
+-- raised by initial_max_streams_bidi instead, 64 against 3.
+testUniStreams :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testUniStreams cc sc waitS = do
+    opened <- newIORef (0 :: Int)
+    E.bracket (forkIO server) killThread $ \_ -> do
+        client opened
+        readIORef opened
+            >>= (`shouldSatisfy` (<= initialMaxStreamsUni (scParameters sc) + 1))
+  where
+    client opened = do
+        waitS
+        C.run cc $ \conn -> do
+            _ <- Timeout.timeout 1500000 $ forever $ do
+                strm <- unidirectionalStream conn
+                sendStream strm "x"
+                modifyIORef' opened (+ 1)
+            return ()
+    server = run sc $ \conn -> do
+        strm0 <- acceptStream conn
+        _ <- recvStream strm0 1
+        closeStream strm0
+        forever $ do
+            strm <- acceptStream conn
+            recvStream strm 1
 
 testRecvStreamClientStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()

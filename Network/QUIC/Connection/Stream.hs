@@ -101,6 +101,21 @@ checkRxMaxStreams conn@Connection{..} sid = do
         3 -> readTVarIO myUniStreamId
         _ -> E.throwIO MustNotReached
 
+-- | Counting one of the peer's streams as done with, and answering the new
+--   limit for MAX_STREAMS if it is time to announce one.
+--
+-- The limit is the initial one plus the number of the peer's streams we are
+-- done with, so that no more than the initial number are open at once
+-- (RFC 9000, section 4.6).  It is announced once it has gone up by half the
+-- initial number, rather than for every stream.
+--
+-- It used to be the highest stream the peer had opened plus the initial
+-- number, whenever a stream was closed and the peer was close to its limit.
+-- A peer keeping its streams open was then given a whole new window every
+-- time we closed one of them, and could keep any number open: one closing a
+-- tenth of what it opened held over three thousand open within seconds,
+-- against a limit of 64.  The initial number was taken from the limit for
+-- bidirectional streams for unidirectional ones too.
 checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int)
 checkStreamIdRoom conn dir = do
     let ref
@@ -108,12 +123,15 @@ checkStreamIdRoom conn dir = do
             | otherwise = peerUniStreamId conn
     atomicModifyIORef' ref checkConc
   where
+    params = getMyParameters conn
+    initialStreams
+        | dir == Bidirectional = initialMaxStreamsBidi params
+        | otherwise = initialMaxStreamsUni params
     checkConc conc@Concurrency{..} =
         let StreamIdBase base = maxStreams
-            initialStreams = initialMaxStreamsBidi $ getMyParameters conn
-            cbase = currentStream !>>. 2
-         in if base - cbase < (initialStreams !>>. 3)
-                then
-                    let base' = cbase + initialStreams
-                     in (conc{maxStreams = StreamIdBase base'}, Just base')
-                else (conc, Nothing)
+            closed = closedStreams + 1
+            base' = initialStreams + closed
+            conc' = conc{closedStreams = closed}
+         in if base' - base >= max 1 (initialStreams `div` 2)
+                then (conc'{maxStreams = StreamIdBase base'}, Just base')
+                else (conc', Nothing)
