@@ -277,6 +277,9 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
         Nothing -> return ()
         Just strm -> do
             onResetStreamReceived (connHooks conn) strm aerr
+            -- Before the pseudo FIN below, so that whoever reads it can
+            -- tell it was not a real one.
+            setResetReceived strm aerr
             setTxStreamClosed strm
             setRxStreamClosed strm
             delStream conn strm

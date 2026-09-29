@@ -100,6 +100,8 @@ spec = do
         -- number of bytes sent by the RESET_STREAM sender.
         it "sends RESET_STREAM with the bytes sent as final size" $ do
             withPipe (DropClientPacket []) $ testResetStreamFinalSize cc sc waitS
+        it "tells a stream that was reset from one that ended" $ do
+            withPipe (DropClientPacket []) $ testResetReceived cc sc waitS
     describe "closed stream" $ do
         it "ignores a late copy of the data it received on a stream it opened" $ do
             withPipe (DelayServerPacket 300) $ testLateCopy False cc sc waitS
@@ -195,6 +197,43 @@ testLateCopy upload cc sc waitS =
         assertEndOfStream strm
         sendStream strm (BS.replicate downLen 0)
         closeStream strm
+
+-- | After a RESET_STREAM, 'recvStream' returns "" just as at the end of the
+-- stream; 'resetReceived' tells the two apart.  The client ends one stream
+-- and resets another, and the server looks at both.
+testResetReceived :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testResetReceived cc sc waitS = do
+    resultVar <- newEmptyMVar
+    E.bracket (forkIO $ server resultVar) killThread $ \_ -> client resultVar
+  where
+    aerr = ApplicationProtocolError 7
+
+    client resultVar = do
+        waitS
+        C.run cc $ \conn -> do
+            strm0 <- stream conn
+            sendStream strm0 "ended"
+            shutdownStream strm0
+            strm1 <- stream conn
+            sendStream strm1 "reset"
+            -- Let the data go first.
+            threadDelay 100000
+            resetStream strm1 aerr
+            mres <- Timeout.timeout 5000000 $ takeMVar resultVar
+            mres `shouldBe` Just (Nothing, Just aerr)
+
+    server resultVar = run sc $ \conn -> do
+        strm0 <- acceptStream conn
+        strm1 <- acceptStream conn
+        let drain strm = do
+                bs <- recvStream strm 1024
+                unless (BS.null bs) $ drain strm
+        drain strm0
+        drain strm1
+        r0 <- resetReceived strm0
+        r1 <- resetReceived strm1
+        putMVar resultVar (r0, r1)
+        threadDelay 1000000
 
 testRecvStreamClientStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
