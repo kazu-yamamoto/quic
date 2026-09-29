@@ -18,14 +18,13 @@ module Config (
 import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
+import Data.Bits ((.&.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.Bits ((.&.))
 import Data.IORef
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
 import Network.Socket
-import System.Directory (createDirectoryIfMissing)
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
 
@@ -105,6 +104,7 @@ testClientConfigR =
                 }
         }
 
+#ifdef QLOG
 -- | Write qlog for the connections that go through 'withPipe'.
 --
 -- These are the tests that lose packets on purpose, and so the ones that
@@ -117,6 +117,7 @@ testClientConfigR =
 -- | Where qlog goes when the @qlog@ flag is on.
 qlogDir :: FilePath
 qlogDir = "qlog"
+#endif
 
 -- | Create 'qlogDir' if the tests are going to write into it.
 --
@@ -288,8 +289,8 @@ withPipeWith stray scenario body = do
     shouldDelay (DelayServerPacket k) fromC pn = not fromC && pn == k
     shouldDelay _ _ _ = False
     -- The packets that follow go ahead of the one held back.
-    delayIf True send = void $ forkIO $ threadDelay 1000000 >> send
-    delayIf False send = send
+    delayIf True send_ = void $ forkIO $ threadDelay 1000000 >> send_
+    delayIf False send_ = send_
 
 chooseALPN :: Version -> [ByteString] -> IO ByteString
 chooseALPN _ver protos = return $ case mh3idx of

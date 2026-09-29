@@ -25,7 +25,6 @@ module Network.QUIC.Connection.Crypto (
 ) where
 
 import Control.Concurrent.STM
-import Network.TLS.Extra.Cipher
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Misc
@@ -141,7 +140,6 @@ updateSecret ver cipher (ClientTrafficSecret cN, ServerTrafficSecret sN) = secN1
     Secret sN1 = nextSecret ver cipher $ Secret sN
     secN1 = (ClientTrafficSecret cN1, ServerTrafficSecret sN1)
 
-
 genNiteCoder
     :: Bool -> Version -> Cipher -> TrafficSecrets a -> IO (Coder, Protector)
 genNiteCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
@@ -185,7 +183,6 @@ genNiteCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
     rxPayloadIV = initialVector ver cipher rxSecret
     rxHeaderKey = headerProtectionKey ver cipher rxSecret
     unp = protectionMask cipher rxHeaderKey
-
 
 genNiteCoder1RTT
     :: Bool -> Version -> Cipher -> TrafficSecrets a -> Coder -> IO Coder
