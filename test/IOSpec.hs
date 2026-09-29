@@ -38,6 +38,9 @@ spec = do
             Timeout.timeout 5000000 (takeMVar var) >>= \r -> case r of
                 Just () -> return ()
                 Nothing -> expectationFailure "server never became ready"
+    describe "handshake" $ do
+        it "can exchange data when the server's first flight is lost" $ do
+            withPipe (DropServerPacket [0, 1, 2]) $ testSendRecv cc sc waitS 20
     describe "send & recv" $ do
         it "can exchange data on random dropping" $ do
             withPipe (Randomly 20) $ testSendRecv cc sc waitS 1000
