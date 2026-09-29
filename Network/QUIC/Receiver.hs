@@ -156,12 +156,22 @@ processReceivedPacket conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
         tim = rpTimeRecevied rpkt
+    -- Before the decryption below.  RFC 9000, section 8.1: "servers MUST
+    -- count all of the payload bytes received in datagrams that are uniquely
+    -- attributed to a single connection.  This includes datagrams that
+    -- contain packets that are discarded."
+    --
+    -- Counted only for what it could read, a server that stops being able to
+    -- read the peer stops earning the credit it needs to answer, and the
+    -- anti-amplification limit holds its sender for good.  Whatever the peer
+    -- retransmits from then on is discarded and buys nothing, so the
+    -- connection does not recover; it hangs until the idle timeout.
+    pathInfo <- getPathInfo conn
+    addPathRxBytes pathInfo $ rpReceivedBytes rpkt
     mplain <- decryptCrypt conn crypt lvl
     case mplain of
         Just plain@Plain{..} -> do
             addRxBytes conn $ rpReceivedBytes rpkt
-            pathInfo <- getPathInfo conn
-            addPathRxBytes pathInfo $ rpReceivedBytes rpkt
             when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
                 closeConnection conn ProtocolViolation "Non 0 RR bits or no frames"
             when (isUnknownFrame plainMarks) $
