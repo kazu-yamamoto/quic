@@ -27,6 +27,9 @@ import qualified Data.List.NonEmpty as NE
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
+#ifdef QLOG
+import System.Directory (createDirectoryIfMissing)
+#endif
 
 import Network.QUIC.Client
 import Network.QUIC.Internal
