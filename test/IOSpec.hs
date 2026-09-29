@@ -123,6 +123,10 @@ spec = do
             withPipe (DropClientPacket []) $ testStopSending cc sc waitS
         it "ends the stream for the reader when it is reset" $ do
             withPipe (DropClientPacket []) $ testRecvAfterReset cc sc waitS
+        it "accepts a stream the peer only reset" $ do
+            withPipe (DropClientPacket []) $ testResetOnly cc sc waitS
+        it "accepts a reset that overtook the data it followed" $ do
+            withPipe (DropClientPacket []) $ testResetOvertakes cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $
@@ -537,3 +541,59 @@ testRecvAfterReset cc sc waitS =
         _ <- recvStream strm 1024
         stopStream strm (ApplicationProtocolError 0)
         threadDelay 3000000
+
+-- | RFC 9000, section 3.2: the receiving part of a stream the peer opened is
+--   created when the first STREAM, STREAM_DATA_BLOCKED or RESET_STREAM frame
+--   for it arrives.  Here the client never sends on the stream, so the
+--   RESET_STREAM is the first the server hears of it.
+testResetOnly :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testResetOnly cc sc waitS = do
+    got <- newEmptyMVar
+    withAsync (server got) $ \_ -> do
+        client
+        -- With a timeout: without the stream, 'acceptStream' on the server
+        -- never returns, and the test would hang rather than fail.
+        r <- Timeout.timeout 1000000 $ takeMVar got
+        r `shouldBe` Just (Just aerr)
+  where
+    aerr = ApplicationProtocolError 7
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            resetStream strm aerr
+            threadDelay 300000
+    server got = run sc $ \conn -> do
+        strm <- acceptStream conn
+        bs <- recvStream strm 1024
+        bs `shouldBe` ""
+        resetReceived strm >>= putMVar got
+
+-- | The same, for the reset that follows data on the stream.  It overtakes
+--   the data: the sender empties the queue the RESET_STREAM is on before the
+--   one the STREAM frame is on.
+testResetOvertakes :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testResetOvertakes cc sc waitS = do
+    got <- newEmptyMVar
+    withAsync (server got) $ \_ -> do
+        client
+        -- With a timeout: without the stream, 'acceptStream' on the server
+        -- never returns, and the test would hang rather than fail.
+        r <- Timeout.timeout 1000000 $ takeMVar got
+        r `shouldBe` Just (Just aerr)
+  where
+    aerr = ApplicationProtocolError 7
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            resetStream strm aerr
+            threadDelay 300000
+    server got = run sc $ \conn -> do
+        strm <- acceptStream conn
+        let recvEOF = do
+                bs <- recvStream strm 1024
+                unless (bs == "") recvEOF
+        recvEOF
+        resetReceived strm >>= putMVar got
