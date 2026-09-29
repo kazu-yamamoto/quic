@@ -1,5 +1,43 @@
 # ChangeLog
 
+## 0.3.7
+
+* Don't open a closed stream again for a late copy of its data.  A STREAM
+  frame for a stream no longer in the table opened it anew, and after the
+  stream was closed what arrives is a copy of data already received, sent
+  again because the packet carrying it was taken for lost while it was
+  only late.  The new stream starts from the initial window, 256K, so a
+  copy from past that point was called a flow control error and the
+  connection closed with FLOW_CONTROL_ERROR; a copy from within the
+  window was worse, handing the application a closed stream as a new one.
+  [#118](https://github.com/kazu-yamamoto/quic/pull/118)
+
+* Report a server that could not be started.  `run` and `runWithSockets`
+  created their sockets inside a handler whose logger discards what it is
+  given, so a failure to bind was swallowed, `onServerReady` was never
+  reached, and `run` returned as if all were well.  **This changes what
+  callers see**: a `run` that cannot bind now raises where it used to
+  return quietly.
+  [#119](https://github.com/kazu-yamamoto/quic/pull/119)
+
+* Don't let one datagram take the server's dispatcher down for good.  An
+  exception anywhere in the dispatcher loop ended it, and nothing
+  restarts it -- the socket stays bound, so the server went on looking
+  like a server and answering nothing, with the failure logged to the
+  same discarding logger.  Decode and dispatch are guarded per datagram
+  now.  No input was found that raises; this is the blast radius being
+  closed, not a known hole.
+  [#120](https://github.com/kazu-yamamoto/quic/pull/120)
+
+* Tests only: the IOSpec relay no longer connects its sockets, since a
+  connected UDP socket turns an ICMP port-unreachable into ECONNREFUSED
+  on the next operation and the peers there come and go with every test.
+  And qlog is behind a `qlog` flag, off by default, which makes its own
+  directory when it is on -- the directory used to be the CI's job, so a
+  fresh clone failed 33 examples with `openFile: does not exist`.
+  [#117](https://github.com/kazu-yamamoto/quic/pull/117),
+  [#121](https://github.com/kazu-yamamoto/quic/pull/121)
+
 ## 0.3.6
 
 A security fix and three for a stalled handshake.
