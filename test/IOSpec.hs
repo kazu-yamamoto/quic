@@ -118,6 +118,8 @@ spec = do
             withPipe (DropClientPacket []) $ testSendAfterReset cc sc waitS
         it "cannot send after the peer's STOP_SENDING" $ do
             withPipe (DropClientPacket []) $ testStopSending cc sc waitS
+        it "ends the stream for the reader when it is reset" $ do
+            withPipe (DropClientPacket []) $ testRecvAfterReset cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $
@@ -494,6 +496,39 @@ testStopSending cc sc waitS =
                         StreamIsClosed -> return True
                         _ -> E.throwIO e
             stopped `shouldBe` True
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        stopStream strm (ApplicationProtocolError 0)
+        threadDelay 3000000
+
+-- | 'resetStream' leaves nothing to wait for.  An application that resets a
+--   stream because 'sendStream' failed does so with the sending part closed
+--   by the peer's STOP_SENDING already, and 'recvStream' has to end there
+--   rather than block: what the peer sends afterwards is dropped anyway,
+--   the stream being out of the table.
+testRecvAfterReset :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testRecvAfterReset cc sc waitS =
+    E.bracket (forkIO server) killThread $ \_ -> client
+  where
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            _ <-
+                ( do
+                    _ <- Timeout.timeout 2000000 $ forever $ do
+                        threadDelay 20000
+                        sendStream strm "x"
+                    return ()
+                )
+                    `E.catch` \e -> case e of
+                        StreamIsClosed -> return ()
+                        _ -> E.throwIO e
+            resetStream strm (ApplicationProtocolError 0)
+            mbs <- Timeout.timeout 1000000 $ recvStream strm 1024
+            mbs `shouldBe` Just ""
     server = run sc $ \conn -> do
         strm <- acceptStream conn
         _ <- recvStream strm 1024
