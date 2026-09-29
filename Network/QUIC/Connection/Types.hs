@@ -12,6 +12,8 @@ import Data.Array.IO
 import Data.ByteString.Internal
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
@@ -200,6 +202,23 @@ newConcurrency rl dir n = Concurrency{..}
         | otherwise = if bidi then 1 else 3
     maxStreams = StreamIdBase n
 
+-- | The peer-initiated streams of one type that have been opened so far.
+--
+-- Every id below 'openedNext' has been opened, save those in
+-- 'openedSkipped': the peer used a higher-numbered stream first, which opens
+-- these too (RFC 9000 Sec 3.2), but nothing has arrived for them yet.  A
+-- stream that has been opened and is no longer in the stream table has been
+-- closed, and a frame for it -- typically a retransmission that crossed our
+-- acknowledgement -- must not open it again.
+data OpenedStreams = OpenedStreams
+    { openedNext :: StreamId
+    , openedSkipped :: IntSet
+    }
+    deriving (Show)
+
+newOpenedStreams :: Concurrency -> OpenedStreams
+newOpenedStreams conc = OpenedStreams (currentStream conc) IntSet.empty
+
 ----------------------------------------------------------------
 
 type Send = Buffer -> Int -> IO ()
@@ -272,6 +291,8 @@ data Connection = Connection
     , myUniStreamId     :: TVar Concurrency -- C:2 S:3
     , peerStreamId      :: IORef Concurrency -- C:1 S:0
     , peerUniStreamId   :: IORef Concurrency -- C:3 S:2
+    , peerOpened        :: IORef OpenedStreams -- C:1 S:0
+    , peerUniOpened     :: IORef OpenedStreams -- C:3 S:2
     , flowTx            :: TVar TxFlow
     , flowRx            :: IORef RxFlow
     , migrationState    :: TVar MigrationState
@@ -370,6 +391,8 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     myUniStreamId     <- newTVarIO (newConcurrency rl Unidirectional 0)
     peerStreamId      <- newIORef peerConcurrency
     peerUniStreamId   <- newIORef peerUniConcurrency
+    peerOpened        <- newIORef (newOpenedStreams peerConcurrency)
+    peerUniOpened     <- newIORef (newOpenedStreams peerUniConcurrency)
     flowTx            <- newTVarIO (newTxFlow 0) -- limit is set in Handshake
     flowRx            <- newIORef (newRxFlow $ initialMaxData myParameters)
     migrationState    <- newTVarIO NonMigration

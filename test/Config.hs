@@ -121,6 +121,10 @@ data Scenario
     = Randomly Int
     | DropClientPacket [Int]
     | DropServerPacket [Int]
+    | -- | Hold the n-th datagram from the client back for a second.
+      DelayClientPacket Int
+    | -- | Hold the n-th datagram from the server back for a second.
+      DelayServerPacket Int
 
 withPipe :: Scenario -> IO () -> IO ()
 withPipe = withPipeWith False
@@ -213,7 +217,10 @@ withPipeWith stray scenario body = do
                     n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
                     dropPacket <- shouldDrop scenario True n
                     let isCC = BS.length bs1 < 200
-                    when (isCC || not dropPacket) $ void $ sendTo sockS bs1 saS
+                    when (isCC || not dropPacket) $
+                        delayIf (shouldDelay scenario True n) $
+                            void $
+                                sendTo sockS bs1 saS
         -- from server
         tid1 <- forkIO $ forever $ do
             (bs, _) <- recvFrom sockS 2048
@@ -222,7 +229,8 @@ withPipeWith stray scenario body = do
             let isCC = BS.length bs < 200
             when (isCC || not dropPacket) $ do
                 mpeer <- readIORef peerRef
-                forM_ mpeer $ \sa -> void $ sendTo sockC bs sa
+                forM_ mpeer $ \sa ->
+                    delayIf (shouldDelay scenario False n) $ void $ sendTo sockC bs sa
         return (tid0, tid1)
     stopRelay (tid0, tid1) = killThread tid0 >> killThread tid1
     waitForClientHello sockC = do
@@ -247,6 +255,13 @@ withPipeWith stray scenario body = do
     shouldDrop (DropServerPacket ns) fromC pn
         | fromC = return False
         | otherwise = return (pn `elem` ns)
+    shouldDrop _ _ _ = return False
+    shouldDelay (DelayClientPacket k) fromC pn = fromC && pn == k
+    shouldDelay (DelayServerPacket k) fromC pn = not fromC && pn == k
+    shouldDelay _ _ _ = False
+    -- The packets that follow go ahead of the one held back.
+    delayIf True send = void $ forkIO $ threadDelay 1000000 >> send
+    delayIf False send = send
 
 chooseALPN :: Version -> [ByteString] -> IO ByteString
 chooseALPN _ver protos = return $ case mh3idx of

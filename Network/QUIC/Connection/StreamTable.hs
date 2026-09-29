@@ -2,6 +2,7 @@
 
 module Network.QUIC.Connection.StreamTable (
     createStream,
+    claimPeerStream,
     findStream,
     addStream,
     delStream,
@@ -10,6 +11,8 @@ module Network.QUIC.Connection.StreamTable (
     clearCryptoStream,
     getCryptoStream,
 ) where
+
+import qualified Data.IntSet as IntSet
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
@@ -25,6 +28,26 @@ createStream conn sid = do
     strm <- addStream conn sid
     putInput conn $ InpStream strm
     return strm
+
+-- | Recording that a peer-initiated stream is opened.  'False' if it was
+--   opened before, which, for one no longer in the stream table, means that it
+--   has been closed.
+--
+-- The skipped ids never outnumber the streams we allow the peer, as a frame
+-- for a stream past that limit is refused before it gets here.
+claimPeerStream :: Connection -> StreamId -> IO Bool
+claimPeerStream conn sid = atomicModifyIORef' ref claim
+  where
+    ref
+        | isUnidirectional sid = peerUniOpened conn
+        | otherwise = peerOpened conn
+    claim os@OpenedStreams{..}
+        | sid >= openedNext =
+            let skipped = IntSet.fromDistinctAscList [openedNext, openedNext + 4 .. sid - 4]
+             in (OpenedStreams (sid + 4) (openedSkipped <> skipped), True)
+        | sid `IntSet.member` openedSkipped =
+            (os{openedSkipped = IntSet.delete sid openedSkipped}, True)
+        | otherwise = (os, False)
 
 findStream :: Connection -> StreamId -> IO (Maybe Stream)
 findStream Connection{..} sid = lookupStream sid <$> readIORef streamTable
