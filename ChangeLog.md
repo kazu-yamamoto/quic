@@ -1,5 +1,79 @@
 # ChangeLog
 
+## 0.3.9
+
+A stream limit the peer could walk past, two ways for a connection to
+hang, and the stream states.
+
+* Keep the peer's open streams within `initial_max_streams`.  MAX_STREAMS
+  counts streams cumulatively (RFC 9000 Sec 4.6), so the limit should go
+  up by one for each of the peer's streams we are done with.  It went up
+  by the highest stream the peer had opened plus the initial number,
+  every time one closed and the peer was near its limit -- a whole new
+  window for one closed stream.  A peer that keeps its streams open could
+  have any number open at once: against 0.3.7 with a limit of 64, a
+  client whose server closed one stream in ten held 3132 open after three
+  seconds, and on an HTTP/3 server each of those is a handler thread.
+  The limit for unidirectional streams was taken from
+  `initialMaxStreamsBidi` as well, and `closeStream` on a unidirectional
+  stream the peer opened sent a FIN on a stream with no sending side, so
+  the peer closed the connection with STREAM_STATE_ERROR and those
+  streams could not be closed at all.
+  [#124](https://github.com/kazu-yamamoto/quic/pull/124)
+
+* Count what cannot be read against the anti-amplification limit.  RFC
+  9000 Sec 8.1 says to count all the payload bytes received, "including
+  datagrams that contain packets that are discarded"; they were counted
+  only for a packet that decrypted.  A server that stops being able to
+  read the peer therefore stops earning the credit it needs to answer,
+  and its sender waits for good.  Reached by way of compatible version
+  negotiation: the server answers in a version of its own and replaces
+  its Initial keys, its first flight is lost, the client retransmits in
+  the version it started with, and the server -- having sent exactly
+  three times what it read -- can neither read those nor send again.  The
+  handshake never finishes.
+  [#128](https://github.com/kazu-yamamoto/quic/pull/128)
+
+* Open the stream a RESET_STREAM arrives for.  RFC 9000 Sec 3.2 has the
+  receiving part of a peer's stream created by the first STREAM,
+  STREAM_DATA_BLOCKED or RESET_STREAM frame for it; only a STREAM frame
+  created it, and a RESET_STREAM that found none was dropped.  It arrives
+  first whenever the peer resets a stream it has just sent on, since the
+  sender empties the queue the RESET_STREAM is on before the one the data
+  is on -- not a race but the order it works in.  The stream was then
+  opened by the data that came after, with nothing to say it had been
+  reset and no FIN to end it, and `recvStream` waited on it until the
+  idle timeout.  A stream never created is never counted, so each one
+  lost this way took a unit of MAX_STREAMS credit with it for good.
+  [#129](https://github.com/kazu-yamamoto/quic/pull/129)
+
+* Set the sending part closed on STOP_SENDING, not on RESET_STREAM.  The
+  two end opposite directions and were the wrong way round.  A
+  RESET_STREAM from the peer closed our sending part as well as the
+  receiving one, so a reply to what the peer sent before the reset could
+  not go out; a STOP_SENDING left our sending part open, so `sendStream`
+  went on working after we had answered with RESET_STREAM.  **This
+  changes what callers see**: `sendStream` on a stream the peer stopped
+  now raises `StreamIsClosed`, where it used to succeed.  `closeStream`
+  and `resetStream` also end the stream for its reader whatever else they
+  do -- with the sending part already closed they skipped it, and
+  `recvStream` blocked for good on a stream that had left the table and
+  could receive nothing more.  And a MAX_STREAMS that does not raise the
+  limit is ignored (RFC 9000 Sec 4.6); one reordered or retransmitted
+  after a newer one lowered the limit on the streams we may open.
+  [#125](https://github.com/kazu-yamamoto/quic/pull/125)
+
+* Tests only: the IOSpec ports moved out of the range the kernel hands
+  out for a socket bound to port 0, which is 49152 to 65535 on macOS and
+  32768 to 60999 on Linux.  Inside it, the relay's own socket was now and
+  then given the very port the test server wanted, and "server never
+  became ready" followed -- about one run in three hundred.  Each test
+  also waits for its server to stop before the next one starts;
+  `killThread` returns once the exception is delivered, not once the
+  thread is done with it, so the server outlived it and went on serving.
+  [#126](https://github.com/kazu-yamamoto/quic/pull/126),
+  [#127](https://github.com/kazu-yamamoto/quic/pull/127)
+
 ## 0.3.8
 
 * Tell a stream that was reset from one that ended.  After a
