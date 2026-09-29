@@ -50,7 +50,7 @@ testServerConfig :: ServerConfig
 testServerConfig =
     defaultServerConfig
         { -- Don't use "0.0.0.0" and "::" for Windows (UDP dispatching bug)
-          scAddresses = [("127.0.0.1", 50003)]
+          scAddresses = [("127.0.0.1", 15003)]
         , scParameters =
             (scParameters defaultServerConfig)
                 { maxIdleTimeout = Milliseconds 10000
@@ -74,7 +74,7 @@ testServerConfigR :: ServerConfig
 testServerConfigR =
     defaultServerConfig
         { -- Don't use "0.0.0.0" and "::" for Windows (UDP dispatching bug)
-          scAddresses = [("127.0.0.1", 50003)]
+          scAddresses = [("127.0.0.1", 15003)]
         , scParameters =
             (scParameters defaultServerConfig)
                 { maxIdleTimeout = Milliseconds 10000
@@ -85,7 +85,7 @@ testClientConfig :: ClientConfig
 testClientConfig =
     defaultClientConfig
         { ccServerName = "127.0.0.1"
-        , ccPortName = "50003"
+        , ccPortName = "15003"
         , ccValidate = False
         , ccDebugLog = True
         , ccParameters =
@@ -98,7 +98,7 @@ testClientConfigR :: ClientConfig
 testClientConfigR =
     defaultClientConfig
         { ccServerName = "127.0.0.1"
-        , ccPortName = "50002"
+        , ccPortName = "15002"
         , ccValidate = False
         , ccDebugLog = True
         , ccParameters =
@@ -174,9 +174,20 @@ withPipeStray = withPipeWith True
 
 withPipeWith :: Bool -> Scenario -> IO () -> IO ()
 withPipeWith stray scenario body = do
-    addrC <- resolve "50002"
+    -- Ports outside the range the kernel hands out for a socket bound to
+    -- port 0, which is 49152 to 65535 on macOS and 32768 to 60999 on Linux.
+    -- Inside it, the relay's own socket for the server side, bound to
+    -- 127.0.0.1:0 below, is now and then given the very port the test
+    -- server wants, and the server cannot bind it:
+    --
+    --   Network.Socket.bind: resource busy (Address already in use)
+    --
+    -- 'run' reports that to whoever forked it, which is nobody, so
+    -- onServerReady never fires and the test fails with "server never
+    -- became ready".  One run in a few hundred, on ports 50002 and 50003.
+    addrC <- resolve "15002"
     let saC = addrAddress addrC
-    addrS <- resolve "50003"
+    addrS <- resolve "15003"
     let saS = addrAddress addrS
     irefC <- newIORef 0
     irefS <- newIORef 0
