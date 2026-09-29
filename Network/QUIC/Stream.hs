@@ -22,6 +22,7 @@ module Network.QUIC.Stream (
     setRxStreamClosed,
     resetReceived,
     setResetReceived,
+    markReleased,
     readStreamFlowTx,
     addTxStreamData,
     setTxMaxStreamData,

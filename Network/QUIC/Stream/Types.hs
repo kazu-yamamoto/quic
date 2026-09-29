@@ -43,6 +43,8 @@ data Stream = Stream
     , streamSyncFinTx :: MVar ()
     , streamResetRx :: IORef (Maybe ApplicationProtocolError)
     -- ^ The error code of a RESET_STREAM from the peer
+    , streamReleased :: IORef Bool
+    -- ^ Whether we are done with it and have counted it so
     }
 
 instance Show Stream where
@@ -59,6 +61,7 @@ newStream streamConnection streamId txLim rxLim = do
     streamReass     <- newIORef (0, Skew.empty)
     streamSyncFinTx <- newEmptyMVar
     streamResetRx   <- newIORef Nothing
+    streamReleased  <- newIORef False
     return Stream{..}
 {- FOURMOLU_ENABLE -}
 
