@@ -152,7 +152,7 @@ testResetStreamFinalSize cc0 sc waitS = do
         payload = BS.replicate 1234 0
         hooks = (ccHooks cc0){onResetStreamReceived2 = record finalSizeVar}
         cc = cc0{ccHooks = hooks}
-    E.bracket (forkIO $ server request payload doneVar) killThread $ \_ ->
+    withAsync (server request payload doneVar) $ \_ ->
         client cc request payload finalSizeVar doneVar
   where
     aerr = ApplicationProtocolError 0
@@ -184,7 +184,7 @@ testResetStreamFinalSize cc0 sc waitS = do
 --   application a stream that was never opened.
 testLateCopy :: Bool -> C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testLateCopy upload cc sc waitS =
-    E.bracket (forkIO server) killThread $ \_ -> client
+    withAsync server $ \_ -> client
   where
     (upLen, downLen)
         | upload = (1000000, 10)
@@ -218,7 +218,7 @@ testLateCopy upload cc sc waitS =
 testResetReceived :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testResetReceived cc sc waitS = do
     resultVar <- newEmptyMVar
-    E.bracket (forkIO $ server resultVar) killThread $ \_ -> client resultVar
+    withAsync (server resultVar) $ \_ -> client resultVar
   where
     aerr = ApplicationProtocolError 7
 
@@ -259,7 +259,7 @@ testResetReceived cc sc waitS = do
 testOpenStreams :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testOpenStreams cc sc waitS = do
     maxOpen <- newIORef (0 :: Int)
-    E.bracket (forkIO $ server maxOpen) killThread $ \_ -> do
+    withAsync (server maxOpen) $ \_ -> do
         client
         readIORef maxOpen
             >>= (`shouldSatisfy` (<= initialMaxStreamsBidi (scParameters sc)))
@@ -288,7 +288,7 @@ testOpenStreams cc sc waitS = do
 testUniStreams :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testUniStreams cc sc waitS = do
     opened <- newIORef (0 :: Int)
-    E.bracket (forkIO server) killThread $ \_ -> do
+    withAsync server $ \_ -> do
         client opened
         readIORef opened
             >>= (`shouldSatisfy` (<= initialMaxStreamsUni (scParameters sc) + 1))
@@ -313,7 +313,7 @@ testRecvStreamClientStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testRecvStreamClientStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
-    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
+    withAsync (server mvar) $ \_ -> client mvar
   where
     aerr = ApplicationProtocolError 0
 
@@ -339,7 +339,7 @@ testRecvStreamServerStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testRecvStreamServerStopFirst cc sc waitS = do
     mvar <- newEmptyMVar
-    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
+    withAsync (server mvar) $ \_ -> client mvar
   where
     aerr = ApplicationProtocolError 0
 
@@ -362,7 +362,7 @@ testRecvStreamServerStopFirst cc sc waitS = do
 testSendRecv :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
 testSendRecv cc sc waitS times = do
     mvar <- newEmptyMVar
-    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
+    withAsync (server mvar) $ \_ -> client mvar
   where
     client mvar = do
         waitS
@@ -381,7 +381,7 @@ testSendRecv cc sc waitS times = do
 testMultiSendRecv :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
 testMultiSendRecv cc sc waitS times = do
     mvars <- replicateM concurrency newEmptyMVar
-    E.bracket (forkIO $ server mvars) killThread $ \_ -> client mvars
+    withAsync (server mvars) $ \_ -> client mvars
   where
     concurrency = 10
     chunklen = 12345
@@ -418,7 +418,7 @@ appErr _ = False
 
 testAbort :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testAbort cc sc waitS = do
-    E.bracket (forkIO server) killThread $ \_ ->
+    withAsync server $ \_ ->
         client `shouldThrow` appErr
   where
     client = do
@@ -444,7 +444,7 @@ testAbort cc sc waitS = do
 testSendAfterReset :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testSendAfterReset cc sc waitS = do
     res <- newEmptyMVar
-    E.bracket (forkIO $ server res) killThread $ \_ -> do
+    withAsync (server res) $ \_ -> do
         client
         takeMVar res >>= (`shouldBe` True)
   where
@@ -478,7 +478,7 @@ testSendAfterReset cc sc waitS = do
 --   so nothing more may go out on it.
 testStopSending :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testStopSending cc sc waitS =
-    E.bracket (forkIO server) killThread $ \_ -> client
+    withAsync server $ \_ -> client
   where
     client = do
         waitS
@@ -509,7 +509,7 @@ testStopSending cc sc waitS =
 --   the stream being out of the table.
 testRecvAfterReset :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testRecvAfterReset cc sc waitS =
-    E.bracket (forkIO server) killThread $ \_ -> client
+    withAsync server $ \_ -> client
   where
     client = do
         waitS
