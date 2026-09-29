@@ -29,7 +29,13 @@ spec = do
                         }
                 }
     let cc = setClientQlog testClientConfigR
-    let waitS = takeMVar var :: IO ()
+    -- With a timeout: 'run' reports a server it could not start, but it is
+    -- reported to whoever forked it, and that is not us.  Without this the
+    -- take never returns and the whole suite stops rather than failing.
+    let waitS =
+            Timeout.timeout 5000000 (takeMVar var) >>= \r -> case r of
+                Just () -> return ()
+                Nothing -> expectationFailure "server never became ready"
     describe "send & recv" $ do
         it "can exchange data on random dropping" $ do
             withPipe (Randomly 20) $ testSendRecv cc sc waitS 1000

@@ -8,6 +8,7 @@ import Control.Monad
 import qualified Data.ByteString as BS
 import Network.TLS (Group (..), HandshakeMode13 (..))
 import qualified Network.TLS as TLS
+import qualified System.Timeout as Timeout
 import Test.Hspec
 
 import Network.QUIC
@@ -30,7 +31,13 @@ spec = do
                         { onServerReady = putMVar var ()
                         }
                 }
-    let waitS = takeMVar var :: IO ()
+    -- With a timeout: 'run' reports a server it could not start, but it is
+    -- reported to whoever forked it, and that is not us.  Without this the
+    -- take never returns and the whole suite stops rather than failing.
+    let waitS =
+            Timeout.timeout 5000000 (takeMVar var) >>= \r -> case r of
+                Just () -> return ()
+                Nothing -> expectationFailure "server never became ready"
     describe "handshake" $ do
         it "can handshake in the normal case" $ do
             let cc = testClientConfig

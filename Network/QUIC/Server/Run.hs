@@ -40,10 +40,16 @@ import Network.QUIC.Types
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 run :: ServerConfig -> (Connection -> IO ()) -> IO ()
-run conf server = handleLogUnit debugLog $ do
+run conf server = do
     labelMe "QUIC run"
     stvar <- newTVarIO Running
-    E.bracket (setup stvar) teardown $ \(_, _, _) -> do
+    -- Outside handleLogUnit on purpose.  If the addresses cannot be bound
+    -- there is no server, and that is the caller's business: swallowing it
+    -- returned from 'run' as if all were well, having never reached
+    -- onServerReady, and left anyone waiting on that hook waiting for good.
+    -- An IOSpec run wedged for two and a half days that way, on a port the
+    -- previous test had not finished releasing.
+    E.bracket (setup stvar) teardown $ \(_, _, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -53,7 +59,6 @@ run conf server = handleLogUnit debugLog $ do
     setup stvar = do
         dispatch <- newDispatch conf
         let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
-        -- fixme: the case where sockets cannot be created.
         ssas <- mapM serverSocket $ scAddresses conf
         tids <- mapM (runDispatcher dispatch conf stvar forkConn) ssas
         return (dispatch, tids, ssas)
@@ -66,10 +71,11 @@ run conf server = handleLogUnit debugLog $ do
 --   The action is executed with a new connection
 --   in a new lightweight thread.
 runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
-runWithSockets ssas conf server = handleLogUnit debugLog $ do
+runWithSockets ssas conf server = do
     labelMe "QUIC runWithSockets"
     stvar <- newTVarIO Running
-    E.bracket (setup stvar) teardown $ \(_, _) -> do
+    -- As in 'run'.
+    E.bracket (setup stvar) teardown $ \(_, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -79,7 +85,6 @@ runWithSockets ssas conf server = handleLogUnit debugLog $ do
     setup stvar = do
         dispatch <- newDispatch conf
         let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
-        -- fixme: the case where sockets cannot be created.
         tids <- mapM (runDispatcher dispatch conf stvar forkConn) ssas
         return (dispatch, tids)
     teardown (dispatch, tids) = do
