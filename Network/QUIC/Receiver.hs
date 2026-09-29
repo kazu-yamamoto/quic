@@ -281,7 +281,27 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
         closeConnection conn ProtocolViolation "RESET_STREAM"
     when (isSendOnly conn sid) $
         closeConnection conn StreamStateError "Received in a send-only stream"
-    mstrm <- findStream conn sid
+    updatePeerStreamId conn sid
+    -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
+    ok <- checkRxMaxStreams conn sid
+    unless ok $ closeConnection conn StreamLimitError "stream id is too large"
+    mstrm0 <- findStream conn sid
+    guardStream conn sid mstrm0
+    -- RFC 9000 Sec 3.2: "The receiving part of a stream initiated by a peer
+    -- ... is created when the first STREAM, STREAM_DATA_BLOCKED, or
+    -- RESET_STREAM frame is received for that stream."  Only a STREAM frame
+    -- created it here, and a RESET_STREAM that arrived before one was
+    -- dropped without a word.
+    --
+    -- It arrives first whenever the peer resets a stream it has just sent
+    -- on: the sender empties the queue the RESET_STREAM is on before the one
+    -- the data is on, so the reset overtakes it.  The peer's application had
+    -- then said its piece and been ignored, and ours waited on 'recvStream'
+    -- for a stream that would never end, until the idle timeout.
+    --
+    -- 'openStream' answers Nothing for a stream that has been closed since,
+    -- so a late copy does not open one anew.
+    mstrm <- maybe (openStream conn sid) (return . Just) mstrm0
     onResetStreamReceived2 (connHooks conn) mstrm aerr finlen
     case mstrm of
         Nothing -> return ()
