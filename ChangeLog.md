@@ -1,5 +1,17 @@
 # ChangeLog
 
+## 0.3.8
+
+* Tell a stream that was reset from one that ended.  After a
+  RESET_STREAM, `recvStream` returns an empty ByteString, just as it does
+  at the end of a stream, and nothing else said which it was.  An
+  application protocol may have to know: HTTP/3's QPACK decoder has to
+  send a Stream Cancellation for a request stream that was reset
+  (RFC 9204 Sec 4.4.2), and a reset that lands between two frames looked
+  to it exactly like the end of the request.  `resetReceived` answers the
+  error code of the peer's RESET_STREAM, or `Nothing` if there was none.
+  [#123](https://github.com/kazu-yamamoto/quic/pull/123)
+
 ## 0.3.7
 
 * Don't open a closed stream again for a late copy of its data.  A STREAM
