@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Config (
@@ -6,6 +7,7 @@ module Config (
     testClientConfig,
     testClientConfigR,
     setServerQlog,
+    prepareQlog,
     setClientQlog,
     withPipe,
     withPipeStray,
@@ -23,6 +25,7 @@ import Data.IORef
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
 import Network.Socket
+import System.Directory (createDirectoryIfMissing)
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
 
@@ -111,11 +114,36 @@ testClientConfigR =
 -- fired.  Two stalls found at a rate of one run in a few hundred were read
 -- straight off these traces, and neither would have been diagnosable
 -- without them.  CI keeps the directory when a job fails.
+-- | Where qlog goes when the @qlog@ flag is on.
+qlogDir :: FilePath
+qlogDir = "qlog"
+
+-- | Create 'qlogDir' if the tests are going to write into it.
+--
+-- The directory used to be the CI's job, and a checkout without it -- a fresh
+-- clone, or a @git clean@ -- failed 33 examples with @openFile: does not
+-- exist@, which says nothing about qlog.  It is the test suite's directory,
+-- so the test suite makes it.
+prepareQlog :: IO ()
+#ifdef QLOG
+prepareQlog = createDirectoryIfMissing True qlogDir
+#else
+prepareQlog = return ()
+#endif
+
 setServerQlog :: ServerConfig -> ServerConfig
-setServerQlog sc = sc{scQLog = Just "qlog"}
+#ifdef QLOG
+setServerQlog sc = sc{scQLog = Just qlogDir}
+#else
+setServerQlog sc = sc
+#endif
 
 setClientQlog :: ClientConfig -> ClientConfig
-setClientQlog cc = cc{ccQLog = Just "qlog"}
+#ifdef QLOG
+setClientQlog cc = cc{ccQLog = Just qlogDir}
+#else
+setClientQlog cc = cc
+#endif
 
 data Scenario
     = Randomly Int

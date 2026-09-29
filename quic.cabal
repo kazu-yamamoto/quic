@@ -24,6 +24,10 @@ flag devel
     description: Development commands
     default:     False
 
+flag qlog
+    description: Write qlog from the test suite
+    default:     False
+
 library
     exposed-modules:
         Network.QUIC
@@ -240,6 +244,10 @@ test-suite spec
     default-language:   Haskell2010
     default-extensions: Strict StrictData
     ghc-options:        -Wall -threaded -rtsopts
+
+    if flag(qlog)
+        cpp-options:    -DQLOG
+
     build-depends:
         base >=4.9 && <5,
         QuickCheck,

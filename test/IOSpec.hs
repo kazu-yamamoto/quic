@@ -19,6 +19,7 @@ import Config
 
 spec :: Spec
 spec = do
+    runIO prepareQlog
     sc0 <- runIO makeTestServerConfigR
     var <- runIO newEmptyMVar
     let sc =
