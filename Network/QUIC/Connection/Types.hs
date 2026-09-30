@@ -310,6 +310,9 @@ data Connection = Connection
     , coders            :: IOArray EncryptionLevel Coder
     , coders1RTT        :: IOArray Bool Coder1RTT
     , protectors        :: IOArray EncryptionLevel Protector
+    , prevInitialKeys   :: IORef (Maybe (Coder, Protector))
+    -- ^ The Initial keys for the version the peer addressed us in, kept
+    --   over a compatible version change (RFC 9368)
     , currentKeyPhase   :: IORef (Bool, PacketNumber)
     , negotiated        :: IORef Negotiated
     , connMyAuthCIDs    :: IORef AuthCIDs
@@ -410,6 +413,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     coders            <- newArray (InitialLevel, HandshakeLevel) initialCoder
     coders1RTT        <- newArray (False, True) initialCoder1RTT
     protectors        <- newArray (InitialLevel, RTT1Level) initialProtector
+    prevInitialKeys   <- newIORef Nothing
     currentKeyPhase   <- newIORef (False, 0)
     negotiated        <- newIORef initialNegotiated
     connMyAuthCIDs    <- newIORef myAuthCIDs
@@ -463,9 +467,10 @@ clientConnection
 clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Client ccParameters' verInfo myAuthCIDs peerAuthCIDs
   where
-    ccParameters' = ccParameters
-      { maxDatagramFrameSize = ccMaxDatagramFrameSize
-      }
+    ccParameters' =
+        ccParameters
+            { maxDatagramFrameSize = ccMaxDatagramFrameSize
+            }
 
 serverConnection
     :: ServerConfig
@@ -486,9 +491,10 @@ serverConnection
 serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
     newConnection Server scParameters' verInfo myAuthCIDs peerAuthCIDs
   where
-    scParameters' = scParameters
-      { maxDatagramFrameSize = scMaxDatagramFrameSize
-      }
+    scParameters' =
+        scParameters
+            { maxDatagramFrameSize = scMaxDatagramFrameSize
+            }
 
 ----------------------------------------------------------------
 

@@ -4,8 +4,8 @@
 module Network.QUIC.Handshake where
 
 import qualified Control.Exception as E
-import Data.List (intersect)
 import qualified Data.ByteString.Short as Short
+import Data.List (intersect)
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 
@@ -107,11 +107,13 @@ handshakeClient conf conn myAuthCIDs = do
     qlogParamsSet conn (ccParameters conf, "local") -- fixme
     handshakeClient' conf' conn myAuthCIDs <$> getVersion conn <*> newHndStateRef
   where
-    conf' = conf
-      { ccParameters = (ccParameters conf)
-        { maxDatagramFrameSize = ccMaxDatagramFrameSize conf
-        }
-      }
+    conf' =
+        conf
+            { ccParameters =
+                (ccParameters conf)
+                    { maxDatagramFrameSize = ccMaxDatagramFrameSize conf
+                    }
+            }
 
 handshakeClient'
     :: ClientConfig -> Connection -> AuthCIDs -> Version -> IORef HndState -> IO ()
@@ -342,6 +344,10 @@ setPeerParams conn _ctx peerExts = do
         case myVers `intersect` peerVers of
             vers@(serverVer : _)
                 | clientVer /= serverVer -> do
+                    -- Before the keys below replace them: the client keeps
+                    -- retransmitting in the version it started with until
+                    -- our answer reaches it.
+                    keepInitialKeys conn
                     setVersionInfo conn $ VersionInfo serverVer vers
                     dcid <- getClientDstCID conn
                     initializeCoder conn InitialLevel $ initialSecrets serverVer dcid
