@@ -261,6 +261,7 @@ test-suite spec
         crypto-token,
         crypton,
         directory,
+        fast-logger >=3.2.2 && <3.3,
         filepath,
         hspec,
         network >=3.2.2,
