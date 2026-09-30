@@ -1,5 +1,62 @@
 # ChangeLog
 
+## 0.3.13
+
+One line of debug output that could end the connection it described, and
+three ways a failure or a coder left something behind.
+
+* A debug write can no longer end the connection it describes.  With a
+  debug directory set every line goes to the connection's file and also
+  to stdout, and a daemon has no stdout to write to: it is closed, or a
+  pipe whose reader has gone.  The write then throws in whichever
+  protocol thread happened to log, and six of those run under nested
+  `concurrently_` and take the rest down with them -- so the connection
+  ended over a line of debug output.  The first write of all is the
+  original CID, before the connection has been built, so the peer heard
+  nothing at all and saw a handshake that never finished; a later one
+  arrived as an INTERNAL_ERROR, once 0.3.12 began saying when a
+  connection ends of something in here.  Against mighty that was every
+  shape we had been chasing at once: the freeze, the CONNECTION_CLOSE
+  that never came, and the bursts of connections that died together.  It
+  came and went because a stdout that is not a terminal is
+  block-buffered and it is the flush that fails.  The writes now drop an
+  `IOException` -- only that, an asynchronous exception is not one, so
+  cancelling a thread that is logging still cancels it.
+  [#148](https://github.com/kazu-yamamoto/quic/pull/148)
+
+* The qlog writer goes the same way and for the same reason.  It is
+  called from the sender, the receiver and the closer, the same threads,
+  and the disk a qlog directory sits on can fill.
+  [#150](https://github.com/kazu-yamamoto/quic/pull/150)
+
+* Free what a failed setup took.  A connection's setup, a client's, and
+  the server's own are each the acquire of their own `bracket`, and an
+  acquire that throws gets no release.  A server connection was leaving
+  two log files, three 2048-byte buffers and a registration in the
+  dispatcher; a client the same, less a log file and plus its socket,
+  which nothing else closes because on the ordinary path the closer does
+  and a connection that never began has no closer; the server itself
+  every address it had already bound, the dispatchers on them and the
+  token manager thread.  `closure''`, which runs on the way out of every
+  connection, left its buffers behind if the CONNECTION_CLOSE could not
+  be encoded.  Setup does fail -- a client and a server in one process
+  pointed at one qlog directory ask for the same file, and the second is
+  told the file is busy -- and the bursts above were leaking two handles
+  apiece.
+  [#149](https://github.com/kazu-yamamoto/quic/pull/149)
+
+* The header protection mask no longer leaks a buffer for every coder.
+  It was taken with `mallocBytes` and freed nowhere: 16 bytes under the
+  AES-GCM ciphers and 32 under ChaCha20-Poly1305, four coders to a
+  connection at each end, held for the life of the process.  A server
+  taking a thousand connections a second lost about 5GB a day.  The
+  buffer was raw because `getMask` handed it out and the caller read it
+  after the call had returned, which nothing a garbage collector owns
+  would survive; the reader is handed in instead now, so the buffer can
+  be a `ForeignPtr` held across exactly the use.  This changes
+  `Protector` in `Network.QUIC.Internal`.
+  [#151](https://github.com/kazu-yamamoto/quic/pull/151)
+
 ## 0.3.12
 
 A server that looked frozen, a Stateless Reset half the peers threw away,
