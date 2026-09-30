@@ -29,6 +29,7 @@ import System.Log.FastLogger
 import Text.Printf
 
 import Network.QUIC.Imports
+import Network.QUIC.Logger (dropIfUnwritable)
 import Network.QUIC.Parameters
 import Network.QUIC.Types
 
@@ -331,22 +332,32 @@ swtim tim base = toLogStr (show m ++ "." ++ printf "%03d" u)
 
 type QLogger = QlogMsg -> IO ()
 
+-- | A qlog writer.
+--
+-- The writes are dropped if they cannot be made, for the reason the debug
+-- logger's are: this is called from the sender, the receiver and the
+-- closer, which are protocol threads under nested 'concurrently_', so an
+-- IOException from the write ends the connection the write was describing.
+-- A qlog directory is asked for by name, as a debug directory is, and the
+-- disk it is on can fill.  A connection with a hole in its qlog is the
+-- lesser of the two.
 newQlogger :: TimeMicrosecond -> ByteString -> CID -> FastLogger -> IO QLogger
 newQlogger base rl ocid fastLogger = do
     let ocid' = toLogStr $ enc16 $ fromCID ocid
-    fastLogger $
-        "{\"qlog_format\":\"NDJSON\",\"qlog_version\":\"draft-02\",\"title\":\"Haskell quic qlog\",\"trace\":{\"vantage_point\":{\"type\":\""
-            <> toLogStr rl
-            <> "\"},\"common_fields\":{\"ODCID\":\""
-            <> ocid'
-            <> "\",\"group_id\":\""
-            <> ocid'
-            <> "\",\"reference_time\":"
-            <> swtim base timeMicrosecond0
-            <> "}}}\n"
+    dropIfUnwritable $
+        fastLogger $
+            "{\"qlog_format\":\"NDJSON\",\"qlog_version\":\"draft-02\",\"title\":\"Haskell quic qlog\",\"trace\":{\"vantage_point\":{\"type\":\""
+                <> toLogStr rl
+                <> "\"},\"common_fields\":{\"ODCID\":\""
+                <> ocid'
+                <> "\",\"group_id\":\""
+                <> ocid'
+                <> "\",\"reference_time\":"
+                <> swtim base timeMicrosecond0
+                <> "}}}\n"
     let qlogger qmsg = do
             let msg = toLogStrTime qmsg base
-            fastLogger msg
+            dropIfUnwritable $ fastLogger msg
     return qlogger
 
 ----------------------------------------------------------------

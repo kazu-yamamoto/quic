@@ -5,6 +5,7 @@ module Network.QUIC.Logger (
     Builder,
     DebugLogger,
     bhow,
+    dropIfUnwritable,
     stdoutLogger,
     dirDebugLogger,
 ) where
@@ -26,7 +27,8 @@ bhow :: Show a => a -> Builder
 bhow = byteString . C8.pack . show
 
 -- | Running a write that describes a connection, dropping the message if
---   it cannot be written.
+--   it cannot be written.  Shared with the qlog writer, which is called
+--   from the same threads and must be no more able to end them.
 --
 -- A debug logger must not be able to end the connection it is describing.
 -- It is called from the protocol threads, six of which run under nested

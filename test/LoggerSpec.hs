@@ -3,10 +3,13 @@
 module LoggerSpec where
 
 import qualified Control.Exception as E
+import Control.Monad (when)
+import Data.IORef
 import GHC.IO.Handle (hDuplicate, hDuplicateTo)
 import System.Directory
 import System.FilePath
 import System.IO
+import System.Log.FastLogger (FastLogger)
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -37,7 +40,42 @@ spec = do
                 clean
                 readFile (dir </> show cid <> ".txt")
                     `shouldReturn` "a line the file can take\n"
+    -- The qlog writer is called from the sender, the receiver and the
+    -- closer, the same protocol threads as the debug logger, so it must be
+    -- no more able to end them.  A qlog directory is asked for by name, as
+    -- a debug directory is, and the disk it is on can fill.
+    describe "newQlogger" $ do
+        it "does not throw when the header cannot be written" $ do
+            tim <- getTimeMicrosecond
+            _ <- newQlogger tim "server" cid full
+            return ()
+
+        it "drops a message that cannot be written" $ do
+            tim <- getTimeMicrosecond
+            qlogger <- newQlogger tim "server" cid full
+            qlogger (QDebug "a line the disk has no room for" tim)
+                `shouldReturn` ()
+
+        -- Only an IOException is dropped.  Nothing else is, and an
+        -- asynchronous exception is not one, so cancelling a thread that is
+        -- writing a qlog still cancels it.
+        it "lets anything that is not an IOException through" $ do
+            tim <- getTimeMicrosecond
+            -- The header is the first write, and it has to get through for
+            -- there to be a logger to try.
+            afterTheHeader <- brokenAfter 1
+            qlogger <- newQlogger tim "server" cid afterTheHeader
+            qlogger (QDebug "not the disk's fault" tim)
+                `shouldThrow` errorCall "boom"
   where
+    full :: FastLogger
+    full _ = E.throwIO $ userError "no space left on device"
+    brokenAfter :: Int -> IO FastLogger
+    brokenAfter k = do
+        ref <- newIORef (0 :: Int)
+        return $ \_ -> do
+            n <- atomicModifyIORef' ref $ \x -> (x + 1, x)
+            when (n >= k) $ E.throwIO $ E.ErrorCall "boom"
     cid = makeCID "\x01\x02\x03\x04\x05\x06\x07\x08"
 
 -- | Running an action with a stdout every write throws on, and putting the
