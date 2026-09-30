@@ -13,6 +13,8 @@ module Network.QUIC.Connection.Crypto (
     setNegotiated,
     --
     dropSecrets,
+    keepInitialKeys,
+    getPrevInitialKeys,
     --
     initializeCoder,
     initializeCoder1RTT,
@@ -95,6 +97,26 @@ dropSecrets :: Connection -> EncryptionLevel -> IO ()
 dropSecrets Connection{..} lvl = do
     writeArray coders lvl initialCoder
     writeArray protectors lvl initialProtector
+    when (lvl == InitialLevel) $ writeIORef prevInitialKeys Nothing
+
+-- | Keeping the Initial keys we have, before they are replaced with the ones
+--   for a version we chose ourselves.
+--
+-- A server that settles on a compatible version (RFC 9368) answers in it, but
+-- the client hears of that only when the answer arrives.  Until then it
+-- retransmits its Initial packets in the version it started with, and without
+-- the keys for that version they are so much noise: the server cannot pick up
+-- the handshake from them, and has to wait out its own PTO instead -- a
+-- second, then two, then four, with the client's retransmissions falling into
+-- it unread.
+keepInitialKeys :: Connection -> IO ()
+keepInitialKeys conn@Connection{..} = do
+    coder <- getCoder conn InitialLevel False
+    protector <- getProtector conn InitialLevel
+    writeIORef prevInitialKeys $ Just (coder, protector)
+
+getPrevInitialKeys :: Connection -> IO (Maybe (Coder, Protector))
+getPrevInitialKeys Connection{..} = readIORef prevInitialKeys
 
 ----------------------------------------------------------------
 

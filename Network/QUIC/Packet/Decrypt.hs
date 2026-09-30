@@ -21,9 +21,37 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 decryptCrypt :: Connection -> Crypt -> EncryptionLevel -> IO (Maybe Plain)
-decryptCrypt conn Crypt{..} lvl = do
-    cipher <- getCipher conn lvl
+decryptCrypt conn crypt lvl = do
     protector <- getProtector conn lvl
+    mplain <- decryptCryptWith conn crypt lvl protector $ getCoder conn lvl
+    case mplain of
+        Just _ -> return mplain
+        Nothing
+            | lvl == InitialLevel -> do
+                -- An Initial we cannot read may be one in the version the
+                -- peer addressed us in, from before we settled on a
+                -- compatible one of our own (RFC 9368).  The peer goes on
+                -- retransmitting in that version until our answer reaches
+                -- it, and those carry the handshake just as well.  Both the
+                -- header protection and the payload keys differ by version,
+                -- so the whole of it is tried again, not the payload alone.
+                mkeys <- getPrevInitialKeys conn
+                case mkeys of
+                    Nothing -> return Nothing
+                    Just (coder, protector') ->
+                        decryptCryptWith conn crypt lvl protector' $
+                            \_ -> return coder
+            | otherwise -> return Nothing
+
+decryptCryptWith
+    :: Connection
+    -> Crypt
+    -> EncryptionLevel
+    -> Protector
+    -> (Bool -> IO Coder)
+    -> IO (Maybe Plain)
+decryptCryptWith conn Crypt{..} lvl protector getCoder' = do
+    cipher <- getCipher conn lvl
     let proFlags = Flags (cryptPacket `BS.index` 0)
         sampleOffset = cryptPktNumOffset + 4
         sampleLen = sampleLength cipher
@@ -59,7 +87,7 @@ decryptCrypt conn Crypt{..} lvl = do
             let keyPhase
                     | lvl == RTT1Level = flags `testBit` 2
                     | otherwise = False
-            coder <- getCoder conn lvl keyPhase
+            coder <- getCoder' keyPhase
             siz <- decrypt coder (decryptBuf conn) ciphertext (AssDat header) pn
             let rrMask
                     | lvl == RTT1Level = 0x18
