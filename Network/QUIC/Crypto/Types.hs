@@ -9,6 +9,7 @@ module Network.QUIC.Crypto.Types (
     AssDat (..),
     Sample (..),
     Mask (..),
+    WithMask,
     Nonce (..),
     Salt,
     Label (..),
@@ -38,6 +39,22 @@ newtype IV = IV ByteString deriving (Eq)
 newtype Secret = Secret ScrubbedBytes deriving (Eq)
 newtype AssDat = AssDat ByteString deriving (Eq)
 newtype Sample = Sample ByteString deriving (Eq)
+
+-- | Running an action on the header protection mask, for as long as the
+--   action takes and no longer.
+--
+-- The mask lives in a buffer the encryption side owns, and the only way to
+-- keep the garbage collector from taking that buffer out from under the
+-- reader was to allocate it with 'mallocBytes' and never free it -- a leak
+-- of 16 or 32 bytes for every coder, which is three to five per connection.
+-- Handing the reader in instead of handing the buffer out lets the buffer
+-- be a 'ForeignPtr' held across exactly the use, and the collector frees it
+-- with the coder.
+--
+-- 'False' when there is no mask to be had, which is a protector without
+-- keys.
+type WithMask = (Buffer -> IO ()) -> IO Bool
+
 newtype Mask = Mask ByteString deriving (Eq)
 newtype Label = Label ByteString deriving (Eq)
 newtype Nonce = Nonce ByteString deriving (Eq)

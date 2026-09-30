@@ -171,11 +171,11 @@ genNiteCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
     -- comes back from the same call as the ciphertext.  ChaCha20-Poly1305
     -- has no equivalent there and takes the path below.
     mgcm <- makeGcmEncrypt cipher txPayloadKey txPayloadIV txHeaderKey
-    (enc, set, get) <- case mgcm of
+    (enc, set, wmask) <- case mgcm of
         Just gcm -> return gcm
         Nothing -> do
-            (s', g') <- makeNiteProtector cipher txHeaderKey
-            return (makeNiteEncrypt cipher txPayloadKey txPayloadIV, s', g')
+            (s', w') <- makeNiteProtector cipher txHeaderKey
+            return (makeNiteEncrypt cipher txPayloadKey txPayloadIV, s', w')
     let dec = case makeGcmDecrypt cipher rxPayloadKey rxPayloadIV of
             Just d -> d
             Nothing -> makeNiteDecrypt cipher rxPayloadKey rxPayloadIV
@@ -187,7 +187,7 @@ genNiteCoder cli ver cipher (ClientTrafficSecret c, ServerTrafficSecret s) = do
     let protector =
             Protector
                 { setSample = set
-                , getMask = get
+                , withMask = wmask
                 , unprotect = unp
                 }
     return (coder, protector)
