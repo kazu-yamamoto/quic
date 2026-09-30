@@ -33,6 +33,7 @@ module Network.QUIC.Packet (
     -- * Token
     CryptoToken (..),
     isRetryToken,
+    isTokenAddress,
     generateToken,
     generateRetryToken,
     encryptToken,
