@@ -25,6 +25,17 @@ instance Eq (ServerTrafficSecret a) where
 
 spec :: Spec
 spec = do
+    describe "the AEAD integrity limit" $ do
+        -- RFC 9001 Sec 6.6 gives these, and the whole of the rule is in
+        -- them: past this many packets that fail authentication the AEAD is
+        -- no longer trusted to tell a forgery from the real thing.
+        it "is 2^52 for the AES-GCM ciphers" $ do
+            integrityLimit cipher13_AES_128_GCM_SHA256 `shouldBe` 2 ^ (52 :: Int)
+            integrityLimit cipher13_AES_256_GCM_SHA384 `shouldBe` 2 ^ (52 :: Int)
+        it "is 2^36 for ChaCha20-Poly1305" $ do
+            integrityLimit cipher13_CHACHA20_POLY1305_SHA256 `shouldBe` 2 ^ (36 :: Int)
+        it "is the smaller of the two for an AEAD we do not know" $ do
+            integrityLimit cipher13_AES_128_CCM_SHA256 `shouldBe` 2 ^ (36 :: Int)
     describe "server configuration" $ do
         it "does not request client certificates by default" $
             scWantClientCert defaultServerConfig `shouldBe` False

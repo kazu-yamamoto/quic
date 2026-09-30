@@ -203,6 +203,18 @@ processReceivedPacket conn rpkt = do
                             qlogDebug conn $ Debug "ping for speedup"
                             sendFrames conn lvl [Ping]
         Nothing -> do
+            -- RFC 9001 Sec 6.6: "endpoints MUST count the number of received
+            -- packets that fail authentication during the lifetime of a
+            -- connection.  If the total number ... exceeds the integrity
+            -- limit for the selected AEAD, the endpoint MUST immediately
+            -- close the connection with a connection error of type
+            -- AEAD_LIMIT_REACHED and not process any more packets."  That
+            -- limit is what stands between a peer and as many guesses at our
+            -- keys as it cares to send.
+            failures <- atomicModifyIORef' (connAuthFailures conn) $ \n -> (n + 1, n + 1)
+            cipher <- getCipher conn RTT1Level
+            when (failures > integrityLimit cipher) $
+                closeConnection conn AeadLimitReached "too many packets failed authentication"
             qlogDropped conn (hdr, "decrypt_error" :: String)
             connDebugLog conn $
                 "debug: cannot decrypt: "
