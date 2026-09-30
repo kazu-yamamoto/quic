@@ -138,6 +138,16 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated handshakePathChallenge
                 runCnoOp cc ms `shouldThrow` transportError
         it
+            "MUST send PROTOCOL_VIOLATION if STREAM_DATA_BLOCKED in Handshake is received [Transport 12.4]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated handshakeStreamDataBlocked
+                runCnoOp cc ms `shouldThrow` transportError
+        it
+            "MUST send PROTOCOL_VIOLATION if DATA_BLOCKED in Handshake is received [Transport 12.4]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated handshakeDataBlocked
+                runCnoOp cc ms `shouldThrow` transportError
+        it
             "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
@@ -394,6 +404,21 @@ handshakePathChallenge :: EncryptionLevel -> Plain -> Plain
 handshakePathChallenge lvl plain
     | lvl == HandshakeLevel =
         plain{plainFrames = PathChallenge (PathData "01234567") : plainFrames plain}
+    | otherwise = plain
+
+-- RFC 9000 Table 3 has STREAM_DATA_BLOCKED and DATA_BLOCKED in 0-RTT and
+-- 1-RTT packets only, and Sec 12.4 makes a frame in a packet that may not
+-- carry it a connection error of type PROTOCOL_VIOLATION.
+handshakeStreamDataBlocked :: EncryptionLevel -> Plain -> Plain
+handshakeStreamDataBlocked lvl plain
+    | lvl == HandshakeLevel =
+        plain{plainFrames = StreamDataBlocked 0 0 : plainFrames plain}
+    | otherwise = plain
+
+handshakeDataBlocked :: EncryptionLevel -> Plain -> Plain
+handshakeDataBlocked lvl plain
+    | lvl == HandshakeLevel =
+        plain{plainFrames = DataBlocked 0 : plainFrames plain}
     | otherwise = plain
 
 noFrames :: EncryptionLevel -> Plain -> Plain

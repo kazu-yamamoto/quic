@@ -475,8 +475,31 @@ processFrame conn lvl (MaxStreams dir n) = do
     if dir == Bidirectional
         then setTxMaxStreams conn n
         else setTxUniMaxStreams conn n
-processFrame _conn _lvl DataBlocked{} = return ()
-processFrame _conn _lvl (StreamDataBlocked _sid _) = return ()
+processFrame conn lvl DataBlocked{} =
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        closeConnection conn ProtocolViolation "DATA_BLOCKED in Initial or Handshake"
+processFrame conn lvl (StreamDataBlocked sid _) = do
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        closeConnection
+            conn
+            ProtocolViolation
+            "STREAM_DATA_BLOCKED in Initial or Handshake"
+    when (isSendOnly conn sid) $
+        closeConnection conn StreamStateError "Received in a send-only stream"
+    updatePeerStreamId conn sid
+    -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
+    ok <- checkRxMaxStreams conn sid
+    unless ok $ closeConnection conn StreamLimitError "stream id is too large"
+    mstrm0 <- findStream conn sid
+    guardStream conn sid mstrm0
+    -- RFC 9000 Sec 3.2: the receiving part of a stream the peer opened is
+    -- created by the first STREAM, STREAM_DATA_BLOCKED or RESET_STREAM frame
+    -- for it.  #129 did the last of the three; this is the other.  The peer
+    -- has nothing it can send on the stream and is saying so, which is a
+    -- thing to hear only when we have told it nothing may be sent -- an
+    -- initial_max_stream_data of zero for that kind of stream.
+    mstrm <- maybe (openStream conn sid) (return . Just) mstrm0
+    forM_ mstrm $ deliverStream conn mstrm0
 processFrame conn lvl (StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake"
