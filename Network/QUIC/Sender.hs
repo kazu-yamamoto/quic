@@ -15,6 +15,7 @@ import Foreign.Ptr (plusPtr)
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
+import Network.QUIC.Crypto (confidentialityLimit)
 import Network.QUIC.Exception
 import Network.QUIC.Imports
 import Network.QUIC.Packet
@@ -111,6 +112,29 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
                         let sentPacket = sentPacket0{spTimeSent = now}
                         qlogSent conn sentPacket now
                         onPacketSent ldcc sentPacket
+                    -- RFC 9001 Sec 6.6: "Endpoints MUST count the number of
+                    -- encrypted packets for each set of keys.  If the total
+                    -- number of encrypted packets with the same key exceeds
+                    -- the confidentiality limit for the selected AEAD, the
+                    -- endpoint MUST stop using those keys."  The way out it
+                    -- gives is a key update, which nothing here starts, so
+                    -- what is left is the other: "If a key update is not
+                    -- possible ... the endpoint MUST stop using the
+                    -- connection", and closing with AEAD_LIMIT_REACHED is how
+                    -- that section recommends doing it.
+                    let n1rtt =
+                            length $
+                                filter ((== RTT1Level) . spEncryptionLevel) sentPackets
+                    when (n1rtt > 0) $ do
+                        protected <-
+                            atomicModifyIORef' (connKeyPackets conn) $
+                                \n -> (n + n1rtt, n + n1rtt)
+                        cipher <- getCipher conn RTT1Level
+                        when (protected > confidentialityLimit cipher) $
+                            closeConnection
+                                conn
+                                AeadLimitReached
+                                "the key has protected too many packets"
     buildPackets _ _ _ [] _ = error "sendPacket: buildPackets"
     buildPackets buf bufsiz siz [spkt] build0 = do
         let pkt = spPlainPacket spkt
