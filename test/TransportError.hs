@@ -138,6 +138,11 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated handshakePathChallenge
                 runCnoOp cc ms `shouldThrow` transportError
         it
+            "MUST send PROTOCOL_VIOLATION if RETIRE_CONNECTION_ID for a sequence number never issued [Transport 19.16]"
+            $ \_ -> do
+                let cc = addHook cc0 $ setOnPlainCreated retireUnissued
+                runCnoOp cc ms `shouldThrow` transportError
+        it
             "MUST send PROTOCOL_VIOLATION if STREAM_DATA_BLOCKED in Handshake is received [Transport 12.4]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated handshakeStreamDataBlocked
@@ -404,6 +409,16 @@ handshakePathChallenge :: EncryptionLevel -> Plain -> Plain
 handshakePathChallenge lvl plain
     | lvl == HandshakeLevel =
         plain{plainFrames = PathChallenge (PathData "01234567") : plainFrames plain}
+    | otherwise = plain
+
+-- RFC 9000 Sec 19.16: "Receipt of a RETIRE_CONNECTION_ID frame containing a
+-- sequence number greater than any previously sent to the peer MUST be
+-- treated as a connection error of type PROTOCOL_VIOLATION."  No endpoint has
+-- given out a hundred thousand connection IDs.
+retireUnissued :: EncryptionLevel -> Plain -> Plain
+retireUnissued lvl plain
+    | lvl == RTT1Level =
+        plain{plainFrames = RetireConnectionID 100000 : plainFrames plain}
     | otherwise = plain
 
 -- RFC 9000 Table 3 has STREAM_DATA_BLOCKED and DATA_BLOCKED in 0-RTT and
