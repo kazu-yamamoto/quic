@@ -225,6 +225,15 @@ isInitiated conn sid
     | isClient conn = isClientInitiated sid
     | otherwise = isServerInitiated sid
 
+-- | Closing the connection over a final size that does not hold together
+--   (RFC 9000 Sec 4.5).
+closeOverFinalSize :: Connection -> Maybe FinalSizeProblem -> IO ()
+closeOverFinalSize conn = mapM_ $ closeConnection conn FinalSizeError . reason
+  where
+    reason FinalSizeChanged = "a final size that is not the one already known"
+    reason FinalSizeTooSmall = "a final size below what the stream has reached"
+    reason DataPastFinalSize = "stream data beyond the final size"
+
 guardStream :: Connection -> StreamId -> Maybe Stream -> IO ()
 guardStream conn sid Nothing =
     streamNotCreatedYet
@@ -319,6 +328,25 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
     case mstrm of
         Nothing -> return ()
         Just strm -> do
+            -- RFC 9000 Sec 4.5, as for a STREAM frame that ends the stream.
+            noteRxFinalSize strm finlen >>= closeOverFinalSize conn
+            -- FLOW CONTROL: MAX_DATA: recv: the octets the peer spent on the
+            -- stream that will now never arrive.  Left uncounted, the window
+            -- we advertise falls behind what the peer believes it has spent,
+            -- by the tail of every stream it resets, until it has none left.
+            unarrived <- takeRxUncounted strm
+            when (unarrived > 0) $ do
+                ok <- checkRxMaxData conn unarrived
+                unless ok $
+                    closeConnection conn FlowControlError "Flow control error for connection"
+                mx <- updateFlowRx conn unarrived
+                forM_ mx $ \newMax -> do
+                    sendFrames conn RTT1Level [MaxData newMax]
+                    fire conn (Microseconds 50000) $
+                        sendFrames conn RTT1Level [MaxData newMax]
+            -- After the two checks above, not before: the application has no
+            -- business serving a stream the frame that opened it is about to
+            -- close the connection over.  As for a STREAM frame (#131).
             deliverStream conn mstrm0 strm
             onResetStreamReceived (connHooks conn) strm aerr
             -- Before the pseudo FIN below, so that whoever reads it can
@@ -389,6 +417,9 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
     forM_ mstrm' $ \strm -> do
         let len = BS.length dat
             rx = RxStreamData dat off len fin
+        -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be said
+        -- differently, and nothing may arrive past it.
+        noteRxFrame strm (off + len) fin >>= closeOverFinalSize conn
         fc <- putRxStreamData strm rx
         case fc of
             -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
@@ -401,6 +432,7 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
                 closeConnection conn QUIC.InternalError "Too many stream fragments"
             Duplicated -> return ()
             Reassembled -> do
+                addRxCounted strm len
                 ok' <- checkRxMaxData conn len
                 -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
                 unless ok' $
@@ -434,6 +466,9 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
     forM_ mstrm' $ \strm -> do
         let len = BS.length dat
             rx = RxStreamData dat off len fin
+        -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be said
+        -- differently, and nothing may arrive past it.
+        noteRxFrame strm (off + len) fin >>= closeOverFinalSize conn
         fc <- putRxStreamData strm rx
         case fc of
             -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
@@ -446,6 +481,7 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
                 closeConnection conn QUIC.InternalError "Too many stream fragments"
             Duplicated -> return ()
             Reassembled -> do
+                addRxCounted strm len
                 ok' <- checkRxMaxData conn len
                 -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
                 unless ok' $

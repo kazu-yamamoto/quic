@@ -5,6 +5,8 @@ module Network.QUIC.Stream.Types (
     newStream,
     TxStreamData (..),
     StreamState (..),
+    RxBounds (..),
+    emptyRxBounds,
     RecvStreamQ (..),
     RxStreamData (..),
     Length,
@@ -45,7 +47,24 @@ data Stream = Stream
     -- ^ The error code of a RESET_STREAM from the peer
     , streamReleased :: IORef Bool
     -- ^ Whether we are done with it and have counted it so
+    , streamRxBounds :: IORef RxBounds
+    -- ^ What has been seen of the stream's end (RFC 9000 Sec 4.5)
     }
+
+-- | What the receiving side has seen of where a stream ends.
+data RxBounds = RxBounds
+    { rxCounted :: Int
+    -- ^ Octets of this stream the connection's flow controller has counted:
+    --   every frame taken for it, in order or not
+    , rxHighest :: Int
+    -- ^ The largest offset plus length seen for it
+    , rxFinal :: Maybe Int
+    -- ^ Its final size, once that is known
+    }
+    deriving (Eq, Show)
+
+emptyRxBounds :: RxBounds
+emptyRxBounds = RxBounds 0 0 Nothing
 
 instance Show Stream where
     show s = show $ streamId s
@@ -62,6 +81,7 @@ newStream streamConnection streamId txLim rxLim = do
     streamSyncFinTx <- newEmptyMVar
     streamResetRx   <- newIORef Nothing
     streamReleased  <- newIORef False
+    streamRxBounds  <- newIORef emptyRxBounds
     return Stream{..}
 {- FOURMOLU_ENABLE -}
 
