@@ -3,6 +3,7 @@
 module Network.QUIC.Crypto.Utils (
     tagLength,
     sampleLength,
+    integrityLimit,
     bsXOR,
     calculateIntegrityTag,
 ) where
@@ -11,6 +12,7 @@ import qualified Data.ByteArray as Byte (xor)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Network.TLS hiding (Version)
+import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Crypto.Nite
 import Network.QUIC.Crypto.Types
@@ -57,3 +59,24 @@ calculateIntegrityTag ver oCID pseudo0 =
     nonce Version1 = Nonce "\x46\x15\x99\xd3\x5d\x63\x2b\xf2\x23\x98\x25\xbb"
     nonce Version2 = Nonce "\xd8\x69\x69\xbc\x2d\x7c\x6d\x99\x90\xef\xb0\x4a"
     nonce _ = Nonce "not supported"
+
+----------------------------------------------------------------
+
+-- | How many packets may fail authentication on a connection before the AEAD
+--   is no longer trusted to tell a forgery from the real thing.
+--
+-- RFC 9001 Sec 6.6: "endpoints MUST count the number of received packets that
+-- fail authentication during the lifetime of a connection.  If the total
+-- number of received packets that fail authentication within the connection,
+-- across all keys, exceeds the integrity limit for the selected AEAD, the
+-- endpoint MUST immediately close the connection with a connection error of
+-- type AEAD_LIMIT_REACHED and not process any more packets."
+--
+-- The same section gives the numbers: 2^52 for the AES-GCM ciphers and 2^36
+-- for ChaCha20-Poly1305.  An AEAD we do not know gets the smaller of the two,
+-- which is the safe way to be wrong.
+integrityLimit :: Cipher -> Int
+integrityLimit cipher
+    | cipher == cipher13_AES_128_GCM_SHA256 = 2 ^ (52 :: Int)
+    | cipher == cipher13_AES_256_GCM_SHA384 = 2 ^ (52 :: Int)
+    | otherwise = 2 ^ (36 :: Int)

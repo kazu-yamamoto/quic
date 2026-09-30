@@ -324,6 +324,8 @@ data Connection = Connection
     , connResources     :: IORef (IO ())
     , connCloseSent     :: IORef Bool
     -- ^ Whether the peer has been told the connection is over
+    , connAuthFailures  :: IORef Int
+    -- ^ Packets that have failed authentication, over the whole connection
     , -- Recovery
       connLDCC          :: LDCC
     }
@@ -427,6 +429,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     decryptBuf        <- mallocBytes bufsiz -- used receiver
     connResources     <- newIORef (free encodeBuf >> free encryptBuf >> free decryptBuf)
     connCloseSent     <- newIORef False
+    connAuthFailures  <- newIORef 0
     -- Recovery
     let put x = atomically $ writeTQueue outputQ $ OutRetrans x
     connLDCC          <- newLDCC connState connQLog put
