@@ -141,6 +141,9 @@ spec = do
                 testFinalSize cc sc waitS [StreamF 0 0 ["ab"] True, StreamF 0 2 ["cd"] False]
         it "counts a reset stream's final size against the connection" $ do
             withPipe (DropClientPacket []) $ testResetCountsAgainstTheWindow cc sc waitS
+    describe "closing" $ do
+        it "tells the peer when the application gives up" $ do
+            withPipe (DropClientPacket []) $ testServerThrows cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $
@@ -688,3 +691,23 @@ testResetCountsAgainstTheWindow cc0 sc0 waitS =
     client = do
         waitS
         C.run cc $ \_conn -> threadDelay 1000000
+
+-- | RFC 9000, section 10.2: an endpoint that ends a connection sends
+--   CONNECTION_CLOSE.  Anything thrown in here that is not already on its way
+--   to the peer used to end the connection in silence, leaving the peer to
+--   wait out its own idle timeout.
+testServerThrows :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testServerThrows cc sc waitS =
+    withAsync server $ \_ -> client `shouldThrow` internalError
+  where
+    server = run sc $ \_conn -> E.throwIO $ userError "the application gave up"
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            void $ recvStream strm 1024
+
+internalError :: QUICException -> Bool
+internalError (TransportErrorIsReceived InternalError _) = True
+internalError _ = False
