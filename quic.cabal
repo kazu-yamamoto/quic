@@ -238,6 +238,7 @@ test-suite spec
         QLoggerSpec
         RecoverySpec
         TLSSpec
+        TokenSpec
         TransportError
         TypesSpec
 
@@ -255,6 +256,7 @@ test-suite spec
         base16-bytestring >=1.0,
         bytestring,
         containers,
+        crypto-token,
         crypton,
         directory,
         filepath,

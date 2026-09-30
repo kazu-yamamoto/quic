@@ -277,9 +277,21 @@ dispatch
                                 if ok then pushToAcceptRetried ct else sendRetry
                             | otherwise -> do
                                 -- A token we issued in NEW_TOKEN.  It carries
-                                -- a lifetime, so honour it.
+                                -- a lifetime and the address it was issued
+                                -- to, and both have to hold.
+                                --
+                                -- RFC 9000 Sec 8.1.3: "Tokens sent in
+                                -- NEW_TOKEN frames MUST include information
+                                -- that allows the server to verify that the
+                                -- client IP address has not changed from when
+                                -- the token was issued.  ...  If the client IP
+                                -- address has changed, the server MUST adhere
+                                -- to the anti-amplification limit".  The token
+                                -- is still a token -- we do not answer with a
+                                -- Retry -- but the address it arrives from has
+                                -- proved nothing.
                                 fresh <- isTokenFresh ct
-                                pushToAcceptFirst fresh
+                                pushToAcceptFirst $ fresh && isTokenAddress ct peersa
                         -- A token we cannot decrypt is not a token.  RFC 9000
                         -- section 8.1.3: "If the token is invalid, then the
                         -- server SHOULD proceed as if the client did not have
@@ -347,7 +359,7 @@ dispatch
         -- initial_source_connection_id       = S3   (dCID)  S2 in our server
         -- original_destination_connection_id = S1   (o)
         -- retry_source_connection_id         = S2   (dCID)
-        pushToAcceptRetried (CryptoToken _ _ _ (Just (_, _, o))) = do
+        pushToAcceptRetried (CryptoToken _ _ _ (Just (_, _, o)) _) = do
             let myAuthCIDs =
                     defaultAuthCIDs
                         { initSrcCID = Just dCID
@@ -360,10 +372,10 @@ dispatch
                         }
             pushToAcceptQ myAuthCIDs peerAuthCIDs True
         pushToAcceptRetried _ = return ()
-        isTokenFresh (CryptoToken _ life etim _) = do
+        isTokenFresh (CryptoToken _ life etim _ _) = do
             diff <- getElapsedTimeMicrosecond etim
             return $ diff <= Microseconds (fromIntegral life * 1000000)
-        isRetryTokenValid (CryptoToken _tver life etim (Just (l, r, _))) = do
+        isRetryTokenValid ct@(CryptoToken _tver life etim (Just (l, r, _)) _) = do
             diff <- getElapsedTimeMicrosecond etim
             return $
                 diff <= Microseconds (fromIntegral life * 1000000)
@@ -372,10 +384,18 @@ dispatch
                     -- Initial for ACK contains the retry token but
                     -- the version would be already version 2, sigh.
                     && _tver == peerVer
+                    -- The address it was issued to, as for NEW_TOKEN above.
+                    -- The hole is the same one: whoever holds a token of
+                    -- ours can otherwise have any address treated as
+                    -- validated, and the CIDs this is tied to were ours to
+                    -- give and are known to whoever we gave them to.  A
+                    -- Retry is answered within the round trip that prompted
+                    -- it, so a client's address has had no chance to move.
+                    && isTokenAddress ct peersa
         isRetryTokenValid _ = return False
         sendRetry = do
             newdCID <- newCID
-            retryToken <- generateRetryToken peerVer scTicketLifetime newdCID sCID dCID
+            retryToken <- generateRetryToken peerVer scTicketLifetime newdCID sCID dCID peersa
             mnewtoken <-
                 timeout (Microseconds 100000) "sendRetry" $ encryptToken tokenMgr retryToken
             case mnewtoken of

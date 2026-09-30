@@ -230,7 +230,8 @@ afterHandshakeServer ServerConfig{..} conn = handleLogT logAction $ do
     register (cidInfoCID cidInfo) conn
     --
     ver <- getVersion conn
-    cryptoToken <- generateToken ver scTicketLifetime
+    pathInfo <- getPathInfo conn
+    cryptoToken <- generateToken ver scTicketLifetime $ peerSockAddr pathInfo
     mgr <- getTokenManager conn
     token <- encryptToken mgr cryptoToken
     let ncid = NewConnectionID cidInfo 0
