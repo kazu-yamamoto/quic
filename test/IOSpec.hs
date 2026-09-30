@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module IOSpec where
 
@@ -144,6 +145,8 @@ spec = do
     describe "closing" $ do
         it "tells the peer when the application gives up" $ do
             withPipe (DropClientPacket []) $ testServerThrows cc sc waitS
+        it "tells the peer before waiting for the application" $ do
+            withPipe (DropClientPacket []) $ testSlowApp cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $
@@ -711,3 +714,35 @@ testServerThrows cc sc waitS =
 internalError :: QUICException -> Bool
 internalError (TransportErrorIsReceived InternalError _) = True
 internalError _ = False
+
+-- | The peer hears of a transport error at once, however long the
+--   application takes to unwind.
+--
+-- The protocol threads and the application run under one 'concurrently_',
+-- which cancels the application when they fail and then waits for it, under
+-- 'uninterruptibleMask_'.  Said after that, the CONNECTION_CLOSE waits with
+-- it, and a peer told nothing waits out its own idle timeout.  Here the
+-- application sits for three seconds after it is cancelled and the client
+-- allows one and a half.
+testSlowApp :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testSlowApp cc0 sc waitS =
+    withAsync server $ \_ -> client `shouldThrow` frameEncodingError
+  where
+    server = run sc $ \conn ->
+        forever (void $ acceptStream conn) `E.catch` \(e :: E.SomeException) -> do
+            threadDelay 3000000
+            E.throwIO e
+    cc = cc0{ccHooks = (ccHooks cc0){onPlainCreated = inject}}
+    inject lvl plain
+        | lvl == RTT1Level =
+            plain
+                { plainFrames = MaxStreams Bidirectional (2 ^ (61 :: Int)) : plainFrames plain
+                }
+        | otherwise = plain
+    client = do
+        waitS
+        C.run cc $ \_conn -> threadDelay 1500000
+
+frameEncodingError :: QUICException -> Bool
+frameEncodingError (TransportErrorIsReceived FrameEncodingError _) = True
+frameEncodingError _ = False

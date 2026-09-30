@@ -145,9 +145,35 @@ runServer conf server0 dispatch stvar acc = do
                 c2 = labelMe "concurrently2" >> concurrently_ c1 s3
                 c3 = labelMe "concurrently3" >> concurrently_ c2 s4
                 c4 = labelMe "concurrently4" >> concurrently_ c3 s5
+                -- Telling the peer here, and not below, because here is the
+                -- one place where it can be done at all: the nested
+                -- 'concurrently_'s above have waited for every protocol
+                -- thread, so the encode buffer is ours alone -- it is shared
+                -- with the sender -- and the application is still running, so
+                -- nothing has begun waiting for it yet.
+                --
+                -- Below, after 'runThreads', is too late.  The
+                -- 'concurrently_' on this line cancels the application when
+                -- the protocol threads fail and then waits for it, under
+                -- 'uninterruptibleMask_', for as long as it takes to unwind.
+                -- The CONNECTION_CLOSE waited with it, and a peer told
+                -- nothing waits out its own idle timeout: seen against an
+                -- HTTP/3 server whose application was slow to die just as the
+                -- handshake finished, where a transport error the server had
+                -- raised correctly never reached the client at all.
+                --
+                -- 'closure' is said once; it rethrows, and the call below
+                -- finds the peer already told.
+                tellThenRaise act =
+                    act `E.catch` \(e :: E.SomeException) -> do
+                        sendFinal conn
+                        setConnectionClosed conn
+                        closure conn ldcc (Left e)
                 c5 =
                     labelMe "concurrently5"
-                        >> concurrently_ (c4 `E.catch` \(_ :: InternalControl) -> return ()) s6
+                        >> concurrently_
+                            (tellThenRaise (c4 `E.catch` \(_ :: InternalControl) -> return ()))
+                            s6
                 runThreads = c5
             ex <- E.try runThreads
             sendFinal conn

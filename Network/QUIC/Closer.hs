@@ -62,8 +62,18 @@ closure conn ldcc (Left se)
         Just (ApplicationProtocolErrorIsReceived _ _) -> True
         _ -> False
 
+-- | Telling the peer the connection is over, once.
+--
+-- Once, because it is said at the first place that knows: where the protocol
+-- threads have finished and the application has not.  What comes here after
+-- that is the same ending on its way out, and the peer has heard it.
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
+    already <- atomicModifyIORef' (connCloseSent conn) $ \b -> (True, b)
+    unless already $ closure'' conn ldcc frame
+
+closure'' :: Connection -> LDCC -> Frame -> IO ()
+closure'' conn ldcc frame = do
     sock <- getSocket conn
     peersa <- peerSockAddr <$> getPathInfo conn
     connected <- getSockConnected conn
