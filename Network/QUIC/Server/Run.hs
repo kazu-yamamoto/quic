@@ -143,7 +143,14 @@ runServer conf server0 dispatch stvar acc = do
         let conn = connResConnection connRes
         setDead conn
         freeResources conn
-    debugLog _conn _msg = return ()
+    -- Say why the connection ended.  This used to discard it, so a server
+    -- connection that died of anything 'closure' does not turn into a
+    -- CONNECTION_CLOSE -- which is to say anything but the four it names --
+    -- went without a word to the peer and without a word in the log.  The
+    -- peer talks on to a connection that is gone until the dispatcher, a
+    -- second later once the connection IDs are unregistered, answers it with
+    -- a Stateless Reset.
+    debugLog conn msg = connDebugLog conn $ "runServer: " <> msg
 
 createServerConnection
     :: ServerConfig
