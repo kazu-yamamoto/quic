@@ -27,6 +27,25 @@ maximumQUICHeaderSize = 256
 
 ----------------------------------------------------------------
 
+-- | How many unidirectional streams a peer may have open at once, to begin
+--   with.
+--
+-- Three is what HTTP/3 needs and no more: a control stream and the two QPACK
+-- streams (RFC 9114 Sec 6.2).  A peer given three can open nothing else --
+-- not a push stream, not a stream of a type from an extension, and not one
+-- of the reserved types it is meant to open now and then so that the types
+-- stay extensible.  It was three here, so a client on these defaults could
+-- never be pushed to, and an unknown stream type could never be tried on
+-- one.
+--
+-- Ten leaves room for those without leaving the peer unbounded: the limit
+-- counts what is open at once, and a stream gives its place back when it is
+-- closed.
+defaultMaxStreamsUni :: Int
+defaultMaxStreamsUni = 10
+
+----------------------------------------------------------------
+
 idleTimeout :: Milliseconds
 idleTimeout = Milliseconds 30000
 
