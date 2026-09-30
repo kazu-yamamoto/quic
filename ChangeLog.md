@@ -1,5 +1,11 @@
 # ChangeLog
 
+## Unreleased
+
+* Fixed an issue where sending data over a connection from many streams
+  concurrently could lead to buffer overruns.
+  [#153](https://github.com/kazu-yamamoto/quic/pull/153)
+
 ## 0.3.13
 
 One line of debug output that could end the connection it described, and
