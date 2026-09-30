@@ -127,6 +127,8 @@ spec = do
             withPipe (DropClientPacket []) $ testResetOnly cc sc waitS
         it "accepts a reset that overtook the data it followed" $ do
             withPipe (DropClientPacket []) $ testResetOvertakes cc sc waitS
+        it "accepts a stream the peer is only blocked on" $ do
+            withPipe (DropClientPacket []) $ testDataBlockedOpens cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $
@@ -597,3 +599,27 @@ testResetOvertakes cc sc waitS = do
                 unless (bs == "") recvEOF
         recvEOF
         resetReceived strm >>= putMVar got
+
+-- | RFC 9000, section 3.2 again, for the other frame of the three: a
+--   STREAM_DATA_BLOCKED opens the stream it names as well.
+testDataBlockedOpens :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testDataBlockedOpens cc0 sc waitS = do
+    got <- newEmptyMVar
+    withAsync (server got) $ \_ -> do
+        client
+        r <- Timeout.timeout 1000000 $ takeMVar got
+        r `shouldBe` Just 0
+  where
+    cc = cc0{ccHooks = (ccHooks cc0){onPlainCreated = blockedOnStream0}}
+    blockedOnStream0 lvl plain
+        | lvl == RTT1Level =
+            plain{plainFrames = StreamDataBlocked 0 0 : plainFrames plain}
+        | otherwise = plain
+    client = do
+        waitS
+        -- No stream of its own: the frame above is all the server hears of
+        -- stream 0.
+        C.run cc $ \_conn -> threadDelay 300000
+    server got = run sc $ \conn -> do
+        strm <- acceptStream conn
+        putMVar got $ streamId strm
