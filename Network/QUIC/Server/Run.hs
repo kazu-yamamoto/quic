@@ -119,12 +119,28 @@ runServer conf server0 dispatch stvar acc = do
                     server0 conn
                     mainDone conn
                 ldcc = connLDCC conn
-            let s1 = labelMe "handshaker" >> handshaker
+            -- Each says why it ended, as the sender and the receiver
+            -- already did.  'concurrently_' cancels the others as soon as one
+            -- of them fails, so the one that did not end in AsyncCancelled is
+            -- the one that ended the connection -- and it was these four that
+            -- said nothing, leaving a log of two cancelled threads and no
+            -- reason anywhere.
+            --
+            -- Being cancelled is not worth a line: the sender and the
+            -- receiver already say when the connection is taken down from
+            -- outside, and everything else follows them.
+            let named nm act =
+                    act `E.catch` \e -> do
+                        case E.fromException e of
+                            Just AsyncCancelled -> return ()
+                            Nothing -> connDebugLog conn $ "debug: " <> nm <> ": " <> bhow e
+                        E.throwIO e
+            let s1 = labelMe "handshaker" >> named "handshaker" handshaker
                 s2 = labelMe "sender" >> sender conn
                 s3 = labelMe "receiver" >> receiver conn
-                s4 = labelMe "resender" >> resender ldcc
-                s5 = labelMe "ldccTimer" >> ldccTimer ldcc
-                s6 = labelMe "QUIC server" >> server
+                s4 = labelMe "resender" >> named "resender" (resender ldcc)
+                s5 = labelMe "ldccTimer" >> named "ldccTimer" (ldccTimer ldcc)
+                s6 = labelMe "QUIC server" >> named "server" server
                 c1 = labelMe "concurrently1" >> concurrently_ s1 s2
                 c2 = labelMe "concurrently2" >> concurrently_ c1 s3
                 c3 = labelMe "concurrently3" >> concurrently_ c2 s4
