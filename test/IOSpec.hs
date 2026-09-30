@@ -1,3 +1,4 @@
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -156,9 +157,43 @@ spec = do
     describe "concurrency" $ do
         it "can handle multiple clients" $ do
             withPipe (Randomly 20) $ testMultiSendRecv cc sc waitS 500
+    describe "packing" $ do
+        it "fits the frames of many streams with tiny writes into a packet" $ do
+            withPipe (DropClientPacket []) $ testTinyWrites cc sc waitS
     describe "abortConnection" $ do
         it "can abort connection" $ do
             withPipe (Randomly 20) $ testAbort cc sc waitS
+
+-- | Writing data to many, many streams doesn't cause a buffer overrun
+testTinyWrites :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testTinyWrites cc sc0 waitS = do
+    doneVar <- newChan
+    withAsync (server doneVar) $ \_ -> client doneVar
+  where
+    nStreams = 400
+    sc =
+        sc0
+            { scParameters =
+                (scParameters sc0){initialMaxStreamsBidi = 2 * nStreams}
+            }
+
+    client doneVar = do
+        waitS
+        C.run cc $ \conn -> do
+            strms <- replicateM nStreams (stream conn)
+            forM_ strms $ \strm -> sendStream strm "a"
+            threadDelay 200_000
+            forM_ strms $ \strm -> sendStream strm "b"
+            -- Wait for the server to have read both bytes of every stream
+            -- before closing the connection.
+            mres <- Timeout.timeout 10_000_000 $ replicateM_ nStreams $ readChan doneVar
+            mres `shouldBe` Just ()
+
+    server doneVar = run sc $ \conn -> forever $ do
+        strm <- acceptStream conn
+        void $ forkIO $ do
+            consumeBytes strm 2
+            writeChan doneVar ()
 
 consumeBytes :: Stream -> Int -> IO ()
 consumeBytes _ 0 = return ()
