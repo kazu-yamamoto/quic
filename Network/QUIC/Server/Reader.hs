@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -34,11 +33,6 @@ import Network.Socket (SockAddr, Socket, waitReadSocketSTM)
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import System.Log.FastLogger
-#if MIN_VERSION_random(1,3,0)
-import System.Random (getStdRandom, randomRIO, uniformByteString)
-#else
-import System.Random (getStdRandom, randomRIO, genByteString)
-#endif
 
 import Network.QUIC.Common
 import Network.QUIC.Config
