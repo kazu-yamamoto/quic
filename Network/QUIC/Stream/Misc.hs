@@ -12,6 +12,11 @@ module Network.QUIC.Stream.Misc (
     resetReceived,
     setResetReceived,
     markReleased,
+    FinalSizeProblem (..),
+    noteRxFrame,
+    noteRxFinalSize,
+    addRxCounted,
+    takeRxUncounted,
     --
     readStreamFlowTx,
     addTxStreamData,
@@ -126,3 +131,68 @@ checkRxMaxStreamData :: Stream -> Int -> IO Bool
 checkRxMaxStreamData Stream{..} len =
     atomicModifyIORef' streamFlowRx $ checkRxLimit len
 -}
+
+----------------------------------------------------------------
+
+-- | What is wrong with where a peer says its stream ends.
+--
+-- RFC 9000 Sec 4.5: "Once a final size for a stream is known, it cannot
+-- change.  If a RESET_STREAM or STREAM frame is received indicating a change
+-- in the final size for the stream, an endpoint SHOULD respond with an error
+-- of type FINAL_SIZE_ERROR. ... A receiver SHOULD treat receipt of data at or
+-- beyond the final size as an error of type FINAL_SIZE_ERROR, even after a
+-- stream is closed."
+data FinalSizeProblem
+    = -- | A final size that is not the one already known
+      FinalSizeChanged
+    | -- | A final size below what has already been seen of the stream
+      FinalSizeTooSmall
+    | -- | Data at or beyond a final size already known
+      DataPastFinalSize
+    deriving (Eq, Show)
+
+-- | Taking in where one STREAM frame says the stream reaches, and whether it
+--   ends it.  Nothing is counted here: a frame may still turn out to be a
+--   duplicate, and only what is taken counts.
+noteRxFrame :: Stream -> Int -> Bool -> IO (Maybe FinalSizeProblem)
+noteRxFrame Stream{..} end fin = atomicModifyIORef' streamRxBounds note
+  where
+    note b@RxBounds{..}
+        | fin = case rxFinal of
+            Just f
+                | f /= end -> (b, Just FinalSizeChanged)
+            _
+                | end < rxHighest -> (b, Just FinalSizeTooSmall)
+                | otherwise ->
+                    (b{rxFinal = Just end, rxHighest = max rxHighest end}, Nothing)
+        | otherwise = case rxFinal of
+            Just f
+                | end > f -> (b, Just DataPastFinalSize)
+            _ -> (b{rxHighest = max rxHighest end}, Nothing)
+
+-- | The same for the final size a RESET_STREAM carries.
+noteRxFinalSize :: Stream -> Int -> IO (Maybe FinalSizeProblem)
+noteRxFinalSize s end = noteRxFrame s end True
+
+-- | Counting octets the connection's flow controller has taken for the
+--   stream.
+addRxCounted :: Stream -> Int -> IO ()
+addRxCounted Stream{..} n =
+    atomicModifyIORef'' streamRxBounds $ \b -> b{rxCounted = rxCounted b + n}
+
+-- | The octets the peer spent on the stream that will never arrive, and
+--   which the connection's flow controller has therefore not counted.
+--
+-- RFC 9000 Sec 4.5: "A receiver SHOULD use the final size to account for all
+-- bytes sent on the stream in its connection-level flow controller."  Left
+-- uncounted, the window we advertise falls behind what the peer believes it
+-- has spent, by the tail of every stream it resets, until it has none left.
+--
+-- Answered once: whatever is asked for here is counted from then on.
+takeRxUncounted :: Stream -> IO Int
+takeRxUncounted Stream{..} = atomicModifyIORef' streamRxBounds take'
+  where
+    take' b@RxBounds{..} = case rxFinal of
+        Just f
+            | f > rxCounted -> (b{rxCounted = f}, f - rxCounted)
+        _ -> (b, 0)

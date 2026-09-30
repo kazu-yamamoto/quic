@@ -129,6 +129,18 @@ spec = do
             withPipe (DropClientPacket []) $ testResetOvertakes cc sc waitS
         it "accepts a stream the peer is only blocked on" $ do
             withPipe (DropClientPacket []) $ testDataBlockedOpens cc sc waitS
+    describe "final size" $ do
+        it "refuses a final size that is not the one already known" $ do
+            withPipe (DropClientPacket []) $
+                testFinalSize cc sc waitS [StreamF 0 0 ["ab"] True, StreamF 0 0 ["abcd"] True]
+        it "refuses a final size below what the stream has reached" $ do
+            withPipe (DropClientPacket []) $
+                testFinalSize cc sc waitS [StreamF 0 0 ["abcd"] False, StreamF 0 0 ["ab"] True]
+        it "refuses stream data beyond the final size" $ do
+            withPipe (DropClientPacket []) $
+                testFinalSize cc sc waitS [StreamF 0 0 ["ab"] True, StreamF 0 2 ["cd"] False]
+        it "counts a reset stream's final size against the connection" $ do
+            withPipe (DropClientPacket []) $ testResetCountsAgainstTheWindow cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $
@@ -623,3 +635,56 @@ testDataBlockedOpens cc0 sc waitS = do
     server got = run sc $ \conn -> do
         strm <- acceptStream conn
         putMVar got $ streamId strm
+
+-- | RFC 9000, section 4.5: where a stream ends, once said, cannot be said
+--   differently, and nothing may arrive past it.  The frames go in by a hook,
+--   since a well-behaved client sends none of these.
+testFinalSize
+    :: C.ClientConfig -> ServerConfig -> IO () -> [Frame] -> IO ()
+testFinalSize cc0 sc waitS frames =
+    withAsync quietServer $ \_ -> client `shouldThrow` finalSizeError
+  where
+    quietServer = run sc $ \conn -> forever $ void $ acceptStream conn
+    cc = cc0{ccHooks = (ccHooks cc0){onPlainCreated = inject}}
+    inject lvl plain
+        | lvl == RTT1Level = plain{plainFrames = frames ++ plainFrames plain}
+        | otherwise = plain
+    client = do
+        waitS
+        C.run cc $ \_conn -> threadDelay 1000000
+
+finalSizeError :: QUICException -> Bool
+finalSizeError (TransportErrorIsReceived FinalSizeError _) = True
+finalSizeError _ = False
+
+flowControlError :: QUICException -> Bool
+flowControlError (TransportErrorIsReceived FlowControlError _) = True
+flowControlError _ = False
+
+-- | RFC 9000, section 4.5: "A receiver SHOULD use the final size to account
+--   for all bytes sent on the stream in its connection-level flow
+--   controller."  A hundred thousand octets is well past what this server
+--   allows for the whole connection, so a stream reset at that final size,
+--   none of which arrives, is over the limit and should be answered as one.
+--
+-- Uncounted, as it was, it cost the peer nothing at all: the window we
+-- advertise fell behind what the peer believed it had spent, by the tail of
+-- every stream it reset, and nothing here noticed.
+testResetCountsAgainstTheWindow
+    :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testResetCountsAgainstTheWindow cc0 sc0 waitS =
+    withAsync quietServer $ \_ -> client `shouldThrow` flowControlError
+  where
+    sc = sc0{scParameters = (scParameters sc0){initialMaxData = 1000}}
+    quietServer = run sc $ \conn -> forever $ void $ acceptStream conn
+    cc = cc0{ccHooks = (ccHooks cc0){onPlainCreated = inject}}
+    inject lvl plain
+        | lvl == RTT1Level =
+            plain
+                { plainFrames =
+                    ResetStream 0 (ApplicationProtocolError 0) 100000 : plainFrames plain
+                }
+        | otherwise = plain
+    client = do
+        waitS
+        C.run cc $ \_conn -> threadDelay 1000000
