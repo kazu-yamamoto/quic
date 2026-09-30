@@ -35,7 +35,32 @@ closure conn ldcc (Left se)
         E.throwIO $ ApplicationProtocolErrorIsSent err desc
     | Just (VerNego vers) <- E.fromException se = do
         E.throwIO $ NextVersion vers
-    | otherwise = E.throwIO se -- including asynchronous exceptions
+    -- Nothing to say: the connection is over for a reason the peer knows at
+    -- least as well as we do.  An idle timeout is closed in silence (RFC 9000
+    -- Sec 10.1); the rest are the peer having closed, or told us to stop.
+    | isOver se = E.throwIO se
+    -- Asynchronous, so we are the ones being taken down, and whoever is doing
+    -- it says what happens next.  'run' has 'sendFinal' for its own ending.
+    | isAsyncException se = E.throwIO se
+    -- Anything else went wrong in here.  RFC 9000 Sec 10.2: an endpoint that
+    -- ends a connection sends CONNECTION_CLOSE.  Without one the peer is left
+    -- talking to a connection that is gone until its own idle timeout, or
+    -- until a Stateless Reset reaches it -- which, for a server, is a second
+    -- away, since the dispatcher holds a dead connection's IDs that long.
+    --
+    -- The reason phrase says nothing of what it was.  It goes to the peer,
+    -- and what went wrong in here is our business; the debug log has it.
+    | otherwise = do
+        closure' conn ldcc $ ConnectionClose InternalError 0 "internal error"
+        E.throwIO se
+  where
+    isOver e = case E.fromException e of
+        Just (ConnectionIsClosed _) -> True
+        Just (ConnectionIsTimeout _) -> True
+        Just ConnectionIsReset -> True
+        Just (TransportErrorIsReceived _ _) -> True
+        Just (ApplicationProtocolErrorIsReceived _ _) -> True
+        _ -> False
 
 closure' :: Connection -> LDCC -> Frame -> IO ()
 closure' conn ldcc frame = do
