@@ -13,12 +13,15 @@ module Network.QUIC.Packet.Token (
 
 import Codec.Serialise
 import qualified Crypto.Token as CT
-import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
-import Data.IP (fromSockAddr)
 import Data.UnixTime
 import GHC.Generics
-import Network.Socket (SockAddr)
+import Network.Socket (
+    SockAddr (..),
+    hostAddress6ToTuple,
+    hostAddressToTuple,
+ )
 
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -53,12 +56,22 @@ isRetryToken token = isJust $ tokenCIDs token
 isTokenAddress :: CryptoToken -> SockAddr -> Bool
 isTokenAddress token sa = tokenAddress token == addressForToken sa
 
--- | The address alone, without the port.  A NAT hands a client a new port
---   whenever it pleases, and it is the address RFC 9000 Sec 8.1.3 asks about.
+-- | The address alone, without the port: four octets for IPv4 and sixteen
+--   for IPv6.
+--
+-- A NAT hands a client a new port whenever it pleases, and it is the address
+-- RFC 9000 Sec 8.1.3 asks about.  The token goes back and forth in Initial
+-- packets, so it is written as the octets rather than as the text of the
+-- address, which runs to thirty-nine characters for an IPv6 one.
 addressForToken :: SockAddr -> ByteString
-addressForToken sa = case fromSockAddr sa of
-    Just (ip, _) -> C8.pack $ show ip
-    Nothing -> C8.empty
+addressForToken (SockAddrInet _ ha) = BS.pack [a, b, c, d]
+  where
+    (a, b, c, d) = hostAddressToTuple ha
+addressForToken (SockAddrInet6 _ _ ha6 _) = BS.pack $ concatMap octets [a, b, c, d, e, f, g, h]
+  where
+    (a, b, c, d, e, f, g, h) = hostAddress6ToTuple ha6
+    octets w = [fromIntegral (w `shiftR` 8), fromIntegral w]
+addressForToken _ = BS.empty
 
 ----------------------------------------------------------------
 

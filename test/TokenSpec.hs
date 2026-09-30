@@ -4,6 +4,7 @@ module TokenSpec where
 
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
+import qualified Data.ByteString as BS
 import Network.Socket
 import Test.Hspec
 
@@ -23,6 +24,17 @@ spec = do
             -- RFC 9000 Sec 8.1.3 asks about the address.
             token <- generateToken Version1 3600 $ addr "127.0.0.1" 1234
             isTokenAddress token (addr "127.0.0.1" 5678) `shouldBe` True
+        it "writes an IPv4 address as four octets" $ do
+            token <- generateToken Version1 3600 $ addr "127.0.0.1" 1234
+            tokenAddress token `shouldBe` "\127\0\0\1"
+        it "writes an IPv6 address as sixteen octets" $ do
+            let sa = SockAddrInet6 1234 0 (0x20010db8, 0, 0, 1) 0
+            token <- generateToken Version1 3600 sa
+            BS.length (tokenAddress token) `shouldBe` 16
+            isTokenAddress token (SockAddrInet6 5678 0 (0x20010db8, 0, 0, 1) 0)
+                `shouldBe` True
+            isTokenAddress token (SockAddrInet6 1234 0 (0x20010db8, 0, 0, 2) 0)
+                `shouldBe` False
         it "still knows its address after a round trip" $ do
             let cid = makeCID "01234567"
             withManager $ \mgr -> do
