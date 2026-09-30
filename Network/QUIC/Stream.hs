@@ -28,6 +28,7 @@ module Network.QUIC.Stream (
     noteRxFinalSize,
     addRxCounted,
     takeRxUncounted,
+    takeRxUnread,
     readStreamFlowTx,
     addTxStreamData,
     setTxMaxStreamData,

@@ -187,6 +187,19 @@ releaseStream s = do
             $ do
                 -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
                 checkMaxStreams Unidirectional
+        -- FLOW CONTROL: MAX_DATA: recv: the octets of this stream the
+        -- application will never read.  Left uncounted, the window we
+        -- advertise stays that much smaller for the rest of the connection:
+        -- a server that answers a request without reading its body pays for
+        -- that body until the connection ends, and enough of them leave the
+        -- peer blocked by octets nobody is waiting for.
+        unread <- takeRxUnread s
+        when (unread > 0) $ do
+            mx <- updateFlowRx conn unread
+            forM_ mx $ \newMax -> do
+                sendFrames conn RTT1Level [MaxData newMax]
+                fire conn (Microseconds 50000) $
+                    sendFrames conn RTT1Level [MaxData newMax]
   where
     conn = streamConnection s
     sid = streamId s

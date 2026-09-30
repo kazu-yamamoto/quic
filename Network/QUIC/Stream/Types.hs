@@ -60,11 +60,14 @@ data RxBounds = RxBounds
     -- ^ The largest offset plus length seen for it
     , rxFinal :: Maybe Int
     -- ^ Its final size, once that is known
+    , rxCredited :: Int
+    -- ^ Octets counted against the connection's window on the stream's
+    --   behalf, over and above what the application has read
     }
     deriving (Eq, Show)
 
 emptyRxBounds :: RxBounds
-emptyRxBounds = RxBounds 0 0 Nothing
+emptyRxBounds = RxBounds 0 0 Nothing 0
 
 instance Show Stream where
     show s = show $ streamId s

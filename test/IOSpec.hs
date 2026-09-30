@@ -140,6 +140,8 @@ spec = do
         it "refuses stream data beyond the final size" $ do
             withPipe (DropClientPacket []) $
                 testFinalSize cc sc waitS [StreamF 0 0 ["ab"] True, StreamF 0 2 ["cd"] False]
+        it "counts what the application never reads against the connection" $ do
+            withPipe (DropClientPacket []) $ testCloseWithoutReading cc sc waitS
         it "counts a reset stream's final size against the connection" $ do
             withPipe (DropClientPacket []) $ testResetCountsAgainstTheWindow cc sc waitS
     describe "closing" $ do
@@ -746,3 +748,30 @@ testSlowApp cc0 sc waitS =
 frameEncodingError :: QUICException -> Bool
 frameEncodingError (TransportErrorIsReceived FrameEncodingError _) = True
 frameEncodingError _ = False
+
+-- | A server that answers without reading the body still gives the octets
+--   back to the connection's window.
+--
+-- They were counted as received and, read by nobody, were never counted as
+-- consumed, so the window we advertise stayed that much smaller for the rest
+-- of the connection.  Here twenty streams of four kilobytes go to a server
+-- that reads one octet of each, against a window of thirty-two: uncounted,
+-- the client is blocked before it is halfway through.
+testCloseWithoutReading :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testCloseWithoutReading cc sc0 waitS =
+    withAsync server $ \_ -> client
+  where
+    sc = sc0{scParameters = (scParameters sc0){initialMaxData = 32768}}
+    server = run sc $ \conn -> forever $ do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1
+        closeStream strm
+    client = do
+        waitS
+        r <- Timeout.timeout 5000000 $ C.run cc $ \conn ->
+            replicateM_ 20 $ do
+                strm <- stream conn
+                sendStream strm $ BS.replicate 4096 0
+                shutdownStream strm
+                closeStream strm
+        r `shouldBe` Just ()
