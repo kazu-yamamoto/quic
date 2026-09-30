@@ -56,16 +56,27 @@ run conf server = do
             check $ st == Stopped
   where
     debugLog _msg = return ()
+    -- 'setup' is this bracket's acquire, so 'teardown' does not run when it
+    -- throws -- and it does throw: a server given two addresses whose second
+    -- port is taken leaves the first socket bound and the token manager
+    -- thread running, for good.  Each step frees what the steps before it
+    -- took, which for a list means each element frees itself.
     setup stvar = do
         dispatch <- newDispatch conf
         let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
-        ssas <- mapM serverSocket $ scAddresses conf
-        tids <- mapM (runDispatcher dispatch conf stvar forkConn) ssas
-        return (dispatch, tids, ssas)
+        flip E.onException (clearDispatch dispatch) $ do
+            ssas <- openAll $ scAddresses conf
+            tids <-
+                runAll dispatch conf stvar forkConn ssas
+                    `E.onException` mapM_ NS.close ssas
+            return (dispatch, tids, ssas)
     teardown (dispatch, tids, ssas) = do
         clearDispatch dispatch
         mapM_ killThread tids
         mapM_ NS.close ssas
+    openAll [] = return []
+    openAll (a : as) =
+        E.bracketOnError (serverSocket a) NS.close $ \s -> (s :) <$> openAll as
 
 -- | Running a QUIC server.
 --   The action is executed with a new connection
@@ -82,14 +93,31 @@ runWithSockets ssas conf server = do
             check $ st == Stopped
   where
     debugLog _msg = return ()
+    -- As in 'run'.  The sockets are the caller's here, so only the token
+    -- manager and the dispatchers are ours to free.
     setup stvar = do
         dispatch <- newDispatch conf
         let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
-        tids <- mapM (runDispatcher dispatch conf stvar forkConn) ssas
-        return (dispatch, tids)
+        flip E.onException (clearDispatch dispatch) $ do
+            tids <- runAll dispatch conf stvar forkConn ssas
+            return (dispatch, tids)
     teardown (dispatch, tids) = do
         clearDispatch dispatch
         mapM_ killThread tids
+
+-- | Running a dispatcher on each socket, killing the ones already running if
+--   a later one cannot be started.
+runAll
+    :: Dispatch
+    -> ServerConfig
+    -> TVar ServerState
+    -> (Accept -> IO ())
+    -> [NS.Socket]
+    -> IO [ThreadId]
+runAll _ _ _ _ [] = return []
+runAll dispatch conf stvar forkConn (s : ss) =
+    E.bracketOnError (runDispatcher dispatch conf stvar forkConn s) killThread $
+        \t -> (t :) <$> runAll dispatch conf stvar forkConn ss
 
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
