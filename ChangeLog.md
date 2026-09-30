@@ -1,5 +1,66 @@
 # ChangeLog
 
+## 0.3.11
+
+A security fix, two things RFC 9000 asks of a receiver that were not
+there, and a default that left a peer no room.
+
+* Bind an address validation token to the address it was issued to.
+  RFC 9000 Sec 8.1.3: tokens sent in NEW_TOKEN frames MUST carry
+  something the server can check the client's address against, and if
+  the address has changed the server MUST keep to the anti-amplification
+  limit.  Ours carried a version, a lifetime and, for a Retry, the
+  connection IDs -- no address -- and a fresh one was taken as proof, so
+  a client need only keep the NEW_TOKEN it was given and send it back
+  with someone else's address in the header: the server treated that
+  address as validated and answered it, certificate and all, having had
+  nothing proved to it.  A token from before this cannot be decoded and
+  is already treated as no token at all, which is to say as an address
+  that has proved nothing.
+  [#133](https://github.com/kazu-yamamoto/quic/pull/133)
+
+* Hold a peer to the final size it gave for a stream.  FINAL_SIZE_ERROR
+  was in the error table and was never sent: where a stream ends, once
+  said, cannot be said differently, and nothing may arrive past it
+  (RFC 9000 Sec 4.5), but the final size a RESET_STREAM carries went to
+  a hook and nowhere else.  That section also asks a receiver to count
+  the final size in its connection-level flow controller, and ours
+  counted what arrived; a peer counts the final size, so every stream it
+  reset with data still in flight left the two further apart, and the
+  window we advertise fell behind what the peer believed it had spent --
+  by the tail of every reset, until it had none left.  HTTP/3 cancels
+  requests as a matter of course.
+  [#136](https://github.com/kazu-yamamoto/quic/pull/136)
+
+* Open the stream a STREAM_DATA_BLOCKED arrives for.  RFC 9000 Sec 3.2
+  has the receiving part of a peer's stream created by the first STREAM,
+  STREAM_DATA_BLOCKED or RESET_STREAM frame for it; the last was done in
+  0.3.10 and this is the other.  Both blocked frames also refuse a
+  packet that may not carry them: Table 3 has them in 0-RTT and 1-RTT
+  only, and Sec 12.4 makes a frame in a packet that may not carry it a
+  PROTOCOL_VIOLATION.
+  [#134](https://github.com/kazu-yamamoto/quic/pull/134)
+
+* **The default `initial_max_streams_uni` is 10, where it was 3.**  Three
+  is what HTTP/3 needs and no more -- a control stream and the two QPACK
+  streams (RFC 9114 Sec 6.2) -- so a peer given three could open nothing
+  else: no push stream, no stream of a type from an extension, and none
+  of the reserved types it is meant to open now and then so that the
+  types stay extensible.  A client on these defaults could never be
+  pushed to.  Ten leaves room for those without leaving the peer
+  unbounded, since 0.3.9 counts what is open at once and a stream gives
+  its place back when it is closed.
+  [#135](https://github.com/kazu-yamamoto/quic/pull/135)
+
+* Say why a server connection ended.  `runServer` logged the reason to a
+  logger that discards what it is given, so a connection that ended of
+  anything `closure` does not turn into a CONNECTION_CLOSE went without
+  a word to the peer and without a word in the log -- the peer talking
+  on to a connection that is gone until the dispatcher, a second later,
+  answers it with a Stateless Reset.  From the outside that looks like a
+  server that froze.
+  [#138](https://github.com/kazu-yamamoto/quic/pull/138)
+
 ## 0.3.10
 
 Two for the server: one that answered on a stream it should never have
