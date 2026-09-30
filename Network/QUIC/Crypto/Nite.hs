@@ -27,12 +27,15 @@ import Crypto.Error (maybeCryptoError)
 import qualified Data.ByteArray as Byte (ByteArrayAccess (..), convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
-import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, newForeignPtr_, withForeignPtr)
-import Foreign.Marshal.Alloc (mallocBytes)
+import Foreign.ForeignPtr (
+    ForeignPtr,
+    mallocForeignPtrBytes,
+    newForeignPtr_,
+    withForeignPtr,
+ )
 import Foreign.Marshal.Utils (copyBytes)
-import Foreign.Ptr (Ptr, minusPtr, nullPtr, plusPtr)
+import Foreign.Ptr (Ptr, castPtr, minusPtr, nullPtr, plusPtr)
 import Foreign.Storable (peek, poke, pokeByteOff)
-import Foreign.Ptr (castPtr)
 import Network.TLS hiding (Version)
 import qualified Network.TLS as TLS
 import Network.TLS.Extra.Cipher
@@ -278,11 +281,11 @@ chacha20HeaderProtection (Key key) (Sample sample) =
 
 ----------------------------------------------------------------
 
-makeNiteProtector :: Cipher -> Key -> IO (Buffer -> IO (), IO Buffer)
+makeNiteProtector :: Cipher -> Key -> IO (Buffer -> IO (), WithMask)
 makeNiteProtector cipher key = do
     ref <- newIORef nullPtr
-    dstbuf <- mallocBytes 32 -- fixme: free
-    return (niteSetSample ref, niteGetMask ref samplelen mkMask dstbuf)
+    dstfp <- mallocForeignPtrBytes 32
+    return (niteSetSample ref, niteWithMask ref samplelen mkMask dstfp)
   where
     samplelen = 16 -- sampleLength cipher -- fixme
     mkMask = protectionMask cipher key
@@ -290,15 +293,18 @@ makeNiteProtector cipher key = do
 niteSetSample :: IORef Buffer -> Buffer -> IO ()
 niteSetSample = writeIORef
 
-niteGetMask :: IORef Buffer -> Int -> (Sample -> Mask) -> Buffer -> IO Buffer
-niteGetMask ref samplelen mkMask dstbuf = do
+niteWithMask
+    :: IORef Buffer -> Int -> (Sample -> Mask) -> ForeignPtr Word8 -> WithMask
+niteWithMask ref samplelen mkMask dstfp act = do
     srcbuf <- readIORef ref
     sample <- do
         fptr <- newForeignPtr_ srcbuf
         return $ PS fptr 0 samplelen
     let Mask mask = mkMask $ Sample sample
-    _len <- copyBS dstbuf mask
-    return dstbuf
+    withForeignPtr dstfp $ \dstbuf -> do
+        _len <- copyBS dstbuf mask
+        act dstbuf
+    return True
 
 ----------------------------------------------------------------
 
@@ -355,19 +361,21 @@ gcmKeySize cipher
 
 -- | The encryption side, with the mask.  The two extra actions are the
 -- 'Protector' halves: they and the encryption share the buffer the mask is
--- written to and the address the sample is taken from.
+-- written to and the address the sample is taken from.  The buffer is a
+-- 'ForeignPtr' and is held only across the reader handed to 'WithMask', so
+-- the collector frees it with the coder.
 makeGcmEncrypt
     :: Cipher
     -> Key
     -> IV
     -> Key
-    -> IO (Maybe (NiteEncrypt, Buffer -> IO (), IO Buffer))
+    -> IO (Maybe (NiteEncrypt, Buffer -> IO (), WithMask))
 makeGcmEncrypt cipher (Key key) iv (Key hpkey) = case gcmKeySize cipher of
     Nothing -> return Nothing
     Just _ -> case (mctx, mhk) of
         (Just ctx, Just hk) -> do
             ref <- newIORef nullPtr
-            maskBuf <- mallocBytes 16 -- fixme: free
+            maskfp <- mallocForeignPtrBytes 16
             ivfp <- mallocForeignPtrBytes 12
             noncefp <- mallocForeignPtrBytes 12
             let IV ivbs = iv
@@ -379,18 +387,20 @@ makeGcmEncrypt cipher (Key key) iv (Key hpkey) = case gcmKeySize cipher of
                         withForeignPtr ivfp $ \ivp ->
                             writeNonce np ivp (fromIntegral pn)
                     ok <-
-                        GCM.encryptWithMask
-                            ctx
-                            hk
-                            (NoncePtr noncefp)
-                            ad
-                            plaintext
-                            16
-                            off
-                            dst
-                            maskBuf
+                        withForeignPtr maskfp $ \maskBuf ->
+                            GCM.encryptWithMask
+                                ctx
+                                hk
+                                (NoncePtr noncefp)
+                                ad
+                                plaintext
+                                16
+                                off
+                                dst
+                                maskBuf
                     return $ if ok then BS.length plaintext + 16 else -1
-            return $ Just (enc, writeIORef ref, return maskBuf)
+                gcmWithMask act = withForeignPtr maskfp act >> return True
+            return $ Just (enc, writeIORef ref, gcmWithMask)
         _ -> return Nothing
   where
     mctx = maybeCryptoError $ GCM.newContext key

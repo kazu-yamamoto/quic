@@ -154,7 +154,7 @@ initialCoder1RTT =
 
 data Protector = Protector
     { setSample :: Buffer -> IO ()
-    , getMask :: IO Buffer
+    , withMask :: WithMask
     , unprotect :: Sample -> Mask
     }
 
@@ -162,7 +162,7 @@ initialProtector :: Protector
 initialProtector =
     Protector
         { setSample = \_ -> return ()
-        , getMask = return nullPtr
+        , withMask = \_ -> return False
         , unprotect = \_ -> Mask ""
         }
 

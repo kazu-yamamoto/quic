@@ -249,14 +249,15 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     protector <- getProtector conn lvl
     setSample protector sampleBeg
     len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
-    maskBeg <- getMask protector
     --
-    if len < 0 || maskBeg == nullPtr
+    if len < 0
         then return (-1, -1)
         else do
-            -- protecting header
-            protectHeader headerBeg pnBeg epnLen maskBeg
-            return (packetLen, padLen)
+            -- protecting header.  The mask is read where it lives rather
+            -- than handed out, so the buffer holding it can be one the
+            -- garbage collector owns; 'False' is a protector without keys.
+            ok <- withMask protector $ protectHeader headerBeg pnBeg epnLen
+            return $ if ok then (packetLen, padLen) else (-1, -1)
   where
     calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz = do
         let headerLen =
