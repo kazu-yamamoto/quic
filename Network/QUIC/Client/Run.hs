@@ -10,8 +10,8 @@ module Network.QUIC.Client.Run (
 ) where
 
 import Control.Concurrent
-import Control.Concurrent.STM
 import Control.Concurrent.Async
+import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Foreign.C.Types
 import qualified Network.Socket as NS
@@ -112,70 +112,79 @@ runClient conf client0 isICVN verInfo = do
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
     (sock, peersa) <- clientSocket ccServerName ccPortName
-    when ccSockConnected $ NS.connect sock peersa
-    q <- newRecvQ
-    sref <- newIORef sock
-    pathInfo <- newPathInfo peersa
-    piref <- newIORef $ PeerInfo pathInfo Nothing
-    let send buf siz
-            | ccSockConnected = do
-                s <- readIORef sref
-                void $ NS.sendBuf s buf siz
-            | otherwise = do
-                s <- readIORef sref
-                PeerInfo pinfo _ <- readIORef piref
-                void $ NS.sendBufTo s buf siz $ peerSockAddr pinfo
-        recv = recvClient q
-    myCID <- newCID
-    -- Creating peer's CIDDB with the temporary CID.  This is
-    -- overridden by resetPeerCID later since no sequence number is
-    -- assigned to the temporary CID by spec.
-    peerCID <- newCID
-    now <- getTimeMicrosecond
-    (qLog, qclean) <- dirQLogger ccQLog now peerCID "client"
-    let debugLog msg
-            | ccDebugLog = stdoutLogger msg
-            | otherwise = return ()
-    debugLog $ "Original CID: " <> bhow peerCID
-    let myAuthCIDs = defaultAuthCIDs{initSrcCID = Just myCID}
-        peerAuthCIDs = defaultAuthCIDs{initSrcCID = Just peerCID, origDstCID = Just peerCID}
-    genSRT <- makeGenStatelessReset
-    connRecvDatagramQ <- newTQueueIO
-    conn <-
-        clientConnection
-            conf
-            verInfo
-            myAuthCIDs
-            peerAuthCIDs
-            debugLog
-            qLog
-            ccHooks
-            sref
-            piref
-            q
-            connRecvDatagramQ
-            send
-            recv
-            genSRT
-    setSockConnected conn ccSockConnected
-    addResource conn qclean
-    modifytPeerParameters conn ccResumption
-    let ver = chosenVersion verInfo
-    initializeCoder conn InitialLevel $ initialSecrets ver peerCID
-    setupCryptoStreams conn -- fixme: cleanup
-    -- RFC9000 \S14.2
-    -- "In the absence of these mechanisms, QUIC endpoints SHOULD
-    -- NOT send datagrams larger than the smallest allowed maximum
-    -- datagram size."
-    --
-    -- Thus use 1200 bytes for minimum packet size.
-    let pktSiz0 = fromMaybe (defaultPacketSize peersa) ccPacketSize
-        pktSiz = (defaultQUICPacketSize `max` pktSiz0) `min` maximumPacketSize peersa
-    setMaxPacketSize conn pktSiz
-    setInitialCongestionWindow (connLDCC conn) pktSiz
-    setAddressValidated pathInfo
-    let reader = readerClient sock conn -- dies when s0 is closed.
-    return $ ConnRes conn myAuthCIDs reader
+    -- As in 'createServerConnection': this is 'run's bracket acquire, so
+    -- nothing releases what it has taken when it throws.  Here that is a
+    -- socket as well -- 'clse' does not close it, the closer does, and a
+    -- connection that never began has no closer.
+    flip E.onException (NS.close sock) $ do
+        when ccSockConnected $ NS.connect sock peersa
+        q <- newRecvQ
+        sref <- newIORef sock
+        pathInfo <- newPathInfo peersa
+        piref <- newIORef $ PeerInfo pathInfo Nothing
+        let send buf siz
+                | ccSockConnected = do
+                    s <- readIORef sref
+                    void $ NS.sendBuf s buf siz
+                | otherwise = do
+                    s <- readIORef sref
+                    PeerInfo pinfo _ <- readIORef piref
+                    void $ NS.sendBufTo s buf siz $ peerSockAddr pinfo
+            recv = recvClient q
+        myCID <- newCID
+        -- Creating peer's CIDDB with the temporary CID.  This is
+        -- overridden by resetPeerCID later since no sequence number is
+        -- assigned to the temporary CID by spec.
+        peerCID <- newCID
+        now <- getTimeMicrosecond
+        (qLog, qclean) <- dirQLogger ccQLog now peerCID "client"
+        flip E.onException qclean $ do
+            let debugLog msg
+                    | ccDebugLog = stdoutLogger msg
+                    | otherwise = return ()
+            debugLog $ "Original CID: " <> bhow peerCID
+            let myAuthCIDs = defaultAuthCIDs{initSrcCID = Just myCID}
+                peerAuthCIDs = defaultAuthCIDs{initSrcCID = Just peerCID, origDstCID = Just peerCID}
+            genSRT <- makeGenStatelessReset
+            connRecvDatagramQ <- newTQueueIO
+            conn <-
+                clientConnection
+                    conf
+                    verInfo
+                    myAuthCIDs
+                    peerAuthCIDs
+                    debugLog
+                    qLog
+                    ccHooks
+                    sref
+                    piref
+                    q
+                    connRecvDatagramQ
+                    send
+                    recv
+                    genSRT
+            flip E.onException (setDead conn >> freeResources conn) $ do
+                setSockConnected conn ccSockConnected
+                modifytPeerParameters conn ccResumption
+                let ver = chosenVersion verInfo
+                initializeCoder conn InitialLevel $ initialSecrets ver peerCID
+                setupCryptoStreams conn -- fixme: cleanup
+                -- RFC9000 \S14.2
+                -- "In the absence of these mechanisms, QUIC endpoints SHOULD
+                -- NOT send datagrams larger than the smallest allowed maximum
+                -- datagram size."
+                --
+                -- Thus use 1200 bytes for minimum packet size.
+                let pktSiz0 = fromMaybe (defaultPacketSize peersa) ccPacketSize
+                    pktSiz = (defaultQUICPacketSize `max` pktSiz0) `min` maximumPacketSize peersa
+                setMaxPacketSize conn pktSiz
+                setInitialCongestionWindow (connLDCC conn) pktSiz
+                setAddressValidated pathInfo
+                let reader = readerClient sock conn -- dies when s0 is closed.
+                -- Handing the qlog over.  Nothing below can throw, so from here
+                -- 'freeResources' is the only releaser.
+                addResource conn qclean
+                return $ ConnRes conn myAuthCIDs reader
 
 -- | Creating a new socket and execute a path validation
 --   with a new connection ID. Typically, this is used

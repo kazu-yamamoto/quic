@@ -5,6 +5,7 @@ module Network.QUIC.QLogger (
     dirQLogger,
 ) where
 
+import qualified Control.Exception as E
 import qualified Data.ByteString.Char8 as C8
 import System.FilePath
 import System.Log.FastLogger
@@ -30,5 +31,5 @@ dirQLogger Nothing _ _ _ = do
 dirQLogger (Just dir) tim cid rl = do
     let file = dir </> (show cid <> "-" <> C8.unpack rl <> ".qlog")
     (fastlogger, clean) <- newFastLogger1 $ LogFileNoRotate file 4096
-    qlogger <- newQlogger tim rl cid fastlogger
+    qlogger <- newQlogger tim rl cid fastlogger `E.onException` clean
     return (qlogger, clean)

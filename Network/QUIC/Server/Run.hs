@@ -211,65 +211,78 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs
         ocid = fromJust $ origDstCID accMyAuthCIDs
+    -- Nothing here is under 'runServer's bracket: that bracket's acquire is
+    -- this function, so whatever it has taken when it throws is released by
+    -- nobody.  It was taking two log files, three 2048-byte buffers and a
+    -- registration in the dispatcher, and a connection setup does fail --
+    -- 'dirQLogger' says how, and that is what it was doing in the field.
+    --
+    -- One releaser is in force at a time.  The logs stay this function's own
+    -- until the end and are handed to the connection only once nothing is
+    -- left that can throw, so 'freeResources' and the handlers here never
+    -- both close the same thing.
     (qLog, qclean) <- dirQLogger scQLog accTime ocid "server"
-    (debugLog, dclean) <- dirDebugLogger scDebugLog ocid
-    debugLog $ "Original CID: " <> bhow ocid
-    connRecvDatagramQ <- newTQueueIO
-    conn <-
-        serverConnection
-            conf
-            accVersionInfo
-            accMyAuthCIDs
-            accPeerAuthCIDs
-            debugLog
-            qLog
-            scHooks
-            sref
-            piref
-            accRecvQ
-            connRecvDatagramQ
-            send
-            recv
-            (genStatelessReset dispatch)
-    addResource conn qclean
-    addResource conn dclean
-    let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
-        ver = chosenVersion accVersionInfo
-    initializeCoder conn InitialLevel $ initialSecrets ver cid
-    setupCryptoStreams conn -- fixme: cleanup
-    let peersa = accPeerSockAddr
-        -- RFC9000 \S14.2
-        -- "In the absence of these mechanisms, QUIC endpoints SHOULD
-        -- NOT send datagrams larger than the smallest allowed maximum
-        -- datagram size."
-        --
-        -- Thus use 1200 bytes for minimum packet size.
-        pktSiz =
-            (defaultQUICPacketSize `max` accPacketSize)
-                `min` maximumPacketSize peersa
-    setMaxPacketSize conn pktSiz
-    setInitialCongestionWindow (connLDCC conn) pktSiz
-    debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"
-    when accAddressValidated $ setAddressValidated pathInfo
-    --
-    let retried = isJust $ retrySrcCID accMyAuthCIDs
-    when retried $ do
-        qlogRecvInitial conn
-        qlogSentRetry conn
-    --
-    let mgr = tokenMgr dispatch
-    setTokenManager conn mgr
-    --
-    setStopServer conn $ atomically $ writeTVar stvar Stopped
-    --
-    setRegister conn accRegister accUnregister
-    accRegister myCID conn
-    addResource conn $ do
-        myCIDs <- getMyCIDs conn
-        mapM_ accUnregister myCIDs
-
-    --
-    return $ ConnRes conn accMyAuthCIDs undefined
+    (debugLog, dclean) <- dirDebugLogger scDebugLog ocid `E.onException` qclean
+    flip E.onException (dclean >> qclean) $ do
+        debugLog $ "Original CID: " <> bhow ocid
+        connRecvDatagramQ <- newTQueueIO
+        conn <-
+            serverConnection
+                conf
+                accVersionInfo
+                accMyAuthCIDs
+                accPeerAuthCIDs
+                debugLog
+                qLog
+                scHooks
+                sref
+                piref
+                accRecvQ
+                connRecvDatagramQ
+                send
+                recv
+                (genStatelessReset dispatch)
+        flip E.onException (setDead conn >> freeResources conn) $ do
+            let cid = fromMaybe ocid $ retrySrcCID accMyAuthCIDs
+                ver = chosenVersion accVersionInfo
+            initializeCoder conn InitialLevel $ initialSecrets ver cid
+            setupCryptoStreams conn -- fixme: cleanup
+            let peersa = accPeerSockAddr
+                -- RFC9000 \S14.2
+                -- "In the absence of these mechanisms, QUIC endpoints SHOULD
+                -- NOT send datagrams larger than the smallest allowed maximum
+                -- datagram size."
+                --
+                -- Thus use 1200 bytes for minimum packet size.
+                pktSiz =
+                    (defaultQUICPacketSize `max` accPacketSize)
+                        `min` maximumPacketSize peersa
+            setMaxPacketSize conn pktSiz
+            setInitialCongestionWindow (connLDCC conn) pktSiz
+            debugLog $ "Packet size: " <> bhow pktSiz <> " (" <> bhow accPacketSize <> ")"
+            when accAddressValidated $ setAddressValidated pathInfo
+            --
+            let retried = isJust $ retrySrcCID accMyAuthCIDs
+            when retried $ do
+                qlogRecvInitial conn
+                qlogSentRetry conn
+            --
+            let mgr = tokenMgr dispatch
+            setTokenManager conn mgr
+            --
+            setStopServer conn $ atomically $ writeTVar stvar Stopped
+            --
+            setRegister conn accRegister accUnregister
+            accRegister myCID conn
+            addResource conn $ do
+                myCIDs <- getMyCIDs conn
+                mapM_ accUnregister myCIDs
+            -- Handing the logs over.  Nothing below can throw, so from here
+            -- 'freeResources' is the only releaser and the handlers above
+            -- have nothing left to free.
+            addResource conn qclean
+            addResource conn dclean
+            return $ ConnRes conn accMyAuthCIDs undefined
 
 afterHandshakeServer :: ServerConfig -> Connection -> IO ()
 afterHandshakeServer ServerConfig{..} conn = handleLogT logAction $ do

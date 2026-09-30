@@ -239,6 +239,7 @@ test-suite spec
         QLoggerSpec
         RecoverySpec
         ResetSpec
+        SetupSpec
         TLSSpec
         TokenSpec
         TransportError
