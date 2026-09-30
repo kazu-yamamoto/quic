@@ -1,5 +1,41 @@
 # ChangeLog
 
+## 0.3.10
+
+Two for the server: one that answered on a stream it should never have
+been given, and one that made a lost flight cost seconds.
+
+* Hand the application a stream only once its first frame is read.
+  `openStream` created the stream and gave it to the application in one
+  step, before the frame that opened it had been looked over, so a first
+  STREAM frame past the flow control limit was answered by the
+  application in the moment before the connection was closed over it.
+  An HTTP/3 server sent a response on a stream the peer had never
+  opened, and the peer called that a STREAM_STATE_ERROR, as RFC 9000 Sec
+  19.8 says to, before the FLOW_CONTROL_ERROR arrived; h3spec's "MUST
+  send FLOW_CONTROL_ERROR if a STREAM frame with a large offset is
+  received" failed for that reason.  The stream now reaches the
+  application after the frame has been checked, so a frame that closes
+  the connection closes it with the application none the wiser.
+  [#131](https://github.com/kazu-yamamoto/quic/pull/131)
+
+* Keep the Initial keys of the version the client addressed us in.  A
+  server that settles on a compatible version answers in it and replaces
+  its Initial keys with the ones for that version (RFC 9368), but the
+  client hears of the choice only when the answer arrives and until then
+  retransmits in the version it started with.  Without the keys for that
+  version the server could not pick the handshake up from those and
+  waited out its own PTO instead -- a second, then two, then four, with
+  the client's retransmissions falling into it unread.  On the test that
+  loses the server's whole first flight, the handshake is done at about
+  1.4 seconds where it took about 7.0.  This is the other half of #128,
+  which stopped the same sequence from hanging for good; what was left
+  was the waiting.
+  [#132](https://github.com/kazu-yamamoto/quic/pull/132)
+
+* The library builds without a warning: two imports left over from the
+  crypton 2.1.0 work are gone.
+
 ## 0.3.9
 
 A stream limit the peer could walk past, two ways for a connection to
