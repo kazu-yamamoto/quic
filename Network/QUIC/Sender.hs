@@ -485,6 +485,16 @@ threshold = 832
 limitation :: Int
 limitation = 1040
 
+-- | Upper bound on what a stream frame takes on top of its data
+streamFrameMaxOverhead :: Int
+streamFrameMaxOverhead
+    = sum
+    [ 1 -- type
+    , 8 -- stream ID
+    , 8 -- offset
+    , 2 -- length
+    ]
+
 packFin :: Connection -> Stream -> Bool -> IO Bool
 packFin _ _ True = return True
 packFin conn s False = do
@@ -509,7 +519,7 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
     let sid0 = streamId s0
         frame0 = StreamF sid0 off0 dats0 fin0
         sb = if fin0 then (s0 :) else id
-    (frames, streams) <- loop s0 frame0 len0 id sb
+    (frames, streams) <- loop s0 frame0 (len0 + streamFrameMaxOverhead) id sb
     ready <- isConnection1RTTReady conn
     let lvl
             | ready = RTT1Level
@@ -536,7 +546,12 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
         case mx of
             Nothing -> return (build [frame], sb [])
             Just (TxStreamData s1 dats1 len1 fin1) -> do
-                let total1 = len1 + total
+                -- Entries of the same stream are merged into one frame,
+                -- any other stream needs a frame of its own.
+                let cost
+                        | streamId s1 == streamId s = len1
+                        | otherwise = len1 + streamFrameMaxOverhead
+                    total1 = cost + total
                 if total1 < limitation
                     then do
                         _ <- takeSendStreamQ conn -- cf tryPeek
