@@ -1,5 +1,80 @@
 # ChangeLog
 
+## 0.3.12
+
+A server that looked frozen, a Stateless Reset half the peers threw away,
+two windows that leaked, and the AEAD limits.
+
+* Tell the peer before waiting for the application.  The protocol threads
+  and the application run under one `concurrently_`; when the protocol
+  threads failed it cancelled the application and then waited for it,
+  under `uninterruptibleMask_`, for as long as it took to unwind, and the
+  CONNECTION_CLOSE waited with it.  A peer told nothing waits out its own
+  idle timeout, so from the outside the server had frozen at the
+  handshake.  Seen against mighty, where a transport error the server
+  raised correctly never reached the client at all; it is said between
+  the two now, which is the one place it can be said.
+  [#141](https://github.com/kazu-yamamoto/quic/pull/141)
+
+* Set the bit RFC 9000 fixes in a Stateless Reset.  Sec 10.3 fixes the
+  first two bits at 01; the first byte was a random seven bits, so the
+  QUIC Bit was clear in half of them.  A peer that has not asked for that
+  bit to be greased (RFC 9287) drops such a packet before anything looks
+  for a token in it -- and a Stateless Reset answers a packet we have no
+  connection for, so whether the peer asked is exactly what we cannot
+  know.  Half went unheard, and the peer went on talking to a connection
+  that was gone until its idle timeout.
+  [#137](https://github.com/kazu-yamamoto/quic/pull/137)
+
+* Tell the peer when a connection ends of something in here.  `closure`
+  turned four exceptions into a CONNECTION_CLOSE and rethrew the rest, so
+  a connection that ended of anything else -- the application throwing,
+  StreamIsClosed, an IOException -- ended in silence.  Those now end with
+  an INTERNAL_ERROR.  An idle timeout, a peer that has already closed,
+  and an asynchronous exception stay silent, as RFC 9000 Sec 10.1 and
+  10.2 have them.
+  [#140](https://github.com/kazu-yamamoto/quic/pull/140)
+
+* Count what the application never reads against the connection's window.
+  It moved in `recvStream` and nowhere else, so octets an application
+  left behind were counted as received and never as consumed, and the
+  window we advertise stayed that much smaller for the rest of the
+  connection.  A server answering a request without reading its body is
+  the ordinary case, and it paid for that body until the connection
+  ended.
+  [#142](https://github.com/kazu-yamamoto/quic/pull/142)
+
+* The AEAD limits of RFC 9001 Sec 6.6, neither of which was kept.
+  AEAD_LIMIT_REACHED was in the error table and nothing raised it.
+  Packets that fail authentication are counted now, across all keys, and
+  the connection closes past the integrity limit -- 2^52 for the AES-GCM
+  ciphers, 2^36 for ChaCha20-Poly1305.  Packets each key protects are
+  counted too, and the connection closes past the confidentiality limit,
+  2^23 under the AES-GCM ciphers.  **Starting a key update instead of
+  closing is the better answer to the second and is not here**: the key
+  state holds one phase and the packet number the peer changed it at,
+  which is what the responding side needs and not what an initiating one
+  does.
+  [#145](https://github.com/kazu-yamamoto/quic/pull/145),
+  [#147](https://github.com/kazu-yamamoto/quic/pull/147)
+
+* Refuse a RETIRE_CONNECTION_ID we never issued.  RFC 9000 Sec 19.16
+  makes a sequence number greater than any we have sent a
+  PROTOCOL_VIOLATION; ours looked it up, found nothing and went on.  One
+  we did send and have already retired stays ignored, since the frame may
+  simply have been sent twice.
+  [#144](https://github.com/kazu-yamamoto/quic/pull/144)
+
+* Say which thread ended a server connection.  Six run under nested
+  `concurrently_`, which cancels the rest as soon as one fails; only the
+  sender and the receiver said why they ended, so a failure in one of the
+  other four left a log of two cancelled threads and no reason anywhere.
+  That is what made the frozen server above so hard to find.  The other
+  half of it -- `runServer` discarding every message handed to its
+  `debugLog` -- went out in 0.3.11 unmentioned.
+  [#138](https://github.com/kazu-yamamoto/quic/pull/138),
+  [#139](https://github.com/kazu-yamamoto/quic/pull/139)
+
 ## 0.3.11
 
 A security fix, two things RFC 9000 asks of a receiver that were not
