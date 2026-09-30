@@ -1,11 +1,20 @@
+{-# LANGUAGE CPP #-}
+
 module Network.QUIC.Packet.Encode (
     --    encodePacket
     encodeVersionNegotiationPacket,
     encodeRetryPacket,
     encodePlainPacket,
+    makeStatelessReset,
 ) where
 
 import qualified Data.ByteString as BS
+import System.Random (getStdRandom, randomRIO)
+#if MIN_VERSION_random(1,3,0)
+import System.Random (uniformByteString)
+#else
+import System.Random (genByteString)
+#endif
 import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable (peek)
@@ -309,3 +318,29 @@ mkBS :: Buffer -> Int -> IO ByteString
 mkBS ptr siz = do
     fptr <- newForeignPtr_ ptr
     return $ PS fptr 0 siz
+
+----------------------------------------------------------------
+
+-- | A Stateless Reset carrying the given token: 1280 octets, of which the
+--   last sixteen are the token and the rest is noise.
+--
+-- RFC 9000 Sec 10.3 fixes the first two bits at 01 -- header form 0 and the
+-- QUIC Bit set -- so that it cannot be told from an ordinary short header
+-- packet.  They used to be one random bit and one fixed at 0, so the QUIC Bit
+-- was clear in half of them, and a peer that has not asked for that bit to be
+-- greased (RFC 9287) discards such a packet before anything looks for a token
+-- in it.  We are answering a packet we have no connection for, so whether the
+-- peer asked is exactly what we cannot know.
+--
+-- 1280 octets is under three times the 428 the caller insists on having
+-- received, which is what Sec 10.3 allows to be sent in answer.
+makeStatelessReset :: StatelessResetToken -> IO ByteString
+makeStatelessReset srt = do
+    r <- randomRIO (0, 255)
+    let flag = 0x40 .|. (r .&. 0x3f)
+#if MIN_VERSION_random(1,3,0)
+    body <- getStdRandom $ uniformByteString 1263
+#else
+    body <- getStdRandom $ genByteString 1263
+#endif
+    return $ BS.concat [BS.singleton flag, body, fromStatelessResetToken srt]
