@@ -326,6 +326,8 @@ data Connection = Connection
     -- ^ Whether the peer has been told the connection is over
     , connAuthFailures  :: IORef Int
     -- ^ Packets that have failed authentication, over the whole connection
+    , connKeyPackets    :: IORef Int
+    -- ^ Packets the 1-RTT key in use has protected
     , -- Recovery
       connLDCC          :: LDCC
     }
@@ -430,6 +432,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connResources     <- newIORef (free encodeBuf >> free encryptBuf >> free decryptBuf)
     connCloseSent     <- newIORef False
     connAuthFailures  <- newIORef 0
+    connKeyPackets    <- newIORef 0
     -- Recovery
     let put x = atomically $ writeTQueue outputQ $ OutRetrans x
     connLDCC          <- newLDCC connState connQLog put

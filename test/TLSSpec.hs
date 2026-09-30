@@ -25,6 +25,19 @@ instance Eq (ServerTrafficSecret a) where
 
 spec :: Spec
 spec = do
+    describe "the AEAD confidentiality limit" $ do
+        -- RFC 9001 Sec 6.6 again: past this many packets under one key the
+        -- AEAD is no longer trusted to keep what it has protected secret.
+        it "is 2^23 for the AES-GCM ciphers" $ do
+            confidentialityLimit cipher13_AES_128_GCM_SHA256 `shouldBe` 2 ^ (23 :: Int)
+            confidentialityLimit cipher13_AES_256_GCM_SHA384 `shouldBe` 2 ^ (23 :: Int)
+        it "is past counting for ChaCha20-Poly1305" $
+            -- "greater than the number of possible packets (2^62) and so can
+            -- be disregarded"
+            confidentialityLimit cipher13_CHACHA20_POLY1305_SHA256
+                `shouldBe` 2 ^ (62 :: Int)
+        it "is the smaller for an AEAD we do not know" $
+            confidentialityLimit cipher13_AES_128_CCM_SHA256 `shouldBe` 2 ^ (23 :: Int)
     describe "the AEAD integrity limit" $ do
         -- RFC 9001 Sec 6.6 gives these, and the whole of the rule is in
         -- them: past this many packets that fail authentication the AEAD is

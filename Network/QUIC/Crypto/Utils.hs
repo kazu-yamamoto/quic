@@ -4,6 +4,7 @@ module Network.QUIC.Crypto.Utils (
     tagLength,
     sampleLength,
     integrityLimit,
+    confidentialityLimit,
     bsXOR,
     calculateIntegrityTag,
 ) where
@@ -80,3 +81,20 @@ integrityLimit cipher
     | cipher == cipher13_AES_128_GCM_SHA256 = 2 ^ (52 :: Int)
     | cipher == cipher13_AES_256_GCM_SHA384 = 2 ^ (52 :: Int)
     | otherwise = 2 ^ (36 :: Int)
+
+-- | How many packets one key may protect before the AEAD is no longer
+--   trusted to keep what it has protected secret.
+--
+-- RFC 9001 Sec 6.6: "Endpoints MUST count the number of encrypted packets for
+-- each set of keys.  If the total number of encrypted packets with the same
+-- key exceeds the confidentiality limit for the selected AEAD, the endpoint
+-- MUST stop using those keys."
+--
+-- The same section gives 2^23 for the AES-GCM ciphers, and for
+-- ChaCha20-Poly1305 a number "greater than the number of possible packets
+-- (2^62) and so can be disregarded".  An AEAD we do not know gets the
+-- smaller, which is the safe way to be wrong.
+confidentialityLimit :: Cipher -> Int
+confidentialityLimit cipher
+    | cipher == cipher13_CHACHA20_POLY1305_SHA256 = 2 ^ (62 :: Int)
+    | otherwise = 2 ^ (23 :: Int)
