@@ -395,7 +395,8 @@ dispatch
         isRetryTokenValid _ = return False
         sendRetry = do
             newdCID <- newCID
-            retryToken <- generateRetryToken peerVer scTicketLifetime newdCID sCID dCID peersa
+            retryToken <-
+                generateRetryToken peerVer scTicketLifetime newdCID sCID dCID peersa
             mnewtoken <-
                 timeout (Microseconds 100000) "sendRetry" $ encryptToken tokenMgr retryToken
             case mnewtoken of
@@ -441,14 +442,7 @@ dispatch
                     srRate <- getRate statelessResetRate
                     -- fixme: hard coding
                     when (srRate < statelessResetLimit) $ do
-                        flag <- randomRIO (0, 127)
-#if MIN_VERSION_random(1,3,0)
-                        body <- getStdRandom $ uniformByteString 1263
-#else
-                        body <- getStdRandom $ genByteString 1263
-#endif
-                        let srt = genStatelessReset dCID
-                            statelessReset = BS.concat [BS.singleton flag, body, fromStatelessResetToken srt]
+                        statelessReset <- makeStatelessReset $ genStatelessReset dCID
                         send' statelessReset
                         logAction $ "Stateless reset is sent to " <> bhow peersa
             Just conn -> do

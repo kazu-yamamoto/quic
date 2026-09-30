@@ -3,6 +3,7 @@ module Network.QUIC.Packet (
     encodeVersionNegotiationPacket,
     encodeRetryPacket,
     encodePlainPacket,
+    makeStatelessReset,
 
     -- * Decode
     decodePacket,
