@@ -79,39 +79,46 @@ closure'' conn ldcc frame = do
     connected <- getSockConnected conn
     -- send
     let bufsiz = maximumUdpPayloadSize
+    -- Both buffers are taken before anything that can throw, and one action
+    -- frees them.  They used to be taken either side of 'encodeCC' and
+    -- 'killReaders' with nothing to free them if those threw, and this runs
+    -- on the way out of every connection.
     sendbuf <- mallocBytes bufsiz
-    -- This must be called before freeResourcesin runClient.
-    siz <- encodeCC conn sendbuf bufsiz frame
-    let send
-            | connected = void $ NS.sendBuf sock sendbuf siz
-            | otherwise = void $ NS.sendBufTo sock sendbuf siz peersa
-    -- recv and clos
-    killReaders conn -- client only
-    (recv, freeRecvBuf, clos) <-
+    mrecvbuf <-
         if isServer conn
-            then return (void $ connRecv conn, free sendbuf, return ())
-            else do
-                recvbuf <- mallocBytes bufsiz
-                let recv'
-                        | connected = void $ NS.recvBuf sock recvbuf bufsiz
-                        | otherwise = do
-                            (_, sa) <- NS.recvBufFrom sock recvbuf bufsiz
-                            when (sa /= peersa) recv'
-                    free' = free recvbuf >> free sendbuf
-                    clos' = do
-                        NS.close sock
-                        -- This is just in case.
-                        getSocket conn >>= NS.close
-                return (recv', free', clos')
-    -- hook
-    let hook = onCloseCompleted $ connHooks conn
-    pto <- getPTO ldcc
-    void $ forkFinally (closer conn pto send recv hook) $ \e -> do
-        case e of
-            Left e' -> connDebugLog conn $ "closure' " <> bhow e'
-            Right _ -> return ()
-        freeRecvBuf
-        clos
+            then return Nothing
+            else Just <$> mallocBytes bufsiz `E.onException` free sendbuf
+    let freeBufs = free sendbuf >> mapM_ free mrecvbuf
+    flip E.onException freeBufs $ do
+        -- This must be called before freeResourcesin runClient.
+        siz <- encodeCC conn sendbuf bufsiz frame
+        let send
+                | connected = void $ NS.sendBuf sock sendbuf siz
+                | otherwise = void $ NS.sendBufTo sock sendbuf siz peersa
+        -- recv and clos
+        killReaders conn -- client only
+        let (recv, clos) = case mrecvbuf of
+                Nothing -> (void $ connRecv conn, return ())
+                Just recvbuf ->
+                    let recv'
+                            | connected = void $ NS.recvBuf sock recvbuf bufsiz
+                            | otherwise = do
+                                (_, sa) <- NS.recvBufFrom sock recvbuf bufsiz
+                                when (sa /= peersa) recv'
+                        clos' = do
+                            NS.close sock
+                            -- This is just in case.
+                            getSocket conn >>= NS.close
+                     in (recv', clos')
+        -- hook
+        let hook = onCloseCompleted $ connHooks conn
+        pto <- getPTO ldcc
+        void $ forkFinally (closer conn pto send recv hook) $ \e -> do
+            case e of
+                Left e' -> connDebugLog conn $ "closure' " <> bhow e'
+                Right _ -> return ()
+            freeBufs
+            clos
 
 encodeCC :: Connection -> Buffer -> BufferSize -> Frame -> IO Int
 encodeCC conn sendbuf0 bufsiz0 frame = do
