@@ -17,6 +17,7 @@ module Network.QUIC.Stream.Misc (
     noteRxFinalSize,
     addRxCounted,
     takeRxUncounted,
+    takeRxUnread,
     --
     readStreamFlowTx,
     addTxStreamData,
@@ -194,5 +195,28 @@ takeRxUncounted Stream{..} = atomicModifyIORef' streamRxBounds take'
   where
     take' b@RxBounds{..} = case rxFinal of
         Just f
-            | f > rxCounted -> (b{rxCounted = f}, f - rxCounted)
+            | f > rxCounted ->
+                (b{rxCounted = f, rxCredited = rxCredited + f - rxCounted}, f - rxCounted)
         _ -> (b, 0)
+
+-- | The octets of the stream the connection's flow controller has counted
+--   and the application will never read.
+--
+-- What it read it has already counted itself, in 'recvStream'.  What it
+-- leaves -- a request whose body a server answers without reading, say --
+-- was counted as received and is never counted as consumed, so the window we
+-- advertise stays that much smaller for the rest of the connection.  The peer
+-- is then blocked by octets nobody is waiting for.
+--
+-- Answered once for each octet: what is answered here is counted as
+-- credited.
+takeRxUnread :: Stream -> IO Int
+takeRxUnread Stream{..} = do
+    consumed <- rxfConsumed <$> readIORef streamFlowRx
+    atomicModifyIORef' streamRxBounds $ take' consumed
+  where
+    take' consumed b@RxBounds{..}
+        | owed > 0 = (b{rxCredited = rxCredited + owed}, owed)
+        | otherwise = (b, 0)
+      where
+        owed = rxCounted - consumed - rxCredited
