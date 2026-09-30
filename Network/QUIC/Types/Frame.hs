@@ -71,9 +71,6 @@ isClientInitiated sid = (0b1 .&. sid) == 0
 isServerInitiated :: StreamId -> Bool
 isServerInitiated sid = (0b1 .&. sid) == 1
 
-isBidirectional :: StreamId -> Bool
-isBidirectional sid = (0b10 .&. sid) == 0
-
 isUnidirectional :: StreamId -> Bool
 isUnidirectional sid = (0b10 .&. sid) == 2
 
@@ -95,11 +92,6 @@ ackEliciting Ack{}                = False
 ackEliciting ConnectionClose{}    = False
 ackEliciting ConnectionCloseApp{} = False
 ackEliciting _                    = True
-
-pathValidating :: Frame -> Bool
-pathValidating PathChallenge{} = True
-pathValidating PathResponse{}  = True
-pathValidating _               = False
 
 inFlight :: Frame -> Bool
 inFlight Ack{}                = False
