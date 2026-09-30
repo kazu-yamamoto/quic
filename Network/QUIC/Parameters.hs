@@ -339,7 +339,7 @@ decodeParameterList bs =
 -- | An example parameters obsoleted in the near future.
 --
 -- >>> defaultParameters
--- Parameters {originalDestinationConnectionId = Nothing, maxIdleTimeout = 30000, statelessResetToken = Nothing, maxUdpPayloadSize = 2048, initialMaxData = 16777216, initialMaxStreamDataBidiLocal = 262144, initialMaxStreamDataBidiRemote = 262144, initialMaxStreamDataUni = 262144, initialMaxStreamsBidi = 64, initialMaxStreamsUni = 3, ackDelayExponent = 3, maxAckDelay = 25, disableActiveMigration = False, preferredAddress = Nothing, activeConnectionIdLimit = 5, initialSourceConnectionId = Nothing, retrySourceConnectionId = Nothing, grease = Nothing, greaseQuicBit = True, versionInformation = Nothing, maxDatagramFrameSize = 0}
+-- Parameters {originalDestinationConnectionId = Nothing, maxIdleTimeout = 30000, statelessResetToken = Nothing, maxUdpPayloadSize = 2048, initialMaxData = 16777216, initialMaxStreamDataBidiLocal = 262144, initialMaxStreamDataBidiRemote = 262144, initialMaxStreamDataUni = 262144, initialMaxStreamsBidi = 64, initialMaxStreamsUni = 10, ackDelayExponent = 3, maxAckDelay = 25, disableActiveMigration = False, preferredAddress = Nothing, activeConnectionIdLimit = 5, initialSourceConnectionId = Nothing, retrySourceConnectionId = Nothing, grease = Nothing, greaseQuicBit = True, versionInformation = Nothing, maxDatagramFrameSize = 0}
 defaultParameters :: Parameters
 defaultParameters =
     baseParameters
@@ -350,7 +350,7 @@ defaultParameters =
         , initialMaxStreamDataBidiRemote = defaultMaxStreamData -- 256K
         , initialMaxStreamDataUni = defaultMaxStreamData -- 256K
         , initialMaxStreamsBidi = defaultMaxStreams -- 64
-        , initialMaxStreamsUni = 3
+        , initialMaxStreamsUni = defaultMaxStreamsUni -- 10
         , activeConnectionIdLimit = 5
         , greaseQuicBit = True
         , maxDatagramFrameSize = 0
