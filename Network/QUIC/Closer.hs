@@ -82,7 +82,16 @@ closure'' conn ldcc frame = do
     sendbuf <- mallocBytes bufsiz
     -- This must be called before freeResourcesin runClient.
     siz <- encodeCC conn sendbuf bufsiz frame
+    -- Nothing came out, so there is nothing to send.  'encodeCC' answers 0
+    -- when the keys for the level it chose are gone, and it says so only by
+    -- way of the qlog line it does not write; what went out was an empty
+    -- datagram, which tells the peer nothing and leaves no trace either.
+    when (siz <= 0) $ do
+        lvl <- getEncryptionLevel conn
+        connDebugLog conn $
+            "closure: no CONNECTION_CLOSE to send at " <> bhow lvl <> "; the keys are gone"
     let send
+            | siz <= 0 = return ()
             | connected = void $ NS.sendBuf sock sendbuf siz
             | otherwise = void $ NS.sendBufTo sock sendbuf siz peersa
     -- recv and clos
