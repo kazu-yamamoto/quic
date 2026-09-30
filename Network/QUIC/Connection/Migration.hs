@@ -15,6 +15,7 @@ module Network.QUIC.Connection.Migration (
     setPeerCIDAndRetireCIDs,
     retirePeerCID,
     retireMyCID,
+    isMyCIDSeqNumIssued,
     addPeerCID,
     waitPeerCID,
     choosePeerCIDForPrivacy,
@@ -220,6 +221,17 @@ setMyCID conn@Connection{..} ncid = do
                 Just ncidinfo -> (set ncidinfo False db, True)
 
 -- | Receiving RetireConnectionID
+-- | Whether the sequence number is one we have given the peer.
+--
+-- RFC 9000 Sec 19.16: "Receipt of a RETIRE_CONNECTION_ID frame containing a
+-- sequence number greater than any previously sent to the peer MUST be
+-- treated as a connection error of type PROTOCOL_VIOLATION."  One we have
+-- given and already retired is not that -- the frame may simply have been
+-- sent twice -- so it is the ones past everything we have given that are
+-- refused.
+isMyCIDSeqNumIssued :: Connection -> Int -> IO Bool
+isMyCIDSeqNumIssued Connection{..} n = (n <) . nextSeqNum <$> readIORef myCIDDB
+
 retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
 retireMyCID Connection{..} n = atomicModifyIORef' myCIDDB $ del' n
 

@@ -591,6 +591,14 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
                 when ng $
                     closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
 processFrame conn RTT1Level (RetireConnectionID sn) = do
+    -- RFC 9000 Sec 19.16: "Receipt of a RETIRE_CONNECTION_ID frame
+    -- containing a sequence number greater than any previously sent to the
+    -- peer MUST be treated as a connection error of type
+    -- PROTOCOL_VIOLATION."  One we have sent and already retired is not
+    -- that, and is ignored below.
+    issued <- isMyCIDSeqNumIssued conn sn
+    unless issued $
+        closeConnection conn ProtocolViolation "RETIRE_CONNECTION_ID never issued"
     -- FIXME: CID is necessary here
     -- The sequence number specified in a RETIRE_CONNECTION_ID frame
     -- MUST NOT refer to the Destination Connection ID field of the
