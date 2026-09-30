@@ -24,7 +24,6 @@ import qualified Crypto.Cipher.ChaCha as ChaCha
 import Crypto.Cipher.ChaChaPoly1305 (aeadChacha20poly1305Init)
 import Crypto.Cipher.Types hiding (Cipher, IV)
 import Crypto.Error (maybeCryptoError)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import qualified Data.ByteArray as Byte (ByteArrayAccess (..), convert)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS

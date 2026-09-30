@@ -62,8 +62,8 @@ setTxUniMaxStreams Connection{..} = set myUniStreamId
 --
 -- A MAX_STREAMS that does not raise it is ignored (RFC 9000, section 4.6).
 -- One of them reordered on the way, or retransmitted after a newer one has
--- gone out, would otherwise lower the limit.  'setTxMaxData' and
--- 'setTxMaxStreamData' guard the limits on data the same way.
+-- gone out, would otherwise lower the limit.  @setTxMaxData@ and
+-- @setTxMaxStreamData@ guard the limits on data the same way.
 set :: TVar Concurrency -> Int -> IO ()
 set tvar mx = atomically $ modifyTVar' tvar raise
   where

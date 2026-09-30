@@ -11,7 +11,6 @@ import qualified Data.ByteArray as Byte (xor)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Network.TLS hiding (Version)
-import Network.TLS.Extra.Cipher
 
 import Network.QUIC.Crypto.Nite
 import Network.QUIC.Crypto.Types
