@@ -348,8 +348,8 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
             -- by the tail of every stream it resets, until it has none left.
             unarrived <- takeRxUncounted strm
             when (unarrived > 0) $ do
-                ok <- checkRxMaxData conn unarrived
-                unless ok $
+                ok' <- checkRxMaxData conn unarrived
+                unless ok' $
                     closeConnection conn FlowControlError "Flow control error for connection"
                 mx <- updateFlowRx conn unarrived
                 forM_ mx $ \newMax -> do
