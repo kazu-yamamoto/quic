@@ -15,7 +15,7 @@
 -- hung every CI job on the former.
 module SetupSpec where
 
-import Control.Concurrent (threadDelay)
+import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
 import System.Directory
@@ -42,10 +42,18 @@ spec = do
                 let qdir = dir </> "qlog"
                 createDirectory qdir
                 sc0 <- makeTestServerConfig
+                -- Waiting for the port to be bound.  Without this the
+                -- client can start first, hear nothing, and give up on its
+                -- idle timeout having never made the server open a qlog at
+                -- all: the directory is then empty and the test fails
+                -- saying so rather than saying anything about handles.  One
+                -- run in five on a busy machine.
+                ready <- newEmptyMVar
                 let sc =
                         sc0
                             { scQLog = Just qdir
                             , scDebugLog = Just (dir </> "not-a-directory")
+                            , scHooks = (scHooks sc0){onServerReady = putMVar ready ()}
                             }
                     cc =
                         testClientConfig
@@ -54,7 +62,8 @@ spec = do
                                     { maxIdleTimeout = Milliseconds 1000
                                     }
                             }
-                withAsync (run sc $ \_ -> return ()) $ \_ ->
+                withAsync (run sc $ \_ -> return ()) $ \_ -> do
+                    takeMVar ready
                     C.run cc (\_ -> return ())
                         `shouldThrow` (\(_ :: QUICException) -> True)
                 -- If the handle is still open, GHC's own lock on the file
