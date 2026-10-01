@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module HandshakeSpec where
 
@@ -46,7 +47,9 @@ spec = do
         it "can request and accept a client certificate" $ do
             let TLS.Credentials credentials = scCredentials sc0
             credential <- case credentials of
-                [] -> expectationFailure "test server has no credentials" >> fail "missing credentials"
+                [] ->
+                    expectationFailure "test server has no credentials"
+                        >> fail "missing credentials"
                 cred : _ -> pure cred
             let clientHooks =
                     (ccTlsHooks testClientConfig)
@@ -80,6 +83,21 @@ spec = do
             let cc = testClientConfig
                 sc = sc0{scUse0RTT = True}
             testHandshake2 cc sc waitS (FullHandshake, RTT0) True
+        it "keeps 0-RTT within the limits the previous connection gave" $ do
+            let cc = testClientConfig
+                sc =
+                    sc0
+                        { scUse0RTT = True
+                        , scParameters =
+                            (scParameters sc0)
+                                { initialMaxData = limit
+                                , initialMaxStreamDataBidiRemote = limit
+                                }
+                        }
+            test0RTTFlowControl cc sc waitS
+        it "sends 0-RTT data without waiting for the handshake" $ do
+            let sc = sc0{scUse0RTT = True}
+            test0RTTSendsEarly sc waitS
         it "fails with unknown server certificate" $ do
             let cc1 =
                     testClientConfig
@@ -146,6 +164,101 @@ query content conn = do
     sendStream s content
     shutdownStream s
     void $ recvStream s 1024
+
+-- | The limit the server gives, which the second connection sends more than.
+limit :: Int
+limit = 1024
+
+-- | A client sending 0-RTT is held to the limits the previous connection
+--   gave it (RFC 9000 Sec 7.4.1).
+--
+-- 0-RTT stream data used to bypass the flow control check altogether: it
+-- went onto the send queue and the window was told about it afterwards, so
+-- a resuming client spent a connection window it had not been given.  A
+-- server that counts -- ours does -- answers that with FLOW_CONTROL_ERROR
+-- before the handshake has even finished.
+--
+-- The data has to be written before the handshake completes for any of this
+-- to be exercised, so this does not go through 'query', which waits for the
+-- connection to be established first.
+test0RTTFlowControl :: ClientConfig -> ServerConfig -> IO () -> IO ()
+test0RTTFlowControl cc1 sc waitS = do
+    mvar <- newEmptyMVar
+    E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
+  where
+    content = BS.replicate (limit * 4) 97
+    client mvar = do
+        waitS
+        res <- C.run cc1 $ \conn -> do
+            query "first" conn
+            threadDelay 50000
+            getResumptionInfo conn
+        threadDelay 50000
+        let cc2 = cc1{ccResumption = res, ccUse0RTT = True}
+        C.run cc2 $ \conn -> do
+            s <- stream conn
+            sendStream s content
+            shutdownStream s
+            void $ recvStream s 1024
+        takeMVar mvar
+    server mvar = S.run sc serv
+      where
+        serv conn = do
+            s <- acceptStream conn
+            bs <- recvAll s id
+            sendStream s "bye"
+            closeStream s
+            when (bs == content) $ putMVar mvar ()
+    recvAll s build = do
+        bs <- recvStream s 1024
+        if BS.null bs
+            then return $ BS.concat $ build []
+            else recvAll s (build . (bs :))
+
+-- | The remembered limits are what let 0-RTT carry anything at all.
+--
+-- The connection's own send limit starts at zero and the handshake is what
+-- raises it, so a client that checks the connection window before the
+-- handshake -- which it has to, see above -- has nothing to spend until the
+-- handshake is over, and 0-RTT carries no data.  What it may spend is what
+-- the previous connection gave it.
+--
+-- Every packet from the server is dropped here, so the handshake cannot
+-- finish and a send that waits for it waits for good.
+test0RTTSendsEarly :: ServerConfig -> IO () -> IO ()
+test0RTTSendsEarly sc waitS =
+    E.bracket (forkIO server) killThread $ \_ -> do
+        waitS
+        resVar <- newEmptyMVar
+        withPipe (DropServerPacket []) $ do
+            res <- C.run testClientConfigR $ \conn -> do
+                query "first" conn
+                threadDelay 50000
+                getResumptionInfo conn
+            putMVar resVar res
+        res <- takeMVar resVar
+        threadDelay 50000
+        let cc =
+                testClientConfigR
+                    { ccResumption = res
+                    , ccUse0RTT = True
+                    }
+        sent <- newEmptyMVar
+        withPipe (DropServerPacket [0 .. 50]) $ do
+            void $ forkIO $ void $ ignoreQUIC $ C.run cc $ \conn -> do
+                s <- stream conn
+                sendStream s $ BS.replicate limit 97
+                putMVar sent ()
+                threadDelay 5000000
+            Timeout.timeout 2000000 (takeMVar sent) `shouldReturn` Just ()
+  where
+    server = S.run sc $ \conn -> do
+        s <- acceptStream conn
+        void $ recvStream s 1024
+        sendStream s "bye"
+        closeStream s
+    ignoreQUIC :: IO () -> IO ()
+    ignoreQUIC act = act `E.catch` \(_ :: E.SomeException) -> return ()
 
 testHandshake2
     :: ClientConfig

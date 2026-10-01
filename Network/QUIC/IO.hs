@@ -51,19 +51,18 @@ sendStreamMany _ [] = return ()
 sendStreamMany s dats0 = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
-    -- fixme: size check for 0RTT
-    let len = totalLen dats0
-    ready <- isConnection1RTTReady conn
-    if not ready
-        then do
-            -- 0-RTT
-            putSendStreamQ conn $ TxStreamData s dats0 len False
-            addTx conn s len
-        else flowControl dats0 len False
+    flowControl dats0 (totalLen dats0) False
   where
     conn = streamConnection s
+    -- 0-RTT goes through here too.  It used to take the other road: the
+    -- data went straight onto the queue and the window was told about it
+    -- afterwards, so a resuming client spent a connection window it had not
+    -- been given, and a server that counts answers that with
+    -- FLOW_CONTROL_ERROR.  RFC 9000 Sec 7.4.1 holds a client sending 0-RTT
+    -- to the limits the previous connection gave, and those are in the
+    -- peer's parameters by the time anything is sent, so one check serves
+    -- both.
     flowControl dats len wait = do
-        -- 1-RTT
         -- FLOW CONTROL: MAX_STREAM_DATA: send: respecting peer's limit
         -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
         eblocked <- checkBlocked s len wait
@@ -78,8 +77,14 @@ sendStreamMany s dats0 = do
                     addTx conn s n
                     flowControl dats2 (len - n) False
             Left blocked -> do
-                -- fixme: RTT0Level?
-                sendBlocked conn RTT1Level blocked
+                -- Read each time round rather than once: the handshake may
+                -- finish while we are waiting for the window, and a BLOCKED
+                -- frame at a level we have no keys for goes nowhere.
+                ready <- isConnection1RTTReady conn
+                let lvl
+                        | ready = RTT1Level
+                        | otherwise = RTT0Level
+                sendBlocked conn lvl blocked
                 flowControl dats len True
 
 sendBlocked :: Connection -> EncryptionLevel -> Blocked -> IO ()
