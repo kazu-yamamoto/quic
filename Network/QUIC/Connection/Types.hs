@@ -18,7 +18,6 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
 import Foreign.Marshal.Alloc
-import Foreign.Ptr (nullPtr)
 import Network.Control (
     Rate,
     RxFlow,
