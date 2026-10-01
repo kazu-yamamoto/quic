@@ -1,10 +1,51 @@
 # ChangeLog
 
-## Unreleased
+## 0.3.14
 
-* Fixed an issue where sending data over a connection from many streams
-  concurrently could lead to buffer overruns.
+A buffer overrun on many streams at once, 0-RTT sent against no limit at
+all, and two frames a receiver was taking on trust.
+
+* Count the frame headers when packing many streams into one packet.
+  `sendStreamSmall` fills a packet from the send queue up to 1040 octets
+  and was counting only the stream data, but every stream whose turn
+  comes needs a STREAM frame of its own and nineteen octets of header
+  with it.  Hundreds of streams writing a byte or two each therefore
+  built a packet far larger than the buffer it is encoded into, and the
+  sender died of `BufferOverrun`.  Seen in Cloud Haskell, where one
+  connection carries hundreds of processes.
   [#153](https://github.com/kazu-yamamoto/quic/pull/153)
+
+* Hold a client sending 0-RTT to the limits the previous connection gave
+  it.  RFC 9000 Sec 7.4.1 holds it to those until the server's own
+  arrive.  `sendStreamMany` had a second road for 0-RTT that put the data
+  straight on the queue and told the flow control window about it
+  afterwards, so a resuming client could spend a connection window it had
+  not been given -- and a server that counts answers that with
+  FLOW_CONTROL_ERROR before the handshake has finished.  Both roads go
+  through the check now, and the connection's own send limit is seeded
+  from the remembered parameters so that 0-RTT still carries data.  It is
+  seeded beside the two stream counts that were already seeded there and
+  were being taken from `defaultParameters` -- 64 streams and ten
+  unidirectional, where a server may have allowed fewer, and since these
+  limits only ever rise one set too high stayed too high for the rest of
+  the connection.
+  [#156](https://github.com/kazu-yamamoto/quic/pull/156)
+
+* Refuse a NEW_CONNECTION_ID that contradicts an earlier one.  RFC 9000
+  Sec 19.15 leaves to the receiver a connection ID repeated with a
+  different stateless reset token or a different sequence number, and a
+  sequence number used for a different connection ID.  Ours looked the
+  connection ID up, found it, and took the frame for a retransmission
+  without comparing what had come with it.  A retransmission says exactly
+  what it said before, so it still passes.
+  [#157](https://github.com/kazu-yamamoto/quic/pull/157)
+
+* Refuse a RETIRE_CONNECTION_ID for the connection ID the packet carrying
+  it arrived on, which RFC 9000 Sec 19.16 also leaves to the receiver.
+  An endpoint has to stop using a connection ID before retiring it, so
+  the packet that retires one is addressed to another and nothing correct
+  is caught by this.
+  [#158](https://github.com/kazu-yamamoto/quic/pull/158)
 
 ## 0.3.13
 
