@@ -565,6 +565,19 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
             seqNum = cidInfoSeq cidInfo
         when (cidlen < 1 || 20 < cidlen || retirePriorTo > seqNum) $
             closeConnection conn FrameEncodingError "NEW_CONNECTION_ID parameter error"
+        -- RFC 9000 Sec 19.15 says:
+        -- If an endpoint receives a NEW_CONNECTION_ID frame that repeats a
+        -- previously issued connection ID with a different Stateless Reset
+        -- Token field value or a different Sequence Number field value, or
+        -- if a sequence number is used for different connection IDs, the
+        -- endpoint MAY treat that receipt as a connection error of type
+        -- PROTOCOL_VIOLATION.
+        --
+        -- Before the retirement below: a frame that contradicts what the
+        -- peer has already said is not one to act on.
+        consistent <- isPeerCIDConsistent conn cidInfo
+        unless consistent $
+            closeConnection conn ProtocolViolation "NEW_CONNECTION_ID repeated differently"
         -- Retiring CIDs first then add a new CID.
         --
         -- RFC 9000 Sec 5.1.1 says:
