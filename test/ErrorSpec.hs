@@ -53,6 +53,11 @@ spec = beforeAll setup $ afterAll teardown $ do
             runQuietly (hooked oneCIDTwoSeqNums) `shouldThrow` protocolViolation
         it "refuses one sequence number offered for two connection IDs" $ \_ ->
             runQuietly (hooked oneSeqNumTwoCIDs) `shouldThrow` protocolViolation
+    -- RFC 9000 Sec 19.16, also a MAY.
+    describe "RETIRE_CONNECTION_ID" $
+        it "refuses one for the connection ID it arrived on" $ \_ ->
+            runQuietly (hooked retireArrivalCID)
+                `shouldThrow` violationSaying "RETIRE_CONNECTION_ID for the CID it arrived on"
 
 -- | A client that connects, says nothing, and waits to be closed.
 runQuietly :: ClientConfig -> IO (Maybe ())
@@ -68,6 +73,13 @@ hooked f = cc{ccHooks = (ccHooks cc){onPlainCreated = f}}
 protocolViolation :: QUICException -> Bool
 protocolViolation (TransportErrorIsReceived te _) = te == ProtocolViolation
 protocolViolation _ = False
+
+-- | The reason phrase matters here: a sequence number that was never issued
+--   is a PROTOCOL_VIOLATION too, and that check would answer for this one.
+violationSaying :: ReasonPhrase -> QUICException -> Bool
+violationSaying want (TransportErrorIsReceived te got) =
+    te == ProtocolViolation && got == want
+violationSaying _ _ = False
 
 srt1, srt2 :: StatelessResetToken
 srt1 = StatelessResetToken "0123456789abcdef"
@@ -85,6 +97,14 @@ contradict a b lvl plain
     | otherwise = plain
   where
     frames = [NewConnectionID a 0, NewConnectionID b 0]
+
+-- | Retiring sequence number 0, which is the connection ID the server first
+--   gave and the one a client is still using.
+retireArrivalCID :: EncryptionLevel -> Plain -> Plain
+retireArrivalCID lvl plain
+    | lvl == RTT1Level =
+        plain{plainFrames = RetireConnectionID 0 : plainFrames plain}
+    | otherwise = plain
 
 oneCIDTwoSeqNums :: EncryptionLevel -> Plain -> Plain
 oneCIDTwoSeqNums = contradict (newCIDInfo 10 cid1 srt1) (newCIDInfo 11 cid1 srt1)
