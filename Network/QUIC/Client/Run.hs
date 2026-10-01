@@ -72,9 +72,20 @@ runClient conf client0 isICVN verInfo = do
         handshaker <- handshakeClient conf' conn myAuthCIDs
         let client = do
                 -- For 0-RTT, the following variables should be initialized
-                -- in advance.
-                setTxMaxStreams conn $ initialMaxStreamsBidi defaultParameters
-                setTxUniMaxStreams conn $ initialMaxStreamsUni defaultParameters
+                -- in advance -- from the parameters the previous connection
+                -- gave, which is what RFC 9000 Sec 7.4.1 holds a client
+                -- sending 0-RTT to, and not from 'defaultParameters'.  Those
+                -- are 64 bidi streams and 10 uni where a server may have
+                -- allowed fewer, and since each of these setters only ever
+                -- raises, a limit too high here stayed too high for the rest
+                -- of the connection.  The connection's own send limit
+                -- belongs with them and was missing altogether: it starts at
+                -- zero and nothing raised it before the handshake, so 0-RTT
+                -- stream data went out against no connection limit at all.
+                params <- getPeerParameters conn
+                setTxMaxData conn $ initialMaxData params
+                setTxMaxStreams conn $ initialMaxStreamsBidi params
+                setTxUniMaxStreams conn $ initialMaxStreamsUni params
                 if ccUse0RTT conf
                     then wait0RTTReady conn
                     else wait1RTTReady conn
