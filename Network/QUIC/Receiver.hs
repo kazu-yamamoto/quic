@@ -192,6 +192,7 @@ processReceivedPacket conn rpkt = do
             when (nkp /= ckp && plainPacketNumber > cpn) $ do
                 setCurrentKeyPhase conn nkp plainPacketNumber
                 updateCoder1RTT conn ckp -- ckp is now next
+            checkRetireOfArrivalCID conn hdr plainFrames
             mapM_ (processFrame conn lvl) plainFrames
             when ackEli $ do
                 case lvl of
@@ -287,6 +288,38 @@ openStream conn sid
 deliverStream :: Connection -> Maybe Stream -> Stream -> IO ()
 deliverStream conn found strm =
     when (isNothing found) $ putInput conn $ InpStream strm
+
+-- | Refusing a RETIRE_CONNECTION_ID that retires the connection ID the
+--   packet carrying it was addressed to.
+--
+-- RFC 9000 Sec 19.16: "The sequence number specified in a
+-- RETIRE_CONNECTION_ID frame MUST NOT refer to the Destination Connection
+-- ID field of the packet in which the frame is contained.  The peer MAY
+-- treat this as a connection error of type PROTOCOL_VIOLATION."
+--
+-- Here rather than in 'processFrame', which is handed the level and one
+-- frame and not the header the sequence number has to be read against.
+-- Giving all twenty-eight of its equations an argument for the sake of this
+-- one is a worse trade than reading the frames twice.
+--
+-- A peer with nothing wrong with it cannot trip this: it has to stop using
+-- a connection ID before retiring it, so the packet that retires one is
+-- addressed to another.  A retransmission cannot either -- it goes to a
+-- connection ID we still have, and the retired one we no longer answer on
+-- at all.
+checkRetireOfArrivalCID :: Connection -> Header -> [Frame] -> IO ()
+checkRetireOfArrivalCID conn hdr frames = do
+    mseq <- myCIDsInclude conn $ headerMyCID hdr
+    case mseq of
+        Nothing -> return ()
+        Just sn ->
+            when (sn `elem` retired) $
+                closeConnection
+                    conn
+                    ProtocolViolation
+                    "RETIRE_CONNECTION_ID for the CID it arrived on"
+  where
+    retired = [n | RetireConnectionID n <- frames]
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -624,11 +657,9 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
     issued <- isMyCIDSeqNumIssued conn sn
     unless issued $
         closeConnection conn ProtocolViolation "RETIRE_CONNECTION_ID never issued"
-    -- FIXME: CID is necessary here
-    -- The sequence number specified in a RETIRE_CONNECTION_ID frame
-    -- MUST NOT refer to the Destination Connection ID field of the
-    -- packet in which the frame is contained. The peer MAY treat this
-    -- as a connection error of type PROTOCOL_VIOLATION.
+    -- The sequence number it must not refer to is the one the packet was
+    -- addressed to, and the header is not here.  See
+    -- 'checkRetireOfArrivalCID'.
     mcidInfo <- retireMyCID conn sn
     case mcidInfo of
         Nothing -> return ()
