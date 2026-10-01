@@ -17,6 +17,7 @@ module Network.QUIC.Connection.Migration (
     retireMyCID,
     isMyCIDSeqNumIssued,
     addPeerCID,
+    isPeerCIDConsistent,
     waitPeerCID,
     choosePeerCIDForPrivacy,
     setPeerStatelessResetToken,
@@ -88,6 +89,30 @@ getNewMyCID Connection{..} = do
     atomicModifyIORef' myCIDDB $ new cid srt
 
 ----------------------------------------------------------------
+
+-- | Does this NEW_CONNECTION_ID agree with what the peer has already said?
+--
+-- RFC 9000 Sec 19.15: a connection ID repeated with a different stateless
+-- reset token or a different sequence number, or a sequence number used for
+-- a different connection ID, MAY be treated as a connection error of type
+-- PROTOCOL_VIOLATION.
+--
+-- A retransmission says exactly what it said before and is not caught here,
+-- which is the point of comparing the whole 'CIDInfo' rather than noting
+-- that we have seen the connection ID.  One that has since been retired is
+-- no longer in the table and is not caught either; that is the lenient side
+-- of a MAY, and the alternative is remembering every sequence number the
+-- peer has ever used.
+isPeerCIDConsistent :: Connection -> CIDInfo -> IO Bool
+isPeerCIDConsistent Connection{..} cidInfo = agree <$> readTVarIO peerCIDDB
+  where
+    agree CIDDB{..} = ok bySeqNum && ok byCID
+      where
+        ok = maybe True (== cidInfo)
+        bySeqNum = IntMap.lookup (cidInfoSeq cidInfo) cidInfos
+        byCID =
+            flip IntMap.lookup cidInfos
+                =<< Map.lookup (cidInfoCID cidInfo) revInfos
 
 -- | Receiving NewConnectionID
 addPeerCID :: Connection -> CIDInfo -> IO Bool
