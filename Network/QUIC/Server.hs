@@ -20,6 +20,8 @@ module Network.QUIC.Server (
     --   , scParameters
     scCredentials,
     scSessionManager,
+    scCloseReason,
+    scInstallShutdownHandler,
 
     -- * Certificate
     clientCertificateChain,
