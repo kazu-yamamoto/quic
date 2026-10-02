@@ -113,6 +113,13 @@ closure'' conn ldcc frame = do
         -- hook
         let hook = onCloseCompleted $ connHooks conn
         pto <- getPTO ldcc
+        -- The first one goes out here, in the thread that is ending the
+        -- connection, rather than in the closer below: a server that is
+        -- stopping lets go of its sockets as soon as its connections have
+        -- ended, and a CONNECTION_CLOSE still waiting its turn on a thread
+        -- of its own misses them.  The closer repeats it for a peer that
+        -- did not hear it, which is what it is for.
+        send
         void $ forkFinally (closer conn pto send recv hook) $ \e -> do
             case e of
                 Left e' -> connDebugLog conn $ "closure' " <> bhow e'
