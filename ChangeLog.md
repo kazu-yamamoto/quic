@@ -1,5 +1,58 @@
 # ChangeLog
 
+## 0.3.15
+
+A server could not be stopped without closing a socket under it, and its
+peers were told nothing when it was.
+
+* Hand the caller the action that stops the server, through
+  `scInstallShutdownHandler`, the way warp hands out the action that
+  stops a warp.  `stop` reaches a server through one of its connections,
+  and a server is at its emptiest when someone wants it to stop: one that
+  never took a connection, or has finished the ones it had, could not be
+  stopped at all.  What a caller was left with was closing the socket out
+  from under the dispatcher waiting on it, which ends the server by
+  making it fail and closes a socket that in `runWithSockets` is not the
+  server's to close.  The dispatchers already wait for a datagram and for
+  this at once, so they see it where they wait and end there: no socket
+  is closed and nothing is raised.  Which matters beyond being tidy --
+  waking a thread out of a wait by closing the file descriptor under it
+  is what `closeFdWith` is for, and the IO manager that provides it is
+  not the only one there will be.
+  [#159](https://github.com/kazu-yamamoto/quic/pull/159)
+
+* Tell the peers when the server stops.  A server that stopped closed its
+  sockets and that was all they ever learned of it: each connection went
+  quiet and stayed quiet until the peer's idle timeout expired, half a
+  minute later, on a connection that was never going to answer again.
+  The connections are now ended through the same path that ends a
+  connection for any other reason, while the sockets are still open, so
+  each peer is sent a CONNECTION_CLOSE and can open a new connection at
+  once.  It is an application close and `scCloseReason` says which: a
+  transport CONNECTION_CLOSE carrying NO_ERROR is what a connection whose
+  application has finished normally sends, and a client makes an
+  exception of it in a 1-RTT packet so that a server finishing is not an
+  error.  A server that is going away is saying something else, and the
+  application protocol is where it is said -- HTTP/3 has H3_NO_ERROR for
+  it.
+  [#159](https://github.com/kazu-yamamoto/quic/pull/159)
+
+* Send the first CONNECTION_CLOSE before leaving the connection.  The
+  frame was encoded where the connection ends and the sending left to a
+  closer thread that nothing waited for, so the connection ended before
+  it had gone anywhere -- and a server that stops lets go of its sockets
+  as soon as its connections have ended, so the send then failed on a
+  closed socket and the peer heard nothing at all.
+  [#159](https://github.com/kazu-yamamoto/quic/pull/159)
+
+* Set `SO_REUSEPORT` on macOS and the BSDs.  Replacing a server means
+  starting its successor while the old process still has the UDP port,
+  and `SO_REUSEADDR` alone does not allow that there: the second bind is
+  refused with "Address already in use" and the successor cannot start.
+  It is not set on Linux, where it would load balance one server's
+  datagrams across the two processes by a hash of the four-tuple.
+  [#159](https://github.com/kazu-yamamoto/quic/pull/159)
+
 ## 0.3.14
 
 A buffer overrun on many streams at once, 0-RTT sent against no limit at
