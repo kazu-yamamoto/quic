@@ -13,6 +13,7 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Network.Socket as NS
+import qualified System.Timeout as T
 
 import Network.QUIC.Closer
 import Network.QUIC.Common
@@ -43,6 +44,7 @@ run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = do
     labelMe "QUIC run"
     stvar <- newTVarIO Running
+    installShutdownHandler conf stvar
     -- Outside handleLogUnit on purpose.  If the addresses cannot be bound
     -- there is no server, and that is the caller's business: swallowing it
     -- returned from 'run' as if all were well, having never reached
@@ -63,7 +65,11 @@ run conf server = do
     -- took, which for a list means each element frees itself.
     setup stvar = do
         dispatch <- newDispatch conf
-        let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
+        let forkConn acc =
+                void $
+                    forkIO $
+                        withConnectionCount dispatch $
+                            runServer conf server dispatch stvar acc
         flip E.onException (clearDispatch dispatch) $ do
             ssas <- openAll $ scAddresses conf
             tids <-
@@ -73,6 +79,7 @@ run conf server = do
     teardown (dispatch, tids, ssas) = do
         clearDispatch dispatch
         mapM_ killThread tids
+        shutdownConnections conf dispatch
         mapM_ NS.close ssas
     openAll [] = return []
     openAll (a : as) =
@@ -85,6 +92,7 @@ runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
 runWithSockets ssas conf server = do
     labelMe "QUIC runWithSockets"
     stvar <- newTVarIO Running
+    installShutdownHandler conf stvar
     -- As in 'run'.
     E.bracket (setup stvar) teardown $ \(_, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
@@ -97,13 +105,72 @@ runWithSockets ssas conf server = do
     -- manager and the dispatchers are ours to free.
     setup stvar = do
         dispatch <- newDispatch conf
-        let forkConn acc = void $ forkIO (runServer conf server dispatch stvar acc)
+        let forkConn acc =
+                void $
+                    forkIO $
+                        withConnectionCount dispatch $
+                            runServer conf server dispatch stvar acc
         flip E.onException (clearDispatch dispatch) $ do
             tids <- runAll dispatch conf stvar forkConn ssas
             return (dispatch, tids)
     teardown (dispatch, tids) = do
         clearDispatch dispatch
         mapM_ killThread tids
+        shutdownConnections conf dispatch
+
+-- | Handing the caller the action that stops this server.
+--
+-- 'stop' is the same action, reached through a connection; a server with no
+-- connections cannot be stopped that way, and a server is at its emptiest
+-- when someone wants it to stop.
+--
+-- Stopping closes no socket and raises nothing.  The dispatchers wait for a
+-- datagram and for this at once, so they see it where they wait and end
+-- there; 'run' then ends the connections and returns, and the sockets are
+-- the caller's to close.  Which matters beyond being tidy: waking a thread
+-- out of a wait by closing the file descriptor under it is what
+-- 'closeFdWith' is for, and the IO manager that provides it is not the only
+-- one there will be.
+installShutdownHandler :: ServerConfig -> TVar ServerState -> IO ()
+installShutdownHandler conf stvar =
+    scInstallShutdownHandler conf $ atomically $ writeTVar stvar Stopped
+
+-- | Ending the connections the server still has, while the sockets are
+--   still open.
+--
+-- Killing the dispatchers above is what stops the server taking new
+-- connections: nothing reads the sockets any more, so an Initial that
+-- arrives now goes unanswered and is retried a PTO later -- by which time
+-- the successor has the port and answers it instead.
+--
+-- What killing them cannot do is say anything to the connections that are
+-- already here.  Left alone they find out when the sockets close under
+-- them, which is too late to tell anyone, and each peer is left with a
+-- connection that answers nothing until its idle timeout expires half a
+-- minute later.  So each of them is ended here, through the same path that
+-- ends a connection for any other reason, and the peer is sent a
+-- CONNECTION_CLOSE while there is still a socket to send it on.  A peer
+-- that hears it can open a new connection at once, and the successor is
+-- there to answer.
+--
+-- Hearing the peers is another matter: once the successor has the port, on
+-- Linux it is the successor that receives.  See Note [Binding the same port
+-- twice].  Sending still works, which is what this relies on.
+--
+-- Each is ended from a thread of its own, because 'throwTo' waits for the
+-- exception to be taken and a connection whose application is slow to
+-- unwind would hold up the rest.  The wait that follows is what they are
+-- all given, and it is bounded: a connection that will not end is not worth
+-- the sockets.
+shutdownConnections :: ServerConfig -> Dispatch -> IO ()
+shutdownConnections conf dispatch = do
+    conns <- liveConnections dispatch
+    unless (null conns) $ do
+        mapM_ (void . forkIO . shut) conns
+        void $ T.timeout 1000000 $ waitNoConnection dispatch
+  where
+    (err, reason) = scCloseReason conf
+    shut conn = abortConnection conn err reason
 
 -- | Running a dispatcher on each socket, killing the ones already running if
 --   a later one cannot be started.

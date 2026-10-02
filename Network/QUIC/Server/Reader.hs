@@ -6,6 +6,9 @@ module Network.QUIC.Server.Reader (
     newDispatch,
     clearDispatch,
     runDispatcher,
+    liveConnections,
+    withConnectionCount,
+    waitNoConnection,
     tokenMgr,
     genStatelessReset,
 
@@ -20,6 +23,7 @@ module Network.QUIC.Server.Reader (
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
@@ -55,6 +59,7 @@ data Dispatch = Dispatch
     , srcTable :: RecvQDict
     , genStatelessReset :: CID -> StatelessResetToken
     , statelessResetRate :: Rate
+    , connectionCount :: TVar Int
     }
 
 statelessResetLimit :: Int
@@ -68,6 +73,7 @@ newDispatch ServerConfig{..} =
         <*> newRecvQDict
         <*> makeGenStatelessReset
         <*> newRate
+        <*> newTVarIO 0
   where
     conf =
         CT.defaultConfig
@@ -97,6 +103,28 @@ registerConnectionDict ref cid conn = atomicModifyIORef'' ref $
 unregisterConnectionDict :: IORef ConnectionDict -> CID -> IO ()
 unregisterConnectionDict ref cid = atomicModifyIORef'' ref $
     \(ConnectionDict tbl) -> ConnectionDict $ M.delete cid tbl
+
+-- | The connections the server still has, each of them once.
+liveConnections :: Dispatch -> IO [Connection]
+liveConnections Dispatch{..} = do
+    ConnectionDict tbl <- readIORef dstTable
+    -- A connection is in the table under each of the CIDs it answers to, so
+    -- the elements repeat.  Its main thread is what it has one of.
+    return $ M.elems $ M.fromList [(mainThreadId conn, conn) | conn <- M.elems tbl]
+
+-- | Running a connection, counted while it runs.  'dstTable' cannot say
+--   when the last of them is done: a connection leaves it a second after it
+--   ends, and it is in there under several keys.
+withConnectionCount :: Dispatch -> IO a -> IO a
+withConnectionCount Dispatch{..} = E.bracket_ (bump 1) (bump (-1))
+  where
+    bump n = atomically $ modifyTVar' connectionCount (+ n)
+
+-- | Waiting until no connection is running.
+waitNoConnection :: Dispatch -> IO ()
+waitNoConnection Dispatch{..} = atomically $ do
+    n <- readTVar connectionCount
+    STM.check $ n == 0
 
 ----------------------------------------------------------------
 

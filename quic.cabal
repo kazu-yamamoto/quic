@@ -240,6 +240,7 @@ test-suite spec
         RecoverySpec
         ResetSpec
         SetupSpec
+        ShutdownSpec
         TLSSpec
         TokenSpec
         TransportError

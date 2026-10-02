@@ -199,6 +199,23 @@ data ServerConfig = ServerConfig
     , scDebugLog :: Maybe FilePath
     , scTicketLifetime :: Int
     -- ^ A lifetime (in seconds) for TLS session ticket and QUIC token.
+    , scCloseReason :: (ApplicationProtocolError, ReasonPhrase)
+    -- ^ What the connections still open are told when the server is
+    -- stopped.
+    --
+    -- An application close rather than a transport one, and deliberately:
+    -- a transport CONNECTION_CLOSE carrying NO_ERROR is what a connection
+    -- whose application has finished normally sends, and a client makes an
+    -- exception of it so that a server finishing is not an error.  A server
+    -- that is going away is saying something else, and the application
+    -- protocol is where it is said: HTTP/3 has H3_NO_ERROR (0x100) for it.
+    , scInstallShutdownHandler :: IO () -> IO ()
+    -- ^ Handed the action that stops this server, once, as the server
+    -- starts.  Keeping it is what lets the caller stop a server that has no
+    -- connections to stop it through, and stopping one this way closes no
+    -- socket and raises nothing: the dispatchers see it where they wait for
+    -- a datagram and end, the connections are told the server is going, and
+    -- 'run' returns.  The default does nothing with it.
     }
 
 -- | The default value for server configuration.
@@ -229,4 +246,6 @@ defaultServerConfig =
         , scSessionManager = noSessionManager
         , scDebugLog = Nothing
         , scTicketLifetime = 7200
+        , scCloseReason = (ApplicationProtocolError 0, "server is closing")
+        , scInstallShutdownHandler = \_ -> return ()
         }
