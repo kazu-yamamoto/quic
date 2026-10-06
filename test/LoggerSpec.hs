@@ -4,15 +4,20 @@ module LoggerSpec where
 
 import qualified Control.Exception as E
 import Control.Monad (when)
+import qualified Data.ByteString.Char8 as BS
 import Data.IORef
+import qualified GHC.IO.Exception as E
 import GHC.IO.Handle (hDuplicate, hDuplicateTo)
 import System.Directory
 import System.FilePath
 import System.IO
+import qualified System.IO.Error as E
 import System.Log.FastLogger (FastLogger)
 import Test.Hspec
 
 import Network.QUIC.Internal
+
+import Config
 
 spec :: Spec
 spec = do
@@ -27,19 +32,33 @@ spec = do
     -- and the peer saw a handshake that never finished.
     describe "stdoutLogger" $
         it "drops a message stdout cannot take" $
-            withUnwritableStdout (stdoutLogger "a line no one can receive")
+            onUnwritableStdout
+                (stdoutLogger "a line no one can receive")
+                (`shouldBe` ())
+
+    -- What the two above rest on, where a stdout that throws is not to be
+    -- had.
+    describe "dropIfUnwritable" $ do
+        it "drops an IOException" $
+            dropIfUnwritable (E.throwIO $ userError "no space left on device")
                 `shouldReturn` ()
+        it "lets anything else through" $
+            dropIfUnwritable (E.throwIO $ E.ErrorCall "boom")
+                `shouldThrow` errorCall "boom"
 
     describe "dirDebugLogger" $
         -- The file is what the caller asked for, and it is still written
         -- when stdout is gone.
         it "writes the file when stdout cannot be written" $
-            withDebugDir $ \dir -> do
+            withTempDir "quic-logger-spec" $ \dir -> do
                 (dLog, clean) <- dirDebugLogger (Just dir) cid
-                withUnwritableStdout $ dLog "a line the file can take"
-                clean
-                readFile (dir </> show cid <> ".txt")
-                    `shouldReturn` "a line the file can take\n"
+                onUnwritableStdout (dLog "a line the file can take") $ \() -> do
+                    clean
+                    -- Strictly: a lazy read leaves the handle open until the
+                    -- content is demanded, and Windows will not delete a
+                    -- file that is open.
+                    BS.readFile (dir </> show cid <> ".txt")
+                        `shouldReturn` "a line the file can take\n"
     -- The qlog writer is called from the sender, the receiver and the
     -- closer, the same protocol threads as the debug logger, so it must be
     -- no more able to end them.  A qlog directory is asked for by name, as
@@ -79,31 +98,42 @@ spec = do
     cid = makeCID "\x01\x02\x03\x04\x05\x06\x07\x08"
 
 -- | Running an action with a stdout every write throws on, and putting the
---   real one back afterwards.  stdout is redirected rather than closed:
---   hspec reports through it, and a handle that is only redirected can be
---   restored from the duplicate however the action ends.
+--   real one back afterwards.  'Nothing' where stdout cannot be redirected
+--   at all.
 --
--- Any handle open for reading will do, since what makes the write throw is
--- the mode GHC holds the handle in and not anything the system does.  A file
--- of our own rather than the null device, which is \"\/dev\/null\" on one
--- platform and \"NUL\" on another.
-withUnwritableStdout :: IO a -> IO a
+-- stdout is redirected rather than closed: hspec reports through it, and a
+-- handle that is only redirected can be restored from the duplicate however
+-- the action ends.  Any handle open for reading does for the stand-in, since
+-- what makes the write throw is the mode GHC holds the handle in and not
+-- anything the system does -- a file of our own rather than the null device,
+-- which is \"\/dev\/null\" on one platform and \"NUL\" on another.
+--
+-- 'hDuplicateTo' is @dup2@ on the device underneath, and the native handle
+-- the Windows I\/O manager gives a standard stream does not implement it:
+-- @dup2@ is left at its default, which throws.  Asking the handle rather
+-- than asking which operating system this is, because the handle is what the
+-- test needs something of.
+withUnwritableStdout :: IO a -> IO (Maybe a)
 withUnwritableStdout action = do
     tmp <- getTemporaryDirectory
     let file = tmp </> "quic-logger-spec-readable"
     writeFile file ""
     saved <- hDuplicate stdout
     let redirected = withFile file ReadMode $ \h -> do
-            hDuplicateTo h stdout
-            action `E.finally` hDuplicateTo saved stdout
+            swapped <- E.try $ hDuplicateTo h stdout
+            case swapped of
+                Left e
+                    | E.ioeGetErrorType e == E.UnsupportedOperation ->
+                        return Nothing
+                    | otherwise -> E.throwIO e
+                Right () ->
+                    Just <$> action `E.finally` hDuplicateTo saved stdout
     redirected `E.finally` hClose saved
 
-withDebugDir :: (FilePath -> IO a) -> IO a
-withDebugDir = E.bracket newDir removePathForcibly
-  where
-    newDir = do
-        tmp <- getTemporaryDirectory
-        let dir = tmp </> "quic-logger-spec"
-        removePathForcibly dir
-        createDirectory dir
-        return dir
+-- | Running what needs a stdout that throws, or saying why it was not run.
+onUnwritableStdout :: IO a -> (a -> Expectation) -> Expectation
+onUnwritableStdout action check = do
+    r <- withUnwritableStdout action
+    case r of
+        Nothing -> pendingWith "stdout cannot be redirected on this handle"
+        Just x -> check x

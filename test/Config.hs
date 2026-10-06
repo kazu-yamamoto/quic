@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Config (
     makeTestServerConfig,
@@ -10,6 +11,7 @@ module Config (
     prepareQlog,
     setClientQlog,
     withPipe,
+    withTempDir,
     withPipeStray,
     Scenario (..),
     newSessionManager,
@@ -27,9 +29,8 @@ import qualified Data.List.NonEmpty as NE
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
-#ifdef QLOG
-import System.Directory (createDirectoryIfMissing)
-#endif
+import System.Directory
+import System.FilePath ((</>))
 
 import Network.QUIC.Client
 import Network.QUIC.Internal
@@ -353,3 +354,31 @@ sessionManager ref =
 -- | How long 'DelayClientPacket' and 'DelayServerPacket' hold a datagram.
 delayTime :: Int
 delayTime = 100000
+
+-- | A directory of our own for a spec to put files in, taken away
+--   afterwards.
+--
+-- Windows will not delete a file that is open, and will refuse for a while
+-- after it has been closed as well -- a virus scanner reading what was just
+-- written is enough, and that is the normal state of a CI runner.  So the
+-- removal is given a few seconds to come good rather than failing the test
+-- that had already passed.  A handle a test really leaks is still caught:
+-- it is never released, and the wait runs out.
+withTempDir :: String -> (FilePath -> IO a) -> IO a
+withTempDir name body = do
+    tmp <- getTemporaryDirectory
+    let dir = tmp </> name
+    E.bracket (newDir dir) removeWhenItCan body
+  where
+    newDir dir = do
+        removeWhenItCan dir
+        createDirectory dir
+        return dir
+    removeWhenItCan dir = go (250 :: Int)
+      where
+        go 0 = removePathForcibly dir
+        go n = do
+            r <- E.try $ removePathForcibly dir
+            case r of
+                Right () -> return ()
+                Left (_ :: E.IOException) -> threadDelay 20000 >> go (n - 1)

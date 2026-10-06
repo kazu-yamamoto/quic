@@ -3,11 +3,12 @@
 module QLoggerSpec where
 
 import qualified Control.Exception as E
-import System.Directory
-import System.FilePath
+import System.Directory (listDirectory)
 import Test.Hspec
 
 import Network.QUIC.Internal
+
+import Config
 
 spec :: Spec
 spec = do
@@ -19,7 +20,7 @@ spec = do
         -- exclusively: the second to ask got "openFile: resource busy" thrown
         -- through its connection setup rather than a worse log.
         it "gives the two ends of one connection their own files" $
-            withTempDir $ \dir -> do
+            withTempDir "quic-qlogger-spec" $ \dir -> do
                 now <- getTimeMicrosecond
                 let cid = toCID "01234567"
                 E.bracket (dirQLogger (Just dir) now cid "client") snd $ \_ ->
@@ -27,10 +28,3 @@ spec = do
                         return ()
                 files <- listDirectory dir
                 length files `shouldBe` 2
-
-withTempDir :: (FilePath -> IO a) -> IO a
-withTempDir body = do
-    tmp <- getTemporaryDirectory
-    let dir = tmp </> "quic-qlogger-spec"
-    E.bracket_ (createDirectoryIfMissing True dir) (removeDirectoryRecursive dir) $
-        body dir

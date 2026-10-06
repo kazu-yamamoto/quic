@@ -18,7 +18,7 @@ module SetupSpec where
 import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
-import System.Directory
+import System.Directory (createDirectory, listDirectory)
 import System.FilePath
 import System.IO
 import Test.Hspec
@@ -38,7 +38,7 @@ spec = do
     -- pointed at one directory.
     describe "a server connection setup that fails" $
         it "does not leave the qlog it had already opened open" $
-            withTempDir $ \dir -> do
+            withTempDir "quic-setup-spec" $ \dir -> do
                 let qdir = dir </> "qlog"
                 createDirectory qdir
                 sc0 <- makeTestServerConfig
@@ -91,13 +91,3 @@ waitUnlocked file = go (100 :: Int)
         case r of
             Right () -> return ()
             Left (_ :: E.IOException) -> threadDelay 20000 >> go (n - 1)
-
-withTempDir :: (FilePath -> IO a) -> IO a
-withTempDir = E.bracket newDir removePathForcibly
-  where
-    newDir = do
-        tmp <- getTemporaryDirectory
-        let dir = tmp </> "quic-setup-spec"
-        removePathForcibly dir
-        createDirectory dir
-        return dir
