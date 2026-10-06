@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:  [ 'ubuntu-latest', 'macOS-latest' ]
+        os:  [ 'ubuntu-latest', 'macOS-latest', 'windows-latest' ]
         ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12' ]
         # GitHub runs at most five macOS jobs at once, so the sixth sat
         # waiting for one of the others to finish and by itself decided when
@@ -21,11 +21,19 @@ jobs:
         # beyond the syscalls the network code makes, and those do not vary
         # by compiler; keep the oldest and newest there and let Linux cover
         # the range in between.
+        #
+        # Windows is here for one thing, which is the I/O manager the test
+        # suite runs under, and that does not vary by compiler either.
         exclude:
           - { os: macOS-latest, ghc: '9.4'  }
           - { os: macOS-latest, ghc: '9.6'  }
           - { os: macOS-latest, ghc: '9.8'  }
           - { os: macOS-latest, ghc: '9.10' }
+          - { os: windows-latest, ghc: '9.2'  }
+          - { os: windows-latest, ghc: '9.4'  }
+          - { os: windows-latest, ghc: '9.6'  }
+          - { os: windows-latest, ghc: '9.8'  }
+          - { os: windows-latest, ghc: '9.10' }
 
     env:
       cache-name: cabal-ghc
