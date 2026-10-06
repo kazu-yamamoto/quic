@@ -11,6 +11,8 @@ module Network.QUIC.Server.Reader (
     waitNoConnection,
     tokenMgr,
     genStatelessReset,
+    stopServerNow,
+    wakeDispatcher,
 
     -- * Accepting
     Accept (..),
@@ -23,8 +25,8 @@ module Network.QUIC.Server.Reader (
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
+import qualified Control.Monad.STM as STM
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
@@ -33,7 +35,13 @@ import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Control (LRUCacheRef, Rate, getRate, newRate)
 import qualified Network.Control as LRUCache
-import Network.Socket (SockAddr, Socket, waitReadSocketSTM)
+import Network.Socket (
+    SockAddr (..),
+    Socket,
+    getSocketName,
+    tupleToHostAddress,
+    tupleToHostAddress6,
+ )
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import System.Log.FastLogger
@@ -60,13 +68,16 @@ data Dispatch = Dispatch
     , genStatelessReset :: CID -> StatelessResetToken
     , statelessResetRate :: Rate
     , connectionCount :: TVar Int
+    , stopServerNow :: IO ()
+    -- ^ Stopping this server: what the shutdown handler is handed, and
+    -- what a connection's 'stop' reaches it by.
     }
 
 statelessResetLimit :: Int
 statelessResetLimit = 20
 
-newDispatch :: ServerConfig -> IO Dispatch
-newDispatch ServerConfig{..} =
+newDispatch :: ServerConfig -> IO () -> IO Dispatch
+newDispatch ServerConfig{..} stopNow =
     Dispatch
         <$> CT.spawnTokenManager conf
         <*> newIORef emptyConnectionDict
@@ -74,6 +85,7 @@ newDispatch ServerConfig{..} =
         <*> makeGenStatelessReset
         <*> newRate
         <*> newTVarIO 0
+        <*> pure stopNow
   where
     conf =
         CT.defaultConfig
@@ -174,20 +186,36 @@ runDispatcher d conf stvar forkConn mysock = forkIO $ dispatcher d conf stvar fo
 
 data ServerState = Running | Stopped deriving (Eq, Show)
 
-checkLoop :: TVar ServerState -> Socket -> IO Bool
-checkLoop stvar mysock = do
-    st0 <- readTVarIO stvar
-    if st0 == Stopped
-        then return False
-        else do
-            wait <- waitReadSocketSTM mysock
-            atomically $ do
-                st <- readTVar stvar
-                if st == Stopped
-                    then return False
-                    else do
-                        wait -- blocking is retry
-                        return True
+-- | Waking a dispatcher that is waiting for a datagram, by sending it one.
+--
+-- The dispatchers used to wait for the socket to become readable and for the
+-- stop variable at once, in a single 'atomically', and so saw a stop where
+-- they waited.  Readiness is not something every I/O manager has to report:
+-- a completion-based one has nothing to say about a socket being readable,
+-- and on Windows the wait reaches 'waitRead#', which the threaded RTS does
+-- not merely refuse but aborts the process over.  So the wait is a plain
+-- receive now, and stopping has to put something into it.
+--
+-- An empty datagram to the socket's own address does that, and keeps what
+-- the shutdown handler promises: no socket is closed and nothing is raised.
+-- The loop reads the stop variable again when the receive returns and ends
+-- there.  An empty datagram carries no packet, so one arriving from anywhere
+-- else is just as harmless.
+wakeDispatcher :: Socket -> IO ()
+wakeDispatcher s = E.handle ignore $ do
+    sa <- getSocketName s
+    void $ NSB.sendTo s "" $ reachable sa
+
+-- | The address a socket can be reached on from the host it is bound on.
+--   A wildcard bind is not an address to send to, so the loopback stands in
+--   for it.
+reachable :: SockAddr -> SockAddr
+reachable (SockAddrInet p a)
+    | a == 0 = SockAddrInet p $ tupleToHostAddress (127, 0, 0, 1)
+reachable (SockAddrInet6 p f a sc)
+    | a == (0, 0, 0, 0) =
+        SockAddrInet6 p f (tupleToHostAddress6 (0, 0, 0, 0, 0, 0, 0, 1)) sc
+reachable sa = sa
 
 dispatcher
     :: Dispatch
@@ -200,9 +228,17 @@ dispatcher d conf stvar forkConnection mysock = do
     labelMe "QUIC dispatcher"
     handleLogUnit logAction loop
   where
+    -- The loop used to wait for the socket to become readable, watching the
+    -- stop variable in the same 'atomically' so that 'stop' broke it without
+    -- an exception.  Readiness is not a thing a completion-based I/O manager
+    -- reports, so on Windows that wait is not available at all; the loop
+    -- simply blocks in the receive instead, and 'stop' is answered by the
+    -- 'killThread' and the 'close' that 'run's own teardown does next.  The
+    -- stop variable is still read, for the datagram that arrives between the
+    -- two.
     loop = do
-        cont <- checkLoop stvar mysock
-        when cont $ do
+        st <- readTVarIO stvar
+        when (st == Running) $ do
             (bs, peersa) <- safeRecv $ NSB.recvFrom mysock 2048
             now <- getTimeMicrosecond
             let send' b = void $ NSB.sendTo mysock b peersa

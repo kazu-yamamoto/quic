@@ -251,7 +251,7 @@ withPipeWith stray scenario body = do
             dropPacket0 <- shouldDrop scenario True n0
             unless dropPacket0 $ void $ sendTo sockS bs saS
             forever $ do
-                (bs1, sa) <- recvFrom sockC 2048
+                (bs1, sa) <- relayRecv sockC
                 -- Only from the client we latched onto.  The connect this
                 -- replaces did that in the kernel; doing it here keeps
                 -- leftovers from the connection that just closed from being
@@ -266,7 +266,7 @@ withPipeWith stray scenario body = do
                                 sendTo sockS bs1 saS
         -- from server
         tid1 <- forkIO $ forever $ do
-            (bs, _) <- recvFrom sockS 2048
+            (bs, _) <- relayRecv sockS
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
             dropPacket <- shouldDrop scenario False n
             let isCC = BS.length bs < 200
@@ -276,8 +276,13 @@ withPipeWith stray scenario body = do
                     delayIf (shouldDelay scenario False n) $ void $ sendTo sockC bs sa
         return (tid0, tid1)
     stopRelay (tid0, tid1) = killThread tid0 >> killThread tid1
+    -- 'stopRelay' kills these threads and the brackets close the sockets
+    -- straight after, and a thread blocked in a socket call on Windows is
+    -- not reachable by 'killThread' -- it would be left in the call and
+    -- would die of the close instead, from a thread nobody is watching.
+    relayRecv sock = windowsThreadBlockHack $ recvFrom sock 2048
     waitForClientHello sockC = do
-        (bs, saO) <- recvFrom sockC 2048
+        (bs, saO) <- relayRecv sockC
         if not (BS.null bs) && BS.head bs .&. 0x80 /= 0
             then return (bs, saO)
             else waitForClientHello sockC

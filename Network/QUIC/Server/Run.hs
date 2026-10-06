@@ -44,14 +44,19 @@ run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = do
     labelMe "QUIC run"
     stvar <- newTVarIO Running
-    installShutdownHandler conf stvar
+    -- The sockets do not exist yet and the stop has to reach them, so what
+    -- stops this server is built here and what it wakes is filled in by
+    -- 'setup'.  See 'wakeDispatcher'.
+    wakeRef <- newIORef $ return ()
+    let stopNow = stopping stvar wakeRef
+    installShutdownHandler conf stopNow
     -- Outside handleLogUnit on purpose.  If the addresses cannot be bound
     -- there is no server, and that is the caller's business: swallowing it
     -- returned from 'run' as if all were well, having never reached
     -- onServerReady, and left anyone waiting on that hook waiting for good.
     -- An IOSpec run wedged for two and a half days that way, on a port the
     -- previous test had not finished releasing.
-    E.bracket (setup stvar) teardown $ \(_, _, _) -> handleLogUnit debugLog $ do
+    E.bracket (setup stvar stopNow wakeRef) teardown $ \(_, _, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -63,15 +68,16 @@ run conf server = do
     -- port is taken leaves the first socket bound and the token manager
     -- thread running, for good.  Each step frees what the steps before it
     -- took, which for a list means each element frees itself.
-    setup stvar = do
-        dispatch <- newDispatch conf
+    setup stvar stopNow wakeRef = do
+        dispatch <- newDispatch conf stopNow
         let forkConn acc =
                 void $
                     forkIO $
                         withConnectionCount dispatch $
-                            runServer conf server dispatch stvar acc
+                            runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             ssas <- openAll $ scAddresses conf
+            writeIORef wakeRef $ mapM_ wakeDispatcher ssas
             tids <-
                 runAll dispatch conf stvar forkConn ssas
                     `E.onException` mapM_ NS.close ssas
@@ -92,9 +98,12 @@ runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
 runWithSockets ssas conf server = do
     labelMe "QUIC runWithSockets"
     stvar <- newTVarIO Running
-    installShutdownHandler conf stvar
+    -- As in 'run', except that the sockets are in hand already.
+    wakeRef <- newIORef $ mapM_ wakeDispatcher ssas
+    let stopNow = stopping stvar wakeRef
+    installShutdownHandler conf stopNow
     -- As in 'run'.
-    E.bracket (setup stvar) teardown $ \(_, _) -> handleLogUnit debugLog $ do
+    E.bracket (setup stvar stopNow) teardown $ \(_, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -103,13 +112,13 @@ runWithSockets ssas conf server = do
     debugLog _msg = return ()
     -- As in 'run'.  The sockets are the caller's here, so only the token
     -- manager and the dispatchers are ours to free.
-    setup stvar = do
-        dispatch <- newDispatch conf
+    setup stvar stopNow = do
+        dispatch <- newDispatch conf stopNow
         let forkConn acc =
                 void $
                     forkIO $
                         withConnectionCount dispatch $
-                            runServer conf server dispatch stvar acc
+                            runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             tids <- runAll dispatch conf stvar forkConn ssas
             return (dispatch, tids)
@@ -131,9 +140,15 @@ runWithSockets ssas conf server = do
 -- out of a wait by closing the file descriptor under it is what
 -- 'closeFdWith' is for, and the IO manager that provides it is not the only
 -- one there will be.
-installShutdownHandler :: ServerConfig -> TVar ServerState -> IO ()
-installShutdownHandler conf stvar =
-    scInstallShutdownHandler conf $ atomically $ writeTVar stvar Stopped
+installShutdownHandler :: ServerConfig -> IO () -> IO ()
+installShutdownHandler = scInstallShutdownHandler
+
+-- | Telling this server to stop: the state the dispatchers read, and then
+--   the datagram that gets them to read it.
+stopping :: TVar ServerState -> IORef (IO ()) -> IO ()
+stopping stvar wakeRef = do
+    atomically $ writeTVar stvar Stopped
+    join $ readIORef wakeRef
 
 -- | Ending the connections the server still has, while the sockets are
 --   still open.
@@ -192,10 +207,9 @@ runServer
     :: ServerConfig
     -> (Connection -> IO ())
     -> Dispatch
-    -> TVar ServerState
     -> Accept
     -> IO ()
-runServer conf server0 dispatch stvar acc = do
+runServer conf server0 dispatch acc = do
     labelMe "QUIC runServer"
     E.bracket open clse $ \(ConnRes conn myAuthCIDs _reader) ->
         handleLogUnit (debugLog conn) $ do
@@ -275,7 +289,7 @@ runServer conf server0 dispatch stvar acc = do
             setConnectionClosed conn
             closure conn ldcc ex
   where
-    open = createServerConnection conf dispatch acc stvar
+    open = createServerConnection conf dispatch acc
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
@@ -293,9 +307,8 @@ createServerConnection
     :: ServerConfig
     -> Dispatch
     -> Accept
-    -> TVar ServerState
     -> IO ConnRes
-createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
+createServerConnection conf@ServerConfig{..} dispatch Accept{..} = do
     sref <- newIORef accMySocket
     pathInfo <- newPathInfo accPeerSockAddr
     piref <- newIORef $ PeerInfo pathInfo Nothing
@@ -365,7 +378,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} stvar = do
             let mgr = tokenMgr dispatch
             setTokenManager conn mgr
             --
-            setStopServer conn $ atomically $ writeTVar stvar Stopped
+            setStopServer conn $ stopServerNow dispatch
             --
             setRegister conn accRegister accUnregister
             accRegister myCID conn

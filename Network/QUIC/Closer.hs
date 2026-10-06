@@ -18,6 +18,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Types
+import Network.QUIC.Windows
 
 closure :: Connection -> LDCC -> Either E.SomeException a -> IO a
 closure conn ldcc (Right x) = do
@@ -100,10 +101,21 @@ closure'' conn ldcc frame = do
         let (recv, clos) = case mrecvbuf of
                 Nothing -> (void $ connRecv conn, return ())
                 Just recvbuf ->
+                    -- 'closer' puts a timeout around this, and a timeout
+                    -- does not reach a thread blocked in a socket call on
+                    -- Windows, so the call goes to a thread of its own
+                    -- there.  Each timeout abandons one; there are six at
+                    -- most, they share a buffer nothing reads, and 'clos'
+                    -- below closes the socket and ends them all.
                     let recv'
-                            | connected = void $ NS.recvBuf sock recvbuf bufsiz
+                            | connected =
+                                windowsThreadBlockHack $
+                                    void $
+                                        NS.recvBuf sock recvbuf bufsiz
                             | otherwise = do
-                                (_, sa) <- NS.recvBufFrom sock recvbuf bufsiz
+                                (_, sa) <-
+                                    windowsThreadBlockHack $
+                                        NS.recvBufFrom sock recvbuf bufsiz
                                 when (sa /= peersa) recv'
                         clos' = do
                             NS.close sock

@@ -82,10 +82,18 @@ spec = do
 --   real one back afterwards.  stdout is redirected rather than closed:
 --   hspec reports through it, and a handle that is only redirected can be
 --   restored from the duplicate however the action ends.
+--
+-- Any handle open for reading will do, since what makes the write throw is
+-- the mode GHC holds the handle in and not anything the system does.  A file
+-- of our own rather than the null device, which is \"\/dev\/null\" on one
+-- platform and \"NUL\" on another.
 withUnwritableStdout :: IO a -> IO a
 withUnwritableStdout action = do
+    tmp <- getTemporaryDirectory
+    let file = tmp </> "quic-logger-spec-readable"
+    writeFile file ""
     saved <- hDuplicate stdout
-    let redirected = withFile "/dev/null" ReadMode $ \h -> do
+    let redirected = withFile file ReadMode $ \h -> do
             hDuplicateTo h stdout
             action `E.finally` hDuplicateTo saved stdout
     redirected `E.finally` hClose saved
