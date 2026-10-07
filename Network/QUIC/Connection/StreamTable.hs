@@ -6,12 +6,15 @@ module Network.QUIC.Connection.StreamTable (
     findStream,
     addStream,
     delStream,
+    keepDepartedStream,
+    noteDepartedRxFrame,
     initialRxMaxStreamData,
     setupCryptoStreams,
     clearCryptoStream,
     getCryptoStream,
 ) where
 
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 
 import Network.QUIC.Connection.Misc
@@ -74,6 +77,68 @@ addStream conn@Connection{..} sid = do
 delStream :: Connection -> Stream -> IO ()
 delStream Connection{..} strm =
     atomicModifyIORef'' streamTable $ deleteStream $ streamId strm
+
+----------------------------------------------------------------
+
+-- | Keeping account of a stream the application has closed before the peer
+--   finished it.
+--
+-- A frame that arrives for a stream no longer in the table is dropped, and
+-- what the peer spent on it is then counted by nobody: not as received,
+-- since we never looked at it, and not as consumed, since nobody will read
+-- it.  The window we advertise falls that much behind what the peer
+-- believes it has spent, for the rest of the connection, and a server that
+-- answers requests without reading their bodies runs its peers out of
+-- window.  'Network.QUIC.IO.releaseStream' gives back what had arrived by
+-- the time of the close; this is for what arrives after it.
+--
+-- Nothing is kept for a stream the peer has finished: its final size is
+-- known and accounted for, and anything that still arrives for it lies
+-- inside that and has been counted already.
+keepDepartedStream :: Connection -> Stream -> IO ()
+keepDepartedStream Connection{..} strm = do
+    b <- getRxBounds strm
+    unless (settled b) $
+        atomicModifyIORef'' departedStreams $
+            IntMap.insert (streamId strm) b
+
+-- | Is there nothing more this stream can owe?
+settled :: RxBounds -> Bool
+settled RxBounds{..} = rxFinal == Just rxCounted
+
+-- | Noting a frame that arrived for a stream the application has closed,
+--   and answering with what the connection's window is owed for it.
+--
+-- The peer's own flow control counts the offsets it has sent, not the
+-- octets that reached us, so what is owed is measured the same way: the
+-- furthest point of the stream anything has reached, less what has been
+-- accounted for already.  A retransmission does not move that point and so
+-- is owed nothing, which is what keeps this from counting twice -- the
+-- reassembly that tells a copy from new data went with the stream.
+noteDepartedRxFrame :: Connection -> StreamId -> Int -> Bool -> IO Int
+noteDepartedRxFrame Connection{..} sid end fin =
+    atomicModifyIORef' departedStreams note
+  where
+    note tbl = case IntMap.lookup sid tbl of
+        Nothing -> (tbl, 0)
+        Just b ->
+            let b' = account b
+             in ( if settled b' then IntMap.delete sid tbl else IntMap.insert sid b' tbl
+                , rxCounted b' - rxCounted b
+                )
+    account b@RxBounds{..} =
+        b
+            { rxCounted = reached
+            , rxHighest = max rxHighest end
+            , rxFinal = if fin then Just end else rxFinal
+            }
+      where
+        -- Never past the end the peer has said the stream has: a frame
+        -- claiming to reach beyond it is for the live path to refuse, and
+        -- this one is not the place to answer it.
+        reached = case (if fin then Just end else rxFinal) of
+            Just f -> min f $ max rxCounted end
+            Nothing -> max rxCounted end
 
 initialRxMaxStreamData :: Connection -> StreamId -> Int
 initialRxMaxStreamData conn sid

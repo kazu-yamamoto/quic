@@ -199,12 +199,20 @@ releaseStream s = do
         -- that body until the connection ends, and enough of them leave the
         -- peer blocked by octets nobody is waiting for.
         unread <- takeRxUnread s
-        when (unread > 0) $ do
-            mx <- updateFlowRx conn unread
+        -- And, if the peer has said where the stream ends, the rest of it:
+        -- RFC 9000 Sec 4.5 has a receiver account for every octet sent on a
+        -- stream, and what was lost on the way was still spent.
+        uncounted <- takeRxUncounted s
+        let owed = unread + uncounted
+        when (owed > 0) $ do
+            mx <- updateFlowRx conn owed
             forM_ mx $ \newMax -> do
                 sendFrames conn RTT1Level [MaxData newMax]
                 fire conn (Microseconds 50000) $
                     sendFrames conn RTT1Level [MaxData newMax]
+        -- Where the peer has not said, what arrives from here on is still
+        -- owed and the stream is gone, so what it owes is kept without it.
+        keepDepartedStream conn s
   where
     conn = streamConnection s
     sid = streamId s
