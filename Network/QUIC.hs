@@ -3,6 +3,11 @@
 -- | This main module provides APIs for QUIC.
 --
 -- The -threaded option must be specified to GHC to use this library.
+--
+-- On Windows the native I/O manager must be selected as well, with
+-- @-with-rtsopts=--io-manager=native@ or @+RTS --io-manager=native@.
+-- Under the other one (MIO) a handshake does not complete.  A library
+-- cannot choose this, so the application has to.
 module Network.QUIC (
     -- * Connection
     Connection,
