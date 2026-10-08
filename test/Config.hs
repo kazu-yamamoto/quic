@@ -162,14 +162,16 @@ data Scenario
 withPipe :: Scenario -> IO () -> IO ()
 withPipe = withPipeWith False
 
--- | 'withPipe', with one short-header datagram delivered to the relay's
--- socket before the relay starts reading.
+-- | 'withPipe', with two leftover datagrams delivered to the relay's socket
+-- before the relay starts reading: a short-header one and a long-header one.
 --
--- That is what the CONNECTION_CLOSE of the connection that just closed looks
--- like when it lands after this socket has taken over the port, and taking it
--- for the client ties the relay to a peer with nothing left to say.  The test
--- that uses this fails within the idle timeout if the relay ever goes back to
--- latching onto the first datagram it sees.
+-- That is what the connection that just closed leaves behind when it lands
+-- after this socket has taken over the port.  A CONNECTION_CLOSE is a
+-- short-header packet once the handshake is confirmed and a long-header one
+-- before that, and taking either for the client ties the relay to a peer
+-- with nothing left to say.  The test that uses this fails within the idle
+-- timeout if the relay ever goes back to latching onto the first datagram it
+-- sees, or onto the first long-header one.
 withPipeStray :: Scenario -> IO () -> IO ()
 withPipeStray = withPipeWith True
 
@@ -213,8 +215,9 @@ withPipeWith stray scenario body = do
             addrAny <- resolve "0"
             bind sockS $ addrAddress addrAny
             when stray $
-                E.bracket (openSocket addrC) close $ \sock ->
+                E.bracket (openSocket addrC) close $ \sock -> do
                     void $ sendTo sock (BS.pack [0x40, 1, 2, 3]) saC
+                    void $ sendTo sock (BS.pack [0xc0, 1, 2, 3]) saC
 
             -- The relaying threads have to stop before the sockets close.
             -- Run at the end of body instead, the kills are skipped whenever
@@ -232,7 +235,8 @@ withPipeWith stray scenario body = do
         -- from client
         tid0 <- forkIO $ do
             -- Wait for the client to introduce itself, and take the first
-            -- long-header packet rather than the first datagram.
+            -- datagram that could be its opening one rather than the first
+            -- datagram.
             --
             -- These sockets use one fixed port, so the socket for this test
             -- binds it a fraction of a millisecond after the previous test
@@ -244,8 +248,20 @@ withPipeWith stray scenario body = do
             -- relay: it sends Initial packets until the idle timeout and
             -- hears nothing, the server never sees the connection at all.
             --
-            -- A client always opens with a long header; a leftover from an
-            -- established connection is a short one.  That tells them apart.
+            -- A client opens with an Initial packet in a datagram padded to
+            -- at least 1200 bytes, which RFC 9000 Sec 14.1 requires of it so
+            -- that the path is known to carry one.  Nothing a connection
+            -- leaves behind is that: a CONNECTION_CLOSE is a short-header
+            -- packet once the handshake is confirmed and a long-header one
+            -- before that, and either way it is a fraction of that size.
+            -- Long header alone does not tell them apart.
+            --
+            -- This is a guard, not the cure.  A connection that is still
+            -- running sends datagrams that are a client's opening one in
+            -- every respect, because that is what they are, and no reading
+            -- of a datagram can say which test it belongs to.  A test that
+            -- leaves a client behind breaks the next one however this
+            -- chooses, so a test must not leave one behind.
             (bs, saO) <- waitForClientHello sockC
             writeIORef peerRef $ Just saO
             n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
@@ -284,9 +300,11 @@ withPipeWith stray scenario body = do
     relayRecv sock = windowsThreadBlockHack $ recvFrom sock 2048
     waitForClientHello sockC = do
         (bs, saO) <- relayRecv sockC
-        if not (BS.null bs) && BS.head bs .&. 0x80 /= 0
+        if isClientHello bs
             then return (bs, saO)
             else waitForClientHello sockC
+    isClientHello bs =
+        BS.length bs >= 1200 && BS.head bs .&. 0x80 /= 0
     hints =
         defaultHints
             { addrSocketType = Network.Socket.Datagram
