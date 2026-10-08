@@ -27,6 +27,7 @@ import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Socket
 import Network.QUIC.Types
+import Network.QUIC.Windows
 
 -- | readerClient dies when the socket is closed.
 readerClient :: Socket -> Connection -> IO ()
@@ -35,10 +36,16 @@ readerClient s0 conn = handleLogUnit logAction $ do
     wait
     connected <- getSockConnected conn
     peersa0 <- peerSockAddr <$> getPathInfo conn
+    -- The idle timeout below throws into this thread to end the wait, and
+    -- 'killReaders' does the same when the connection closes.  Neither
+    -- reaches a thread blocked in a socket call on Windows, so the call --
+    -- the call alone, not the loop around it -- goes to a thread of its own
+    -- there.  Nothing is left racing for a datagram: the timeout closes the
+    -- socket and stops, and closing it is also what ends an abandoned call.
     let recv
-            | connected = NSB.recv s0 2048
+            | connected = windowsThreadBlockHack $ NSB.recv s0 2048
             | otherwise = do
-                (bs, peersa) <- NSB.recvFrom s0 2048
+                (bs, peersa) <- windowsThreadBlockHack $ NSB.recvFrom s0 2048
                 if peersa /= peersa0 then recv else return bs
     loop recv
   where
