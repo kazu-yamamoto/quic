@@ -244,13 +244,22 @@ test0RTTSendsEarly sc waitS =
                     , ccUse0RTT = True
                     }
         sent <- newEmptyMVar
-        withPipe (DropServerPacket [0 .. 50]) $ do
-            void $ forkIO $ void $ ignoreQUIC $ C.run cc $ \conn -> do
+        -- The client is held open past the send so that the connection does
+        -- not tear down before the take below, and killed with the test so
+        -- that it does not outlive it.  Left to run out its own delay, it
+        -- went on sending Initial packets to the port the relay had just
+        -- given up, and the relay of whatever test came next latched onto
+        -- it: that test's client was then ignored for every datagram it
+        -- sent and failed on the idle timeout, ten seconds later and with
+        -- nothing to say why.
+        let client = ignoreQUIC $ C.run cc $ \conn -> do
                 s <- stream conn
                 sendStream s $ BS.replicate limit 97
                 putMVar sent ()
                 threadDelay 5000000
-            Timeout.timeout 2000000 (takeMVar sent) `shouldReturn` Just ()
+        withPipe (DropServerPacket [0 .. 50]) $
+            E.bracket (forkIO client) killThread $ \_ ->
+                Timeout.timeout 2000000 (takeMVar sent) `shouldReturn` Just ()
   where
     server = S.run sc $ \conn -> do
         s <- acceptStream conn
