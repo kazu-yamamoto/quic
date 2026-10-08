@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:  [ 'ubuntu-latest', 'macOS-latest' ]
+        os:  [ 'ubuntu-latest', 'macOS-latest', 'windows-latest' ]
         ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12' ]
         # GitHub runs at most five macOS jobs at once, so the sixth sat
         # waiting for one of the others to finish and by itself decided when
@@ -21,11 +21,19 @@ jobs:
         # beyond the syscalls the network code makes, and those do not vary
         # by compiler; keep the oldest and newest there and let Linux cover
         # the range in between.
+        #
+        # Windows is here for one thing, which is the I/O manager the test
+        # suite runs under, and that does not vary by compiler either.
         exclude:
           - { os: macOS-latest, ghc: '9.4'  }
           - { os: macOS-latest, ghc: '9.6'  }
           - { os: macOS-latest, ghc: '9.8'  }
           - { os: macOS-latest, ghc: '9.10' }
+          - { os: windows-latest, ghc: '9.2'  }
+          - { os: windows-latest, ghc: '9.4'  }
+          - { os: windows-latest, ghc: '9.6'  }
+          - { os: windows-latest, ghc: '9.8'  }
+          - { os: windows-latest, ghc: '9.10' }
 
     env:
       cache-name: cabal-ghc
@@ -41,30 +49,28 @@ jobs:
     - uses: actions/checkout@v4
 
     - uses: haskell-actions/setup@v2
+      id: setup
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: latest
 
-    - name: Cache Key
-      id: params
-      shell: bash
-      run: |
-        ghc_version=$(ghc --numeric-version)
-        echo "cache=${{ runner.os }}-build-${{ env.cache-name }}-${ghc_version}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}" > "$GITHUB_OUTPUT"
-        echo "ghc_version=$ghc_version" >> "$GITHUB_OUTPUT"
-
+    # The store, and only the store: it holds the built dependencies, which
+    # is the whole of what takes time.  The package index is deliberately not
+    # kept with them -- restored together, the index goes back to whatever
+    # was current when the cache was written, and the job cannot see anything
+    # published since, however long ago that was.  A cabal update run before
+    # the restore is simply overwritten, so the two have to be apart.
+    #
+    # And the store is found by asking the setup step rather than by naming
+    # ~/.cabal, which is not where it is on Windows: that job was building
+    # every dependency from scratch every time.
     - name: Restore Cache
       uses: actions/cache/restore@v4
       if: ${{ github.ref_name != 'ci-uc' }}
       with:
-        path: ~/.cabal
-        key: ${{ steps.params.outputs.cache }}
+        path: ${{ steps.setup.outputs.cabal-store }}
+        key: ${{ env.cache-name }}-${{ runner.os }}-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
 
-    # After the restore, not before it.  The cache is ~/.cabal, which is where
-    # the package index lives, so restoring it puts back whatever index was
-    # current when the cache was written -- and a cabal update run first is
-    # simply overwritten.  A job then cannot see anything published since the
-    # cache was made, however long ago that was.
     - name: Hackage index
       shell: bash
       run: cabal update
@@ -98,8 +104,8 @@ jobs:
       uses: actions/cache/save@v4
       if: ${{ steps.inst-dep.outputs.installed == 'true' || steps.doctest-dep.outputs.installed == 'true' }}
       with:
-        path: ~/.cabal
-        key: ${{ steps.params.outputs.cache }}
+        path: ${{ steps.setup.outputs.cabal-store }}
+        key: ${{ env.cache-name }}-${{ runner.os }}-${{ steps.setup.outputs.ghc-version }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
 
     - name: Build
       run: cabal build ${{ env.target-config }} all
