@@ -56,7 +56,7 @@ run conf server = do
     -- onServerReady, and left anyone waiting on that hook waiting for good.
     -- An IOSpec run wedged for two and a half days that way, on a port the
     -- previous test had not finished releasing.
-    E.bracket (setup stvar stopNow wakeRef) teardown $ \(_, _, _) -> handleLogUnit debugLog $ do
+    E.bracket (setup stvar stopNow wakeRef) (teardown stopNow) $ \(_, _, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -82,7 +82,19 @@ run conf server = do
                 runAll dispatch conf stvar forkConn ssas
                     `E.onException` mapM_ NS.close ssas
             return (dispatch, tids, ssas)
-    teardown (dispatch, tids, ssas) = do
+    -- Telling the dispatchers first.  They end where they wait, on the
+    -- datagram 'stopping' sends them, and the 'killThread' below then has
+    -- nothing to reach -- which matters because on Windows it could not
+    -- have reached them anyway: a thread blocked in a socket call there is
+    -- not interruptible.  Running them on a thread of their own so that it
+    -- could be was a forked thread for every datagram the server received.
+    --
+    -- The usual way here is through the shutdown handler, which has already
+    -- done this; doing it again is free.  The way that had not, until now,
+    -- is 'run' being cancelled from outside.
+    teardown :: IO () -> (Dispatch, [ThreadId], [NS.Socket]) -> IO ()
+    teardown stopNow (dispatch, tids, ssas) = do
+        stopNow
         clearDispatch dispatch
         mapM_ killThread tids
         shutdownConnections conf dispatch
@@ -103,7 +115,7 @@ runWithSockets ssas conf server = do
     let stopNow = stopping stvar wakeRef
     installShutdownHandler conf stopNow
     -- As in 'run'.
-    E.bracket (setup stvar stopNow) teardown $ \(_, _) -> handleLogUnit debugLog $ do
+    E.bracket (setup stvar stopNow) (teardown stopNow) $ \(_, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -122,7 +134,10 @@ runWithSockets ssas conf server = do
         flip E.onException (clearDispatch dispatch) $ do
             tids <- runAll dispatch conf stvar forkConn ssas
             return (dispatch, tids)
-    teardown (dispatch, tids) = do
+    -- As in 'run'.
+    teardown :: IO () -> (Dispatch, [ThreadId]) -> IO ()
+    teardown stopNow (dispatch, tids) = do
+        stopNow
         clearDispatch dispatch
         mapM_ killThread tids
         shutdownConnections conf dispatch
