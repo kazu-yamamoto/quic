@@ -13,6 +13,7 @@ module Network.QUIC.Stream.Misc (
     setResetReceived,
     markReleased,
     FinalSizeProblem (..),
+    getRxBounds,
     noteRxFrame,
     noteRxFinalSize,
     addRxCounted,
@@ -155,6 +156,10 @@ data FinalSizeProblem
 -- | Taking in where one STREAM frame says the stream reaches, and whether it
 --   ends it.  Nothing is counted here: a frame may still turn out to be a
 --   duplicate, and only what is taken counts.
+-- | What the receiving side has seen of where this stream ends.
+getRxBounds :: Stream -> IO RxBounds
+getRxBounds Stream{..} = readIORef streamRxBounds
+
 noteRxFrame :: Stream -> Int -> Bool -> IO (Maybe FinalSizeProblem)
 noteRxFrame Stream{..} end fin = atomicModifyIORef' streamRxBounds note
   where

@@ -143,6 +143,8 @@ spec = do
                 testFinalSize cc sc waitS [StreamF 0 0 ["ab"] True, StreamF 0 2 ["cd"] False]
         it "counts what the application never reads against the connection" $ do
             withPipe (DropClientPacket []) $ testCloseWithoutReading cc sc waitS
+        it "counts what arrives after the application has closed the stream" $ do
+            withPipe (DropClientPacket []) $ testCloseWhileArriving cc sc waitS
         it "counts a reset stream's final size against the connection" $ do
             withPipe (DropClientPacket []) $ testResetCountsAgainstTheWindow cc sc waitS
     describe "closing" $ do
@@ -792,6 +794,40 @@ frameEncodingError _ = False
 -- of the connection.  Here twenty streams of four kilobytes go to a server
 -- that reads one octet of each, against a window of thirty-two: uncounted,
 -- the client is blocked before it is halfway through.
+-- | The octets that arrive for a stream after the application has closed
+--   it are given back to the connection's window too.
+--
+-- They go nowhere -- the stream is gone from the table and the data is
+-- dropped -- but the peer spent its connection window on them all the same.
+-- Counted by nobody, the window we advertise falls that much behind what
+-- the peer believes it has spent, for the rest of the connection.
+--
+-- The stream is written in two halves with a pause between them, so that the
+-- server reads its one octet and closes while the second half is still on
+-- its way.  Without the pause this is a race the server usually loses --
+-- which is why 'testCloseWithoutReading' passed on one machine and failed on
+-- a slower one.
+testCloseWhileArriving :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testCloseWhileArriving cc sc0 waitS =
+    withAsync server $ \_ -> client
+  where
+    sc = sc0{scParameters = (scParameters sc0){initialMaxData = 32768}}
+    server = run sc $ \conn -> forever $ do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1
+        closeStream strm
+    client = do
+        waitS
+        r <- Timeout.timeout 5000000 $ C.run cc $ \conn ->
+            replicateM_ 20 $ do
+                strm <- stream conn
+                sendStream strm $ BS.replicate 2048 0
+                threadDelay 2000
+                sendStream strm $ BS.replicate 2048 0
+                shutdownStream strm
+                closeStream strm
+        r `shouldBe` Just ()
+
 testCloseWithoutReading :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testCloseWithoutReading cc sc0 waitS =
     withAsync server $ \_ -> client
