@@ -1,5 +1,16 @@
 # ChangeLog
 
+## 0.3.16
+
+* Stop waiting for a socket to be readable, and run on Windows.
+  [#161](https://github.com/kazu-yamamoto/quic/pull/161)
+* Count what arrives after the application has closed a stream.
+  [#163](https://github.com/kazu-yamamoto/quic/pull/163)
+* Say that Windows needs the native I/O manager.
+  [#164](https://github.com/kazu-yamamoto/quic/pull/164)
+* Stop forking a thread for every datagram a server receives.
+  [#165](https://github.com/kazu-yamamoto/quic/pull/165)
+
 ## 0.3.15
 
 * Add `scInstallShutdownHandler` to stop a server.
