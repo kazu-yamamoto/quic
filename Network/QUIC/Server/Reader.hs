@@ -57,7 +57,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
 import Network.QUIC.Types
-import Network.QUIC.Windows
 
 ----------------------------------------------------------------
 
@@ -263,8 +262,13 @@ dispatcher d conf stvar forkConnection mysock = do
 
     logAction _msg = return ()
 
+    -- No thread of its own for the receive.  The dispatcher is not ended by
+    -- an exception thrown into it -- it is told, and sees it where it waits
+    -- -- so it does not need to be interruptible there, and a forked thread
+    -- for every datagram a server receives is 4.5 microseconds of each on
+    -- Windows.
     safeRecv rcv = do
-        ex <- E.try $ windowsThreadBlockHack rcv
+        ex <- E.try rcv
         case ex of
             Right x -> return x
             Left se | isAsyncException se -> E.throwIO (se :: E.SomeException)
