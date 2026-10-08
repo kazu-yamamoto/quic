@@ -7,6 +7,21 @@ This package implements QUIC based on Haskell lightweight threads.
 - APIs are found in the [`Network.QUIC`](https://github.com/kazu-yamamoto/quic/blob/master/Network/QUIC.hs) module.
 - Example client and server are found in the [`util/`](https://github.com/kazu-yamamoto/quic/tree/master/util) directory.
 
+### Windows
+
+This package works under the native I/O manager (WinIO) only.  An
+executable using it must say so, since a library cannot:
+
+```
+ghc-options: -threaded
+if os(windows)
+    ghc-options: -with-rtsopts=--io-manager=native
+```
+
+Under the other I/O manager (MIO) a handshake does not complete: a thread
+blocked in a socket call cannot be reached by an asynchronous exception
+there, so the timeouts this package relies on never fire.
+
 This package covers:
 
 - [Version-Independent Properties of QUIC](https://tools.ietf.org/html/rfc8999)
