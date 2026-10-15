@@ -233,6 +233,7 @@ test-suite spec
         HandshakeSpec
         IOSpec
         LoggerSpec
+        MigrationSpec
         PacketSpec
         ReassSpec
         ParametersSpec

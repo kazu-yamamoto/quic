@@ -22,8 +22,7 @@ module Network.QUIC.Connection.Migration (
     choosePeerCIDForPrivacy,
     setPeerStatelessResetToken,
     isStatelessRestTokenValid,
-    setMigrationStarted,
-    isPathValidating,
+    claimMigration,
     checkResponse,
     validatePath,
     getMyRetirePriorTo,
@@ -378,17 +377,26 @@ setChallenges :: Connection -> PathInfo -> PathData -> IO ()
 setChallenges Connection{..} pathInfo pdat =
     atomically $ writeTVar migrationState $ SendChallenge pathInfo pdat
 
-setMigrationStarted :: Connection -> IO ()
-setMigrationStarted Connection{..} =
-    atomically $ writeTVar migrationState MigrationStarted
-
-isPathValidating :: Connection -> IO Bool
-isPathValidating Connection{..} = do
-    s <- readTVarIO migrationState
+-- | Take on the migration, if no one has it.
+--
+-- True to the caller that took it, and that caller is then the one to carry
+-- it out; False to everyone else, including every later caller until the
+-- validation this one starts is finished.
+--
+-- Test and set together.  Apart, every packet that arrived before the
+-- winner had set the state read it as free, and a peer that sends from an
+-- address this connection has not seen -- which takes no more than another
+-- port -- got a migration for each of those packets rather than one for all
+-- of them.
+claimMigration :: Connection -> IO Bool
+claimMigration Connection{..} = atomically $ do
+    s <- readTVar migrationState
     case s of
-        SendChallenge{} -> return True
-        MigrationStarted -> return True
-        _ -> return False
+        SendChallenge{} -> return False
+        MigrationStarted -> return False
+        _ -> do
+            writeTVar migrationState MigrationStarted
+            return True
 
 waitResponse :: Connection -> IO ()
 waitResponse Connection{..} = atomically $ do
