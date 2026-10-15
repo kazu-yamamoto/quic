@@ -1,5 +1,11 @@
 # ChangeLog
 
+## 0.3.17
+
+* Security fix: bound what an unauthenticated packet can take.
+  [#168](https://github.com/kazu-yamamoto/quic/pull/168)
+* Allow crypton 2.2 and the x509 family at 1.10.
+
 ## 0.3.16
 
 * Stop waiting for a socket to be readable, and run on Windows.
