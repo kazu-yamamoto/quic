@@ -13,7 +13,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:  [ 'ubuntu-latest', 'macOS-latest', 'windows-latest' ]
+        # macos-15 rather than macOS-latest, for as long as the latest
+        # cannot link.  The macos-26 image of 2026-10-13 carries Command
+        # Line Tools whose SDK stubs name an architecture its own linker
+        # cannot read, so every package that links fails:
+        #
+        #   /Library/Developer/CommandLineTools/SDKs/MacOSX27.0.sdk/usr/lib/libSystem.B.tbd:4:20:
+        #     error: unknown architecture
+        #       arm64e.x1-macos, arm64e.x1-maccatalyst ]
+        #   clang: error: linker command failed with exit code 1
+        #
+        # Nothing in this package is involved: byteorder and colour fail the
+        # same way.  The fix is upstream, in the linker, and until it
+        # arrives the newest macOS cannot build Haskell at all.  Put
+        # macOS-latest back when it can.
+        os:  [ 'ubuntu-latest', 'macos-15', 'windows-latest' ]
         ghc: [ '9.2', '9.4', '9.6', '9.8', '9.10', '9.12' ]
         # GitHub runs at most five macOS jobs at once, so the sixth sat
         # waiting for one of the others to finish and by itself decided when
@@ -25,10 +39,10 @@ jobs:
         # Windows is here for one thing, which is the I/O manager the test
         # suite runs under, and that does not vary by compiler either.
         exclude:
-          - { os: macOS-latest, ghc: '9.4'  }
-          - { os: macOS-latest, ghc: '9.6'  }
-          - { os: macOS-latest, ghc: '9.8'  }
-          - { os: macOS-latest, ghc: '9.10' }
+          - { os: macos-15, ghc: '9.4'  }
+          - { os: macos-15, ghc: '9.6'  }
+          - { os: macos-15, ghc: '9.8'  }
+          - { os: macos-15, ghc: '9.10' }
           - { os: windows-latest, ghc: '9.2'  }
           - { os: windows-latest, ghc: '9.4'  }
           - { os: windows-latest, ghc: '9.6'  }
