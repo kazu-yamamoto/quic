@@ -518,8 +518,20 @@ dispatch
                     mPathInfo <- findPathInfo conn peersa
                     case mPathInfo of
                         Nothing -> do
-                            forkManaged conn $
-                                onClientMigration conn dCID peersa cidChanged
+                            -- Taken here, before the thread rather than
+                            -- inside it, so that a peer sending from an
+                            -- address this connection has not seen gets one
+                            -- thread for the migration and not one for every
+                            -- packet.  'findPathInfo' knows the address in
+                            -- use and the one before it and nothing else, so
+                            -- a sender that moves its port -- which asks no
+                            -- spoofing of it -- is unknown every time, and
+                            -- this runs on packets nothing has authenticated
+                            -- yet.
+                            claimed <- claimMigration conn
+                            when claimed $
+                                forkManaged conn $
+                                    onClientMigration conn dCID peersa cidChanged
                         _ -> return ()
                     writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 ----------------------------------------------------------------
@@ -550,22 +562,20 @@ dispatch
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ
 
+-- | Carry out the migration the caller has claimed with 'claimMigration'.
 onClientMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
 onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
-    migrating <- isPathValidating conn -- fixme: test and set
-    unless migrating $ do
-        setMigrationStarted conn
-        -- fixme: should not block
-        mcidinfo <-
-            if cidChanged
-                then timeout (Microseconds 100000) "onClientMigration" $ waitPeerCID conn
-                else return Nothing -- PathChallenge only, no RetireConnectionID
-        let msg = "Migration: " <> bhow peersa <> " (" <> bhow newdCID <> ")"
-        qlogDebug conn $ Debug $ toLogStr msg
-        connDebugLog conn $ "debug: onClientMigration: " <> msg
-        pathInfo <- newPathInfo peersa
-        -- assumed that this PathInfo is not stored in PeerInfo
-        addPathInfo conn pathInfo
-        validatePath conn pathInfo mcidinfo
+    -- fixme: should not block
+    mcidinfo <-
+        if cidChanged
+            then timeout (Microseconds 100000) "onClientMigration" $ waitPeerCID conn
+            else return Nothing -- PathChallenge only, no RetireConnectionID
+    let msg = "Migration: " <> bhow peersa <> " (" <> bhow newdCID <> ")"
+    qlogDebug conn $ Debug $ toLogStr msg
+    connDebugLog conn $ "debug: onClientMigration: " <> msg
+    pathInfo <- newPathInfo peersa
+    -- assumed that this PathInfo is not stored in PeerInfo
+    addPathInfo conn pathInfo
+    validatePath conn pathInfo mcidinfo
   where
     logAction msg = connDebugLog conn ("debug: onClientMigration: " <> msg)
