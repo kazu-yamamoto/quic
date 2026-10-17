@@ -62,6 +62,35 @@ spec = describe "the shutdown handler" $ do
                         told <- T.timeout 5000000 $ waitCatch peer
                         told `shouldSatisfy` wasToldTheServerIsClosing
 
+    -- The caller owns the socket and closes it once this returns, so
+    -- returning while a connection still runs hands that connection a
+    -- closed descriptor.  What it loses is the CONNECTION_CLOSE it was in
+    -- the middle of sending, and the peer then waits out its idle timeout
+    -- hearing nothing.
+    it "waits for a connection whose application is still finishing" $
+        withServerSocket $ \sock -> do
+            (sc, ready, stopVar) <- shutdownServerConfig
+            let forever' = threadDelay 30000000
+            serving <- newEmptyMVar
+            finished <- newEmptyMVar
+            -- An application that takes its time on the way out, and says
+            -- when it is done.
+            let slowApp _ =
+                    (putMVar serving () >> forever')
+                        `E.finally` (threadDelay 1500000 >> putMVar finished ())
+            withAsync (runWithSockets [sock] sc slowApp) $ \server -> do
+                takeMVar ready
+                stopNow <- takeMVar stopVar
+                withAsync (C.run clientConfig (\_ -> forever')) $ \_ -> do
+                    takeMVar serving
+                    stopNow
+                    ended <- T.timeout 10000000 $ wait server
+                    ended `shouldBe` Just ()
+                    -- Already finished by the time the server returned,
+                    -- which is the whole point: a take that has to wait
+                    -- here is a server that returned too early.
+                    tryTakeMVar finished `shouldReturn` Just ()
+
 -- | Whether the client ended because the server said so, rather than
 --   because it waited out its idle timeout on a connection that had stopped
 --   answering.

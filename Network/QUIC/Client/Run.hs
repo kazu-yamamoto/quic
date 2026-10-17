@@ -114,11 +114,15 @@ runClient conf client0 isICVN verInfo = do
         closure conn ldcc ex
   where
     open = createClientConnection conf verInfo
+    -- Stopping the readers and seeing them out before the buffers they use
+    -- are freed.  This used to free first and stop after, which left every
+    -- reader a window in which to use a buffer that had been handed back.
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
-        freeResources conn
         killReaders conn
+        waitManaged conn
+        freeResources conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do

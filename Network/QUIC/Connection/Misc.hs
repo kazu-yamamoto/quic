@@ -24,6 +24,7 @@ module Network.QUIC.Connection.Misc (
     resetDealyedAck,
     setMaxPacketSize,
     forkManaged,
+    waitManaged,
     killReaders,
     addResource,
     freeResources,
@@ -191,6 +192,13 @@ freeResources Connection{..} =
 
 forkManaged :: Connection -> String -> IO () -> IO ()
 forkManaged Connection{..} = T.forkManaged readers
+
+-- | Waiting until this connection's 'forkManaged' threads are all done.
+--
+-- What they are done with is the connection's buffers, so this has to come
+-- between stopping them and 'freeResources'.
+waitManaged :: Connection -> IO ()
+waitManaged Connection{..} = T.waitUntilAllGone readers
 
 -- | Killing the threads of 'forkManaged'.  One forked after this is
 --   refused rather than run.
