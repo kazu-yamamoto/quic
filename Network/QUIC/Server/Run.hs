@@ -71,10 +71,8 @@ run conf server = do
     setup stvar stopNow wakeRef = do
         dispatch <- newDispatch conf stopNow
         let forkConn acc =
-                void $
-                    forkIO $
-                        withConnectionCount dispatch $
-                            runServer conf server dispatch acc
+                spawnConnection dispatch $
+                    runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             ssas <- openAll $ scAddresses conf
             writeIORef wakeRef $ mapM_ wakeDispatcher ssas
@@ -127,10 +125,8 @@ runWithSockets ssas conf server = do
     setup stvar stopNow = do
         dispatch <- newDispatch conf stopNow
         let forkConn acc =
-                void $
-                    forkIO $
-                        withConnectionCount dispatch $
-                            runServer conf server dispatch acc
+                spawnConnection dispatch $
+                    runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             tids <- runAll dispatch conf stvar forkConn ssas
             return (dispatch, tids)

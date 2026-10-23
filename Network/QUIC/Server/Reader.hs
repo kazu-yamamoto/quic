@@ -7,7 +7,7 @@ module Network.QUIC.Server.Reader (
     clearDispatch,
     runDispatcher,
     liveConnections,
-    withConnectionCount,
+    spawnConnection,
     waitNoConnection,
     tokenMgr,
     genStatelessReset,
@@ -26,7 +26,6 @@ module Network.QUIC.Server.Reader (
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
-import qualified Control.Monad.STM as STM
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
@@ -45,6 +44,7 @@ import Network.Socket (
 import qualified Network.Socket.ByteString as NSB
 import qualified System.IO.Error as E
 import System.Log.FastLogger
+import qualified System.ThreadManager as T
 
 import Network.QUIC.Common
 import Network.QUIC.Config
@@ -66,7 +66,7 @@ data Dispatch = Dispatch
     , srcTable :: RecvQDict
     , genStatelessReset :: CID -> StatelessResetToken
     , statelessResetRate :: Rate
-    , connectionCount :: TVar Int
+    , connectionThreads :: T.ThreadManager
     , stopServerNow :: IO ()
     -- ^ Stopping this server: what the shutdown handler is handed, and
     -- what a connection's 'stop' reaches it by.
@@ -83,7 +83,7 @@ newDispatch ServerConfig{..} stopNow =
         <*> newRecvQDict
         <*> makeGenStatelessReset
         <*> newRate
-        <*> newTVarIO 0
+        <*> T.newThreadManager
         <*> pure stopNow
   where
     conf =
@@ -123,19 +123,16 @@ liveConnections Dispatch{..} = do
     -- the elements repeat.  Its main thread is what it has one of.
     return $ M.elems $ M.fromList [(mainThreadId conn, conn) | conn <- M.elems tbl]
 
--- | Running a connection, counted while it runs.  'dstTable' cannot say
---   when the last of them is done: a connection leaves it a second after it
---   ends, and it is in there under several keys.
-withConnectionCount :: Dispatch -> IO a -> IO a
-withConnectionCount Dispatch{..} = E.bracket_ (bump 1) (bump (-1))
-  where
-    bump n = atomically $ modifyTVar' connectionCount (+ n)
+-- | Running a connection on a thread of its own, counted from before the
+--   fork.  'dstTable' cannot say when the last of them is done: a
+--   connection leaves it a second after it ends, and it is in there under
+--   several keys.
+spawnConnection :: Dispatch -> IO () -> IO ()
+spawnConnection Dispatch{..} = T.forkManaged connectionThreads "QUIC connection"
 
 -- | Waiting until no connection is running.
 waitNoConnection :: Dispatch -> IO ()
-waitNoConnection Dispatch{..} = atomically $ do
-    n <- readTVar connectionCount
-    STM.check $ n == 0
+waitNoConnection Dispatch{..} = T.waitUntilAllGone connectionThreads
 
 ----------------------------------------------------------------
 
@@ -530,7 +527,7 @@ dispatch
                             -- yet.
                             claimed <- claimMigration conn
                             when claimed $
-                                forkManaged conn $
+                                forkManaged conn "QUIC migration" $
                                     onClientMigration conn dCID peersa cidChanged
                         _ -> return ()
                     writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl

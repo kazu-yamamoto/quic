@@ -59,7 +59,7 @@ run conf client = do
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
 runClient conf client0 isICVN verInfo = do
     E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) -> do
-        forkManaged conn reader
+        forkManaged conn "QUIC reader" reader
         let conf' =
                 conf
                     { ccParameters =
@@ -107,7 +107,7 @@ runClient conf client0 isICVN verInfo = do
                 labelMe "concurrently5"
                     >> concurrently (c4 `E.catch` \(_ :: InternalControl) -> return ()) s6
             runThreads = snd <$> c5
-        when (ccWatchDog conf) $ forkManaged conn $ watchDog conn
+        when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog conn
         ex <- E.try runThreads
         sendFinal conn
         setConnectionClosed conn
