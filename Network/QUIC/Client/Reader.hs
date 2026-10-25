@@ -3,6 +3,7 @@
 
 module Network.QUIC.Client.Reader (
     readerClient,
+    socketReaderOf,
     recvClient,
     ConnectionControl (..),
     controlConnection,
@@ -29,9 +30,20 @@ import Network.QUIC.Socket
 import Network.QUIC.Types
 import Network.QUIC.Windows
 
--- | readerClient dies when the socket is closed.
+-- | The reader of a socket of this connection, registered so that
+--   'rebind' can retire it.  The caller forks what this returns.
+socketReaderOf :: Connection -> Socket -> IO (IO ())
+socketReaderOf conn sock = do
+    var <- newEmptyMVar
+    void $ setSocketReader conn var
+    return $ do
+        myThreadId >>= putMVar var
+        readerClient sock conn
+
+-- | Reading the datagrams of a socket of this connection until the socket
+--   is retired by 'rebind' or the connection ends.
 readerClient :: Socket -> Connection -> IO ()
-readerClient s0 conn = handleLogUnit logAction $ do
+readerClient s0 conn = handleLogUnit logAction $ handleRetired $ do
     labelMe "readerClient"
     wait
     connected <- getSockConnected conn
@@ -67,6 +79,10 @@ readerClient s0 conn = handleLogUnit logAction $ do
                 pkts <- decodePackets bs (not quicBit)
                 mapM_ (putQ now) pkts
                 loop recv
+    -- Retirement is what 'rebind' does to this reader, not a failure.
+    handleRetired = E.handle $ \e -> case e of
+        BreakForever -> return ()
+        _ -> E.throwIO e
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ (PacketIB BrokenPacket _) = return ()
     putQ t (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
@@ -243,6 +259,24 @@ rebind conn microseconds = do
     connected <- getSockConnected conn
     when connected $ connect newSock peersa
     oldSock <- setSocket conn newSock
-    let reader = readerClient newSock conn
+    -- Taken before the new reader takes over: this is the thread still
+    -- reading the old socket, which goes on taking what arrives on the old
+    -- path until the delay below is up.
+    oldReader <- getSocketReader conn
+    reader <- socketReaderOf conn newSock
     forkManaged conn "QUIC reader" reader
-    fire conn microseconds $ close oldSock
+    fire conn microseconds $ do
+        -- Tell the old reader to stop before the socket goes, rather than
+        -- close the socket to end it.  A close ends a thread waiting on a
+        -- descriptor only because the event manager tells the waiter so,
+        -- and that is to be removed; after it is, a waiter left behind on
+        -- a number which has been handed to someone else since reads that
+        -- someone else's socket.
+        --
+        -- The close still follows, because it is what releases the call
+        -- 'windowsThreadBlockHack' abandoned on Windows, where an
+        -- asynchronous exception does not reach a blocking socket call.
+        forM_ oldReader $ \var ->
+            readMVar var >>= \tid ->
+                E.throwTo tid BreakForever
+        close oldSock

@@ -263,6 +263,10 @@ data Connection = Connection
     , connRecvQ         :: RecvQ
     , connRecvDatagramQ :: DatagramQ
     , connSocket        :: IORef Socket
+    , socketReader      :: IORef (Maybe (MVar ThreadId))
+    -- ^ Client only: where the thread reading 'connSocket' says which
+    --   thread it is, so that 'rebind' can retire it.  A server's sockets
+    --   are read by the dispatcher.
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
@@ -381,6 +385,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connState         <- newConnState rl
     -- Manage
     readers           <- T.newThreadManager
+    socketReader      <- newIORef Nothing
     mainThreadId      <- myThreadId
     controlRate       <- newRate
     -- Info

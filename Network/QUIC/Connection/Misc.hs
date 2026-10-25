@@ -23,6 +23,8 @@ module Network.QUIC.Connection.Misc (
     delayedAck,
     resetDealyedAck,
     setMaxPacketSize,
+    setSocketReader,
+    getSocketReader,
     forkManaged,
     waitManaged,
     killReaders,
@@ -35,6 +37,7 @@ module Network.QUIC.Connection.Misc (
     abortConnection,
 ) where
 
+import Control.Concurrent (MVar, ThreadId)
 import qualified Control.Exception as E
 import Network.Socket (SockAddr, Socket)
 import qualified System.ThreadManager as T
@@ -72,6 +75,16 @@ getSocket Connection{..} = readIORef connSocket
 
 setSocket :: Connection -> Socket -> IO Socket
 setSocket Connection{..} sock = atomicModifyIORef' connSocket (sock,)
+
+-- | Taking over as the reader of this connection's socket, and giving
+--   back the one displaced.  The handle is an 'MVar' rather than the
+--   'ThreadId' itself so that a reader forked but not yet running is
+--   waited for rather than missed.
+setSocketReader :: Connection -> MVar ThreadId -> IO (Maybe (MVar ThreadId))
+setSocketReader Connection{..} var = atomicModifyIORef' socketReader (Just var,)
+
+getSocketReader :: Connection -> IO (Maybe (MVar ThreadId))
+getSocketReader Connection{..} = readIORef socketReader
 
 -- fixme
 clearSocket :: Connection -> IO Socket

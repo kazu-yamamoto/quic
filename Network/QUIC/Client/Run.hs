@@ -195,7 +195,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
                 setMaxPacketSize conn pktSiz
                 setInitialCongestionWindow (connLDCC conn) pktSiz
                 setAddressValidated pathInfo
-                let reader = readerClient sock conn -- dies when s0 is closed.
+                reader <- socketReaderOf conn sock
                 -- Handing the qlog over.  Nothing below can throw, so from here
                 -- 'freeResources' is the only releaser.
                 addResource conn qclean
