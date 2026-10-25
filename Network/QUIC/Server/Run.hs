@@ -206,7 +206,8 @@ stopping stvar wakeRef = do
 -- There is no cap on the wait.  An application that never finishes with a
 -- connection therefore keeps the server from returning, which is a
 -- deliberate choice: the alternative is returning while it runs, which is
--- what this changed.
+-- what this changed.  http3 caps the wait it does of its own, so an H3
+-- connection comes back within that cap however its handler behaves.
 shutdownConnections :: ServerConfig -> Dispatch -> IO ()
 shutdownConnections conf dispatch = loop []
   where

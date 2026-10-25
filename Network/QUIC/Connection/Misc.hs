@@ -197,6 +197,10 @@ forkManaged Connection{..} = T.forkManaged readers
 --
 -- What they are done with is the connection's buffers, so this has to come
 -- between stopping them and 'freeResources'.
+--
+-- No cap on the wait: these are all this library's own threads and they
+-- end on the exception 'killReaders' throws.  What http2 and http3 cap is
+-- a wait that includes the application's handler.
 waitManaged :: Connection -> IO ()
 waitManaged Connection{..} = T.waitUntilAllGone readers
 
