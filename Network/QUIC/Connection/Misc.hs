@@ -24,6 +24,7 @@ module Network.QUIC.Connection.Misc (
     resetDealyedAck,
     setMaxPacketSize,
     forkManaged,
+    waitManaged,
     killReaders,
     addResource,
     freeResources,
@@ -34,11 +35,9 @@ module Network.QUIC.Connection.Misc (
     abortConnection,
 ) where
 
-import Control.Concurrent
 import qualified Control.Exception as E
-import qualified Data.Map.Strict as Map
 import Network.Socket (SockAddr, Socket)
-import System.Mem.Weak
+import qualified System.ThreadManager as T
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Timeout
@@ -191,35 +190,24 @@ freeResources Connection{..} =
 
 ----------------------------------------------------------------
 
-addReader :: Connection -> ThreadId -> IO ()
-addReader Connection{..} tid = do
-    wtid <- mkWeakThreadId tid
-    let n = fromThreadId tid
-    atomicModifyIORef'' readers $ Map.insert n wtid
+forkManaged :: Connection -> String -> IO () -> IO ()
+forkManaged Connection{..} = T.forkManaged readers
 
-delReader :: Connection -> ThreadId -> IO ()
-delReader Connection{..} tid = do
-    let n = fromThreadId tid
-    atomicModifyIORef'' readers $ Map.delete n
+-- | Waiting until this connection's 'forkManaged' threads are all done.
+--
+-- What they are done with is the connection's buffers, so this has to come
+-- between stopping them and 'freeResources'.
+--
+-- No cap on the wait: these are all this library's own threads and they
+-- end on the exception 'killReaders' throws.  What http2 and http3 cap is
+-- a wait that includes the application's handler.
+waitManaged :: Connection -> IO ()
+waitManaged Connection{..} = T.waitUntilAllGone readers
 
-forkManaged :: Connection -> IO () -> IO ()
-forkManaged conn action = void $ forkIO $ do
-    E.bracket setup clean $ \_ -> action
-  where
-    setup = do
-        tid <- myThreadId
-        addReader conn tid
-        return tid
-    clean = delReader conn
-
+-- | Killing the threads of 'forkManaged'.  One forked after this is
+--   refused rather than run.
 killReaders :: Connection -> IO ()
-killReaders Connection{..} = do
-    wtids <- readIORef readers
-    forM_ wtids $ \wtid -> do
-        mtid <- deRefWeak wtid
-        case mtid of
-            Nothing -> return ()
-            Just tid -> killThread tid
+killReaders Connection{..} = T.stopAfter readers (return ()) $ \_ -> return ()
 
 ----------------------------------------------------------------
 

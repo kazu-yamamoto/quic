@@ -59,7 +59,7 @@ run conf client = do
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
 runClient conf client0 isICVN verInfo = do
     E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) -> do
-        forkManaged conn reader
+        forkManaged conn "QUIC reader" reader
         let conf' =
                 conf
                     { ccParameters =
@@ -107,18 +107,22 @@ runClient conf client0 isICVN verInfo = do
                 labelMe "concurrently5"
                     >> concurrently (c4 `E.catch` \(_ :: InternalControl) -> return ()) s6
             runThreads = snd <$> c5
-        when (ccWatchDog conf) $ forkManaged conn $ watchDog conn
+        when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog conn
         ex <- E.try runThreads
         sendFinal conn
         setConnectionClosed conn
         closure conn ldcc ex
   where
     open = createClientConnection conf verInfo
+    -- Stopping the readers and seeing them out before the buffers they use
+    -- are freed.  This used to free first and stop after, which left every
+    -- reader a window in which to use a buffer that had been handed back.
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
-        freeResources conn
         killReaders conn
+        waitManaged conn
+        freeResources conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do

@@ -244,5 +244,5 @@ rebind conn microseconds = do
     when connected $ connect newSock peersa
     oldSock <- setSocket conn newSock
     let reader = readerClient newSock conn
-    forkManaged conn reader
+    forkManaged conn "QUIC reader" reader
     fire conn microseconds $ close oldSock

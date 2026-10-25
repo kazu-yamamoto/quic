@@ -28,7 +28,7 @@ import Network.Control (
  )
 import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC
-import System.Mem.Weak (Weak)
+import qualified System.ThreadManager as T
 
 import Network.QUIC.Config
 import Network.QUIC.Connector
@@ -264,7 +264,7 @@ data Connection = Connection
     , connRecvDatagramQ :: DatagramQ
     , connSocket        :: IORef Socket
     , genStatelessResetToken :: CID -> StatelessResetToken
-    , readers           :: IORef (Map Word64 (Weak ThreadId))
+    , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
     , controlRate       :: Rate
     , -- Info
@@ -380,7 +380,7 @@ newConnection
 newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugLog connQLog connHooks connSocket peerInfo connRecvQ connRecvDatagramQ ~connSend ~connRecv genStatelessResetToken = do
     connState         <- newConnState rl
     -- Manage
-    readers           <- newIORef Map.empty
+    readers           <- T.newThreadManager
     mainThreadId      <- myThreadId
     controlRate       <- newRate
     -- Info

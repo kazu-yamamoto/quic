@@ -71,10 +71,8 @@ run conf server = do
     setup stvar stopNow wakeRef = do
         dispatch <- newDispatch conf stopNow
         let forkConn acc =
-                void $
-                    forkIO $
-                        withConnectionCount dispatch $
-                            runServer conf server dispatch acc
+                spawnConnection dispatch $
+                    runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             ssas <- openAll $ scAddresses conf
             writeIORef wakeRef $ mapM_ wakeDispatcher ssas
@@ -127,10 +125,8 @@ runWithSockets ssas conf server = do
     setup stvar stopNow = do
         dispatch <- newDispatch conf stopNow
         let forkConn acc =
-                void $
-                    forkIO $
-                        withConnectionCount dispatch $
-                            runServer conf server dispatch acc
+                spawnConnection dispatch $
+                    runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             tids <- runAll dispatch conf stvar forkConn ssas
             return (dispatch, tids)
@@ -189,18 +185,42 @@ stopping stvar wakeRef = do
 --
 -- Each is ended from a thread of its own, because 'throwTo' waits for the
 -- exception to be taken and a connection whose application is slow to
--- unwind would hold up the rest.  The wait that follows is what they are
--- all given, and it is bounded: a connection that will not end is not worth
--- the sockets.
+-- unwind would hold up the rest.
+
+-- | Telling every connection to stop, and waiting until none is left.
+--
+-- Waiting matters because the caller owns the sockets.  Returning while a
+-- connection still runs leaves it using a socket the caller is about to
+-- close, and what that costs is not theoretical: the connection's last
+-- CONNECTION_CLOSE went out on a closed descriptor and was lost, so the
+-- peer heard nothing and sat until its idle timeout.  It is also a thread
+-- reading a descriptor number that the kernel may hand to someone else.
+--
+-- Each connection is told once.  Telling it again a second later cannot
+-- hurry a connection that is already closing down under 'mask', and what it
+-- does reach is the CONNECTION_CLOSE being sent -- which it then interrupts
+-- and loses, which is the thing this is here to prevent.  The second pass
+-- is only to tell connections that were not yet in the table when the first
+-- one looked.
+--
+-- There is no cap on the wait.  An application that never finishes with a
+-- connection therefore keeps the server from returning, which is a
+-- deliberate choice: the alternative is returning while it runs, which is
+-- what this changed.  http3 caps the wait it does of its own, so an H3
+-- connection comes back within that cap however its handler behaves.
 shutdownConnections :: ServerConfig -> Dispatch -> IO ()
-shutdownConnections conf dispatch = do
-    conns <- liveConnections dispatch
-    unless (null conns) $ do
-        mapM_ (void . forkIO . shut) conns
-        void $ T.timeout 1000000 $ waitNoConnection dispatch
+shutdownConnections conf dispatch = loop []
   where
     (err, reason) = scCloseReason conf
     shut conn = abortConnection conn err reason
+    loop told = do
+        conns <- liveConnections dispatch
+        let unTold = [conn | conn <- conns, mainThreadId conn `notElem` told]
+        mapM_ (void . forkIO . shut) unTold
+        done <- T.timeout 1000000 $ waitNoConnection dispatch
+        case done of
+            Just () -> return ()
+            Nothing -> loop $ map mainThreadId unTold ++ told
 
 -- | Running a dispatcher on each socket, killing the ones already running if
 --   a later one cannot be started.
@@ -305,9 +325,15 @@ runServer conf server0 dispatch acc = do
             closure conn ldcc ex
   where
     open = createServerConnection conf dispatch acc
+    -- Stop this connection's own threads and see them out before the
+    -- buffers they use are freed.  Nothing stopped them here at all: a path
+    -- validation outlived the connection it was validating a path for, and
+    -- went on reading and writing buffers that had been handed back.
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
+        killReaders conn
+        waitManaged conn
         freeResources conn
     -- Say why the connection ended.  This used to discard it, so a server
     -- connection that died of anything 'closure' does not turn into a
