@@ -1,5 +1,15 @@
 # ChangeLog
 
+## 0.3.18
+
+* The threads of a connection are owned by `time-manager`'s
+  `ThreadManager`, and counted from before each fork.
+  [#174](https://github.com/kazu-yamamoto/quic/pull/174)
+* A server waits for its connections before returning, instead of giving
+  them one second and returning while they still use the caller's sockets.
+  [#174](https://github.com/kazu-yamamoto/quic/pull/174)
+* Requires `time-manager` 0.5.
+
 ## 0.3.17
 
 * Security fix: bound what an unauthenticated packet can take.
