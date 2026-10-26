@@ -17,7 +17,12 @@ module Network.QUIC.Internal (
     module Network.QUIC.Socket,
 ) where
 
-import Network.QUIC.Client.Reader (ConnectionControl (..), controlConnection)
+import Network.QUIC.Client.Reader (
+    ConnectionControl (..),
+    controlConnection,
+    readerClient,
+    rebind,
+ )
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector

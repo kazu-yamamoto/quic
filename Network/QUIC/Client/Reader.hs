@@ -3,6 +3,7 @@
 
 module Network.QUIC.Client.Reader (
     readerClient,
+    rebind,
     recvClient,
     ConnectionControl (..),
     controlConnection,
