@@ -3,7 +3,9 @@
 module Network.QUIC.Closer (closure) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Control.Exception as E
+import Data.Either (isRight)
 import Foreign.Marshal.Alloc
 import Foreign.Ptr
 import qualified Network.Socket as NS
@@ -18,7 +20,6 @@ import Network.QUIC.Packet
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
 import Network.QUIC.Types
-import Network.QUIC.Windows
 
 closure :: Connection -> LDCC -> Either E.SomeException a -> IO a
 closure conn ldcc (Right x) = do
@@ -98,25 +99,33 @@ closure'' conn ldcc frame = do
                 | otherwise = void $ NS.sendBufTo sock sendbuf siz peersa
         -- recv and clos
         killReaders conn -- client only
-        let (recv, clos) = case mrecvbuf of
-                Nothing -> (void $ connRecv conn, return ())
+        let (recvWithin, clos) = case mrecvbuf of
+                Nothing ->
+                    -- The server reads its datagrams from a queue, not from
+                    -- a socket, and a timeout does reach a thread waiting
+                    -- on one.
+                    ( \tmo -> isJust <$> timeout tmo "closer" (void $ connRecv conn)
+                    , return ()
+                    )
                 Just recvbuf ->
-                    -- 'closer' puts a timeout around this, and a timeout
-                    -- does not reach a thread blocked in a socket call on
-                    -- Windows, so the call goes to a thread of its own
-                    -- there.  Each timeout abandons one; there are six at
-                    -- most, they share a buffer nothing reads, and 'clos'
-                    -- below closes the socket and ends them all.
-                    let recv'
-                            | connected =
-                                windowsThreadBlockHack $
-                                    void $
-                                        NS.recvBuf sock recvbuf bufsiz
-                            | otherwise = do
-                                (_, sa) <-
-                                    windowsThreadBlockHack $
-                                        NS.recvBufFrom sock recvbuf bufsiz
-                                when (sa /= peersa) recv'
+                    -- The deadline is waited for beside the receive rather
+                    -- than thrown at it: an asynchronous exception does not
+                    -- reach a thread blocked in a socket call on Windows.
+                    -- Nothing is abandoned, so nothing has to be closed to
+                    -- end it either.
+                    let recv' (Microseconds us) = do
+                            expired <- registerDelay us
+                            let giveUp = check =<< readTVar expired
+                                again = recv' (Microseconds us)
+                            if connected
+                                then isRight <$> NS.recvBufWith sock recvbuf bufsiz giveUp
+                                else do
+                                    r <- NS.recvBufFromWith sock recvbuf bufsiz giveUp
+                                    case r of
+                                        Left () -> return False
+                                        Right (_, sa)
+                                            | sa /= peersa -> again
+                                            | otherwise -> return True
                         clos' = do
                             NS.close sock
                             -- This is just in case.
@@ -132,7 +141,7 @@ closure'' conn ldcc frame = do
         -- of its own misses them.  The closer repeats it for a peer that
         -- did not hear it, which is what it is for.
         send
-        void $ forkFinally (closer conn pto send recv hook) $ \e -> do
+        void $ forkFinally (closer conn pto send recvWithin hook) $ \e -> do
             case e of
                 Left e' -> connDebugLog conn $ "closure' " <> bhow e'
                 Right _ -> return ()
@@ -170,8 +179,16 @@ encodeCC conn sendbuf0 bufsiz0 frame = do
             else
                 return 0
 
-closer :: Connection -> Microseconds -> IO () -> IO () -> IO () -> IO ()
-closer _conn (Microseconds pto) send recv hook = do
+-- The fourth argument receives a datagram within the given time,
+-- answering 'False' if none came.
+closer
+    :: Connection
+    -> Microseconds
+    -> IO ()
+    -> (Microseconds -> IO Bool)
+    -> IO ()
+    -> IO ()
+closer _conn (Microseconds pto) send recvWithin hook = do
     labelMe "QUIC closer"
     loop (3 :: Int)
   where
@@ -179,15 +196,11 @@ closer _conn (Microseconds pto) send recv hook = do
     loop n = do
         send
         getTimeMicrosecond >>= skip (Microseconds pto)
-        mx <- timeout (Microseconds (pto !>>. 1)) "closer 1" recv
-        case mx of
-            Nothing -> hook
-            Just () -> loop (n - 1)
+        got <- recvWithin $ Microseconds (pto !>>. 1)
+        if got then loop (n - 1) else hook
     skip tmo@(Microseconds duration) base = do
-        mx <- timeout tmo "closer 2" recv
-        case mx of
-            Nothing -> return ()
-            Just () -> do
-                Microseconds elapsed <- getElapsedTimeMicrosecond base
-                let duration' = duration - elapsed
-                when (duration' >= 5000) $ skip (Microseconds duration') base
+        got <- recvWithin tmo
+        when got $ do
+            Microseconds elapsed <- getElapsedTimeMicrosecond base
+            let duration' = duration - elapsed
+            when (duration' >= 5000) $ skip (Microseconds duration') base

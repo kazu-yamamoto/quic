@@ -10,6 +10,9 @@ module Network.QUIC.Client.Reader (
 ) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
+import Data.Functor (($>))
+import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
 import Data.List (intersect)
 import Network.Socket (Socket, close, connect, getSocketName)
@@ -27,26 +30,33 @@ import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Socket
 import Network.QUIC.Types
-import Network.QUIC.Windows
 
--- | readerClient dies when the socket is closed.
-readerClient :: Socket -> Connection -> IO ()
-readerClient s0 conn = handleLogUnit logAction $ do
+-- What ended a wait in 'readerClient'.
+data ReaderEnd = Retired | TimedOut
+
+-- | The reader of a client's socket.  It returns when the socket is
+--   retired, which is how 'rebind' ends the reader of the socket it
+--   replaced, and when the connection has been idle for too long.
+--
+--   Nothing is closed and nothing is thrown to make it return: the receive
+--   and both of those are waited for at once.  The socket it was reading is
+--   the caller's to close afterwards, and a retired reader is gone by the
+--   time the caller is told so.
+readerClient :: TVar Bool -> Socket -> Connection -> IO ()
+readerClient retired s0 conn = handleLogUnit logAction $ do
     labelMe "readerClient"
     wait
     connected <- getSockConnected conn
     peersa0 <- peerSockAddr <$> getPathInfo conn
-    -- The idle timeout below throws into this thread to end the wait, and
-    -- 'killReaders' does the same when the connection closes.  Neither
-    -- reaches a thread blocked in a socket call on Windows, so the call --
-    -- the call alone, not the loop around it -- goes to a thread of its own
-    -- there.  Nothing is left racing for a datagram: the timeout closes the
-    -- socket and stops, and closing it is also what ends an abandoned call.
-    let recv
-            | connected = windowsThreadBlockHack $ NSB.recv s0 2048
+    let recv giveUp
+            | connected = NSB.recvWith s0 2048 giveUp
             | otherwise = do
-                (bs, peersa) <- windowsThreadBlockHack $ NSB.recvFrom s0 2048
-                if peersa /= peersa0 then recv else return bs
+                r <- NSB.recvFromWith s0 2048 giveUp
+                case r of
+                    Left a -> return $ Left a
+                    Right (bs, peersa)
+                        | peersa /= peersa0 -> recv giveUp
+                        | otherwise -> return $ Right bs
     loop recv
   where
     wait = do
@@ -57,11 +67,17 @@ readerClient s0 conn = handleLogUnit logAction $ do
             yield
             wait
     loop recv = do
-        ito <- readMinIdleTimeout conn
-        mbs <- timeout ito "readeClient" recv
-        case mbs of
-            Nothing -> close s0
-            Just bs -> do
+        Microseconds ito <- readMinIdleTimeout conn
+        expired <- registerDelay ito
+        ebs <-
+            recv $
+                ((readTVar retired >>= STM.check) $> Retired)
+                    `orElse` ((readTVar expired >>= STM.check) $> TimedOut)
+        case ebs of
+            -- The socket belongs to whoever retired it; it closes it.
+            Left Retired -> return ()
+            Left TimedOut -> close s0
+            Right bs -> do
                 now <- getTimeMicrosecond
                 let quicBit = greaseQuicBit $ getMyParameters conn
                 pkts <- decodePackets bs (not quicBit)
@@ -242,7 +258,12 @@ rebind conn microseconds = do
     newSock <- natRebinding peersa
     connected <- getSockConnected conn
     when connected $ connect newSock peersa
+    newRetired <- newTVarIO False
+    oldRetired <- setSocketRetire conn newRetired
     oldSock <- setSocket conn newSock
-    let reader = readerClient newSock conn
-    forkManaged conn "QUIC reader" reader
+    forkManaged conn "QUIC reader" $ readerClient newRetired newSock conn
+    -- Telling the old reader to go rather than closing the socket under
+    -- it: a close ends a thread blocked on a descriptor only because the
+    -- event manager says so, and a descriptor number is reused.
+    atomically $ writeTVar oldRetired True
     fire conn microseconds $ close oldSock

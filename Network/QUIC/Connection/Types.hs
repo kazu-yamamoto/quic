@@ -263,6 +263,9 @@ data Connection = Connection
     , connRecvQ         :: RecvQ
     , connRecvDatagramQ :: DatagramQ
     , connSocket        :: IORef Socket
+    , connSocketRetire  :: IORef (TVar Bool)
+    -- ^ Set to tell the reader of 'connSocket' that the socket is not its
+    --   to read any more.  'rebind' swaps both.
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
@@ -380,6 +383,7 @@ newConnection
 newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugLog connQLog connHooks connSocket peerInfo connRecvQ connRecvDatagramQ ~connSend ~connRecv genStatelessResetToken = do
     connState         <- newConnState rl
     -- Manage
+    connSocketRetire  <- newIORef =<< newTVarIO False
     readers           <- T.newThreadManager
     mainThreadId      <- myThreadId
     controlRate       <- newRate

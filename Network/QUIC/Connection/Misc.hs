@@ -9,6 +9,8 @@ module Network.QUIC.Connection.Misc (
     getOriginalVersion,
     getSocket,
     setSocket,
+    getSocketRetire,
+    setSocketRetire,
     clearSocket,
     getPathInfo,
     addPathInfo,
@@ -35,6 +37,7 @@ module Network.QUIC.Connection.Misc (
     abortConnection,
 ) where
 
+import Control.Concurrent.STM (TVar, atomically, writeTVar)
 import qualified Control.Exception as E
 import Network.Socket (SockAddr, Socket)
 import qualified System.ThreadManager as T
@@ -72,6 +75,15 @@ getSocket Connection{..} = readIORef connSocket
 
 setSocket :: Connection -> Socket -> IO Socket
 setSocket Connection{..} sock = atomicModifyIORef' connSocket (sock,)
+
+-- | The variable which retires the reader of the current socket.
+getSocketRetire :: Connection -> IO (TVar Bool)
+getSocketRetire Connection{..} = readIORef connSocketRetire
+
+-- | Swapping in the variable for a new socket's reader, returning the old
+--   one for the caller to retire with.
+setSocketRetire :: Connection -> TVar Bool -> IO (TVar Bool)
+setSocketRetire Connection{..} var = atomicModifyIORef' connSocketRetire (var,)
 
 -- fixme
 clearSocket :: Connection -> IO Socket
@@ -207,7 +219,14 @@ waitManaged Connection{..} = T.waitUntilAllGone readers
 -- | Killing the threads of 'forkManaged'.  One forked after this is
 --   refused rather than run.
 killReaders :: Connection -> IO ()
-killReaders Connection{..} = T.stopAfter readers (return ()) $ \_ -> return ()
+killReaders conn@Connection{..} = do
+    -- Telling the reader of the current socket to go.  'stopAfter' below
+    -- throws into the threads it manages, and an asynchronous exception
+    -- does not reach one blocked in a socket call on Windows; the reader
+    -- waits on this variable beside its receive instead.
+    retired <- getSocketRetire conn
+    atomically $ writeTVar retired True
+    T.stopAfter readers (return ()) $ \_ -> return ()
 
 ----------------------------------------------------------------
 

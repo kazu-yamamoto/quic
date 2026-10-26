@@ -14,7 +14,6 @@ module Network.QUIC.Internal (
     module Network.QUIC.Utils,
     module Network.QUIC.Recovery,
     module Network.QUIC.Client.Reader,
-    module Network.QUIC.Windows,
     module Network.QUIC.Socket,
 ) where
 
@@ -34,4 +33,3 @@ import Network.QUIC.Stream
 import Network.QUIC.TLS
 import Network.QUIC.Types
 import Network.QUIC.Utils
-import Network.QUIC.Windows
