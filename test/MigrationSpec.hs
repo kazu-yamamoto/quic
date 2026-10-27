@@ -4,7 +4,7 @@ import Control.Concurrent
 import Control.Concurrent.Async (mapConcurrently)
 import Control.Concurrent.STM
 import Control.Monad (void)
-import Network.Socket (getSocketName)
+import Network.Socket (connect, getSocketName)
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -56,6 +56,11 @@ spec = do
         it "lets a retired reader return, leaving its socket open" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             sock <- getSocket clientConn
+            -- The reader waits for the socket to be bound, and on Windows
+            -- getSocketName says so only once it is.  A client binds it by
+            -- sending; nothing is sent here, so connect does it instead.
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
             retired <- getSocketRetire clientConn
             done <- newEmptyMVar
             void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
