@@ -12,7 +12,7 @@ import qualified Data.List.NonEmpty as NE
 import Network.Socket
 
 natRebinding :: SockAddr -> IO Socket
-natRebinding sa = E.bracketOnError open close return
+natRebinding sa = E.bracketOnError open unsafeClose return
   where
     family = sockAddrFamily sa
     open = socket family Datagram defaultProtocol
@@ -25,7 +25,7 @@ sockAddrFamily _ = error "sockAddrFamily"
 clientSocket :: HostName -> ServiceName -> IO (Socket, SockAddr)
 clientSocket host port = do
     addr <- NE.head <$> getAddrInfo (Just hints) (Just host) (Just port)
-    E.bracketOnError (openSocket addr) close $ \s -> return (s, addrAddress addr)
+    E.bracketOnError (openSocket addr) unsafeClose $ \s -> return (s, addrAddress addr)
   where
     hints = defaultHints{addrSocketType = Datagram, addrFlags = [AI_ADDRCONFIG]}
 
@@ -53,7 +53,7 @@ clientSocket host port = do
 -- processes at random.
 
 serverSocket :: (IP, PortNumber) -> IO Socket
-serverSocket ip = E.bracketOnError open close $ \s -> do
+serverSocket ip = E.bracketOnError open unsafeClose $ \s -> do
     setSocketOption s ReuseAddr 1
 #if defined(darwin_HOST_OS) || defined(freebsd_HOST_OS) || defined(netbsd_HOST_OS) || defined(openbsd_HOST_OS)
     setSocketOption s ReusePort 1
