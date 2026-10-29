@@ -9,6 +9,8 @@ module Network.QUIC.Server.Reader (
     liveConnections,
     spawnConnection,
     waitNoConnection,
+    spawnDispatcher,
+    waitNoDispatcher,
     tokenMgr,
     genStatelessReset,
     stopServerNow,
@@ -22,7 +24,6 @@ module Network.QUIC.Server.Reader (
     ServerState (..),
 ) where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
@@ -63,6 +64,11 @@ data Dispatch = Dispatch
     , genStatelessReset :: CID -> StatelessResetToken
     , statelessResetRate :: Rate
     , connectionThreads :: T.ThreadManager
+    , dispatcherThreads :: T.ThreadManager
+    -- ^ The threads reading the listening sockets.  They are waited for
+    -- rather than killed: 'stopServerNow' is what ends them, and a thread
+    -- blocked in a socket call is not reachable by an exception on Windows
+    -- anyway.
     , stopServerNow :: IO ()
     -- ^ Stopping this server: what the shutdown handler is handed, and
     -- what a connection's 'stop' reaches it by.
@@ -79,6 +85,7 @@ newDispatch ServerConfig{..} stopNow =
         <*> newRecvQDict
         <*> makeGenStatelessReset
         <*> newRate
+        <*> T.newThreadManager
         <*> T.newThreadManager
         <*> pure stopNow
   where
@@ -130,6 +137,16 @@ spawnConnection Dispatch{..} = T.forkManaged connectionThreads "QUIC connection"
 waitNoConnection :: Dispatch -> IO ()
 waitNoConnection Dispatch{..} = T.waitUntilAllGone connectionThreads
 
+-- | Running a dispatcher on a thread of its own.
+spawnDispatcher :: Dispatch -> IO () -> IO ()
+spawnDispatcher Dispatch{..} = T.forkManaged dispatcherThreads "QUIC dispatcher"
+
+-- | Waiting until every dispatcher has returned.  Nothing is left reading
+--   the listening sockets once this does, which is what lets the caller
+--   close them.
+waitNoDispatcher :: Dispatch -> IO ()
+waitNoDispatcher Dispatch{..} = T.waitUntilAllGone dispatcherThreads
+
 ----------------------------------------------------------------
 
 -- Source CID -> RecvQ
@@ -173,8 +190,9 @@ runDispatcher
     -> TVar ServerState
     -> (Accept -> IO ())
     -> Socket
-    -> IO ThreadId
-runDispatcher d conf stvar forkConn mysock = forkIO $ dispatcher d conf stvar forkConn mysock
+    -> IO ()
+runDispatcher d conf stvar forkConn mysock =
+    spawnDispatcher d $ dispatcher d conf stvar forkConn mysock
 
 data ServerState = Running | Stopped deriving (Eq, Show)
 
