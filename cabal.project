@@ -1,7 +1,0 @@
--- network 3.2.10.0 and network-run 0.7.0 are not on Hackage yet.  network's
--- generated configure is not in git, so these are the sibling checkouts
--- rather than source-repository-packages.
-packages:
-    .
-    ../network
-    ../network-run
