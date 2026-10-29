@@ -52,7 +52,7 @@ run conf server = do
     -- onServerReady, and left anyone waiting on that hook waiting for good.
     -- An IOSpec run wedged for two and a half days that way, on a port the
     -- previous test had not finished releasing.
-    E.bracket (setup stvar stopNow) (teardown stopNow) $ \(_, _, _) -> handleLogUnit debugLog $ do
+    E.bracket (setup stvar stopNow) (teardown stopNow) $ \_ -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -71,24 +71,30 @@ run conf server = do
                     runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             ssas <- openAll $ scAddresses conf
-            tids <-
-                runAll dispatch conf stvar forkConn ssas
-                    `E.onException` mapM_ NS.close ssas
-            return (dispatch, tids, ssas)
-    -- Telling the dispatchers first.  They end where they wait, on the stop
-    -- variable 'stopping' sets, and the 'killThread' below then has nothing
-    -- to reach -- which matters because on Windows it could not have
-    -- reached them anyway: a thread blocked in a socket call there is not
-    -- interruptible.
+            runAll dispatch conf stvar forkConn ssas
+                `E.onException` do
+                    stopNow
+                    waitNoDispatcher dispatch
+                    mapM_ NS.close ssas
+            return (dispatch, ssas)
+    -- Telling the dispatchers, and then waiting for them.  They end where
+    -- they wait, on the stop variable 'stopping' sets; nothing is thrown at
+    -- them, which matters because on Windows an exception would not reach a
+    -- thread blocked in a socket call anyway.
+    --
+    -- The waiting is what lets the sockets be closed below: a dispatcher
+    -- which has returned has given up its receive, and the connections
+    -- waited for after it are what send on those sockets.  Telling a thread
+    -- to stop is not the same as it having stopped.
     --
     -- The usual way here is through the shutdown handler, which has already
     -- done this; doing it again is free.  The way that had not, until now,
     -- is 'run' being cancelled from outside.
-    teardown :: IO () -> (Dispatch, [ThreadId], [NS.Socket]) -> IO ()
-    teardown stopNow (dispatch, tids, ssas) = do
+    teardown :: IO () -> (Dispatch, [NS.Socket]) -> IO ()
+    teardown stopNow (dispatch, ssas) = do
         stopNow
         clearDispatch dispatch
-        mapM_ killThread tids
+        waitNoDispatcher dispatch
         shutdownConnections conf dispatch
         mapM_ NS.close ssas
     openAll [] = return []
@@ -105,7 +111,7 @@ runWithSockets ssas conf server = do
     let stopNow = stopping stvar
     installShutdownHandler conf stopNow
     -- As in 'run'.
-    E.bracket (setup stvar stopNow) (teardown stopNow) $ \(_, _) -> handleLogUnit debugLog $ do
+    E.bracket (setup stvar stopNow) (teardown stopNow) $ \_ -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -120,14 +126,17 @@ runWithSockets ssas conf server = do
                 spawnConnection dispatch $
                     runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
-            tids <- runAll dispatch conf stvar forkConn ssas
-            return (dispatch, tids)
-    -- As in 'run'.
-    teardown :: IO () -> (Dispatch, [ThreadId]) -> IO ()
-    teardown stopNow (dispatch, tids) = do
+            runAll dispatch conf stvar forkConn ssas
+                `E.onException` (stopNow >> waitNoDispatcher dispatch)
+            return dispatch
+    -- As in 'run'.  The caller's sockets are not closed here, but the
+    -- dispatchers are still waited for: the caller is free to close them
+    -- the moment this returns.
+    teardown :: IO () -> Dispatch -> IO ()
+    teardown stopNow dispatch = do
         stopNow
         clearDispatch dispatch
-        mapM_ killThread tids
+        waitNoDispatcher dispatch
         shutdownConnections conf dispatch
 
 -- | Handing the caller the action that stops this server.
@@ -215,19 +224,17 @@ shutdownConnections conf dispatch = loop []
             Just () -> return ()
             Nothing -> loop $ map mainThreadId unTold ++ told
 
--- | Running a dispatcher on each socket, killing the ones already running if
---   a later one cannot be started.
+-- | Running a dispatcher on each socket.  The caller ends them all
+--   together, by telling them, so there is nothing to undo here for the
+--   ones already running.
 runAll
     :: Dispatch
     -> ServerConfig
     -> TVar ServerState
     -> (Accept -> IO ())
     -> [NS.Socket]
-    -> IO [ThreadId]
-runAll _ _ _ _ [] = return []
-runAll dispatch conf stvar forkConn (s : ss) =
-    E.bracketOnError (runDispatcher dispatch conf stvar forkConn s) killThread $
-        \t -> (t :) <$> runAll dispatch conf stvar forkConn ss
+    -> IO ()
+runAll dispatch conf stvar forkConn = mapM_ $ runDispatcher dispatch conf stvar forkConn
 
 -- Typically, ConnectionIsClosed breaks acceptStream.
 -- And the exception should be ignored.
