@@ -1,6 +1,13 @@
 # ChangeLog
 
 
+## 0.3.20
+
+* The dispatchers run under a `ThreadManager` and are waited for before
+  the listening sockets are closed, instead of being killed.
+* Sockets this library owns and nobody is waiting on are closed with
+  `close(2)` rather than with `close`.  Requires network 3.2.11.
+
 ## 0.3.19
 
 * The dispatcher is stopped by the stop variable alone: it waits for that

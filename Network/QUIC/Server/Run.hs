@@ -75,7 +75,7 @@ run conf server = do
                 `E.onException` do
                     stopNow
                     waitNoDispatcher dispatch
-                    mapM_ NS.close ssas
+                    mapM_ NS.unsafeClose ssas
             return (dispatch, ssas)
     -- Telling the dispatchers, and then waiting for them.  They end where
     -- they wait, on the stop variable 'stopping' sets; nothing is thrown at
@@ -96,10 +96,10 @@ run conf server = do
         clearDispatch dispatch
         waitNoDispatcher dispatch
         shutdownConnections conf dispatch
-        mapM_ NS.close ssas
+        mapM_ NS.unsafeClose ssas
     openAll [] = return []
     openAll (a : as) =
-        E.bracketOnError (serverSocket a) NS.close $ \s -> (s :) <$> openAll as
+        E.bracketOnError (serverSocket a) NS.unsafeClose $ \s -> (s :) <$> openAll as
 
 -- | Running a QUIC server.
 --   The action is executed with a new connection
