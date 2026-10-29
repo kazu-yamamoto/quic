@@ -262,10 +262,10 @@ data Connection = Connection
     -- Manage
     , connRecvQ         :: RecvQ
     , connRecvDatagramQ :: DatagramQ
-    , connSocket        :: IORef Socket
-    , connSocketRetire  :: IORef (TVar Bool)
-    -- ^ Set to tell the reader of 'connSocket' that the socket is not its
-    --   to read any more.  'rebind' swaps both.
+    , connSocket        :: IORef (Socket, TVar Bool)
+    -- ^ The socket and the variable which retires its reader: setting it
+    --   tells the reader that the socket is not its to read any more.
+    --   One reference, so that the two cannot be swapped apart.
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
@@ -372,7 +372,7 @@ newConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef Socket
+    -> IORef (Socket, TVar Bool)
     -> IORef PeerInfo
     -> RecvQ
     -> DatagramQ
@@ -383,7 +383,6 @@ newConnection
 newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugLog connQLog connHooks connSocket peerInfo connRecvQ connRecvDatagramQ ~connSend ~connRecv genStatelessResetToken = do
     connState         <- newConnState rl
     -- Manage
-    connSocketRetire  <- newIORef =<< newTVarIO False
     readers           <- T.newThreadManager
     mainThreadId      <- myThreadId
     controlRate       <- newRate
@@ -473,7 +472,7 @@ clientConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef Socket
+    -> IORef (Socket, TVar Bool)
     -> IORef PeerInfo
     -> RecvQ
     -> DatagramQ
@@ -497,7 +496,7 @@ serverConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef Socket
+    -> IORef (Socket, TVar Bool)
     -> IORef PeerInfo
     -> RecvQ
     -> DatagramQ

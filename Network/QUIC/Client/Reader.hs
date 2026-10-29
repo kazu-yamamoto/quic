@@ -41,8 +41,10 @@ data ReaderEnd = Retired | TimedOut
 --
 --   Nothing is closed and nothing is thrown to make it return: the receive
 --   and both of those are waited for at once.  The socket it was reading is
---   the caller's to close afterwards, and a retired reader is gone by the
---   time the caller is told so.
+--   the caller's to close afterwards -- __not at once, though__: nothing
+--   here says when this has returned, so a caller which closes before it
+--   has is back to closing a socket under a reader.  'rebind' leaves the
+--   delay it is given before closing, for that.
 readerClient :: TVar Bool -> Socket -> Connection -> IO ()
 readerClient retired s0 conn = handleLogUnit logAction $ do
     labelMe "readerClient"
@@ -260,11 +262,13 @@ rebind conn microseconds = do
     connected <- getSockConnected conn
     when connected $ connect newSock peersa
     newRetired <- newTVarIO False
-    oldRetired <- setSocketRetire conn newRetired
-    oldSock <- setSocket conn newSock
-    forkManaged conn "QUIC reader" $ readerClient newRetired newSock conn
-    -- Telling the old reader to go rather than closing the socket under
-    -- it: a close ends a thread blocked on a descriptor only because the
-    -- event manager says so, and a descriptor number is reused.
-    atomically $ writeTVar oldRetired True
-    fire conn microseconds $ close oldSock
+    (oldSock, oldRetired) <- swapSocket conn newSock newRetired
+    (forkManaged conn "QUIC reader" $ readerClient newRetired newSock conn)
+        `E.finally` do
+            -- Telling the old reader to go rather than closing the socket
+            -- under it: a close ends a thread blocked on a descriptor only
+            -- because the event manager says so, and a descriptor number is
+            -- reused.  Said even if the fork above failed, since the old
+            -- socket is not this connection's any more either way.
+            atomically $ writeTVar oldRetired True
+            fire conn microseconds $ close oldSock

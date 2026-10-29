@@ -10,7 +10,7 @@ module Network.QUIC.Connection.Misc (
     getSocket,
     setSocket,
     getSocketRetire,
-    setSocketRetire,
+    swapSocket,
     clearSocket,
     getPathInfo,
     addPathInfo,
@@ -71,23 +71,29 @@ getOriginalVersion = chosenVersion . origVersionInfo
 ----------------------------------------------------------------
 
 getSocket :: Connection -> IO Socket
-getSocket Connection{..} = readIORef connSocket
+getSocket Connection{..} = fst <$> readIORef connSocket
 
+-- | Swapping the socket alone, leaving the reader of the old one to be
+--   retired through the variable they share.
 setSocket :: Connection -> Socket -> IO Socket
-setSocket Connection{..} sock = atomicModifyIORef' connSocket (sock,)
+setSocket Connection{..} sock =
+    atomicModifyIORef' connSocket $ \(old, retire) -> ((sock, retire), old)
 
 -- | The variable which retires the reader of the current socket.
 getSocketRetire :: Connection -> IO (TVar Bool)
-getSocketRetire Connection{..} = readIORef connSocketRetire
+getSocketRetire Connection{..} = snd <$> readIORef connSocket
 
--- | Swapping in the variable for a new socket's reader, returning the old
---   one for the caller to retire with.
-setSocketRetire :: Connection -> TVar Bool -> IO (TVar Bool)
-setSocketRetire Connection{..} var = atomicModifyIORef' connSocketRetire (var,)
+-- | Swapping the socket and the variable which retires its reader at
+--   once, returning the pair they replace.  The two go together, so
+--   nothing can see one of them swapped and not the other.
+swapSocket :: Connection -> Socket -> TVar Bool -> IO (Socket, TVar Bool)
+swapSocket Connection{..} sock retire =
+    atomicModifyIORef' connSocket ((sock, retire),)
 
 -- fixme
 clearSocket :: Connection -> IO Socket
-clearSocket Connection{..} = atomicModifyIORef' connSocket (undefined,)
+clearSocket Connection{..} =
+    atomicModifyIORef' connSocket $ \(old, retire) -> ((undefined, retire), old)
 
 ----------------------------------------------------------------
 

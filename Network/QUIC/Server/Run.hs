@@ -343,11 +343,12 @@ createServerConnection
     -> Accept
     -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} = do
-    sref <- newIORef accMySocket
+    retire0 <- newTVarIO False
+    sref <- newIORef (accMySocket, retire0)
     pathInfo <- newPathInfo accPeerSockAddr
     piref <- newIORef $ PeerInfo pathInfo Nothing
     let send buf siz = void $ do
-            sock <- readIORef sref
+            (sock, _) <- readIORef sref
             PeerInfo pinfo _ <- readIORef piref
             NS.sendBufTo sock buf siz $ peerSockAddr pinfo
         recv = recvServer accRecvQ

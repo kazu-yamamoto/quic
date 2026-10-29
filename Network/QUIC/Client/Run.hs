@@ -134,15 +134,16 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     flip E.onException (NS.close sock) $ do
         when ccSockConnected $ NS.connect sock peersa
         q <- newRecvQ
-        sref <- newIORef sock
+        retire0 <- newTVarIO False
+        sref <- newIORef (sock, retire0)
         pathInfo <- newPathInfo peersa
         piref <- newIORef $ PeerInfo pathInfo Nothing
         let send buf siz
                 | ccSockConnected = do
-                    s <- readIORef sref
+                    (s, _) <- readIORef sref
                     void $ NS.sendBuf s buf siz
                 | otherwise = do
-                    s <- readIORef sref
+                    (s, _) <- readIORef sref
                     PeerInfo pinfo _ <- readIORef piref
                     void $ NS.sendBufTo s buf siz $ peerSockAddr pinfo
             recv = recvClient q
