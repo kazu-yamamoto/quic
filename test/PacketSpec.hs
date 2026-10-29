@@ -130,7 +130,8 @@ makeConnections conf v = do
     let clientConf = testClientConfig
     (sock, peersa) <- clientSocket "127.0.0.1" "2000"
     q <- newRecvQ
-    sref <- newIORef sock
+    retire <- newTVarIO False
+    sref <- newIORef (sock, retire)
     pathInfo <- newPathInfo peersa
     piref <- newIORef $ PeerInfo pathInfo Nothing
     let ver = v

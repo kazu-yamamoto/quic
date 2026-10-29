@@ -1,6 +1,10 @@
 module MigrationSpec where
 
+import Control.Concurrent
 import Control.Concurrent.Async (mapConcurrently)
+import Control.Concurrent.STM
+import Control.Monad (void)
+import Network.Socket (connect, getSocketName)
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -27,3 +31,44 @@ spec = do
             (_, serverConn) <- makeConnections serverConf Version1
             claimMigration serverConn `shouldReturn` True
             claimMigration serverConn `shouldReturn` False
+
+    -- 'rebind' swaps a new socket in and has to end the reader of the old
+    -- one.  It used to do that by closing the old socket under it, which
+    -- works only because the event manager tells a blocked thread that the
+    -- descriptor closed; the reader is told now.  Retiring the wrong one of
+    -- the two leaves a connection whose socket nobody reads, and both
+    -- readers are alive either way, so this watches which variable is set.
+    -- See #173.
+    describe "rebind" $ do
+        it "retires the reader of the socket it replaced, not the new one" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            oldSock <- getSocket clientConn
+            oldRetired <- getSocketRetire clientConn
+            rebind clientConn $ Microseconds 1000000
+            newSock <- getSocket clientConn
+            newRetired <- getSocketRetire clientConn
+            readTVarIO oldRetired `shouldReturn` True
+            readTVarIO newRetired `shouldReturn` False
+            (newSock == oldSock) `shouldBe` False
+            -- The reader 'rebind' forked is on the new socket; let it go.
+            atomically $ writeTVar newRetired True
+
+        it "lets a retired reader return, leaving its socket open" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            sock <- getSocket clientConn
+            -- The reader waits for the socket to be bound, and on Windows
+            -- getSocketName says so only once it is.  A client binds it by
+            -- sending; nothing is sent here, so connect does it instead.
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
+            retired <- getSocketRetire clientConn
+            done <- newEmptyMVar
+            void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
+            threadDelay 100000
+            atomically $ writeTVar retired True
+            returned <- timeout (Microseconds 2000000) "retired reader" $ takeMVar done
+            returned `shouldBe` Just ()
+            -- The socket belongs to whoever retired the reader: it is still
+            -- open for them to close, which getSocketName would not be on a
+            -- closed one.
+            void $ getSocketName sock

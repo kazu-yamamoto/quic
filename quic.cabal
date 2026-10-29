@@ -1,6 +1,6 @@
 cabal-version:      2.0
 name:               quic
-version:            0.3.18
+version:            0.3.19
 license:            BSD3
 license-file:       LICENSE
 maintainer:         kazu@iij.ad.jp
@@ -119,7 +119,6 @@ library
         Network.QUIC.Types.Resumption
         Network.QUIC.Types.Time
         Network.QUIC.Utils
-        Network.QUIC.Windows
 
     default-language:   Haskell2010
     default-extensions: Strict StrictData
@@ -140,7 +139,7 @@ library
         fast-logger >=3.2.8 && <3.3,
         filepath,
         iproute >=1.7.12 && <1.8,
-        network >=3.2.3,
+        network >=3.2.10,
         network-byte-order >=0.1.7 && <0.2,
         network-control >=0.1.5 && <0.2,
         ram,
@@ -268,7 +267,7 @@ test-suite spec
         fast-logger >=3.2.8 && <3.3,
         filepath,
         hspec,
-        network >=3.2.2,
+        network >=3.2.10,
         quic,
         ram,
         stm,

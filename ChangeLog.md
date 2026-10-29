@@ -1,5 +1,31 @@
 # ChangeLog
 
+
+## 0.3.19
+
+* The dispatcher is stopped by the stop variable alone: it waits for that
+  and for its receive at once, through network's `recvFromWith`.  The
+  empty datagram it used to be woken with, and the machinery which sent
+  it, are gone.
+* `rebind` retires the reader of the socket it replaces rather than
+  closing that socket under it, and the reader's idle timeout is waited
+  for rather than thrown.  A close ends a thread blocked on a descriptor
+  only because the event manager says so, and that is being removed.
+  (#173)
+* The dispatcher's receive tells a closed socket from a datagram's
+  failure with network's `isClosedSocketError` rather than by comparing
+  the error type here.
+* Requires network 3.2.10 and network-run 0.7.
+* The closer's drain gives up on its receive at the deadline rather than
+  having `timeout` abandon it, so the six calls it could leave behind, and
+  the close which ended them, are gone.
+* `killReaders` retires the reader of the current socket before
+  `stopAfter` throws into the managed threads, which does not reach one
+  blocked in a socket call on Windows.
+* `Network.QUIC.Windows` is removed.  It ran a blocking call on a thread
+  of its own and abandoned it, which held only because the socket was
+  closed soon after; network's `withReadable` cancels the call instead.
+
 ## 0.3.18
 
 * The threads of a connection are owned by `time-manager`'s

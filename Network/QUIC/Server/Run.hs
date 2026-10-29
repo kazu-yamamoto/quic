@@ -44,11 +44,7 @@ run :: ServerConfig -> (Connection -> IO ()) -> IO ()
 run conf server = do
     labelMe "QUIC run"
     stvar <- newTVarIO Running
-    -- The sockets do not exist yet and the stop has to reach them, so what
-    -- stops this server is built here and what it wakes is filled in by
-    -- 'setup'.  See 'wakeDispatcher'.
-    wakeRef <- newIORef $ return ()
-    let stopNow = stopping stvar wakeRef
+    let stopNow = stopping stvar
     installShutdownHandler conf stopNow
     -- Outside handleLogUnit on purpose.  If the addresses cannot be bound
     -- there is no server, and that is the caller's business: swallowing it
@@ -56,7 +52,7 @@ run conf server = do
     -- onServerReady, and left anyone waiting on that hook waiting for good.
     -- An IOSpec run wedged for two and a half days that way, on a port the
     -- previous test had not finished releasing.
-    E.bracket (setup stvar stopNow wakeRef) (teardown stopNow) $ \(_, _, _) -> handleLogUnit debugLog $ do
+    E.bracket (setup stvar stopNow) (teardown stopNow) $ \(_, _, _) -> handleLogUnit debugLog $ do
         onServerReady $ scHooks conf
         atomically $ do
             st <- readTVar stvar
@@ -68,24 +64,22 @@ run conf server = do
     -- port is taken leaves the first socket bound and the token manager
     -- thread running, for good.  Each step frees what the steps before it
     -- took, which for a list means each element frees itself.
-    setup stvar stopNow wakeRef = do
+    setup stvar stopNow = do
         dispatch <- newDispatch conf stopNow
         let forkConn acc =
                 spawnConnection dispatch $
                     runServer conf server dispatch acc
         flip E.onException (clearDispatch dispatch) $ do
             ssas <- openAll $ scAddresses conf
-            writeIORef wakeRef $ mapM_ wakeDispatcher ssas
             tids <-
                 runAll dispatch conf stvar forkConn ssas
                     `E.onException` mapM_ NS.close ssas
             return (dispatch, tids, ssas)
-    -- Telling the dispatchers first.  They end where they wait, on the
-    -- datagram 'stopping' sends them, and the 'killThread' below then has
-    -- nothing to reach -- which matters because on Windows it could not
-    -- have reached them anyway: a thread blocked in a socket call there is
-    -- not interruptible.  Running them on a thread of their own so that it
-    -- could be was a forked thread for every datagram the server received.
+    -- Telling the dispatchers first.  They end where they wait, on the stop
+    -- variable 'stopping' sets, and the 'killThread' below then has nothing
+    -- to reach -- which matters because on Windows it could not have
+    -- reached them anyway: a thread blocked in a socket call there is not
+    -- interruptible.
     --
     -- The usual way here is through the shutdown handler, which has already
     -- done this; doing it again is free.  The way that had not, until now,
@@ -108,9 +102,7 @@ runWithSockets :: [NS.Socket] -> ServerConfig -> (Connection -> IO ()) -> IO ()
 runWithSockets ssas conf server = do
     labelMe "QUIC runWithSockets"
     stvar <- newTVarIO Running
-    -- As in 'run', except that the sockets are in hand already.
-    wakeRef <- newIORef $ mapM_ wakeDispatcher ssas
-    let stopNow = stopping stvar wakeRef
+    let stopNow = stopping stvar
     installShutdownHandler conf stopNow
     -- As in 'run'.
     E.bracket (setup stvar stopNow) (teardown stopNow) $ \(_, _) -> handleLogUnit debugLog $ do
@@ -156,10 +148,11 @@ installShutdownHandler = scInstallShutdownHandler
 
 -- | Telling this server to stop: the state the dispatchers read, and then
 --   the datagram that gets them to read it.
-stopping :: TVar ServerState -> IORef (IO ()) -> IO ()
-stopping stvar wakeRef = do
-    atomically $ writeTVar stvar Stopped
-    join $ readIORef wakeRef
+-- The dispatchers wait on this variable and on their receive at once, so
+-- setting it is all there is to stopping them: nothing has to be sent to
+-- the sockets and nothing has to be thrown into the threads.
+stopping :: TVar ServerState -> IO ()
+stopping stvar = atomically $ writeTVar stvar Stopped
 
 -- | Ending the connections the server still has, while the sockets are
 --   still open.
@@ -350,11 +343,12 @@ createServerConnection
     -> Accept
     -> IO ConnRes
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} = do
-    sref <- newIORef accMySocket
+    retire0 <- newTVarIO False
+    sref <- newIORef (accMySocket, retire0)
     pathInfo <- newPathInfo accPeerSockAddr
     piref <- newIORef $ PeerInfo pathInfo Nothing
     let send buf siz = void $ do
-            sock <- readIORef sref
+            (sock, _) <- readIORef sref
             PeerInfo pinfo _ <- readIORef piref
             NS.sendBufTo sock buf siz $ peerSockAddr pinfo
         recv = recvServer accRecvQ

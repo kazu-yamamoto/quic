@@ -12,7 +12,6 @@ module Network.QUIC.Server.Reader (
     tokenMgr,
     genStatelessReset,
     stopServerNow,
-    wakeDispatcher,
 
     -- * Accepting
     Accept (..),
@@ -25,24 +24,21 @@ module Network.QUIC.Server.Reader (
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import qualified GHC.IO.Exception as E
 import Network.ByteOrder
 import Network.Control (LRUCacheRef, Rate, getRate, newRate)
 import qualified Network.Control as LRUCache
 import Network.Socket (
+    isClosedSocketError,
     SockAddr (..),
     Socket,
-    getSocketName,
-    tupleToHostAddress,
-    tupleToHostAddress6,
  )
 import qualified Network.Socket.ByteString as NSB
-import qualified System.IO.Error as E
 import System.Log.FastLogger
 import qualified System.ThreadManager as T
 
@@ -182,37 +178,6 @@ runDispatcher d conf stvar forkConn mysock = forkIO $ dispatcher d conf stvar fo
 
 data ServerState = Running | Stopped deriving (Eq, Show)
 
--- | Waking a dispatcher that is waiting for a datagram, by sending it one.
---
--- The dispatchers used to wait for the socket to become readable and for the
--- stop variable at once, in a single 'atomically', and so saw a stop where
--- they waited.  Readiness is not something every I/O manager has to report:
--- a completion-based one has nothing to say about a socket being readable,
--- and on Windows the wait reaches 'waitRead#', which the threaded RTS does
--- not merely refuse but aborts the process over.  So the wait is a plain
--- receive now, and stopping has to put something into it.
---
--- An empty datagram to the socket's own address does that, and keeps what
--- the shutdown handler promises: no socket is closed and nothing is raised.
--- The loop reads the stop variable again when the receive returns and ends
--- there.  An empty datagram carries no packet, so one arriving from anywhere
--- else is just as harmless.
-wakeDispatcher :: Socket -> IO ()
-wakeDispatcher s = E.handle ignore $ do
-    sa <- getSocketName s
-    void $ NSB.sendTo s "" $ reachable sa
-
--- | The address a socket can be reached on from the host it is bound on.
---   A wildcard bind is not an address to send to, so the loopback stands in
---   for it.
-reachable :: SockAddr -> SockAddr
-reachable (SockAddrInet p a)
-    | a == 0 = SockAddrInet p $ tupleToHostAddress (127, 0, 0, 1)
-reachable (SockAddrInet6 p f a sc)
-    | a == (0, 0, 0, 0) =
-        SockAddrInet6 p f (tupleToHostAddress6 (0, 0, 0, 0, 0, 0, 0, 1)) sc
-reachable sa = sa
-
 dispatcher
     :: Dispatch
     -> ServerConfig
@@ -224,53 +189,54 @@ dispatcher d conf stvar forkConnection mysock = do
     labelMe "QUIC dispatcher"
     handleLogUnit logAction loop
   where
-    -- The loop used to wait for the socket to become readable, watching the
-    -- stop variable in the same 'atomically' so that 'stop' broke it without
-    -- an exception.  Readiness is not a thing a completion-based I/O manager
-    -- reports, so on Windows that wait is not available at all; the loop
-    -- simply blocks in the receive instead, and 'stop' is answered by the
-    -- 'killThread' and the 'close' that 'run's own teardown does next.  The
-    -- stop variable is still read, for the datagram that arrives between the
-    -- two.
+    -- The receive and the stop variable are waited for at once, so stopping
+    -- the dispatcher needs nothing put into the socket and nothing thrown
+    -- into this thread: 'recvFromWith' gives up on the receive itself.  It
+    -- used to be woken with an empty datagram to its own address, which was
+    -- the only way that held on Windows.
     loop = do
-        st <- readTVarIO stvar
-        when (st == Running) $ do
-            (bs, peersa) <- safeRecv $ NSB.recvFrom mysock 2048
-            now <- getTimeMicrosecond
-            let send' b = void $ NSB.sendTo mysock b peersa
-                -- cf: greaseQuicBit $ getMyParameters conn
-                quicBit = greaseQuicBit $ scParameters conf
-            let bytes = BS.length bs
-                switch = dispatch d conf forkConnection logAction mysock peersa send' bytes now
-            -- One datagram's failure is one datagram's problem.
-            --
-            -- Letting it out of the loop ends the dispatcher, and nothing
-            -- restarts it.  The socket stays bound, because 'run' holds it
-            -- for as long as the server lives, so the server goes on looking
-            -- like a server and answers nothing for the rest of its life --
-            -- with the handler above logging it to a logger that discards
-            -- what it is given.  Whatever a peer could find that raises in
-            -- here would be one datagram against the whole server, from any
-            -- address, before any handshake.
-            handleLogUnit logAction $ do
-                cpckts <- decodeCryptPackets bs (not quicBit)
-                mapM_ switch cpckts
-            loop
+        er <- safeRecv $ NSB.recvFromWith mysock 2048 stopped
+        case er of
+            Left () -> return ()
+            Right (bs, peersa) -> do
+                now <- getTimeMicrosecond
+                let send' b = void $ NSB.sendTo mysock b peersa
+                    -- cf: greaseQuicBit $ getMyParameters conn
+                    quicBit = greaseQuicBit $ scParameters conf
+                let bytes = BS.length bs
+                    switch = dispatch d conf forkConnection logAction mysock peersa send' bytes now
+                -- One datagram's failure is one datagram's problem.
+                --
+                -- Letting it out of the loop ends the dispatcher, and nothing
+                -- restarts it.  The socket stays bound, because 'run' holds it
+                -- for as long as the server lives, so the server goes on
+                -- looking like a server and answers nothing for the rest of
+                -- its life -- with the handler above logging it to a logger
+                -- that discards what it is given.  Whatever a peer could find
+                -- that raises in here would be one datagram against the whole
+                -- server, from any address, before any handshake.
+                handleLogUnit logAction $ do
+                    cpckts <- decodeCryptPackets bs (not quicBit)
+                    mapM_ switch cpckts
+                loop
+
+    stopped = do
+        st <- readTVar stvar
+        STM.check $ st /= Running
 
     logAction _msg = return ()
 
-    -- No thread of its own for the receive.  The dispatcher is not ended by
-    -- an exception thrown into it -- it is told, and sees it where it waits
-    -- -- so it does not need to be interruptible there, and a forked thread
-    -- for every datagram a server receives is 4.5 microseconds of each on
-    -- Windows.
+    -- One datagram's failure is one datagram's problem here too: a receive
+    -- which fails is tried again rather than ending the dispatcher.
     safeRecv rcv = do
         ex <- E.try rcv
         case ex of
             Right x -> return x
             Left se | isAsyncException se -> E.throwIO (se :: E.SomeException)
             Left se -> case E.fromException se of
-                Just e | E.ioeGetErrorType e == E.InvalidArgument -> E.throwIO se
+                -- The socket was closed under the receive, which is not a
+                -- datagram's failure and not something to try again.
+                Just e | isClosedSocketError e -> E.throwIO se
                 _ -> do
                     logAction $ "recv again: " <> bhow se
                     rcv

@@ -18,6 +18,7 @@ module Config (
 ) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Control.Monad
 import Data.Bits ((.&.))
@@ -228,6 +229,7 @@ withPipeWith stray scenario body = do
             E.bracket (startRelay saS sockC sockS irefC irefS) stopRelay $ \_ -> body
   where
     startRelay saS sockC sockS irefC irefS = do
+        stop <- newTVarIO False
         -- Where to send what comes back from the server.  Set once the client
         -- has introduced itself, which is before the server can have anything
         -- to say about it.
@@ -262,13 +264,13 @@ withPipeWith stray scenario body = do
             -- of a datagram can say which test it belongs to.  A test that
             -- leaves a client behind breaks the next one however this
             -- chooses, so a test must not leave one behind.
-            (bs, saO) <- waitForClientHello sockC
-            writeIORef peerRef $ Just saO
-            n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
-            dropPacket0 <- shouldDrop scenario True n0
-            unless dropPacket0 $ void $ sendTo sockS bs saS
-            forever $ do
-                (bs1, sa) <- relayRecv sockC
+            mhello <- waitForClientHello stop sockC
+            forM_ mhello $ \(bs, saO) -> do
+              writeIORef peerRef $ Just saO
+              n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+              dropPacket0 <- shouldDrop scenario True n0
+              unless dropPacket0 $ void $ sendTo sockS bs saS
+              relayLoop stop sockC $ \(bs1, sa) -> do
                 -- Only from the client we latched onto.  The connect this
                 -- replaces did that in the kernel; doing it here keeps
                 -- leftovers from the connection that just closed from being
@@ -282,8 +284,7 @@ withPipeWith stray scenario body = do
                             void $
                                 sendTo sockS bs1 saS
         -- from server
-        tid1 <- forkIO $ forever $ do
-            (bs, _) <- relayRecv sockS
+        tid1 <- forkIO $ relayLoop stop sockS $ \(bs, _) -> do
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
             dropPacket <- shouldDrop scenario False n
             let isCC = BS.length bs < 200
@@ -291,18 +292,30 @@ withPipeWith stray scenario body = do
                 mpeer <- readIORef peerRef
                 forM_ mpeer $ \sa ->
                     delayIf (shouldDelay scenario False n) $ void $ sendTo sockC bs sa
-        return (tid0, tid1)
-    stopRelay (tid0, tid1) = killThread tid0 >> killThread tid1
-    -- 'stopRelay' kills these threads and the brackets close the sockets
-    -- straight after, and a thread blocked in a socket call on Windows is
-    -- not reachable by 'killThread' -- it would be left in the call and
-    -- would die of the close instead, from a thread nobody is watching.
-    relayRecv sock = windowsThreadBlockHack $ recvFrom sock 2048
-    waitForClientHello sockC = do
-        (bs, saO) <- relayRecv sockC
-        if isClientHello bs
-            then return (bs, saO)
-            else waitForClientHello sockC
+        return (stop, tid0, tid1)
+    -- Telling these threads to stop rather than killing them: a thread
+    -- blocked in a socket call on Windows is not reachable by 'killThread',
+    -- and the brackets close the sockets straight after.  The kill stays
+    -- for a thread which is somewhere else.
+    stopRelay (stop, tid0, tid1) = do
+        atomically $ writeTVar stop True
+        killThread tid0
+        killThread tid1
+    relayRecv stop sock = recvFromWith sock 2048 (check =<< readTVar stop)
+    relayLoop stop sock act = loop
+      where
+        loop = do
+            r <- relayRecv stop sock
+            case r of
+                Left () -> return ()
+                Right x -> act x >> loop
+    waitForClientHello stop sockC = do
+        r <- relayRecv stop sockC
+        case r of
+            Left () -> return Nothing
+            Right (bs, saO)
+                | isClientHello bs -> return $ Just (bs, saO)
+                | otherwise -> waitForClientHello stop sockC
     isClientHello bs =
         BS.length bs >= 1200 && BS.head bs .&. 0x80 /= 0
     hints =

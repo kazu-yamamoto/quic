@@ -262,7 +262,10 @@ data Connection = Connection
     -- Manage
     , connRecvQ         :: RecvQ
     , connRecvDatagramQ :: DatagramQ
-    , connSocket        :: IORef Socket
+    , connSocket        :: IORef (Socket, TVar Bool)
+    -- ^ The socket and the variable which retires its reader: setting it
+    --   tells the reader that the socket is not its to read any more.
+    --   One reference, so that the two cannot be swapped apart.
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
@@ -369,7 +372,7 @@ newConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef Socket
+    -> IORef (Socket, TVar Bool)
     -> IORef PeerInfo
     -> RecvQ
     -> DatagramQ
@@ -469,7 +472,7 @@ clientConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef Socket
+    -> IORef (Socket, TVar Bool)
     -> IORef PeerInfo
     -> RecvQ
     -> DatagramQ
@@ -493,7 +496,7 @@ serverConnection
     -> DebugLogger
     -> QLogger
     -> Hooks
-    -> IORef Socket
+    -> IORef (Socket, TVar Bool)
     -> IORef PeerInfo
     -> RecvQ
     -> DatagramQ

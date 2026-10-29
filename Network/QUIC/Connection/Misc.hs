@@ -9,6 +9,8 @@ module Network.QUIC.Connection.Misc (
     getOriginalVersion,
     getSocket,
     setSocket,
+    getSocketRetire,
+    swapSocket,
     clearSocket,
     getPathInfo,
     addPathInfo,
@@ -35,6 +37,7 @@ module Network.QUIC.Connection.Misc (
     abortConnection,
 ) where
 
+import Control.Concurrent.STM (TVar, atomically, writeTVar)
 import qualified Control.Exception as E
 import Network.Socket (SockAddr, Socket)
 import qualified System.ThreadManager as T
@@ -68,14 +71,29 @@ getOriginalVersion = chosenVersion . origVersionInfo
 ----------------------------------------------------------------
 
 getSocket :: Connection -> IO Socket
-getSocket Connection{..} = readIORef connSocket
+getSocket Connection{..} = fst <$> readIORef connSocket
 
+-- | Swapping the socket alone, leaving the reader of the old one to be
+--   retired through the variable they share.
 setSocket :: Connection -> Socket -> IO Socket
-setSocket Connection{..} sock = atomicModifyIORef' connSocket (sock,)
+setSocket Connection{..} sock =
+    atomicModifyIORef' connSocket $ \(old, retire) -> ((sock, retire), old)
+
+-- | The variable which retires the reader of the current socket.
+getSocketRetire :: Connection -> IO (TVar Bool)
+getSocketRetire Connection{..} = snd <$> readIORef connSocket
+
+-- | Swapping the socket and the variable which retires its reader at
+--   once, returning the pair they replace.  The two go together, so
+--   nothing can see one of them swapped and not the other.
+swapSocket :: Connection -> Socket -> TVar Bool -> IO (Socket, TVar Bool)
+swapSocket Connection{..} sock retire =
+    atomicModifyIORef' connSocket ((sock, retire),)
 
 -- fixme
 clearSocket :: Connection -> IO Socket
-clearSocket Connection{..} = atomicModifyIORef' connSocket (undefined,)
+clearSocket Connection{..} =
+    atomicModifyIORef' connSocket $ \(old, retire) -> ((undefined, retire), old)
 
 ----------------------------------------------------------------
 
@@ -207,7 +225,14 @@ waitManaged Connection{..} = T.waitUntilAllGone readers
 -- | Killing the threads of 'forkManaged'.  One forked after this is
 --   refused rather than run.
 killReaders :: Connection -> IO ()
-killReaders Connection{..} = T.stopAfter readers (return ()) $ \_ -> return ()
+killReaders conn@Connection{..} = do
+    -- Telling the reader of the current socket to go.  'stopAfter' below
+    -- throws into the threads it manages, and an asynchronous exception
+    -- does not reach one blocked in a socket call on Windows; the reader
+    -- waits on this variable beside its receive instead.
+    retired <- getSocketRetire conn
+    atomically $ writeTVar retired True
+    T.stopAfter readers (return ()) $ \_ -> return ()
 
 ----------------------------------------------------------------
 
