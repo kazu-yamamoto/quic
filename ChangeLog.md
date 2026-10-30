@@ -7,6 +7,9 @@
   the listening sockets are closed, instead of being killed.
 * Sockets this library owns and nobody is waiting on are closed with
   `close(2)` rather than with `close`.  Requires network 3.2.11.
+* A reader retired by `rebind` closes its own socket, once it has left
+  it, rather than `rebind` closing it after a delay long enough that it
+  probably has.  `rebind` loses its `Microseconds` argument.
 
 ## 0.3.19
 

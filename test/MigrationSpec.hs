@@ -44,7 +44,7 @@ spec = do
             (clientConn, _) <- makeConnections serverConf Version1
             oldSock <- getSocket clientConn
             oldRetired <- getSocketRetire clientConn
-            rebind clientConn $ Microseconds 1000000
+            rebind clientConn
             newSock <- getSocket clientConn
             newRetired <- getSocketRetire clientConn
             readTVarIO oldRetired `shouldReturn` True
@@ -56,13 +56,33 @@ spec = do
         it "closes the socket it replaced even if the connection ends first" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             oldSock <- getSocket clientConn
-            rebind clientConn $ Microseconds 100000
+            rebind clientConn
             -- Over before the old socket's delay is up.
             setDead clientConn
             threadDelay 300000
             -- A closed socket has its descriptor taken away.
             withFdSocket oldSock return `shouldReturn` (-1)
             newRetired <- getSocketRetire clientConn
+            atomically $ writeTVar newRetired True
+
+        it "closes its socket when rebind has swapped that socket out" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            sock <- getSocket clientConn
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
+            retired <- getSocketRetire clientConn
+            done <- newEmptyMVar
+            void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
+            threadDelay 100000
+            -- What 'rebind' does: swap first, retire second.
+            newSock <- natRebinding False peersa
+            newRetired <- newTVarIO False
+            _ <- swapSocket clientConn newSock newRetired
+            atomically $ writeTVar retired True
+            returned <- timeout (Microseconds 2000000) "retired reader" $ takeMVar done
+            returned `shouldBe` Just ()
+            -- Nobody else has it, so the reader closed it on its way out.
+            getSocketName sock `shouldThrow` anyException
             atomically $ writeTVar newRetired True
 
         it "lets a retired reader return, leaving its socket open" $ do
