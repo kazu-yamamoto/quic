@@ -325,15 +325,15 @@ runServer conf server0 dispatch acc = do
             closure conn ldcc ex
   where
     open = createServerConnection conf dispatch acc
-    -- Stop this connection's own threads and see them out before the
-    -- buffers they use are freed.  Nothing stopped them here at all: a path
-    -- validation outlived the connection it was validating a path for, and
-    -- went on reading and writing buffers that had been handed back.
+    -- 'killReaders' stops this connection's own threads and sees them out,
+    -- which has to happen before the buffers they use are freed.  Nothing
+    -- stopped them here at all: a path validation outlived the connection it
+    -- was validating a path for, and went on reading and writing buffers
+    -- that had been handed back.
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
         killReaders conn
-        waitManaged conn
         freeResources conn
     -- Say why the connection ended.  This used to discard it, so a server
     -- connection that died of anything 'closure' does not turn into a
