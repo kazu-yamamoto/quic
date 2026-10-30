@@ -113,6 +113,8 @@ spec = do
             (clientConn, _) <- makeConnections serverConf Version1
             peersa <- peerSockAddr <$> getPathInfo clientConn
             sock <- natRebinding peersa
+            -- getSocketName says nothing of an unbound socket on Windows.
+            connect sock peersa
             retireSocket clientConn sock
             void $ getSocketName sock
             -- No sender to drain it, so the teardown is what closes it.
