@@ -131,6 +131,9 @@ runClient conf client0 isICVN verInfo = do
         setDead conn
         killReaders conn
         waitManaged conn
+        -- Every reader and the sender are gone, so whatever a reader left
+        -- behind is nobody's now.
+        closeRetiredSockets conn
         -- Only the closer closes the socket, and there is none when the
         -- peer ended the connection.  No thread is on the socket now.
         owned <- readIORef $ connCloserOwnsSocket conn

@@ -65,7 +65,7 @@ spec = do
             newRetired <- getSocketRetire clientConn
             atomically $ writeTVar newRetired True
 
-        it "closes its socket when rebind has swapped that socket out" $ do
+        it "leaves its socket for the sender when rebind has swapped it out" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             sock <- getSocket clientConn
             peersa <- peerSockAddr <$> getPathInfo clientConn
@@ -81,7 +81,10 @@ spec = do
             atomically $ writeTVar retired True
             returned <- timeout (Microseconds 2000000) "retired reader" $ takeMVar done
             returned `shouldBe` Just ()
-            -- Nobody else has it, so the reader closed it on its way out.
+            -- Left, not closed: the sender could still be inside a send on
+            -- it, and it is the sender which closes it.
+            void $ getSocketName sock
+            closeRetiredSockets clientConn
             getSocketName sock `shouldThrow` anyException
             atomically $ writeTVar newRetired True
 
