@@ -17,7 +17,7 @@ import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, close, getSocketName)
+import Network.Socket (Socket, getSocketName)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Common
@@ -84,7 +84,11 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
             Left Retired -> do
                 current <- getSocketRetire conn
                 when (current /= retired) $ retireSocket conn s0
-            Left TimedOut -> close s0
+            -- What ends the connection on an idle timeout is the
+            -- receiver throwing 'ConnectionIsTimeout'; this thread only
+            -- stops reading.  The socket goes the same way as a retired
+            -- one, because the sender may be inside a send on it.
+            Left TimedOut -> retireSocket conn s0
             Right bs -> do
                 now <- getTimeMicrosecond
                 let quicBit = greaseQuicBit $ getMyParameters conn
