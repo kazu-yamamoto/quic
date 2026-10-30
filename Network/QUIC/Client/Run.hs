@@ -134,7 +134,10 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     -- nothing releases what it has taken when it throws.  Here that is a
     -- socket as well -- 'clse' does not close it, the closer does, and a
     -- connection that never began has no closer.
-    flip E.onException (NS.close sock) $ do
+    --
+    -- Nothing below forks, and the reader is only built here, so this
+    -- thread is the only one the socket has ever had.
+    flip E.onException (NS.unsafeClose sock) $ do
         when ccSockConnected $ NS.connect sock peersa
         q <- newRecvQ
         retire0 <- newTVarIO False

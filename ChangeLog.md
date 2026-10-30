@@ -5,18 +5,18 @@
 
 * The dispatchers run under a `ThreadManager` and are waited for before
   the listening sockets are closed, instead of being killed.
-* Sockets this library owns and nobody is waiting on are closed with
-  `close(2)` rather than with `close`.  Requires network 3.2.11.
-* A socket `rebind` retires is closed with `close(2)` at a point where no
-  thread can be inside a call on it: the reader leaves it behind on its
-  way out, and the sender, the only other thread which sends on it,
-  closes it between two sends.  `rebind` used to close it after a delay
-  long enough that the reader probably had left, and loses its
-  `Microseconds` argument.
+* Every socket this library closes is closed with `close(2)`, rather than
+  with `close` and the IO manager it goes through to tell a waiter.  Each
+  is closed where no thread can be inside a call on it; the entries below
+  are what it took to make that true.  Requires network 3.2.11.
+* A socket `rebind` retires is left by the reader on its way out and
+  closed by the sender, the only other thread which sends on it, between
+  two sends.  `rebind` used to close it after a delay long enough that
+  the reader probably had left, and loses its `Microseconds` argument.
 * `killReaders` sees the threads out rather than only throwing at them, so
   a caller which goes on to use what they were using is not racing them.
   The closer is one: it sends and receives on the connection's socket
-  after `killReaders`, and now closes it with `close(2)`.
+  after `killReaders`, and then closes it.
 * A client's reader leaves its socket for the sender on an idle timeout
   too, rather than closing it where the sender may be inside a send on
   it.  What ends the connection there is the receiver, which throws
