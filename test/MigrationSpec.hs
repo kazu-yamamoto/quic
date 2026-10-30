@@ -76,6 +76,21 @@ spec = do
             getSocketName sock `shouldThrow` anyException
             atomically $ writeTVar newRetired True
 
+        it "leaves its socket for the sender when the connection goes idle" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            sock <- getSocket clientConn
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
+            setMinIdleTimeout clientConn $ Microseconds 100000
+            retired <- getSocketRetire clientConn
+            done <- newEmptyMVar
+            void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
+            returned <- timeout (Microseconds 2000000) "idle reader" $ takeMVar done
+            returned `shouldBe` Just ()
+            void $ getSocketName sock
+            closeRetiredSockets clientConn
+            getSocketName sock `shouldThrow` anyException
+
         it "lets a retired reader return, leaving its socket open" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             sock <- getSocket clientConn

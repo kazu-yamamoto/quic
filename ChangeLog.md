@@ -17,6 +17,10 @@
   a caller which goes on to use what they were using is not racing them.
   The closer is one: it sends and receives on the connection's socket
   after `killReaders`, and now closes it with `close(2)`.
+* A client's reader leaves its socket for the sender on an idle timeout
+  too, rather than closing it where the sender may be inside a send on
+  it.  What ends the connection there is the receiver, which throws
+  `ConnectionIsTimeout` at the same deadline.
 
 ## 0.3.19
 
