@@ -109,6 +109,16 @@ spec = do
             closeRetiredSockets clientConn
             getSocketName sock `shouldThrow` anyException
 
+        it "closes a socket it was left even if nothing drains it" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            sock <- natRebinding peersa
+            retireSocket clientConn sock
+            void $ getSocketName sock
+            -- No sender to drain it, so the teardown is what closes it.
+            freeResources clientConn
+            getSocketName sock `shouldThrow` anyException
+
         it "lets a retired reader return, leaving its socket open" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             sock <- getSocket clientConn

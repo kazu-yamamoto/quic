@@ -122,9 +122,6 @@ runClient conf client0 isICVN verInfo = do
         let conn = connResConnection connRes
         setDead conn
         killReaders conn
-        -- Every reader and the sender are gone, so whatever a reader left
-        -- behind is nobody's now.
-        closeRetiredSockets conn
         freeResources conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes

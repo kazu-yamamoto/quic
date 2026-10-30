@@ -95,14 +95,19 @@ swapSocket Connection{..} sock retire =
 -- | Leaving a socket this connection has finished with for the sender to
 --   close.  Said by the reader on its way out, so that the only thread
 --   which could still be inside a call on it is the sender.
+--
+-- The close is registered as a resource as well, so that leaving one here
+-- is all it takes: a connection whose sender never wakes again closes it
+-- in 'freeResources' instead.  Closing an already closed socket does
+-- nothing, so it does not matter which gets there first.
 retireSocket :: Connection -> Socket -> IO ()
-retireSocket Connection{..} sock =
+retireSocket conn@Connection{..} sock = do
     atomicModifyIORef' connRetiredSocks $ \socks -> (sock : socks, ())
+    addResource conn $ unsafeClose sock
 
 -- | Closing what 'retireSocket' has left.  The caller must not be inside a
---   call on any of them, which is why this is the sender between two sends,
---   and the teardown once every thread is gone.  Nobody is waiting on them,
---   so @close(2)@ is enough.
+--   call on any of them, which is why this is the sender between two sends.
+--   Nobody is waiting on them, so @close(2)@ is enough.
 closeRetiredSockets :: Connection -> IO ()
 closeRetiredSockets Connection{..} = do
     socks <- atomicModifyIORef' connRetiredSocks ([],)
