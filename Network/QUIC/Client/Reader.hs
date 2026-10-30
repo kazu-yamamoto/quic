@@ -75,13 +75,14 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
                 ((readTVar retired >>= STM.check) $> Retired)
                     `orElse` ((readTVar expired >>= STM.check) $> TimedOut)
         case ebs of
-            -- 'rebind' swapped this socket out before retiring it, and
-            -- nothing else has it, so it is closed here, where it is known
-            -- that this reader has left it.  'killReaders' did not swap,
-            -- and the closer still reads and sends on it.
+            -- 'rebind' swapped this socket out before retiring it, so the
+            -- sender is the only thread which can still be inside a call
+            -- on it: it is left for the sender to close, said here, where
+            -- it is known that this reader has left it.  'killReaders' did
+            -- not swap, and the closer still reads and sends on it.
             Left Retired -> do
                 current <- getSocketRetire conn
-                when (current /= retired) $ close s0
+                when (current /= retired) $ retireSocket conn s0
             Left TimedOut -> close s0
             Right bs -> do
                 now <- getTimeMicrosecond
@@ -270,7 +271,8 @@ rebind conn = do
         `E.finally` do
             -- Telling the old reader to go rather than closing the socket
             -- under it: a close ends a thread blocked on a descriptor only
-            -- because the event manager says so.  The reader closes it on
-            -- its way out.  Said even if the fork above failed, since the
-            -- old socket is not this connection's any more either way.
+            -- because the event manager says so.  The reader leaves it for
+            -- the sender instead.  Said even if the fork above failed,
+            -- since the old socket is not this connection's any more
+            -- either way.
             atomically $ writeTVar oldRetired True

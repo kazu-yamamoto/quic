@@ -266,6 +266,11 @@ data Connection = Connection
     -- ^ The socket and the variable which retires its reader: setting it
     --   tells the reader that the socket is not its to read any more.
     --   One reference, so that the two cannot be swapped apart.
+    , connRetiredSocks  :: IORef [Socket]
+    -- ^ Sockets a reader has left and nobody is in any more.  The sender
+    --   closes them, because it is the one thread which could otherwise
+    --   be inside a send on one, and the connection's teardown closes
+    --   what is left.
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
@@ -420,6 +425,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     bytesTx           <- newIORef 0
     bytesRx           <- newIORef 0
     connDone          <- newTVarIO False
+    connRetiredSocks  <- newIORef []
     -- TLS
     pendingQ          <- makePendingQ
     ciphers           <- newArray (InitialLevel, RTT1Level) defaultCipher

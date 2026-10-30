@@ -12,6 +12,8 @@ module Network.QUIC.Connection.Misc (
     getSocketRetire,
     swapSocket,
     clearSocket,
+    retireSocket,
+    closeRetiredSockets,
     getPathInfo,
     addPathInfo,
     findPathInfo,
@@ -39,7 +41,7 @@ module Network.QUIC.Connection.Misc (
 
 import Control.Concurrent.STM (TVar, atomically, writeTVar)
 import qualified Control.Exception as E
-import Network.Socket (SockAddr, Socket)
+import Network.Socket (SockAddr, Socket, unsafeClose)
 import qualified System.ThreadManager as T
 
 import Network.QUIC.Connection.Queue
@@ -89,6 +91,22 @@ getSocketRetire Connection{..} = snd <$> readIORef connSocket
 swapSocket :: Connection -> Socket -> TVar Bool -> IO (Socket, TVar Bool)
 swapSocket Connection{..} sock retire =
     atomicModifyIORef' connSocket ((sock, retire),)
+
+-- | Leaving a socket this connection has finished with for the sender to
+--   close.  Said by the reader on its way out, so that the only thread
+--   which could still be inside a call on it is the sender.
+retireSocket :: Connection -> Socket -> IO ()
+retireSocket Connection{..} sock =
+    atomicModifyIORef' connRetiredSocks $ \socks -> (sock : socks, ())
+
+-- | Closing what 'retireSocket' has left.  The caller must not be inside a
+--   call on any of them, which is why this is the sender between two sends,
+--   and the teardown once every thread is gone.  Nobody is waiting on them,
+--   so @close(2)@ is enough.
+closeRetiredSockets :: Connection -> IO ()
+closeRetiredSockets Connection{..} = do
+    socks <- atomicModifyIORef' connRetiredSocks ([],)
+    mapM_ unsafeClose socks
 
 -- fixme
 clearSocket :: Connection -> IO Socket
