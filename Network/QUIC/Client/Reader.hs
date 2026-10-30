@@ -41,10 +41,11 @@ data ReaderEnd = Retired | TimedOut
 --
 --   Nothing is closed and nothing is thrown to make it return: the receive
 --   and both of those are waited for at once.  A socket retired by 'rebind'
---   is closed here rather than by the caller, which cannot see when this
---   has returned and would be closing it under a reader.
+--   is left for the sender here rather than closed by the caller, which
+--   cannot see when this has returned and would be closing it under a
+--   reader.
 readerClient :: TVar Bool -> Socket -> Connection -> IO ()
-readerClient retired s0 conn = handleLogUnit logAction $ do
+readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ do
     labelMe "readerClient"
     wait
     connected <- getSockConnected conn
@@ -60,6 +61,16 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
                         | otherwise -> return $ Right bs
     loop recv
   where
+    -- A socket 'rebind' swapped out is nobody's but the retired list's,
+    -- so it is left there however this thread ends -- told, thrown at or
+    -- failed.  One still the connection's belongs to the closer, which
+    -- reads and sends on it after this.
+    --
+    -- Left rather than closed because the sender may be inside a send on
+    -- it; it closes them between two sends.
+    leave = do
+        current <- getSocketRetire conn
+        when (current /= retired) $ retireSocket conn s0
     wait = do
         bound <- E.handle (throughAsync (return False)) $ do
             _ <- getSocketName s0
@@ -75,14 +86,8 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
                 ((readTVar retired >>= STM.check) $> Retired)
                     `orElse` ((readTVar expired >>= STM.check) $> TimedOut)
         case ebs of
-            -- 'rebind' swapped this socket out before retiring it, so the
-            -- sender is the only thread which can still be inside a call
-            -- on it: it is left for the sender to close, said here, where
-            -- it is known that this reader has left it.  'killReaders' did
-            -- not swap, and the closer still reads and sends on it.
-            Left Retired -> do
-                current <- getSocketRetire conn
-                when (current /= retired) $ retireSocket conn s0
+            -- 'leave' has it.
+            Left Retired -> return ()
             -- What ends the connection on an idle timeout is the
             -- receiver throwing 'ConnectionIsTimeout'; this thread only
             -- stops reading.  The socket goes the same way as a retired

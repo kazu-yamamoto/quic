@@ -76,6 +76,24 @@ spec = do
             getSocketName sock `shouldThrow` anyException
             atomically $ writeTVar newRetired True
 
+        it "leaves its socket even when it is killed rather than told" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            sock <- getSocket clientConn
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
+            retired <- getSocketRetire clientConn
+            tid <- forkIO $ readerClient retired sock clientConn
+            threadDelay 100000
+            newSock <- natRebinding peersa
+            newRetired <- newTVarIO False
+            _ <- swapSocket clientConn newSock newRetired
+            -- As 'killReaders' does: thrown at, not told.
+            killThread tid
+            threadDelay 100000
+            closeRetiredSockets clientConn
+            getSocketName sock `shouldThrow` anyException
+            atomically $ writeTVar newRetired True
+
         it "leaves its socket for the sender when the connection goes idle" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             sock <- getSocket clientConn
