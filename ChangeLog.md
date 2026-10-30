@@ -9,7 +9,7 @@
   with `close` and the IO manager it goes through to tell a waiter.  Each
   is closed where no thread can be inside a call on it; the entries below
   are what it took to make that true.  Requires network 3.2.11.
-* A socket `rebind` retires is left by the reader on its way out and
+* A socket `rebind` retires is left by the reader however it ends, and
   closed by the sender, the only other thread which sends on it, between
   two sends.  `rebind` used to close it after a delay long enough that
   the reader probably had left, and loses its `Microseconds` argument.
