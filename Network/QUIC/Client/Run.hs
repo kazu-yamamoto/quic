@@ -114,14 +114,14 @@ runClient conf client0 isICVN verInfo = do
         closure conn ldcc ex
   where
     open = createClientConnection conf verInfo
-    -- Stopping the readers and seeing them out before the buffers they use
-    -- are freed.  This used to free first and stop after, which left every
-    -- reader a window in which to use a buffer that had been handed back.
+    -- 'killReaders' sees the readers out, which has to happen before the
+    -- buffers they use are freed.  This used to free first and stop after,
+    -- which left every reader a window in which to use a buffer that had
+    -- been handed back.
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
         killReaders conn
-        waitManaged conn
         -- Every reader and the sender are gone, so whatever a reader left
         -- behind is nobody's now.
         closeRetiredSockets conn

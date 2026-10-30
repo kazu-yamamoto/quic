@@ -240,8 +240,14 @@ forkManaged Connection{..} = T.forkManaged readers
 waitManaged :: Connection -> IO ()
 waitManaged Connection{..} = T.waitUntilAllGone readers
 
--- | Killing the threads of 'forkManaged'.  One forked after this is
---   refused rather than run.
+-- | Killing the threads of 'forkManaged' and seeing them out.  One forked
+--   after this is refused rather than run.
+--
+-- 'T.stopAfter' throws and returns: 'throwTo' waits for the exception to be
+-- taken, not for the thread to end, so without the wait a caller which goes
+-- on to use what those threads were using -- the connection's socket, in
+-- 'Network.QUIC.Closer' -- is racing them.  'waitManaged' says why there is
+-- no cap on it.
 killReaders :: Connection -> IO ()
 killReaders conn@Connection{..} = do
     -- Telling the reader of the current socket to go.  'stopAfter' below
@@ -251,6 +257,7 @@ killReaders conn@Connection{..} = do
     retired <- getSocketRetire conn
     atomically $ writeTVar retired True
     T.stopAfter readers (return ()) $ \_ -> return ()
+    waitManaged conn
 
 ----------------------------------------------------------------
 

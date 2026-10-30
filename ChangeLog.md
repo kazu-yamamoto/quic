@@ -13,6 +13,10 @@
   closes it between two sends.  `rebind` used to close it after a delay
   long enough that the reader probably had left, and loses its
   `Microseconds` argument.
+* `killReaders` sees the threads out rather than only throwing at them, so
+  a caller which goes on to use what they were using is not racing them.
+  The closer is one: it sends and receives on the connection's socket
+  after `killReaders`, and now closes it with `close(2)`.
 
 ## 0.3.19
 
