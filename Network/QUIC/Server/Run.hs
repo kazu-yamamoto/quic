@@ -75,7 +75,7 @@ run conf server = do
                 `E.onException` do
                     stopNow
                     waitNoDispatcher dispatch
-                    mapM_ NS.close ssas
+                    mapM_ NS.unsafeClose ssas
             return (dispatch, ssas)
     -- Telling the dispatchers, and then waiting for them.  They end where
     -- they wait, on the stop variable 'stopping' sets; nothing is thrown at
@@ -96,10 +96,10 @@ run conf server = do
         clearDispatch dispatch
         waitNoDispatcher dispatch
         shutdownConnections conf dispatch
-        mapM_ NS.close ssas
+        mapM_ NS.unsafeClose ssas
     openAll [] = return []
     openAll (a : as) =
-        E.bracketOnError (serverSocket a) NS.close $ \s -> (s :) <$> openAll as
+        E.bracketOnError (serverSocket a) NS.unsafeClose $ \s -> (s :) <$> openAll as
 
 -- | Running a QUIC server.
 --   The action is executed with a new connection
@@ -325,15 +325,15 @@ runServer conf server0 dispatch acc = do
             closure conn ldcc ex
   where
     open = createServerConnection conf dispatch acc
-    -- Stop this connection's own threads and see them out before the
-    -- buffers they use are freed.  Nothing stopped them here at all: a path
-    -- validation outlived the connection it was validating a path for, and
-    -- went on reading and writing buffers that had been handed back.
+    -- 'killReaders' stops this connection's own threads and sees them out,
+    -- which has to happen before the buffers they use are freed.  Nothing
+    -- stopped them here at all: a path validation outlived the connection it
+    -- was validating a path for, and went on reading and writing buffers
+    -- that had been handed back.
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
         killReaders conn
-        waitManaged conn
         freeResources conn
     -- Say why the connection ended.  This used to discard it, so a server
     -- connection that died of anything 'closure' does not turn into a

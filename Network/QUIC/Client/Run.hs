@@ -114,14 +114,14 @@ runClient conf client0 isICVN verInfo = do
         closure conn ldcc ex
   where
     open = createClientConnection conf verInfo
-    -- Stopping the readers and seeing them out before the buffers they use
-    -- are freed.  This used to free first and stop after, which left every
-    -- reader a window in which to use a buffer that had been handed back.
+    -- 'killReaders' sees the readers out, which has to happen before the
+    -- buffers they use are freed.  This used to free first and stop after,
+    -- which left every reader a window in which to use a buffer that had
+    -- been handed back.
     clse connRes = do
         let conn = connResConnection connRes
         setDead conn
         killReaders conn
-        waitManaged conn
         freeResources conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
@@ -131,7 +131,10 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     -- nothing releases what it has taken when it throws.  Here that is a
     -- socket as well -- 'clse' does not close it, the closer does, and a
     -- connection that never began has no closer.
-    flip E.onException (NS.close sock) $ do
+    --
+    -- Nothing below forks, and the reader is only built here, so this
+    -- thread is the only one the socket has ever had.
+    flip E.onException (NS.unsafeClose sock) $ do
         when ccSockConnected $ NS.connect sock peersa
         q <- newRecvQ
         retire0 <- newTVarIO False

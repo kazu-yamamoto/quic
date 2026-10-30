@@ -44,7 +44,7 @@ spec = do
             (clientConn, _) <- makeConnections serverConf Version1
             oldSock <- getSocket clientConn
             oldRetired <- getSocketRetire clientConn
-            rebind clientConn $ Microseconds 1000000
+            rebind clientConn
             newSock <- getSocket clientConn
             newRetired <- getSocketRetire clientConn
             readTVarIO oldRetired `shouldReturn` True
@@ -52,6 +52,74 @@ spec = do
             (newSock == oldSock) `shouldBe` False
             -- The reader 'rebind' forked is on the new socket; let it go.
             atomically $ writeTVar newRetired True
+
+        it "leaves its socket for the sender when rebind has swapped it out" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            sock <- getSocket clientConn
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
+            retired <- getSocketRetire clientConn
+            done <- newEmptyMVar
+            void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
+            threadDelay 100000
+            -- What 'rebind' does: swap first, retire second.
+            newSock <- natRebinding peersa
+            newRetired <- newTVarIO False
+            _ <- swapSocket clientConn newSock newRetired
+            atomically $ writeTVar retired True
+            returned <- timeout (Microseconds 2000000) "retired reader" $ takeMVar done
+            returned `shouldBe` Just ()
+            -- Left, not closed: the sender could still be inside a send on
+            -- it, and it is the sender which closes it.
+            void $ getSocketName sock
+            closeRetiredSockets clientConn
+            getSocketName sock `shouldThrow` anyException
+            atomically $ writeTVar newRetired True
+
+        it "leaves its socket even when it is killed rather than told" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            sock <- getSocket clientConn
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
+            retired <- getSocketRetire clientConn
+            tid <- forkIO $ readerClient retired sock clientConn
+            threadDelay 100000
+            newSock <- natRebinding peersa
+            newRetired <- newTVarIO False
+            _ <- swapSocket clientConn newSock newRetired
+            -- As 'killReaders' does: thrown at, not told.
+            killThread tid
+            threadDelay 100000
+            closeRetiredSockets clientConn
+            getSocketName sock `shouldThrow` anyException
+            atomically $ writeTVar newRetired True
+
+        it "leaves its socket for the sender when the connection goes idle" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            sock <- getSocket clientConn
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect sock peersa
+            setMinIdleTimeout clientConn $ Microseconds 100000
+            retired <- getSocketRetire clientConn
+            done <- newEmptyMVar
+            void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
+            returned <- timeout (Microseconds 2000000) "idle reader" $ takeMVar done
+            returned `shouldBe` Just ()
+            void $ getSocketName sock
+            closeRetiredSockets clientConn
+            getSocketName sock `shouldThrow` anyException
+
+        it "closes a socket it was left even if nothing drains it" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            sock <- natRebinding peersa
+            -- getSocketName says nothing of an unbound socket on Windows.
+            connect sock peersa
+            retireSocket clientConn sock
+            void $ getSocketName sock
+            -- No sender to drain it, so the teardown is what closes it.
+            freeResources clientConn
+            getSocketName sock `shouldThrow` anyException
 
         it "lets a retired reader return, leaving its socket open" $ do
             (clientConn, _) <- makeConnections serverConf Version1

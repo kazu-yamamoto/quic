@@ -12,6 +12,8 @@ module Network.QUIC.Connection.Misc (
     getSocketRetire,
     swapSocket,
     clearSocket,
+    retireSocket,
+    closeRetiredSockets,
     getPathInfo,
     addPathInfo,
     findPathInfo,
@@ -39,7 +41,7 @@ module Network.QUIC.Connection.Misc (
 
 import Control.Concurrent.STM (TVar, atomically, writeTVar)
 import qualified Control.Exception as E
-import Network.Socket (SockAddr, Socket)
+import Network.Socket (SockAddr, Socket, unsafeClose)
 import qualified System.ThreadManager as T
 
 import Network.QUIC.Connection.Queue
@@ -89,6 +91,27 @@ getSocketRetire Connection{..} = snd <$> readIORef connSocket
 swapSocket :: Connection -> Socket -> TVar Bool -> IO (Socket, TVar Bool)
 swapSocket Connection{..} sock retire =
     atomicModifyIORef' connSocket ((sock, retire),)
+
+-- | Leaving a socket this connection has finished with for the sender to
+--   close.  Said by the reader on its way out, so that the only thread
+--   which could still be inside a call on it is the sender.
+--
+-- The close is registered as a resource as well, so that leaving one here
+-- is all it takes: a connection whose sender never wakes again closes it
+-- in 'freeResources' instead.  Closing an already closed socket does
+-- nothing, so it does not matter which gets there first.
+retireSocket :: Connection -> Socket -> IO ()
+retireSocket conn@Connection{..} sock = do
+    atomicModifyIORef' connRetiredSocks $ \socks -> (sock : socks, ())
+    addResource conn $ unsafeClose sock
+
+-- | Closing what 'retireSocket' has left.  The caller must not be inside a
+--   call on any of them, which is why this is the sender between two sends.
+--   Nobody is waiting on them, so @close(2)@ is enough.
+closeRetiredSockets :: Connection -> IO ()
+closeRetiredSockets Connection{..} = do
+    socks <- atomicModifyIORef' connRetiredSocks ([],)
+    mapM_ unsafeClose socks
 
 -- fixme
 clearSocket :: Connection -> IO Socket
@@ -222,8 +245,14 @@ forkManaged Connection{..} = T.forkManaged readers
 waitManaged :: Connection -> IO ()
 waitManaged Connection{..} = T.waitUntilAllGone readers
 
--- | Killing the threads of 'forkManaged'.  One forked after this is
---   refused rather than run.
+-- | Killing the threads of 'forkManaged' and seeing them out.  One forked
+--   after this is refused rather than run.
+--
+-- 'T.stopAfter' throws and returns: 'throwTo' waits for the exception to be
+-- taken, not for the thread to end, so without the wait a caller which goes
+-- on to use what those threads were using -- the connection's socket, in
+-- 'Network.QUIC.Closer' -- is racing them.  'waitManaged' says why there is
+-- no cap on it.
 killReaders :: Connection -> IO ()
 killReaders conn@Connection{..} = do
     -- Telling the reader of the current socket to go.  'stopAfter' below
@@ -233,6 +262,7 @@ killReaders conn@Connection{..} = do
     retired <- getSocketRetire conn
     atomically $ writeTVar retired True
     T.stopAfter readers (return ()) $ \_ -> return ()
+    waitManaged conn
 
 ----------------------------------------------------------------
 

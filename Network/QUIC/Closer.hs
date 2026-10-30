@@ -126,10 +126,14 @@ closure'' conn ldcc frame = do
                                         Right (_, sa)
                                             | sa /= peersa -> again
                                             | otherwise -> return True
+                        -- 'killReaders' above has seen the readers out,
+                        -- and this runs on the way out of the closer, the
+                        -- last thread to send or receive on it: @close(2)@
+                        -- is enough.
                         clos' = do
-                            NS.close sock
+                            NS.unsafeClose sock
                             -- This is just in case.
-                            getSocket conn >>= NS.close
+                            getSocket conn >>= NS.unsafeClose
                      in (recv', clos')
         -- hook
         let hook = onCloseCompleted $ connHooks conn

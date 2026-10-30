@@ -332,6 +332,9 @@ sender conn = handleLogT logAction loop
             then
                 E.throwIO ExitConnection
             else do
+                -- Between two sends, so this thread is not inside a call
+                -- on any of them.
+                closeRetiredSockets conn
                 sendP conn
                 loop
     logAction msg = connDebugLog conn ("debug: sender: " <> msg)
