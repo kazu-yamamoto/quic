@@ -68,13 +68,15 @@ sendStreamMany s dats0 = do
         eblocked <- checkBlocked s len wait
         case eblocked of
             Right n
+                -- Counted before queued, so that a reset in between takes
+                -- it into the final size.
                 | len == n -> do
-                    putSendStreamQ conn $ TxStreamData s dats len False
                     addTx conn s n
+                    putSendStreamQ conn $ TxStreamData s dats len False
                 | otherwise -> do
                     let (dats1, dats2) = split n dats
-                    putSendStreamQ conn $ TxStreamData s dats1 n False
                     addTx conn s n
+                    putSendStreamQ conn $ TxStreamData s dats1 n False
                     flowControl dats2 (len - n) False
             Left blocked -> do
                 -- Read each time round rather than once: the handshake may
@@ -267,8 +269,7 @@ resetStream s aerr = do
     let sid = streamId s
     sclosed <- isTxStreamClosed s
     unless sclosed $ do
-        finalSize <- getTxStreamFinalSize s
-        setTxStreamClosed s
+        finalSize <- resetTxStream s
         lvl <- getEncryptionLevel conn
         let frame = ResetStream sid aerr finalSize
         putOutput conn $ OutControl lvl [frame]
