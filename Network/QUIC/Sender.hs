@@ -295,7 +295,14 @@ mkPlainPacket conn lvl frames0 ppns = do
         ppkt = PlainPacket header plain
     return [mkSentPacket mypn lvl ppkt ppns ackEli]
   where
-    mkAck ps = Ack (toAckInfo $ fromPeerPacketNumbers ps) noDelay
+    mkAck ps =
+        Ack (capAckInfo maxAckFrameSize $ toAckInfo $ fromPeerPacketNumbers ps) noDelay
+
+-- | What an ACK frame may take.  A 1200-octet 1-RTT packet holding the
+--   largest STREAM frame built here (1059) has about 100 octets left
+--   after its header and tag; more would be cut off when encoded.
+maxAckFrameSize :: Int
+maxAckFrameSize = 64
 
 mkHeader :: Connection -> EncryptionLevel -> IO Header
 mkHeader conn lvl = do

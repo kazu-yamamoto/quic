@@ -83,6 +83,24 @@ fromAckInfo (AckInfo lpn fr grs) = loop grs stt [stt .. lpn]
         z = s - fromIntegral g - 2
         lo = z - fromIntegral r
 
+-- | Keeping only the newest ranges so that the ACK frame, with its type
+--   and a one-octet ACK Delay, takes at most the given octets.  The
+--   largest acknowledged always stays (RFC 9000 Sec 13.2.3).
+capAckInfo :: Int -> AckInfo -> AckInfo
+capAckInfo limit (AckInfo lpn fr grs) = AckInfo lpn fr $ take n grs
+  where
+    base = 2 + varIntLen lpn + varIntLen fr
+    sizes = scanl1 (+) [varIntLen g + varIntLen r | (g, r) <- grs]
+    fits k siz = base + varIntLen k + siz <= limit
+    n = length $ takeWhile id $ zipWith fits [1 ..] sizes
+
+varIntLen :: Int -> Int
+varIntLen i
+    | i < 0x40 = 1
+    | i < 0x4000 = 2
+    | i < 0x40000000 = 4
+    | otherwise = 8
+
 fromAckInfoToPred :: AckInfo -> (PacketNumber -> Bool)
 fromAckInfoToPred (AckInfo lpn fr grs) =
     \x -> any (f x) $ loop grs stt [(stt, lpn)]

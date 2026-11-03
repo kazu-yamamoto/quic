@@ -70,6 +70,18 @@ spec = do
         it "saturates instead of overflowing" $ do
             d <- ackDelayOf $ replicate 8 0xff -- 2 ^ 62 - 1
             ackDelayMicro 20 d `shouldBe` Microseconds maxBound
+    describe "capAckInfo" $ do
+        it "keeps an ACK frame that fits" $ do
+            let ai = toAckInfo [9, 8, 7, 5, 4]
+            capAckInfo 64 ai `shouldBe` ai
+        it "drops the oldest ranges of one that does not" $ do
+            let pns = [0, 2 .. 1000] -- 501 ranges
+                ai@(AckInfo lpn _ _) = capAckInfo 64 $ toAckInfo $ reverse pns
+            bs <- encodeFrames [Ack ai noDelay]
+            BS.length bs `shouldSatisfy` (<= 64)
+            BS.length bs `shouldSatisfy` (> 60)
+            lpn `shouldBe` 1000
+            fromAckInfo ai `shouldSatisfy` (`isSuffixOf` pns)
     describe "toAckInfo and fromAckInfo" $ do
         it "should be dual" $ property $ \xs -> do
             let rs =
