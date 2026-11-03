@@ -40,6 +40,18 @@ spec = do
             Timeout.timeout 5000000 (takeMVar var) >>= \r -> case r of
                 Just () -> return ()
                 Nothing -> expectationFailure "server never became ready"
+    -- RFC 9000 Sec 6.2 and 17.2.5.2: once a packet from the server has been
+    -- processed, a Version Negotiation or Retry packet is to be discarded.
+    -- The connection has moved to Version2 by compatible negotiation.
+    describe "a forged packet after the handshake" $ do
+        it "ignores Version Negotiation" $
+            testInjected cc sc waitS $ \dcid scid ->
+                encodeVersionNegotiationPacket $
+                    VersionNegotiationPacket dcid scid [Version1]
+        it "ignores Retry" $
+            testInjected cc sc waitS $ \dcid scid ->
+                encodeRetryPacket $
+                    RetryPacket Version2 dcid (toCID "forged") "token" (Left scid)
     describe "handshake" $ do
         it "can exchange data when the server's first flight is lost" $ do
             withPipe (DropServerPacket [0, 1, 2]) $ testSendRecv cc sc waitS 20
@@ -483,6 +495,42 @@ testSendRecv cc sc waitS times = do
     server mvar = run sc $ \conn -> do
         strm <- acceptStream conn
         consumeBytes strm (10000 * times)
+        assertEndOfStream strm
+        putMVar mvar ()
+
+-- | Exchanging data after the client has been sent a forged packet.  The
+--   client is to run its action once, to the end.
+testInjected
+    :: C.ClientConfig
+    -> ServerConfig
+    -> IO ()
+    -> (CID -> CID -> IO BS.ByteString)
+    -> IO ()
+testInjected cc sc waitS mk = do
+    trigger <- newEmptyMVar
+    runs <- newIORef (0 :: Int)
+    mvar <- newEmptyMVar
+    r <- Timeout.timeout 10_000_000 $
+        withPipe (InjectToClient trigger mk) $
+            withAsync (server mvar) $
+                \_ -> client trigger runs mvar
+    r `shouldBe` Just ()
+    readIORef runs `shouldReturn` 1
+  where
+    client trigger runs mvar = do
+        waitS
+        C.run cc $ \conn -> do
+            atomicModifyIORef' runs $ \n -> (n + 1, ())
+            waitEstablished conn
+            void $ tryPutMVar trigger ()
+            threadDelay 100_000
+            strm <- stream conn
+            sendStream strm $ BS.replicate 10000 0
+            shutdownStream strm
+            takeMVar mvar
+    server mvar = run sc $ \conn -> do
+        strm <- acceptStream conn
+        consumeBytes strm 10000
         assertEndOfStream strm
         putMVar mvar ()
 
