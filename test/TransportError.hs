@@ -379,14 +379,14 @@ largeStreamId lvl plain
 impossibleAckRange :: EncryptionLevel -> Plain -> Plain
 impossibleAckRange lvl plain
     | lvl == RTT1Level =
-        plain{plainFrames = Ack (AckInfo 5 0 [(10, 0)]) 0 : plainFrames plain}
+        plain{plainFrames = Ack (AckInfo 5 0 [(10, 0)]) noDelay : plainFrames plain}
     | otherwise = plain
 
 -- Nobody has sent a million packets down this connection.
 ackForUnsentPacket :: EncryptionLevel -> Plain -> Plain
 ackForUnsentPacket lvl plain
     | lvl == RTT1Level =
-        plain{plainFrames = Ack (AckInfo 1000000 0 []) 0 : plainFrames plain}
+        plain{plainFrames = Ack (AckInfo 1000000 0 []) noDelay : plainFrames plain}
     | otherwise = plain
 
 unknownFrame :: EncryptionLevel -> Plain -> Plain

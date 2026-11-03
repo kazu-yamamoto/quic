@@ -4,8 +4,10 @@ module TypesSpec where
 
 import Control.Concurrent.STM (atomically)
 import Control.Monad (replicateM)
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 import Data.List
+import Data.Word (Word8)
 import qualified System.Timeout as Timeout
 import Test.Hspec
 import Test.QuickCheck
@@ -20,6 +22,13 @@ numbered n =
         timeMicrosecond0
         1200
         RTT1Level
+
+-- | The ACK Delay of an ACK frame whose delay field is the given octets.
+ackDelayOf :: [Word8] -> IO Delay
+ackDelayOf field = do
+    Just [Ack _ d] <-
+        decodeFramesBS $ BS.pack $ [0x02, 0x00] ++ field ++ [0x00, 0x00]
+    return d
 
 number :: ReceivedPacket -> Int
 number rpkt =
@@ -55,10 +64,12 @@ spec = do
     -- microseconds, and it is a varint, so up to 2 ^ 62 - 1 of them.
     describe "ackDelayMicro" $ do
         it "scales the field by the exponent" $ do
-            ackDelayMicro 3 125 `shouldBe` Microseconds 1000
-            ackDelayMicro 0 125 `shouldBe` Microseconds 125
-        it "saturates instead of overflowing" $
-            ackDelayMicro 20 (2 ^ (62 :: Int) - 1) `shouldBe` Microseconds maxBound
+            d <- ackDelayOf [0x40, 0x7d] -- 125
+            ackDelayMicro 3 d `shouldBe` Microseconds 1000
+            ackDelayMicro 0 d `shouldBe` Microseconds 125
+        it "saturates instead of overflowing" $ do
+            d <- ackDelayOf $ replicate 8 0xff -- 2 ^ 62 - 1
+            ackDelayMicro 20 d `shouldBe` Microseconds maxBound
     describe "toAckInfo and fromAckInfo" $ do
         it "should be dual" $ property $ \xs -> do
             let rs =

@@ -6,8 +6,8 @@ module Network.QUIC.Types.Frame where
 import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
 import Network.QUIC.Types.CID
+import Network.QUIC.Types.Delay
 import Network.QUIC.Types.Error
-import Network.QUIC.Types.Time
 
 ----------------------------------------------------------------
 
@@ -76,17 +76,6 @@ isBidirectional sid = (0b10 .&. sid) == 0
 
 isUnidirectional :: StreamId -> Bool
 isUnidirectional sid = (0b10 .&. sid) == 2
-
--- | The ACK Delay field as sent, in units of 2 ^ ack_delay_exponent
---   microseconds of the ACK's sender (RFC 9000 Sec 19.3).
-type Delay = Int
-
--- | Microseconds from the ACK Delay field and the sender's exponent,
---   saturating rather than overflowing on a value out of range.
-ackDelayMicro :: Int -> Delay -> Microseconds
-ackDelayMicro e d
-    | d > maxBound `shiftR` e = Microseconds maxBound
-    | otherwise = Microseconds $ d `shiftL` e
 
 type Fin = Bool
 

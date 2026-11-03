@@ -44,7 +44,7 @@ encodeFrame wbuf Ping = write8 wbuf 0x01
 encodeFrame wbuf (Ack (AckInfo largest range1 ranges) delay) = do
     write8 wbuf 0x02
     encodeInt' wbuf $ fromIntegral largest
-    encodeInt' wbuf $ fromIntegral delay
+    encodeDelay wbuf delay
     encodeInt' wbuf $ fromIntegral $ length ranges
     encodeInt' wbuf $ fromIntegral range1
     mapM_ putRanges ranges
@@ -262,7 +262,7 @@ decodeCrypto rbuf = do
 decodeAck :: ReadBuffer -> IO Frame
 decodeAck rbuf = do
     largest <- fromIntegral <$> decodeInt' rbuf
-    delay <- fromIntegral <$> decodeInt' rbuf
+    delay <- decodeDelay rbuf
     count <- fromIntegral <$> decodeInt' rbuf
     range1 <- fromIntegral <$> decodeInt' rbuf
     ranges <- getRanges count id
