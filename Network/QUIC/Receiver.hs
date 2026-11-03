@@ -353,7 +353,8 @@ processFrame conn lvl (Ack ackInfo@(AckInfo largestAcked _ _) ackDelay) = do
     nextPN <- getPacketNumber conn
     when (largestAcked >= nextPN) $
         closeConnection conn ProtocolViolation "ACK for a packet never sent"
-    onAckReceived (connLDCC conn) lvl ackInfo $ milliToMicro ackDelay
+    e <- ackDelayExponent <$> getPeerParameters conn
+    onAckReceived (connLDCC conn) lvl ackInfo $ ackDelayMicro e ackDelay
 processFrame conn lvl (ResetStream sid aerr finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "RESET_STREAM"

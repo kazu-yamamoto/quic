@@ -51,6 +51,14 @@ spec = do
             -- for.
             atomically $ prependRecvQ q $ numbered 0
             number <$> readRecvQ q `shouldReturn` 0
+    -- RFC 9000 Sec 19.3: the field counts units of 2 ^ ack_delay_exponent
+    -- microseconds, and it is a varint, so up to 2 ^ 62 - 1 of them.
+    describe "ackDelayMicro" $ do
+        it "scales the field by the exponent" $ do
+            ackDelayMicro 3 125 `shouldBe` Microseconds 1000
+            ackDelayMicro 0 125 `shouldBe` Microseconds 125
+        it "saturates instead of overflowing" $
+            ackDelayMicro 20 (2 ^ (62 :: Int) - 1) `shouldBe` Microseconds maxBound
     describe "toAckInfo and fromAckInfo" $ do
         it "should be dual" $ property $ \xs -> do
             let rs =
