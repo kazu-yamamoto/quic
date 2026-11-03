@@ -295,7 +295,7 @@ mkPlainPacket conn lvl frames0 ppns = do
         ppkt = PlainPacket header plain
     return [mkSentPacket mypn lvl ppkt ppns ackEli]
   where
-    mkAck ps = Ack (toAckInfo $ fromPeerPacketNumbers ps) 0
+    mkAck ps = Ack (toAckInfo $ fromPeerPacketNumbers ps) noDelay
 
 mkHeader :: Connection -> EncryptionLevel -> IO Header
 mkHeader conn lvl = do

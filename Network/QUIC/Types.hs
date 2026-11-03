@@ -6,6 +6,7 @@ module Network.QUIC.Types (
     module Network.QUIC.Types.Ack,
     module Network.QUIC.Types.CID,
     module Network.QUIC.Types.Constants,
+    module Network.QUIC.Types.Delay,
     module Network.QUIC.Types.Error,
     module Network.QUIC.Types.Exception,
     module Network.QUIC.Types.Frame,
@@ -20,6 +21,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Types.Ack
 import Network.QUIC.Types.CID
 import Network.QUIC.Types.Constants
+import Network.QUIC.Types.Delay
 import Network.QUIC.Types.Error
 import Network.QUIC.Types.Exception
 import Network.QUIC.Types.Frame
