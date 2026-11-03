@@ -490,9 +490,9 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
             TooFragmented ->
                 closeConnection conn QUIC.InternalError "Too many stream fragments"
             Duplicated -> return ()
-            Reassembled -> do
-                addRxCounted strm len
-                ok' <- checkRxMaxData conn len
+            Reassembled n -> do
+                addRxCounted strm n
+                ok' <- checkRxMaxData conn n
                 -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
                 unless ok' $
                     closeConnection
@@ -543,9 +543,9 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
                 TooFragmented ->
                     closeConnection conn QUIC.InternalError "Too many stream fragments"
                 Duplicated -> return ()
-                Reassembled -> do
-                    addRxCounted strm len
-                    ok' <- checkRxMaxData conn len
+                Reassembled n -> do
+                    addRxCounted strm n
+                    ok' <- checkRxMaxData conn n
                     -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
                     unless ok' $
                         closeConnection
@@ -752,7 +752,7 @@ putRxCrypto conn lvl rx = do
                     closeConnection conn QUIC.InternalError "Too many CRYPTO fragments"
                     return False -- not reached: closeConnection throws
                 Duplicated -> return True
-                Reassembled -> return False
+                Reassembled _ -> return False
 
 killHandshaker :: Connection -> EncryptionLevel -> IO ()
 killHandshaker conn lvl = putCrypto conn $ InpHandshake lvl ""

@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -10,14 +11,12 @@ module Network.QUIC.Stream.Reass (
 ) where
 
 import qualified Data.ByteString as BS
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
 import Network.QUIC.Imports
-import Network.QUIC.Stream.Frag
 import Network.QUIC.Stream.Misc
 import Network.QUIC.Stream.Queue
-import qualified Network.QUIC.Stream.Skew as Skew
 import Network.QUIC.Stream.Types
 import Network.QUIC.Types
 
@@ -99,8 +98,10 @@ data FlowCntl
       OverLimit
     | -- | Past the number of separate pieces we will hold for one stream.
       TooFragmented
-    | Duplicated
-    | Reassembled
+    | -- | Nothing that had not been delivered or held already.
+      Duplicated
+    | -- | Taken, with the number of octets which are new.
+      Reassembled Int
     deriving (Eq, Show)
 
 putRxStreamData :: Stream -> RxStreamData -> IO FlowCntl
@@ -134,80 +135,58 @@ putRxCryptoData s lim rx@(RxStreamData _ off len _) put = do
         then return OverLimit
         else tryReassemble s rx put (return ())
 
--- fin of StreamState off fin means see-fin-already.
+-- | Take the octets of a fragment which are neither delivered nor held,
+--   deliver whatever that makes contiguous, and say how many were new.
+--
+-- What is held is kept disjoint, so a copy sent again with other boundaries
+-- -- a retransmission, or a CRYPTO flight repacketized after a PTO -- adds
+-- exactly what it brings, and the count of pieces held is the true one.
 tryReassemble
     :: Stream -> RxStreamData -> (StreamData -> IO ()) -> IO () -> IO FlowCntl
-tryReassemble Stream{} (RxStreamData "" _ _ False) _ _ = return Duplicated
-tryReassemble Stream{..} x@(RxStreamData "" off _ True) _ putFin = do
-    si0@(StreamState off0 fin0) <- readIORef streamStateRx
-    let si1 = si0{streamFin = True}
-    if fin0
-        then do
-            -- stdoutLogger "Illegal Fin" -- fixme
-            return Duplicated
-        else case off `compare` off0 of
-            LT -> return Duplicated
-            EQ -> do
-                writeIORef streamStateRx si1
-                putFin
-                return Reassembled
-            GT -> do
-                writeIORef streamStateRx si1
-                hold streamReass x
-tryReassemble Stream{..} x@(RxStreamData dat off len False) put putFin = do
-    si0@(StreamState off0 _) <- readIORef streamStateRx
-    case off `compare` off0 of
-        LT -> return Duplicated
-        EQ -> do
-            put dat
-            loop si0 (off0 + len)
-            return Reassembled
-        GT -> hold streamReass x
+tryReassemble Stream{..} (RxStreamData dat off len fin) put putFin = do
+    StreamState off0 fin0 <- readIORef streamStateRx
+    Reass held mfin <- readIORef streamReass
+    let new = uncovered held (max off off0) $ BS.drop (off0 - off) dat
+        newLen = sum $ map (BS.length . snd) new
+        -- 'streamFin' is set by the first FIN, or when we stop receiving.
+        finNew = fin && not fin0
+        mfin1 = if finNew then Just (off + len) else mfin
+        (ready, held1, off1) = deliverable off0 $ foldr (uncurry Map.insert) held new
+        done = mfin1 == Just off1
+    if
+        | newLen == 0 && not finNew -> return Duplicated
+        | Map.size held1 > maxReassFragments -> return TooFragmented
+        | otherwise -> do
+            writeIORef streamReass $ Reass held1 $ if done then Nothing else mfin1
+            atomicModifyIORef'' streamStateRx $ \(StreamState _ f) ->
+                StreamState off1 (f || fin)
+            mapM_ put ready
+            when done putFin
+            return $ Reassembled newLen
+
+-- | The parts of the octets at an offset which no held piece covers.
+uncovered
+    :: Map Offset StreamData -> Offset -> StreamData -> [(Offset, StreamData)]
+uncovered held = go
   where
-    loop si0 xff = do
-        mrxs <- atomicModifyIORef' streamReass $ \(n, sk) ->
-            let (sk', mrxs) = Skew.deleteMinIf xff sk
-             in ((n - maybe 0 length mrxs, sk'), mrxs)
-        case mrxs of
-            Nothing -> writeIORef streamStateRx si0{streamOffset = xff}
-            Just rxs -> do
-                mapM_ (put . rxstrmData) rxs
-                let xff1 = nextOff rxs
-                if hasFin rxs
-                    then do
-                        putFin
-                    else do
-                        loop si0 xff1
-tryReassemble Stream{..} x@(RxStreamData dat off len True) put putFin = do
-    si0@(StreamState off0 fin0) <- readIORef streamStateRx
-    let si1 = si0{streamFin = True}
-    if fin0
-        then return Duplicated
-        else case off `compare` off0 of
-            LT -> return Duplicated
-            EQ -> do
-                let off1 = off0 + len
-                writeIORef streamStateRx si1{streamOffset = off1}
-                put dat
-                putFin
-                return Reassembled
-            GT -> do
-                writeIORef streamStateRx si1
-                hold streamReass x
+    go s d
+        | BS.null d = []
+        | Just (k, v) <- Map.lookupLE s held
+        , k + BS.length v > s =
+            let e = k + BS.length v in go e $ BS.drop (e - s) d
+        | Just (k, _) <- Map.lookupGT s held
+        , k < s + BS.length d =
+            let (d1, d2) = BS.splitAt (k - s) d in (s, d1) : go k d2
+        | otherwise = [(s, d)]
 
--- | Keep a fragment that cannot be delivered yet, unless we are already
---   holding as many as we are willing to.
---
--- Flow control bounds the octets, not the pieces, and a peer that sends its
--- window one octet at a time at scattered offsets pays for the octets while
--- we pay for the pieces.
-hold :: IORef (Int, Skew.Skew RxStreamData) -> RxStreamData -> IO FlowCntl
-hold ref x = atomicModifyIORef' ref $ \st@(n, sk) ->
-    if n >= maxReassFragments
-        then (st, TooFragmented)
-        else ((n + 1, Skew.insert x sk), Reassembled)
-
-hasFin :: Seq RxStreamData -> Bool
-hasFin s = case Seq.viewr s of
-    Seq.EmptyR -> False
-    _ Seq.:> x -> rxstrmFin x
+-- | The pieces which follow on from an offset, without a gap.
+deliverable
+    :: Offset
+    -> Map Offset StreamData
+    -> ([StreamData], Map Offset StreamData, Offset)
+deliverable o m = case Map.minViewWithKey m of
+    Just ((k, d), m')
+        | k == o ->
+            let (ds, m'', o') = deliverable (o + BS.length d) m'
+             in (d : ds, m'', o')
+    _ -> ([], m, o)
