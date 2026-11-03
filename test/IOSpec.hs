@@ -106,6 +106,8 @@ spec = do
         -- number of bytes sent by the RESET_STREAM sender.
         it "sends RESET_STREAM with the bytes sent as final size" $ do
             withPipe (DropClientPacket []) $ testResetStreamFinalSize cc sc waitS
+        it "sends RESET_STREAM with the bytes queued as final size" $ do
+            withPipe (DropClientPacket []) $ testResetAfterSend cc sc waitS
         it "tells a stream that was reset from one that ended" $ do
             withPipe (DropClientPacket []) $ testResetReceived cc sc waitS
     describe "closed stream" $ do
@@ -240,6 +242,46 @@ testResetStreamFinalSize cc0 sc waitS = do
         strm <- acceptStream conn
         consumeBytes strm (BS.length request)
         sendStream strm payload
+        takeMVar doneVar
+
+-- | A reset straight after 'sendStream' finds most of the data still
+--   queued.  The final size has to cover it, and none of it may follow the
+--   RESET_STREAM: either makes the peer close with FINAL_SIZE_ERROR.
+testResetAfterSend :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testResetAfterSend cc0 sc waitS = do
+    finalSizeVar <- newEmptyMVar
+    doneVar <- newEmptyMVar
+    let hooks = (ccHooks cc0){onResetStreamReceived2 = record finalSizeVar}
+        cc = cc0{ccHooks = hooks}
+    withAsync (server doneVar) $ \_ -> client cc finalSizeVar doneVar
+  where
+    payload = BS.replicate 100000 0
+    record finalSizeVar _strm _aerr finalSize = void $ tryPutMVar finalSizeVar finalSize
+
+    client cc finalSizeVar doneVar = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "open"
+            mres <- Timeout.timeout 5000000 $ takeMVar finalSizeVar
+            mres `shouldBe` Just (BS.length payload)
+            -- The connection is still there once anything sent after the
+            -- RESET_STREAM would have arrived.
+            strm2 <- stream conn
+            sendStream strm2 "ping"
+            shutdownStream strm2
+            recvStream strm2 4 `shouldReturn` "ping"
+            putMVar doneVar ()
+
+    server doneVar = run sc $ \conn -> do
+        strm <- acceptStream conn
+        consumeBytes strm 4
+        sendStream strm payload
+        resetStream strm $ ApplicationProtocolError 0
+        strm2 <- acceptStream conn
+        consumeBytes strm2 4
+        sendStream strm2 "ping"
+        shutdownStream strm2
         takeMVar doneVar
 
 -- | One end has read a stream to its end and closed it while a packet for

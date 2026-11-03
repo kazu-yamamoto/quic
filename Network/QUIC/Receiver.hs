@@ -429,12 +429,11 @@ processFrame conn lvl (StopSending sid err) = do
         case mstrm of
             Nothing -> streamNotCreatedYet conn sid "No such stream for STOP_SENDING"
             Just strm -> do
-                finalSize <- getTxStreamFinalSize strm
-                sendFrames conn lvl [ResetStream sid err finalSize]
                 -- Our sending part is reset now (RFC 9000, section 3.5), so
                 -- no more STREAM frames may go out on it.  Without this,
                 -- 'sendStream' went on working after the RESET_STREAM.
-                setTxStreamClosed strm
+                finalSize <- resetTxStream strm
+                sendFrames conn lvl [ResetStream sid err finalSize]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $

@@ -508,10 +508,15 @@ packFin conn s False = do
 
 sendTxStreamData :: Connection -> TxStreamData -> IO ()
 sendTxStreamData conn (TxStreamData s dats len fin0) = do
-    fin <- packFin conn s fin0
-    if len < limitation
-        then sendStreamSmall conn s dats fin len
-        else sendStreamLarge conn s dats fin
+    reset <- isTxStreamReset s
+    -- RFC 9000 Sec 3.3: no STREAM frame for a stream in "Reset Sent".
+    if reset
+        then when fin0 $ syncFinTx s
+        else do
+            fin <- packFin conn s fin0
+            if len < limitation
+                then sendStreamSmall conn s dats fin len
+                else sendStreamLarge conn s dats fin
 
 sendStreamSmall :: Connection -> Stream -> [StreamData] -> Bool -> Int -> IO ()
 sendStreamSmall conn s0 dats0 fin0 len0 = do
@@ -532,8 +537,19 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
         case mx of
             Nothing -> do
                 yield
-                tryPeekSendStreamQ conn
-            Just _ -> return mx
+                tryPeekSendStreamQ conn >>= dropReset
+            Just _ -> dropReset mx
+    -- What a reset stream has queued goes nowhere; see 'sendTxStreamData'.
+    dropReset mx = case mx of
+        Just (TxStreamData s1 _ _ fin1) -> do
+            reset <- isTxStreamReset s1
+            if reset
+                then do
+                    _ <- takeSendStreamQ conn -- cf tryPeek
+                    when fin1 $ syncFinTx s1
+                    tryPeek
+                else return mx
+        Nothing -> return mx
     loop
         :: Stream
         -> Frame
@@ -582,6 +598,9 @@ sendStreamLarge conn s dats0 fin0 = do
     sid = streamId s
     loop [] = return ()
     loop dats = do
+        reset <- isTxStreamReset s
+        unless reset $ send dats
+    send dats = do
         let (dats1, dats2) = splitChunks dats
             len = totalLen dats1
         off <- getTxStreamOffset s len

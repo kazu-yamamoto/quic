@@ -2,7 +2,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Stream.Misc (
-    getTxStreamFinalSize,
+    resetTxStream,
+    isTxStreamReset,
     getTxStreamOffset,
     isTxStreamClosed,
     setTxStreamClosed,
@@ -39,8 +40,18 @@ import Network.QUIC.Types (ApplicationProtocolError)
 
 ----------------------------------------------------------------
 
-getTxStreamFinalSize :: Stream -> IO Offset
-getTxStreamFinalSize Stream{..} = streamOffset <$> readIORef streamStateTx
+-- | Reset the sending part and return its final size: every octet handed
+--   to the sender, sent or still queued.  The sender drops what is queued,
+--   so nothing goes out past it.
+resetTxStream :: Stream -> IO Offset
+resetTxStream s@Stream{..} = do
+    -- Before the read: what is queued after it is dropped, not counted.
+    atomicWriteIORef streamResetTx True
+    setTxStreamClosed s
+    txfSent <$> readTVarIO streamFlowTx
+
+isTxStreamReset :: Stream -> IO Bool
+isTxStreamReset Stream{..} = readIORef streamResetTx
 
 getTxStreamOffset :: Stream -> Int -> IO Offset
 getTxStreamOffset Stream{..} len = atomicModifyIORef' streamStateTx get
