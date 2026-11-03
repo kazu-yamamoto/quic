@@ -9,6 +9,7 @@ module Network.QUIC.Stream.Types (
     emptyRxBounds,
     RecvStreamQ (..),
     RxStreamData (..),
+    Reass (..),
     Length,
     syncFinTx,
     waitFinTx,
@@ -16,14 +17,12 @@ module Network.QUIC.Stream.Types (
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import qualified Data.ByteString as BS
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Network.Control
 
 import {-# SOURCE #-} Network.QUIC.Connection.Types
 import Network.QUIC.Imports
-import Network.QUIC.Stream.Frag
-import Network.QUIC.Stream.Skew
-import qualified Network.QUIC.Stream.Skew as Skew
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -40,8 +39,8 @@ data Stream = Stream
     , streamStateTx :: IORef StreamState -- offset, fin
     , streamStateRx :: IORef StreamState -- offset, fin
     , streamRecvQ :: RecvStreamQ -- input bytestring
-    , -- input stream fragments to streamQ, and how many of them
-      streamReass :: IORef (Int, Skew RxStreamData)
+    , streamReass :: IORef Reass
+    -- ^ Fragments which cannot be delivered yet
     , streamSyncFinTx :: MVar ()
     , streamResetRx :: IORef (Maybe ApplicationProtocolError)
     -- ^ The error code of a RESET_STREAM from the peer
@@ -80,7 +79,7 @@ newStream streamConnection streamId txLim rxLim = do
     streamStateTx   <- newIORef emptyStreamState
     streamStateRx   <- newIORef emptyStreamState
     streamRecvQ     <- newRecvStreamQ
-    streamReass     <- newIORef (0, Skew.empty)
+    streamReass     <- newIORef $ Reass Map.empty Nothing
     streamSyncFinTx <- newEmptyMVar
     streamResetRx   <- newIORef Nothing
     streamReleased  <- newIORef False
@@ -108,19 +107,13 @@ data RxStreamData = RxStreamData
     }
     deriving (Eq, Show)
 
-instance Frag RxStreamData where
-    currOff r = rxstrmOff r
-    nextOff r = rxstrmOff r + rxstrmLen r
-    shrink off' (RxStreamData bs off len fin) =
-        let n = off' - off
-            bs' = BS.drop n bs
-            len' = len - n
-         in RxStreamData
-                { rxstrmData = bs'
-                , rxstrmOff = off'
-                , rxstrmLen = len'
-                , rxstrmFin = fin
-                }
+-- | What a stream holds past the point it has delivered in order.
+data Reass = Reass
+    { reassPieces :: Map Offset StreamData
+    -- ^ Disjoint, and each starting past the delivered offset
+    , reassFin :: Maybe Offset
+    -- ^ Where the stream ends, once a FIN is held but not yet delivered
+    }
 
 ----------------------------------------------------------------
 
