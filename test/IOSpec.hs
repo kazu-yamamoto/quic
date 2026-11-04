@@ -530,14 +530,16 @@ testEcho cc sc waitS times = do
             shutdownStream strm
             consumeBytes strm len
             assertEndOfStream strm
-            takeMVar mvar `shouldReturn` ()
+            putMVar mvar ()
+    -- Until the client has it all: returning closes the connection, and
+    -- the client was then now and then reset before it had read it.
     server mvar = run sc $ \conn -> do
         strm <- acceptStream conn
         consumeBytes strm len
         assertEndOfStream strm
         replicateM_ times $ sendStream strm $ BS.replicate 10000 0
         shutdownStream strm
-        putMVar mvar ()
+        takeMVar mvar
 
 -- | Exchanging data after the client has been sent a forged packet.  The
 --   client is to run its action once, to the end.
