@@ -49,14 +49,6 @@ putOutput conn out = atomically $ do
     writeTQueue (outputQ conn) out
     modifyTVar' (queuedControls conn) (+ countControls out)
 
--- DATAGRAM frames are the application's data, not answers to the peer.
-countControls :: Output -> Int
-countControls (OutControl _ frames) = length [f | f <- frames, not (isDatagram f)]
-  where
-    isDatagram Datagram{} = True
-    isDatagram _ = False
-countControls _ = 0
-
 -- | Control frames waiting for the sender, which a peer that keeps the
 --   congestion window shut can make us pile up (CVE-2024-22189).
 getQueuedControls :: Connection -> IO Int
@@ -78,6 +70,10 @@ takeRetransSTM conn lvl = do
     outs <- flushTQueue (outputQ conn)
     let (found, rest) = pick outs
     mapM_ (writeTQueue (outputQ conn)) rest
+    case found of
+        Nothing -> return ()
+        Just ppkt ->
+            modifyTVar' (queuedControls conn) (subtract $ countControls $ OutRetrans ppkt)
     return found
   where
     pick [] = (Nothing, [])

@@ -444,7 +444,11 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connAuthFailures  <- newIORef 0
     connKeyPackets    <- newIORef 0
     -- Recovery
-    let put x = atomically $ writeTQueue outputQ $ OutRetrans x
+    -- Counted as 'putOutput' does, which this cannot use.
+    let put x = atomically $ do
+            let out = OutRetrans x
+            writeTQueue outputQ out
+            modifyTVar' queuedControls (+ countControls out)
     connLDCC          <- newLDCC connState connQLog put
     return Connection{..}
   where
@@ -524,6 +528,22 @@ data Output
     = OutControl EncryptionLevel [Frame]
     | OutHandshake [(EncryptionLevel, ByteString)]
     | OutRetrans PlainPacket
+
+-- | The control frames of an output, which 'queuedControls' counts.
+--   Not data, which flow control bounds, nor what is never resent.
+countControls :: Output -> Int
+countControls (OutControl _ frames) = length $ filter isControl frames
+countControls (OutRetrans (PlainPacket _ plain)) = length $ filter isControl $ plainFrames plain
+countControls OutHandshake{} = 0
+
+isControl :: Frame -> Bool
+isControl Padding{} = False
+isControl Ack{} = False
+isControl StreamF{} = False
+isControl CryptoF{} = False
+isControl Datagram{} = False
+isControl PathResponse{} = False
+isControl _ = True
 
 type InputQ = TQueue Input
 type CryptoQ = TQueue Crypto

@@ -55,9 +55,11 @@ pathAndCIDFrameLimit = PerSecond 32
 pathResponseLimit :: PerSecond
 pathResponseLimit = PerSecond 10
 
--- | Per connection, control frames waiting for the sender, DATAGRAM
---   aside.  Enforced.  This bounds the RETIRE_CONNECTION_ID frames a
---   NEW_CONNECTION_ID flood asks for.  The value is quic-go's.
+-- | Per connection, control frames waiting for the sender, those of lost
+--   packets to resend included.  Data, which flow control bounds, is not
+--   counted.  Enforced.  With what the congestion window lets be in
+--   flight, this bounds the RETIRE_CONNECTION_ID frames a NEW_CONNECTION_ID
+--   flood asks for.  The value is quic-go's.
 queuedControlLimit :: Int
 queuedControlLimit = 16384
 
