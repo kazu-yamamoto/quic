@@ -141,6 +141,7 @@ closure'' conn ldcc frame = do
         -- of its own misses them.  The closer repeats it for a peer that
         -- did not hear it, which is what it is for.
         send
+        writeIORef (connCloserOwnsSocket conn) True
         void $ forkFinally (closer conn pto send recvWithin hook) $ \e -> do
             case e of
                 Left e' -> connDebugLog conn $ "closure' " <> bhow e'

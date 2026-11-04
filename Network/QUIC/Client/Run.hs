@@ -122,6 +122,10 @@ runClient conf client0 isICVN verInfo = do
         setDead conn
         killReaders conn
         waitManaged conn
+        -- Only the closer closes the socket, and there is none when the
+        -- peer ended the connection.  No thread is on the socket now.
+        owned <- readIORef $ connCloserOwnsSocket conn
+        unless owned $ getSocket conn >>= NS.unsafeClose
         freeResources conn
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
