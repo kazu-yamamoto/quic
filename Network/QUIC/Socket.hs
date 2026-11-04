@@ -7,12 +7,17 @@ module Network.QUIC.Socket (
 ) where
 
 import qualified Control.Exception as E
+import Control.Monad (when)
 import Data.IP (IP, toSockAddr)
 import qualified Data.List.NonEmpty as NE
 import Network.Socket
 
-natRebinding :: SockAddr -> IO Socket
-natRebinding sa = E.bracketOnError open close return
+-- | A new socket for the peer, connected to it if asked.  It is closed
+--   here if the connect fails, since nothing else holds it yet.
+natRebinding :: Bool -> SockAddr -> IO Socket
+natRebinding connected sa = E.bracketOnError open unsafeClose $ \s -> do
+    when connected $ connect s sa
+    return s
   where
     family = sockAddrFamily sa
     open = socket family Datagram defaultProtocol
