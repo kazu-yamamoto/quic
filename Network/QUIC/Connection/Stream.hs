@@ -35,13 +35,14 @@ possibleMyStreams Connection{..} = do
     return (base - (currentStream !>>. 2))
 
 waitMyNewStreamId :: Connection -> IO StreamId
-waitMyNewStreamId Connection{..} = get myStreamId
+waitMyNewStreamId conn@Connection{..} = get conn myStreamId
 
 waitMyNewUniStreamId :: Connection -> IO StreamId
-waitMyNewUniStreamId Connection{..} = get myUniStreamId
+waitMyNewUniStreamId conn@Connection{..} = get conn myUniStreamId
 
-get :: TVar Concurrency -> IO Int
-get tvar = atomically $ do
+get :: Connection -> TVar Concurrency -> IO Int
+get conn tvar = atomically $ do
+    checkPeerClosedSTM conn
     conc@Concurrency{..} <- readTVar tvar
     let streamType = currentStream .&. 0b11
         StreamIdBase base = maxStreams
