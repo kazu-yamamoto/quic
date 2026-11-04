@@ -596,7 +596,7 @@ testStopMany cc sc waitS n = do
                 strm <- stream conn
                 sendStream strm "x"
                 return strm
-            takeMVar mvar
+            () <- takeMVar mvar
             threadDelay 300_000
             rs <- forM strms $ \strm ->
                 E.try (sendStream strm "y") :: IO (Either QUICException ())
