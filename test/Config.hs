@@ -163,6 +163,9 @@ data Scenario
     | -- | Once the MVar is filled, send the client, as if from the server,
       --   what the function makes of the client's and the server's CIDs.
       InjectToClient (MVar ()) (CID -> CID -> IO ByteString)
+    | -- | Record the size of every short-header datagram, with whether it
+      --   came from the client.
+      RecordSizes (IORef [(Bool, Int)])
 
 withPipe :: Scenario -> IO () -> IO ()
 withPipe = withPipeWith False
@@ -282,6 +285,7 @@ withPipeWith stray scenario body = do
                 -- leftovers from the connection that just closed from being
                 -- counted, which would shift the drop indices.
                 when (sa == saO) $ do
+                    recordSize scenario True bs1
                     n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
                     dropPacket <- shouldDrop scenario True n
                     let isCC = BS.length bs1 < 200
@@ -293,6 +297,7 @@ withPipeWith stray scenario body = do
         tid1 <- forkIO $ relayLoop stop sockS $ \(bs, _) -> do
             mcids <- readIORef cidsRef
             when (isNothing mcids) $ writeIORef cidsRef $ longHeaderCIDs bs
+            recordSize scenario False bs
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
             dropPacket <- shouldDrop scenario False n
             let isCC = BS.length bs < 200
@@ -360,6 +365,10 @@ withPipeWith stray scenario body = do
         | fromC = return False
         | otherwise = return (pn `elem` ns)
     shouldDrop _ _ _ = return False
+    recordSize (RecordSizes ref) fromC bs
+        | not (BS.null bs) && BS.head bs .&. 0x80 == 0 =
+            atomicModifyIORef' ref $ \xs -> ((fromC, BS.length bs) : xs, ())
+    recordSize _ _ _ = return ()
     shouldDelay (DelayClientPacket k) fromC pn = fromC && pn == k
     shouldDelay (DelayServerPacket k) fromC pn = not fromC && pn == k
     shouldDelay _ _ _ = False

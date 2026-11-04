@@ -257,6 +257,10 @@ setPeerParams conn _ctx peerExts = do
             checkAuthCIDs params
             checkInvalid params
             setParams params
+            -- RFC 9000 Sec 18.2: "UDP datagrams with payloads larger than
+            -- this limit are not likely to be processed by the receiver."
+            siz <- getMaxPacketSize conn
+            setMaxPacketSize conn $ min siz $ maxUdpPayloadSize params
             qlogParamsSet conn (params, "remote")
             if isClient conn
                 then

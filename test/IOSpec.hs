@@ -52,6 +52,19 @@ spec = do
             testInjected cc sc waitS $ \dcid scid ->
                 encodeRetryPacket $
                     RetryPacket Version2 dcid (toCID "forged") "token" (Left scid)
+    describe "max_udp_payload_size" $ do
+        it "bounds the datagrams each side sends" $ do
+            let small p = p{maxUdpPayloadSize = 1200}
+                cc' = cc{ccParameters = small $ ccParameters cc}
+                sc' = sc{scParameters = small $ scParameters sc}
+            ref <- newIORef []
+            withPipe (RecordSizes ref) $ testEcho cc' sc' waitS 20
+            sizes <- readIORef ref
+            [siz | (True, siz) <- sizes] `shouldSatisfy` all (<= 1200)
+            [siz | (False, siz) <- sizes] `shouldSatisfy` all (<= 1200)
+            -- Data went both ways in full-sized packets.
+            [siz | (True, siz) <- sizes] `shouldSatisfy` elem 1200
+            [siz | (False, siz) <- sizes] `shouldSatisfy` elem 1200
     describe "STOP_SENDING in a burst" $ do
         it "resets every stream (20)" $ testStopMany cc sc waitS 20
         it "resets every stream (40)" $ testStopMany cc sc waitS 40
@@ -501,6 +514,33 @@ testSendRecv cc sc waitS times = do
         assertEndOfStream strm
         putMVar mvar ()
 
+-- | The client sends @times@ blocks and the server sends them back.
+testEcho :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
+testEcho cc sc waitS times = do
+    mvar <- newEmptyMVar
+    withAsync (server mvar) $ \_ -> client mvar
+  where
+    len = 10000 * times
+    client mvar = do
+        waitS
+        C.run cc $ \conn -> do
+            strm <- stream conn
+            let bs = BS.replicate 10000 0
+            replicateM_ times $ sendStream strm bs
+            shutdownStream strm
+            consumeBytes strm len
+            assertEndOfStream strm
+            putMVar mvar ()
+    -- Until the client has it all: returning closes the connection, and
+    -- the client was then now and then reset before it had read it.
+    server mvar = run sc $ \conn -> do
+        strm <- acceptStream conn
+        consumeBytes strm len
+        assertEndOfStream strm
+        replicateM_ times $ sendStream strm $ BS.replicate 10000 0
+        shutdownStream strm
+        takeMVar mvar
+
 -- | Exchanging data after the client has been sent a forged packet.  The
 --   client is to run its action once, to the end.
 testInjected
@@ -556,7 +596,7 @@ testStopMany cc sc waitS n = do
                 strm <- stream conn
                 sendStream strm "x"
                 return strm
-            takeMVar mvar
+            () <- takeMVar mvar
             threadDelay 300_000
             rs <- forM strms $ \strm ->
                 E.try (sendStream strm "y") :: IO (Either QUICException ())
