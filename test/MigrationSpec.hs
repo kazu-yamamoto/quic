@@ -4,7 +4,7 @@ import Control.Concurrent
 import Control.Concurrent.Async (mapConcurrently)
 import Control.Concurrent.STM
 import Control.Monad (void)
-import Network.Socket (connect, getSocketName)
+import Network.Socket (connect, getSocketName, withFdSocket)
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -51,6 +51,18 @@ spec = do
             readTVarIO newRetired `shouldReturn` False
             (newSock == oldSock) `shouldBe` False
             -- The reader 'rebind' forked is on the new socket; let it go.
+            atomically $ writeTVar newRetired True
+
+        it "closes the socket it replaced even if the connection ends first" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            oldSock <- getSocket clientConn
+            rebind clientConn $ Microseconds 100000
+            -- Over before the old socket's delay is up.
+            setDead clientConn
+            threadDelay 300000
+            -- A closed socket has its descriptor taken away.
+            withFdSocket oldSock return `shouldReturn` (-1)
+            newRetired <- getSocketRetire clientConn
             atomically $ writeTVar newRetired True
 
         it "lets a retired reader return, leaving its socket open" $ do
