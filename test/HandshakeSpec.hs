@@ -119,6 +119,13 @@ spec = do
                         te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
             testHandshake3 cc1 cc2 sc waitS handshakeFailure
+        it "fails with no version in common" $ do
+            let cc1 = testClientConfig{ccVersion = Version1, ccVersions = [Version1]}
+                cc2 = testClientConfig
+                sc = sc0{scVersions = [Version2]}
+                failed VersionNegotiationFailed = True
+                failed _ = False
+            testHandshake3 cc1 cc2 sc waitS failed
         it "can handshake with large HE from a client" $ do
             let cc0 = testClientConfig
                 params =

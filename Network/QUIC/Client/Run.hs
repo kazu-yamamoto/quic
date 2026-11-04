@@ -53,7 +53,7 @@ run conf client = do
         Right v -> return v
         -- Other exceptions go though.
         Left (NextVersion nextVerInfo)
-            | verInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
+            | nextVerInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
             | otherwise -> runClient conf client True nextVerInfo
 
 runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
