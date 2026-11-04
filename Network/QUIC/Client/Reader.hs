@@ -288,4 +288,7 @@ rebind conn microseconds = do
             -- reused.  Said even if the fork above failed, since the old
             -- socket is not this connection's any more either way.
             atomically $ writeTVar oldRetired True
-            fire conn microseconds $ close oldSock
+            -- Not 'fire', which does nothing for a connection no longer
+            -- alive: one that ended within the delay kept the old socket
+            -- open for good.  Nothing else closes it.
+            fire' microseconds $ close oldSock
