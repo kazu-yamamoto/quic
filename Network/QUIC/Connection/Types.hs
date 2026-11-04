@@ -286,6 +286,8 @@ data Connection = Connection
     , cryptoQ           :: CryptoQ
     , outputQ           :: OutputQ
     , outputRate        :: Rate
+    , queuedControls    :: TVar Int
+    -- ^ Control frames in 'outputQ' which the sender has not taken yet.
     , shared            :: Shared
     , delayedAckCount   :: IORef Int
     , delayedAckCancel  :: IORef (IO ())
@@ -399,6 +401,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     cryptoQ           <- newTQueueIO
     outputQ           <- newTQueueIO
     outputRate        <- newRate
+    queuedControls    <- newTVarIO 0
     shared            <- newShared
     delayedAckCount   <- newIORef 0
     delayedAckCancel  <- newIORef (return ())

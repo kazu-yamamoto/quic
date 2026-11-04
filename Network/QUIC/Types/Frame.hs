@@ -105,9 +105,9 @@ inFlight ConnectionClose{}    = False
 inFlight ConnectionCloseApp{} = False
 inFlight _                    = True
 
+-- Not RESET_STREAM or STOP_SENDING: MAX_STREAMS bounds them, and a peer
+-- cancelling many streams at once is doing nothing wrong.
 rateControled :: Frame -> Bool
-rateControled ResetStream{}        = True
-rateControled StopSending{}        = True
 rateControled PathChallenge{}      = True
 rateControled PathResponse{}       = True
 rateControled NewConnectionID{}    = True
