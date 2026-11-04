@@ -1,7 +1,6 @@
 module Network.QUIC.Connection.Queue where
 
 import Control.Concurrent.STM
-import Network.Control (getRate)
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Stream
@@ -29,16 +28,31 @@ isEmptyCryptoSTM conn = isEmptyTQueue $ cryptoQ conn
 ----------------------------------------------------------------
 
 takeOutputSTM :: Connection -> STM Output
-takeOutputSTM conn = readTQueue (outputQ conn)
+takeOutputSTM conn = do
+    out <- readTQueue (outputQ conn)
+    modifyTVar' (queuedControls conn) (subtract $ countControls out)
+    return out
 
 tryTakeOutput :: Connection -> IO (Maybe Output)
-tryTakeOutput conn = atomically $ tryReadTQueue (outputQ conn)
+tryTakeOutput conn = atomically $ do
+    mout <- tryReadTQueue (outputQ conn)
+    case mout of
+        Nothing -> return ()
+        Just out -> modifyTVar' (queuedControls conn) (subtract $ countControls out)
+    return mout
 
 tryPeekOutput :: Connection -> IO (Maybe Output)
 tryPeekOutput conn = atomically $ tryPeekTQueue (outputQ conn)
 
 putOutput :: Connection -> Output -> IO ()
-putOutput conn out = atomically $ writeTQueue (outputQ conn) out
+putOutput conn out = atomically $ do
+    writeTQueue (outputQ conn) out
+    modifyTVar' (queuedControls conn) (+ countControls out)
+
+-- | Control frames waiting for the sender, which a peer that keeps the
+--   congestion window shut can make us pile up (CVE-2024-22189).
+getQueuedControls :: Connection -> IO Int
+getQueuedControls conn = readTVarIO $ queuedControls conn
 
 isEmptyOutputSTM :: Connection -> STM Bool
 isEmptyOutputSTM conn = isEmptyTQueue $ outputQ conn
@@ -56,6 +70,10 @@ takeRetransSTM conn lvl = do
     outs <- flushTQueue (outputQ conn)
     let (found, rest) = pick outs
     mapM_ (writeTQueue (outputQ conn)) rest
+    case found of
+        Nothing -> return ()
+        Just ppkt ->
+            modifyTVar' (queuedControls conn) (subtract $ countControls $ OutRetrans ppkt)
     return found
   where
     pick [] = (Nothing, [])
@@ -85,13 +103,3 @@ putSendStreamQ conn out = atomically $ writeTQueue (sharedSendStreamQ $ shared c
 
 isEmptyStreamSTM :: Connection -> STM Bool
 isEmptyStreamSTM conn = isEmptyTQueue $ sharedSendStreamQ $ shared conn
-
-----------------------------------------------------------------
-
-outputLimit :: Int
-outputLimit = 10
-
-rateOK :: Connection -> IO Bool
-rateOK conn = do
-    rate <- getRate $ outputRate conn
-    return $ rate < outputLimit

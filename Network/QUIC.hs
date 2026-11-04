@@ -93,6 +93,13 @@ module Network.QUIC (
     ),
     cryptoError,
     ApplicationProtocolError (..),
+
+    -- * Rate control
+    PerSecond,
+    pathAndCIDFrameLimit,
+    pathResponseLimit,
+    queuedControlLimit,
+    statelessResetLimit,
 ) where
 
 import Network.QUIC.Connection

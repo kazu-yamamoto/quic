@@ -52,6 +52,9 @@ spec = do
             testInjected cc sc waitS $ \dcid scid ->
                 encodeRetryPacket $
                     RetryPacket Version2 dcid (toCID "forged") "token" (Left scid)
+    describe "STOP_SENDING in a burst" $ do
+        it "resets every stream (20)" $ testStopMany cc sc waitS 20
+        it "resets every stream (40)" $ testStopMany cc sc waitS 40
     describe "handshake" $ do
         it "can exchange data when the server's first flight is lost" $ do
             withPipe (DropServerPacket [0, 1, 2]) $ testSendRecv cc sc waitS 20
@@ -533,6 +536,36 @@ testInjected cc sc waitS mk = do
         consumeBytes strm 10000
         assertEndOfStream strm
         putMVar mvar ()
+
+-- | The server asks the client to stop sending on @n@ streams at once.
+testStopMany :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
+testStopMany cc sc waitS n = do
+    mvar <- newEmptyMVar
+    ref <- newIORef 0
+    r <- Timeout.timeout 10_000_000 $
+        withPipe (DropServerPacket []) $
+            withAsync (server mvar) $
+                \_ -> client mvar >>= writeIORef ref
+    r `shouldBe` Just ()
+    readIORef ref `shouldReturn` n
+  where
+    client mvar = do
+        waitS
+        C.run cc $ \conn -> do
+            strms <- replicateM n $ do
+                strm <- stream conn
+                sendStream strm "x"
+                return strm
+            takeMVar mvar
+            threadDelay 300_000
+            rs <- forM strms $ \strm ->
+                E.try (sendStream strm "y") :: IO (Either QUICException ())
+            return $ length [() | Left _ <- rs]
+    server mvar = run sc $ \conn -> do
+        strms <- replicateM n $ acceptStream conn
+        mapM_ (\strm -> stopStream strm $ ApplicationProtocolError 0) strms
+        putMVar mvar ()
+        threadDelay 1_000_000
 
 testMultiSendRecv :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
 testMultiSendRecv cc sc waitS times = do

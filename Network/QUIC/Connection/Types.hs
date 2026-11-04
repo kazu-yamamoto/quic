@@ -269,7 +269,7 @@ data Connection = Connection
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
-    , controlRate       :: Rate
+    , pathAndCIDFrameRate :: Rate
     , -- Info
       roleInfo          :: IORef RoleInfo
     , quicVersionInfo   :: IORef VersionInfo
@@ -285,7 +285,9 @@ data Connection = Connection
       inputQ            :: InputQ
     , cryptoQ           :: CryptoQ
     , outputQ           :: OutputQ
-    , outputRate        :: Rate
+    , pathResponseRate  :: Rate
+    , queuedControls    :: TVar Int
+    -- ^ Control frames in 'outputQ' which the sender has not taken yet.
     , shared            :: Shared
     , delayedAckCount   :: IORef Int
     , delayedAckCancel  :: IORef (IO ())
@@ -385,7 +387,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     -- Manage
     readers           <- T.newThreadManager
     mainThreadId      <- myThreadId
-    controlRate       <- newRate
+    pathAndCIDFrameRate <- newRate
     -- Info
     roleInfo          <- newIORef roleinfo
     quicVersionInfo   <- newIORef origVersionInfo
@@ -398,7 +400,8 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     inputQ            <- newTQueueIO
     cryptoQ           <- newTQueueIO
     outputQ           <- newTQueueIO
-    outputRate        <- newRate
+    pathResponseRate  <- newRate
+    queuedControls    <- newTVarIO 0
     shared            <- newShared
     delayedAckCount   <- newIORef 0
     delayedAckCancel  <- newIORef (return ())
@@ -441,7 +444,11 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connAuthFailures  <- newIORef 0
     connKeyPackets    <- newIORef 0
     -- Recovery
-    let put x = atomically $ writeTQueue outputQ $ OutRetrans x
+    -- Counted as 'putOutput' does, which this cannot use.
+    let put x = atomically $ do
+            let out = OutRetrans x
+            writeTQueue outputQ out
+            modifyTVar' queuedControls (+ countControls out)
     connLDCC          <- newLDCC connState connQLog put
     return Connection{..}
   where
@@ -521,6 +528,22 @@ data Output
     = OutControl EncryptionLevel [Frame]
     | OutHandshake [(EncryptionLevel, ByteString)]
     | OutRetrans PlainPacket
+
+-- | The control frames of an output, which 'queuedControls' counts.
+--   Not data, which flow control bounds, nor what is never resent.
+countControls :: Output -> Int
+countControls (OutControl _ frames) = length $ filter isControl frames
+countControls (OutRetrans (PlainPacket _ plain)) = length $ filter isControl $ plainFrames plain
+countControls OutHandshake{} = 0
+
+isControl :: Frame -> Bool
+isControl Padding{} = False
+isControl Ack{} = False
+isControl StreamF{} = False
+isControl CryptoF{} = False
+isControl Datagram{} = False
+isControl PathResponse{} = False
+isControl _ = True
 
 type InputQ = TQueue Input
 type CryptoQ = TQueue Crypto

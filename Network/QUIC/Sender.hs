@@ -203,7 +203,9 @@ sendPingPacket conn lvl = do
                     Nothing -> do
                         qlogDebug conn $ Debug "probe ping"
                         return [Ping]
-        xs <- construct conn lvl frames False
+        -- A probe must elicit an ACK, whatever was left of the packet.
+        let frames' = if any ackEliciting frames then frames else Ping : frames
+        xs <- construct conn lvl frames' False
         -- Asking for the last one and asking whether there is one at all are
         -- the same question, so ask it once.
         case reverse xs of
@@ -437,6 +439,10 @@ adjustForRetransmit conn (MaxData{} : xs) = do
     rs <- adjustForRetransmit conn xs
     return (r : rs)
 adjustForRetransmit conn (Datagram{} : xs) = adjustForRetransmit conn xs
+-- RFC 9000 Sec 13.3: "Responses to path validation using PATH_RESPONSE
+-- frames are sent just once."  The peer sends a new PATH_CHALLENGE if
+-- it needs one.  Resent, a PATH_RESPONSE flood would never leave us.
+adjustForRetransmit conn (PathResponse{} : xs) = adjustForRetransmit conn xs
 adjustForRetransmit conn (x : xs) = do
     rs <- adjustForRetransmit conn xs
     return (x : rs)
