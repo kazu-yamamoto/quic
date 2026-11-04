@@ -10,6 +10,7 @@ import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
 import Data.IORef
+import qualified Network.Socket as NS
 import qualified System.Timeout as Timeout
 import Test.Hspec
 
@@ -148,6 +149,9 @@ spec = do
             withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
         it "raises the limit on unidirectional streams by their own number" $ do
             withPipe (DropClientPacket []) $ testUniStreams cc sc waitS
+    describe "the client's socket" $ do
+        it "is closed when the peer ends the connection" $ do
+            withPipe (DropClientPacket []) $ testSocketClosed cc sc waitS
     describe "stream state" $ do
         it "can still send after the peer's RESET_STREAM" $ do
             withPipe (DropClientPacket []) $ testSendAfterReset cc sc waitS
@@ -1009,3 +1013,28 @@ testCloseWithoutReading cc sc0 waitS =
                 shutdownStream strm
                 closeStream strm
         r `shouldBe` Just ()
+
+-- | Only the closer closed the client's socket, and a connection the peer
+--   ends has none: the socket was left open.
+testSocketClosed :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testSocketClosed cc sc waitS = do
+    ref <- newIORef Nothing
+    withAsync server $ \_ -> do
+        waitS
+        r <- E.try $ C.run cc $ \conn -> do
+            getSocket conn >>= writeIORef ref . Just
+            strm <- stream conn
+            sendStream strm "ping"
+            void $ recvStream strm 1024
+        case r of
+            Left (ApplicationProtocolErrorIsReceived _ _) -> return ()
+            _ -> expectationFailure $ show r
+        msock <- readIORef ref
+        case msock of
+            Nothing -> expectationFailure "no socket"
+            Just sock -> NS.withFdSocket sock return `shouldReturn` (-1)
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        abortConnection conn (ApplicationProtocolError 1) "bye"

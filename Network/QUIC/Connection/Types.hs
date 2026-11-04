@@ -334,6 +334,8 @@ data Connection = Connection
     , connResources     :: IORef (IO ())
     , connCloseSent     :: IORef Bool
     -- ^ Whether the peer has been told the connection is over
+    , connCloserOwnsSocket :: IORef Bool
+    -- ^ Whether the closer has taken the client's socket to close
     , connAuthFailures  :: IORef Int
     -- ^ Packets that have failed authentication, over the whole connection
     , connKeyPackets    :: IORef Int
@@ -443,6 +445,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     decryptBuf        <- mallocBytes bufsiz -- used receiver
     connResources     <- newIORef (free encodeBuf >> free encryptBuf >> free decryptBuf)
     connCloseSent     <- newIORef False
+    connCloserOwnsSocket <- newIORef False
     connAuthFailures  <- newIORef 0
     connKeyPackets    <- newIORef 0
     -- Recovery
