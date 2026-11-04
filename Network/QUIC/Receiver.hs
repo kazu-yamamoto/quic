@@ -163,7 +163,7 @@ processReceivedPacket conn rpkt = do
             when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $
                 closeConnection conn ProtocolViolation "Non 0 RR bits or no frames"
             when (isUnknownFrame plainMarks) $
-                closeConnection conn FrameEncodingError "Unknown frame"
+                closeConnection conn FrameEncodingError "Unknown or truncated frame"
             enforcePathAndCIDFrameLimit conn plainFrames
             -- For Ping, record PPN first, then send an ACK.
             onPacketReceived (connLDCC conn) lvl plainPacketNumber
