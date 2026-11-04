@@ -292,7 +292,9 @@ data Connection = Connection
     , delayedAckCount   :: IORef Int
     , delayedAckCancel  :: IORef (IO ())
     , -- State
-      peerPacketNumber  :: IORef PacketNumber -- for RTT1
+      peerPacketNumber  :: Array EncryptionLevel (IORef PacketNumber)
+    -- ^ The largest the peer has sent, by level.  0-RTT and 1-RTT share
+    --   one, as they share a packet number space.
     , streamTable       :: IORef StreamTable
     , -- | What a stream the application has closed still owes the
       -- connection's window, for as long as the peer has not finished it.
@@ -406,7 +408,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     delayedAckCount   <- newIORef 0
     delayedAckCancel  <- newIORef (return ())
     -- State
-    peerPacketNumber  <- newIORef 0
+    peerPacketNumber  <- newPeerPacketNumber
     streamTable       <- newIORef emptyStreamTable
     departedStreams   <- newIORef IntMap.empty
     myStreamId        <- newTVarIO (newConcurrency rl Bidirectional 0)
@@ -518,6 +520,18 @@ serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
         scParameters
             { maxDatagramFrameSize = scMaxDatagramFrameSize
             }
+
+----------------------------------------------------------------
+
+newPeerPacketNumber :: IO (Array EncryptionLevel (IORef PacketNumber))
+newPeerPacketNumber = do
+    ini <- newIORef 0
+    app <- newIORef 0
+    hnd <- newIORef 0
+    return $
+        listArray
+            (InitialLevel, RTT1Level)
+            [ini, app, hnd, app] -- Initial, 0-RTT, Handshake, 1-RTT
 
 ----------------------------------------------------------------
 
