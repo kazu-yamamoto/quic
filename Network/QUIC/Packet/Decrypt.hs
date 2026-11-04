@@ -78,7 +78,10 @@ decryptCryptWith conn Crypt{..} lvl protector getCoder' = do
                 bytePN = bsXOR mask2 epn
                 headerLen = cryptPktNumOffset + epnLen
                 (proHeader, ciphertext) = BS.splitAt headerLen cryptPacket
-            peerPN <- if lvl == RTT1Level then getPeerPacketNumber conn else return 0
+            -- RFC 9000 Sec 17.1 and A.3: against the largest in the same
+            -- space.  Against 0, a truncated number past 255 came out wrong
+            -- and the packet failed to decrypt.
+            peerPN <- getPeerPacketNumber conn lvl
             let pn = decodePacketNumber peerPN (toEncodedPacketNumber bytePN) epnLen
             header <- BS.create headerLen $ \p -> do
                 void $ copy p proHeader

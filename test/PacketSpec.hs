@@ -3,11 +3,13 @@
 module PacketSpec where
 
 import Control.Monad (forM_)
+import Data.Bits (shiftR, xor, (.&.), (.|.))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BS
 import Data.IORef
 import Data.Tuple (swap)
+import Foreign.Ptr (plusPtr)
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -44,6 +46,15 @@ spec = do
                 [(CryptPacket _ crypt, lvl, _)] <-
                     decodeCryptPackets (shortSampleInitial len) True
                 decryptCrypt serverConn crypt lvl `shouldReturn` Nothing
+        -- RFC 9000 Sec 17.1: a packet number is sent truncated, and is
+        -- decoded against the largest received in its own space.
+        it "decodes a truncated packet number against its own space" $ do
+            (clientConn, serverConn) <- makeConnections serverConf Version1
+            setPeerPacketNumber serverConn InitialLevel 299
+            bin <- initialWithOneOctetPN clientConn serverConn 300
+            (PacketIC (CryptPacket _ crypt) lvl _, _) <- decodePacket bin True
+            mplain <- decryptCrypt serverConn crypt lvl
+            plainPacketNumber <$> mplain `shouldBe` Just 300
     describe "encodePlainPacket" $ do
         it "leaves the peer a whole header protection sample" $ do
             (senderConn, _) <- makeConnections serverConf Version1
@@ -84,6 +95,39 @@ spec = do
             forM_ [0 .. 15] $ \n -> do
                 broken <- fst <$> decodePacket (retryWithTrailing n) True
                 broken `shouldSatisfy` isBroken
+
+-- | An Initial packet from the client, its packet number in one octet as a
+--   peer which has seen @pn - 1@ acknowledged may send it.  Our encoder
+--   never truncates that far, so it is put together here.
+initialWithOneOctetPN
+    :: Connection -> Connection -> PacketNumber -> IO ByteString
+initialWithOneOctetPN sender recver pn = do
+    let dcid = fromCID clientChosenCID
+        payload = BS.cons 0x01 $ BS.replicate 40 0 -- PING, then PADDING
+        len = 1 + BS.length payload + 16 -- packet number, payload, tag
+        header =
+            BS.pack $
+                [0xc0, 0x00, 0x00, 0x00, 0x01, fromIntegral (BS.length dcid)]
+                    ++ BS.unpack dcid
+                    ++ [0x00, 0x00] -- no source CID, no token
+                    ++ [0x40 .|. fromIntegral (len `shiftR` 8), fromIntegral len]
+                    ++ [fromIntegral pn]
+    -- The sample starts four octets past the packet number, which is one
+    -- octet.  An AES-GCM coder wants to know where it is before encrypting.
+    coder <- getCoder sender InitialLevel False
+    sprotector <- getProtector sender InitialLevel
+    ciphertext <- BS.createAndTrim (BS.length payload + 64) $ \buf -> do
+        setSample sprotector $ buf `plusPtr` 3
+        encrypt coder buf payload (AssDat header) pn
+    -- The receiver's protector unprotects with the sender's key, and the
+    -- mask is the same either way.
+    protector <- getProtector recver InitialLevel
+    let Mask mask = unprotect protector $ Sample $ BS.take 16 $ BS.drop 3 ciphertext
+        flags = BS.head header `xor` (BS.index mask 0 .&. 0x0f)
+        epn = BS.last header `xor` BS.index mask 1
+    return $
+        BS.concat
+            [BS.singleton flags, BS.init (BS.tail header), BS.singleton epn, ciphertext]
 
 -- | An Initial packet in a datagram large enough that a server would not
 --   discard it for being too small, saying its payload is @len@ octets.

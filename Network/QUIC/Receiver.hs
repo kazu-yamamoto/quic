@@ -167,7 +167,7 @@ processReceivedPacket conn rpkt = do
             enforcePathAndCIDFrameLimit conn plainFrames
             -- For Ping, record PPN first, then send an ACK.
             onPacketReceived (connLDCC conn) lvl plainPacketNumber
-            when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
+            setPeerPacketNumber conn lvl plainPacketNumber
             qlogReceived conn (PlainPacket hdr plain) tim
             let ackEli = any ackEliciting plainFrames
             (ckp, cpn) <- getCurrentKeyPhase conn

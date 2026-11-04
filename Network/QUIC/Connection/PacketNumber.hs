@@ -20,12 +20,11 @@ nextPacketNumber Connection{..} = atomicModifyIORef' (packetNumber connState) in
     inc pn = (pn + 1, pn)
 
 ----------------------------------------------------------------
--- Peer's max packet number for RTT1
+-- Peer's largest packet number, which a truncated one is decoded against
 
-getPeerPacketNumber :: Connection -> IO PacketNumber
-getPeerPacketNumber Connection{..} = readIORef peerPacketNumber
+getPeerPacketNumber :: Connection -> EncryptionLevel -> IO PacketNumber
+getPeerPacketNumber Connection{..} lvl = readIORef (peerPacketNumber ! lvl)
 
-setPeerPacketNumber :: Connection -> PacketNumber -> IO ()
-setPeerPacketNumber Connection{..} n = atomicModifyIORef'' peerPacketNumber set
-  where
-    set m = max m n
+setPeerPacketNumber :: Connection -> EncryptionLevel -> PacketNumber -> IO ()
+setPeerPacketNumber Connection{..} lvl n =
+    atomicModifyIORef'' (peerPacketNumber ! lvl) $ max n
