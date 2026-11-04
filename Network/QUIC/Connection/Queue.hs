@@ -1,10 +1,8 @@
 module Network.QUIC.Connection.Queue where
 
 import Control.Concurrent.STM
-import Network.Control (getRate)
 
 import Network.QUIC.Connection.Types
-import Network.QUIC.Imports
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
@@ -109,13 +107,3 @@ putSendStreamQ conn out = atomically $ writeTQueue (sharedSendStreamQ $ shared c
 
 isEmptyStreamSTM :: Connection -> STM Bool
 isEmptyStreamSTM conn = isEmptyTQueue $ sharedSendStreamQ $ shared conn
-
-----------------------------------------------------------------
-
-outputLimit :: Int
-outputLimit = 10
-
-rateOK :: Connection -> IO Bool
-rateOK conn = do
-    rate <- getRate $ outputRate conn
-    return $ rate < outputLimit

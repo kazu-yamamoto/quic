@@ -333,15 +333,16 @@ mkBS ptr siz = do
 -- in it.  We are answering a packet we have no connection for, so whether the
 -- peer asked is exactly what we cannot know.
 --
--- 1280 octets is under three times the 428 the caller insists on having
--- received, which is what Sec 10.3 allows to be sent in answer.
+-- 'statelessResetSize' octets: the flags, the random bytes and the token.
+-- The caller sees that it is under three times what it answers (Sec 10.3).
 makeStatelessReset :: StatelessResetToken -> IO ByteString
 makeStatelessReset srt = do
     r <- randomRIO (0, 255)
     let flag = 0x40 .|. (r .&. 0x3f)
+        bodySize = statelessResetSize - 1 - 16
 #if MIN_VERSION_random(1,3,0)
-    body <- getStdRandom $ uniformByteString 1263
+    body <- getStdRandom $ uniformByteString bodySize
 #else
-    body <- getStdRandom $ genByteString 1263
+    body <- getStdRandom $ genByteString bodySize
 #endif
     return $ BS.concat [BS.singleton flag, body, fromStatelessResetToken srt]

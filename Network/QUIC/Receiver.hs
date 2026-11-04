@@ -7,7 +7,6 @@ module Network.QUIC.Receiver (
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
-import Network.Control
 import Network.TLS (AlertDescription (..))
 import System.Log.FastLogger
 
@@ -140,21 +139,6 @@ processReceivedPacketHandshake conn rpkt = do
                         onPacketNumberSpaceDiscarded ldcc InitialLevel
                 processReceivedPacket conn rpkt
 
-rateLimit :: Int
-rateLimit = 32
-
--- As quic-go does.
-maxQueuedControls :: Int
-maxQueuedControls = 16384
-
-checkRate :: [Frame] -> Int
-checkRate fs0 = go fs0 0
-  where
-    go [] n = n
-    go (f : fs) n
-        | rateControled f = go fs (n + 1)
-        | otherwise = go fs n
-
 processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacket conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
@@ -180,11 +164,7 @@ processReceivedPacket conn rpkt = do
                 closeConnection conn ProtocolViolation "Non 0 RR bits or no frames"
             when (isUnknownFrame plainMarks) $
                 closeConnection conn FrameEncodingError "Unknown frame"
-            let controlled = checkRate plainFrames
-            when (controlled /= 0) $ do
-                rate <- addRate (controlRate conn) controlled
-                when (rate > rateLimit) $ do
-                    closeConnection conn QUIC.InternalError "Rate control"
+            enforcePathAndCIDFrameLimit conn plainFrames
             -- For Ping, record PPN first, then send an ACK.
             onPacketReceived (connLDCC conn) lvl plainPacketNumber
             when (lvl == RTT1Level) $ setPeerPacketNumber conn plainPacketNumber
@@ -200,9 +180,7 @@ processReceivedPacket conn rpkt = do
             mapM_ (processFrame conn lvl) plainFrames
             -- What the frames above made us queue, a NEW_CONNECTION_ID
             -- flood in particular, must not pile up for good.
-            queued <- getQueuedControls conn
-            when (queued > maxQueuedControls) $
-                closeConnection conn QUIC.InternalError "Too many control frames queued"
+            enforceQueuedControlLimit conn
             when ackEli $ do
                 case lvl of
                     RTT0Level -> return ()
@@ -698,7 +676,7 @@ processFrame conn RTT1Level (RetireConnectionID sn) = do
                 unregister <- getUnregister conn
                 unregister $ cidInfoCID cidInfo
 processFrame conn RTT1Level (PathChallenge dat) = do
-    ok <- rateOK conn
+    ok <- withinPathResponseLimit conn
     when ok $ sendFrames conn RTT1Level [PathResponse dat]
 processFrame conn RTT1Level (PathResponse dat) =
     -- RTT0Level falls intentionally

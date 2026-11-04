@@ -269,7 +269,7 @@ data Connection = Connection
     , genStatelessResetToken :: CID -> StatelessResetToken
     , readers           :: T.ThreadManager
     , mainThreadId      :: ThreadId
-    , controlRate       :: Rate
+    , pathAndCIDFrameRate :: Rate
     , -- Info
       roleInfo          :: IORef RoleInfo
     , quicVersionInfo   :: IORef VersionInfo
@@ -285,7 +285,7 @@ data Connection = Connection
       inputQ            :: InputQ
     , cryptoQ           :: CryptoQ
     , outputQ           :: OutputQ
-    , outputRate        :: Rate
+    , pathResponseRate  :: Rate
     , queuedControls    :: TVar Int
     -- ^ Control frames in 'outputQ' which the sender has not taken yet.
     , shared            :: Shared
@@ -387,7 +387,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     -- Manage
     readers           <- T.newThreadManager
     mainThreadId      <- myThreadId
-    controlRate       <- newRate
+    pathAndCIDFrameRate <- newRate
     -- Info
     roleInfo          <- newIORef roleinfo
     quicVersionInfo   <- newIORef origVersionInfo
@@ -400,7 +400,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     inputQ            <- newTQueueIO
     cryptoQ           <- newTQueueIO
     outputQ           <- newTQueueIO
-    outputRate        <- newRate
+    pathResponseRate  <- newRate
     queuedControls    <- newTVarIO 0
     shared            <- newShared
     delayedAckCount   <- newIORef 0

@@ -31,7 +31,7 @@ import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Network.ByteOrder
-import Network.Control (LRUCacheRef, Rate, getRate, newRate)
+import Network.Control (LRUCacheRef, Rate, newRate)
 import qualified Network.Control as LRUCache
 import Network.Socket (
     isClosedSocketError,
@@ -67,9 +67,6 @@ data Dispatch = Dispatch
     -- ^ Stopping this server: what the shutdown handler is handed, and
     -- what a connection's 'stop' reaches it by.
     }
-
-statelessResetLimit :: Int
-statelessResetLimit = 20
 
 newDispatch :: ServerConfig -> IO () -> IO Dispatch
 newDispatch ServerConfig{..} stopNow =
@@ -462,15 +459,11 @@ dispatch
         mconn <- lookupConnectionDict dstTable dCID
         case mconn of
             Nothing -> do
-                -- Three times rule for stateless reset
-                -- Our packet size is 1280
-                when (bytes > 427) $ do
-                    srRate <- getRate statelessResetRate
-                    -- fixme: hard coding
-                    when (srRate < statelessResetLimit) $ do
-                        statelessReset <- makeStatelessReset $ genStatelessReset dCID
-                        send' statelessReset
-                        logAction $ "Stateless reset is sent to " <> bhow peersa
+                ok <- withinStatelessResetLimit statelessResetRate bytes
+                when ok $ do
+                    statelessReset <- makeStatelessReset $ genStatelessReset dCID
+                    send' statelessReset
+                    logAction $ "Stateless reset is sent to " <> bhow peersa
             Just conn -> do
                 alive <- getAlive conn
                 when alive $ do
