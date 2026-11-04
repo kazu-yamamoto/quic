@@ -17,7 +17,7 @@ import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, close, connect, getSocketName)
+import Network.Socket (Socket, close, getSocketName)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Common
@@ -275,9 +275,8 @@ controlConnection' conn ActiveMigration = do
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do
     peersa <- peerSockAddr <$> getPathInfo conn
-    newSock <- natRebinding peersa
     connected <- getSockConnected conn
-    when connected $ connect newSock peersa
+    newSock <- natRebinding connected peersa
     newRetired <- newTVarIO False
     (oldSock, oldRetired) <- swapSocket conn newSock newRetired
     (forkManaged conn "QUIC reader" $ readerClient newRetired newSock conn)
