@@ -97,9 +97,11 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
         -- RFC 9000 Sec 6.2: discarded once any other packet, an earlier
         -- Version Negotiation included, has been processed, and if it
         -- lists the version we chose.
-        late <- (||) <$> processed conn <*> getIncompatibleVN conn
+        done <- processed conn
+        icvn <- getIncompatibleVN conn
         ok <- checkCIDs conn dCID (Left sCID)
-        let listed = myVer `elem` peerVers || Negotiation `elem` peerVers
+        let late = done || icvn
+            listed = myVer `elem` peerVers || Negotiation `elem` peerVers
         when (ok && not late && not listed) $ do
             let myVers = filter (not . isGreasingVersion) myVers0
                 nextVerInfo = case myVers `intersect` peerVers of
@@ -143,7 +145,10 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
 
 -- | Whether a packet from the server has been decrypted or a Retry taken.
 processed :: Connection -> IO Bool
-processed conn = (||) <$> ((> 0) <$> getRxBytes conn) <*> getRetried conn
+processed conn = do
+    rx <- getRxBytes conn
+    retried <- getRetried conn
+    return (rx > 0 || retried)
 
 checkCIDs :: Connection -> CID -> Either CID (ByteString, ByteString) -> IO Bool
 checkCIDs conn dCID (Left sCID) = do
