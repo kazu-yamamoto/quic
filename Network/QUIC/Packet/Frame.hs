@@ -6,6 +6,7 @@ module Network.QUIC.Packet.Frame (
     countZero, -- testing
 ) where
 
+import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Foreign.Ptr (Ptr, alignPtr, castPtr, minusPtr, plusPtr)
@@ -159,8 +160,12 @@ decodeFramesBS bs = withReadBuffer bs decodeFrames
 decodeFramesBuffer :: Buffer -> BufferSize -> IO (Maybe [Frame])
 decodeFramesBuffer buf bufsiz = newReadBuffer buf bufsiz >>= decodeFrames
 
+-- | 'Nothing' for a frame of unknown type, or one cut short.  The latter
+--   ran the decoder past the end of the packet, and the exception it threw
+--   closed the connection with INTERNAL_ERROR rather than
+--   FRAME_ENCODING_ERROR (RFC 9000 Sec 12.4).
 decodeFrames :: ReadBuffer -> IO (Maybe [Frame])
-decodeFrames rbuf = loop id
+decodeFrames rbuf = E.handle (\BufferOverrun -> return Nothing) $ loop id
   where
     loop frames = do
         ok <- (>= 1) <$> remainingSize rbuf
