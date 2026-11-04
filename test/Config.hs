@@ -27,6 +27,7 @@ import qualified Data.ByteString as BS
 import Data.IORef
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
+import Data.Maybe (isNothing)
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
@@ -159,6 +160,9 @@ data Scenario
       DelayClientPacket Int
     | -- | Hold the n-th datagram from the server back for a second.
       DelayServerPacket Int
+    | -- | Once the MVar is filled, send the client, as if from the server,
+      --   what the function makes of the client's and the server's CIDs.
+      InjectToClient (MVar ()) (CID -> CID -> IO ByteString)
 
 withPipe :: Scenario -> IO () -> IO ()
 withPipe = withPipeWith False
@@ -234,6 +238,8 @@ withPipeWith stray scenario body = do
         -- has introduced itself, which is before the server can have anything
         -- to say about it.
         peerRef <- newIORef Nothing
+        -- The CIDs of the server's first long-header packet.
+        cidsRef <- newIORef Nothing
         -- from client
         tid0 <- forkIO $ do
             -- Wait for the client to introduce itself, and take the first
@@ -285,6 +291,8 @@ withPipeWith stray scenario body = do
                                 sendTo sockS bs1 saS
         -- from server
         tid1 <- forkIO $ relayLoop stop sockS $ \(bs, _) -> do
+            mcids <- readIORef cidsRef
+            when (isNothing mcids) $ writeIORef cidsRef $ longHeaderCIDs bs
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
             dropPacket <- shouldDrop scenario False n
             let isCC = BS.length bs < 200
@@ -292,15 +300,31 @@ withPipeWith stray scenario body = do
                 mpeer <- readIORef peerRef
                 forM_ mpeer $ \sa ->
                     delayIf (shouldDelay scenario False n) $ void $ sendTo sockC bs sa
-        return (stop, tid0, tid1)
+        tid2 <- forkIO $ case scenario of
+            InjectToClient trigger mk -> do
+                takeMVar trigger
+                Just (dcid, scid) <- readIORef cidsRef
+                Just sa <- readIORef peerRef
+                bs <- mk dcid scid
+                void $ sendTo sockC bs sa
+            _ -> return ()
+        return (stop, tid0, tid1, tid2)
     -- Telling these threads to stop rather than killing them: a thread
     -- blocked in a socket call on Windows is not reachable by 'killThread',
     -- and the brackets close the sockets straight after.  The kill stays
     -- for a thread which is somewhere else.
-    stopRelay (stop, tid0, tid1) = do
+    stopRelay (stop, tid0, tid1, tid2) = do
         atomically $ writeTVar stop True
         killThread tid0
         killThread tid1
+        killThread tid2
+    longHeaderCIDs bs
+        | BS.length bs < 7 || BS.head bs .&. 0x80 == 0 = Nothing
+        | otherwise =
+            let dlen = fromIntegral $ BS.index bs 5
+                (dcid, rest) = BS.splitAt dlen $ BS.drop 6 bs
+                slen = fromIntegral $ BS.head rest
+             in Just (toCID dcid, toCID $ BS.take slen $ BS.drop 1 rest)
     relayRecv stop sock = recvFromWith sock 2048 (check =<< readTVar stop)
     relayLoop stop sock act = loop
       where

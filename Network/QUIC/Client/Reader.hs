@@ -15,6 +15,7 @@ import Control.Concurrent.STM
 import Data.Functor (($>))
 import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
+import qualified Data.ByteString as BS
 import Data.List (intersect)
 import Network.Socket (Socket, close, connect, getSocketName)
 import qualified Network.Socket.ByteString as NSB
@@ -93,12 +94,18 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
         myVerInfo <- getVersionInfo conn
         let myVer = chosenVersion myVerInfo
             myVers0 = otherVersions myVerInfo
-        -- ignoring VN if the original version is included.
-        when (myVer `notElem` peerVers && Negotiation `notElem` peerVers) $ do
-            ok <- checkCIDs conn dCID (Left sCID)
+        -- RFC 9000 Sec 6.2: discarded once any other packet, an earlier
+        -- Version Negotiation included, has been processed, and if it
+        -- lists the version we chose.
+        done <- processed conn
+        icvn <- getIncompatibleVN conn
+        ok <- checkCIDs conn dCID (Left sCID)
+        let late = done || icvn
+            listed = myVer `elem` peerVers || Negotiation `elem` peerVers
+        when (ok && not late && not listed) $ do
             let myVers = filter (not . isGreasingVersion) myVers0
                 nextVerInfo = case myVers `intersect` peerVers of
-                    vers@(ver : _) | ok -> VersionInfo ver vers
+                    vers@(ver : _) -> VersionInfo ver vers
                     _ -> brokenVersionInfo
             E.throwTo (mainThreadId conn) $ VerNego nextVerInfo
     putQ t (PacketIC pkt@(CryptPacket hdr crypt) lvl siz) = do
@@ -121,8 +128,11 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
                 _ -> return () -- really invalid, just ignore
     putQ t (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t
+        -- RFC 9000 Sec 17.2.5.2: at most one Retry, none after an Initial
+        -- has been processed, and none with an empty token.
+        late <- processed conn
         ok <- checkCIDs conn dCID ex
-        when ok $ do
+        when (ok && not late && not (BS.null token)) $ do
             -- Re-creating peer's CIDDB with peer's CID.
             resetPeerCID conn sCID
             setPeerAuthCIDs conn $ \auth -> auth{retrySrcCID = Just sCID}
@@ -132,6 +142,13 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
             releaseByRetry (connLDCC conn) >>= mapM_ put
       where
         put ppkt = putOutput conn $ OutRetrans ppkt
+
+-- | Whether a packet from the server has been decrypted or a Retry taken.
+processed :: Connection -> IO Bool
+processed conn = do
+    rx <- getRxBytes conn
+    retried <- getRetried conn
+    return (rx > 0 || retried)
 
 checkCIDs :: Connection -> CID -> Either CID (ByteString, ByteString) -> IO Bool
 checkCIDs conn dCID (Left sCID) = do
