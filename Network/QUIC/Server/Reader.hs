@@ -227,7 +227,8 @@ dispatcher d conf stvar forkConnection mysock = do
     logAction _msg = return ()
 
     -- One datagram's failure is one datagram's problem here too: a receive
-    -- which fails is tried again rather than ending the dispatcher.
+    -- which fails is tried again, however often, rather than ending the
+    -- dispatcher.
     safeRecv rcv = do
         ex <- E.try rcv
         case ex of
@@ -239,7 +240,7 @@ dispatcher d conf stvar forkConnection mysock = do
                 Just e | isClosedSocketError e -> E.throwIO se
                 _ -> do
                     logAction $ "recv again: " <> bhow se
-                    rcv
+                    safeRecv rcv
 
 ----------------------------------------------------------------
 
