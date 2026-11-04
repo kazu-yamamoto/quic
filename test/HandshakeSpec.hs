@@ -7,6 +7,8 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
+import qualified Network.Socket as NS
+import qualified Network.Socket.ByteString as NSB
 import Network.TLS (Group (..), HandshakeMode13 (..))
 import qualified Network.TLS as TLS
 import qualified System.Timeout as Timeout
@@ -126,6 +128,19 @@ spec = do
                 failed VersionNegotiationFailed = True
                 failed _ = False
             testHandshake3 cc1 cc2 sc waitS failed
+        it "keeps serving after datagrams too large to receive" $ do
+            mvar <- newEmptyMVar
+            let serv conn = waitEstablished conn >> putMVar mvar ()
+            E.bracket (forkIO $ S.run sc0 serv) killThread $ \_ -> do
+                waitS
+                -- Winsock fails a receive into a buffer too small for the
+                -- datagram, where POSIX truncates it.
+                sendOversized 3
+                r <- Timeout.timeout 5000000 $
+                    C.run testClientConfig $ \conn -> do
+                        waitEstablished conn
+                        takeMVar mvar
+                r `shouldBe` Just ()
         it "can handshake with large HE from a client" $ do
             let cc0 = testClientConfig
                 params =
@@ -143,6 +158,14 @@ spec = do
                         }
                 sc = sc0{scParameters = params}
             testHandshake cc sc waitS FullHandshake
+
+-- | Datagrams larger than the server's receive buffer, to the test server.
+sendOversized :: Int -> IO ()
+sendOversized n = do
+    let hints = NS.defaultHints{NS.addrSocketType = NS.Datagram}
+    addr : _ <- NS.getAddrInfo (Just hints) (Just "127.0.0.1") (Just "15003")
+    E.bracket (NS.openSocket addr) NS.close $ \s ->
+        replicateM_ n $ NSB.sendTo s (BS.replicate 4000 0) (NS.addrAddress addr)
 
 onE :: IO b -> IO a -> IO a
 onE h b = E.onException b h
