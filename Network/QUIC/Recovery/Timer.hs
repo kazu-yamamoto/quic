@@ -64,7 +64,7 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
                     return Nothing
                 else do
                     rtt <- readIORef recoveryRTT
-                    lvl <- getEncryptionLevel ldcc
+                    lvl <- antiDeadlockLevel ldcc
                     let pto = backOff (calcPTO rtt $ Just lvl) (ptoCount rtt)
                     ptoTime <- getFutureTimeMicrosecond pto
                     return $ Just (ptoTime, lvl)
@@ -242,8 +242,8 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
                         -- to earn more anti-amplification credit,
                         -- a Handshake packet proves address ownership.
                         validated <- peerCompletedAddressValidation ldcc
-                        when validated $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: RTT1"
-                        lvl' <- getEncryptionLevel ldcc -- fixme
+                        when validated $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: validated"
+                        lvl' <- antiDeadlockLevel ldcc
                         sendPing ldcc lvl'
 
                 metricsUpdated ldcc $

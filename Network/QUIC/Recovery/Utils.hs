@@ -6,6 +6,7 @@ module Network.QUIC.Recovery.Utils (
     mergeLostCandidates,
     mergeLostCandidatesAndClear,
     peerCompletedAddressValidation,
+    antiDeadlockLevel,
     countAckEli,
     inFlightBytes,
     inCongestionRecovery,
@@ -77,9 +78,19 @@ peerCompletedAddressValidation :: LDCC -> IO Bool
 -- For servers: assume clients validate the server's address implicitly.
 peerCompletedAddressValidation ldcc
     | isServer ldcc = return True
--- For clients: servers complete address validation when a protected
--- packet is received.
-peerCompletedAddressValidation ldcc = isConnectionEstablished ldcc
+-- For clients: a Handshake ACK or the confirmed handshake (RFC 9002 A.8).
+peerCompletedAddressValidation ldcc@LDCC{..} = do
+    confirmed <- isConnectionEstablished ldcc
+    if confirmed
+        then return True
+        else (>= 0) . largestAckedPacket <$> readIORef (lossDetection ! HandshakeLevel)
+
+-- | The level of an anti-deadlock probe: Handshake if its keys are
+-- available, Initial otherwise (RFC 9002 A.8).
+antiDeadlockLevel :: LDCC -> IO EncryptionLevel
+antiDeadlockLevel ldcc = do
+    lvl <- getEncryptionLevel ldcc
+    return $ if lvl >= HandshakeLevel then HandshakeLevel else InitialLevel
 
 ----------------------------------------------------------------
 
