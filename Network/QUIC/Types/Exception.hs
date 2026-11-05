@@ -32,6 +32,7 @@ data InternalControl
     | ExitConnection
     | WrongTransportParameter
     | WrongDatagramSizeParameter
+    | Wrong0RTTLimitParameter
     | WrongVersionInformation
     | BreakForever
     deriving (Eq, Show)
