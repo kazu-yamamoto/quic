@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.StreamTable (
@@ -83,74 +84,64 @@ delStream Connection{..} strm =
 -- | Keeping account of a stream the application has closed before the peer
 --   finished it.
 --
--- A frame that arrives for a stream no longer in the table is dropped, and
--- what the peer spent on it is then counted by nobody: not as received,
--- since we never looked at it, and not as consumed, since nobody will read
--- it.  The window we advertise falls that much behind what the peer
--- believes it has spent, for the rest of the connection, and a server that
--- answers requests without reading their bodies runs its peers out of
--- window.  'Network.QUIC.IO.releaseStream' gives back what had arrived by
--- the time of the close; this is for what arrives after it.
+-- A frame that arrives for a stream no longer in the table is dropped, but
+-- the peer spent its window on it all the same.  'Network.QUIC.IO.releaseStream'
+-- gives back what had been seen by the time of the close; this is for what
+-- arrives after it, and for holding it to the limits it was sent under.
 --
 -- Nothing is kept for a stream the peer has finished: its final size is
 -- known and accounted for, and anything that still arrives for it lies
--- inside that and has been counted already.  Nor for one we only send on.
--- 'True' if it is kept.
+-- inside that.  Nor for one we only send on.  'True' if it is kept.
 keepDepartedStream :: Connection -> Stream -> IO Bool
 keepDepartedStream conn strm
     | sendOnly = return False
     | otherwise = do
-        b <- getRxBounds strm
-        let kept = not $ settled b
-        when kept $
-            atomicModifyIORef'' (departedStreams conn) $
-                IntMap.insert sid b
-        return kept
+        RxBounds{..} <- getRxBounds strm
+        case rxFinal of
+            Just _ -> return False
+            Nothing -> do
+                lim <- getRxMaxStreamData strm
+                atomicModifyIORef'' (departedStreams conn) $
+                    IntMap.insert sid $
+                        Departed rxHighest lim
+                return True
   where
     sid = streamId strm
     sendOnly
         | isClient conn = isClientInitiatedUnidirectional sid
         | otherwise = isServerInitiatedUnidirectional sid
 
--- | Is there nothing more this stream can owe?
-settled :: RxBounds -> Bool
-settled RxBounds{..} = rxFinal == Just rxCounted
-
--- | Noting a frame that arrived for a stream the application has closed,
---   and answering with what the connection's window is owed for it, and
---   whether the stream is now settled and forgotten.
+-- | Noting a frame that arrived for a stream the application has closed.
 --
--- The peer's own flow control counts the offsets it has sent, not the
--- octets that reached us, so what is owed is measured the same way: the
--- furthest point of the stream anything has reached, less what has been
--- accounted for already.  A retransmission does not move that point and so
--- is owed nothing, which is what keeps this from counting twice -- the
--- reassembly that tells a copy from new data went with the stream.
-noteDepartedRxFrame :: Connection -> StreamId -> Int -> Bool -> IO (Int, Bool)
+-- Answered, as for a live stream, with how far it takes the stream past what
+-- has been seen of it, which the connection counts as received and, since
+-- nobody will read it, as consumed too; and with whether the stream has now
+-- ended and is forgotten.  A copy of what was seen moves nothing.  Nothing
+-- when the stream is not kept, and a transport error for a frame the stream
+-- would have refused.
+noteDepartedRxFrame
+    :: Connection
+    -> StreamId
+    -> Int
+    -> Bool
+    -> IO (Either (TransportError, ReasonPhrase) (Int, Bool))
 noteDepartedRxFrame Connection{..} sid end fin =
     atomicModifyIORef' departedStreams note
   where
     note tbl = case IntMap.lookup sid tbl of
-        Nothing -> (tbl, (0, False))
-        Just b ->
-            let b' = account b
-                done = settled b'
-             in ( if done then IntMap.delete sid tbl else IntMap.insert sid b' tbl
-                , (rxCounted b' - rxCounted b, done)
+        Nothing -> (tbl, Right (0, False))
+        Just d@Departed{..}
+            -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
+            | end > depLimit ->
+                (tbl, Left (FlowControlError, "Flow control error for a closed stream"))
+            -- RFC 9000 Sec 4.5: "even after a stream is closed".
+            | fin && end < depHighest ->
+                (tbl, Left (FinalSizeError, "a final size below what the stream has reached"))
+            | fin -> (IntMap.delete sid tbl, Right (end - depHighest, True))
+            | otherwise ->
+                ( IntMap.insert sid d{depHighest = max depHighest end} tbl
+                , Right (max 0 (end - depHighest), False)
                 )
-    account b@RxBounds{..} =
-        b
-            { rxCounted = reached
-            , rxHighest = max rxHighest end
-            , rxFinal = if fin then Just end else rxFinal
-            }
-      where
-        -- Never past the end the peer has said the stream has: a frame
-        -- claiming to reach beyond it is for the live path to refuse, and
-        -- this one is not the place to answer it.
-        reached = case (if fin then Just end else rxFinal) of
-            Just f -> min f $ max rxCounted end
-            Nothing -> max rxCounted end
 
 initialRxMaxStreamData :: Connection -> StreamId -> Int
 initialRxMaxStreamData conn sid

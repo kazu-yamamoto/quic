@@ -7,6 +7,7 @@ module Network.QUIC.Stream.Types (
     StreamState (..),
     RxBounds (..),
     emptyRxBounds,
+    Departed (..),
     RecvStreamQ (..),
     RxStreamData (..),
     Reass (..),
@@ -53,21 +54,29 @@ data Stream = Stream
 
 -- | What the receiving side has seen of where a stream ends.
 data RxBounds = RxBounds
-    { rxCounted :: Int
-    -- ^ Octets of this stream the connection's flow controller has counted:
-    --   every frame taken for it, in order or not
-    , rxHighest :: Int
-    -- ^ The largest offset plus length seen for it
+    { rxHighest :: Int
+    -- ^ The largest offset plus length seen for it.  The connection's flow
+    --   controller counts this as received (RFC 9000 Sec 4.1), gaps and all.
     , rxFinal :: Maybe Int
     -- ^ Its final size, once that is known
     , rxCredited :: Int
-    -- ^ Octets counted against the connection's window on the stream's
-    --   behalf, over and above what the application has read
+    -- ^ Octets counted as consumed on the stream's behalf, over and above
+    --   what the application has read
     }
     deriving (Eq, Show)
 
 emptyRxBounds :: RxBounds
-emptyRxBounds = RxBounds 0 0 Nothing 0
+emptyRxBounds = RxBounds 0 Nothing 0
+
+-- | What is kept of a stream the application has closed while the peer had
+--   not said where it ends.
+data Departed = Departed
+    { depHighest :: Int
+    -- ^ 'rxHighest' so far
+    , depLimit :: Int
+    -- ^ The stream's receive limit, which nothing raises any more
+    }
+    deriving (Eq, Show)
 
 instance Show Stream where
     show s = show $ streamId s
