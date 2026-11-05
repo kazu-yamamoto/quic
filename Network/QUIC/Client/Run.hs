@@ -83,10 +83,16 @@ runClient conf client0 isICVN verInfo = do
                 -- belongs with them and was missing altogether: it starts at
                 -- zero and nothing raised it before the handshake, so 0-RTT
                 -- stream data went out against no connection limit at all.
-                params <- getPeerParameters conn
-                setTxMaxData conn $ initialMaxData params
-                setTxMaxStreams conn $ initialMaxStreamsBidi params
-                setTxUniMaxStreams conn $ initialMaxStreamsUni params
+                --
+                -- Only for 0-RTT: without it, these limits are the ones the
+                -- handshake gives, and since the setters only raise, starting
+                -- from those of a previous connection kept the client to
+                -- them when the server had lowered its own since.
+                when (remembers conf) $ do
+                    params <- getPeerParameters conn
+                    setTxMaxData conn $ initialMaxData params
+                    setTxMaxStreams conn $ initialMaxStreamsBidi params
+                    setTxUniMaxStreams conn $ initialMaxStreamsUni params
                 if ccUse0RTT conf
                     then wait0RTTReady conn
                     else wait1RTTReady conn
@@ -136,6 +142,11 @@ runClient conf client0 isICVN verInfo = do
         owned <- readIORef $ connCloserOwnsSocket conn
         unless owned $ getSocket conn >>= NS.unsafeClose
         freeResources conn
+
+-- | Whether this client sends 0-RTT, and so starts from the transport
+--   parameters it remembers (RFC 9000 Sec 7.4.1).
+remembers :: ClientConfig -> Bool
+remembers ClientConfig{..} = ccUse0RTT && is0RTTPossible ccResumption
 
 createClientConnection :: ClientConfig -> VersionInfo -> IO ConnRes
 createClientConnection conf@ClientConfig{..} verInfo = do
@@ -197,7 +208,9 @@ createClientConnection conf@ClientConfig{..} verInfo = do
                     genSRT
             flip E.onException (setDead conn >> freeResources conn) $ do
                 setSockConnected conn ccSockConnected
-                modifytPeerParameters conn ccResumption
+                -- What RFC 9000 Sec 7.4.1 has a client remember, for 0-RTT
+                -- alone.
+                when (remembers conf) $ modifytPeerParameters conn ccResumption
                 let ver = chosenVersion verInfo
                 initializeCoder conn InitialLevel $ initialSecrets ver peerCID
                 setupCryptoStreams conn -- fixme: cleanup

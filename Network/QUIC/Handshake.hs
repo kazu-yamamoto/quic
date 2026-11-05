@@ -243,7 +243,7 @@ handshakeServer' conf conn ver hsRef paramRef = handshaker
 ----------------------------------------------------------------
 
 setPeerParams :: Connection -> TLS.Context -> [ExtensionRaw] -> IO ()
-setPeerParams conn _ctx peerExts = do
+setPeerParams conn ctx peerExts = do
     tpId <- extensionIDForTtransportParameter <$> getVersion conn
     case getTP tpId peerExts of
         Nothing ->
@@ -329,6 +329,15 @@ setPeerParams conn _ctx peerExts = do
                     newMaxDatagram = maxDatagramFrameSize params
                 when (storedMaxDatagram > 0 && newMaxDatagram < storedMaxDatagram) $
                     E.throwIO WrongDatagramSizeParameter
+                -- RFC 9000 Sec 7.4.1: "If 0-RTT data is accepted by the
+                -- server, the server MUST NOT reduce any limits".  The limits
+                -- only ever rise here, so one lowered all the same was kept
+                -- at the old value, and the server closed the connection over
+                -- what it had itself allowed before.
+                minfo <- TLS.contextGetInformation ctx
+                let accepted = (minfo >>= TLS.infoTLS13HandshakeMode) == Just TLS.RTT0
+                when (accepted && lowered storedParams params) $
+                    E.throwIO Wrong0RTTLimitParameter
 
         setPeerParameters conn params
         case statelessResetToken params of
@@ -341,6 +350,20 @@ setPeerParams conn _ctx peerExts = do
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
         setTxMaxStreams conn $ initialMaxStreamsBidi params
         setTxUniMaxStreams conn $ initialMaxStreamsUni params
+
+    lowered old new =
+        or
+            [ f new < f old
+            | f <-
+                [ activeConnectionIdLimit
+                , initialMaxData
+                , initialMaxStreamDataBidiLocal
+                , initialMaxStreamDataBidiRemote
+                , initialMaxStreamDataUni
+                , initialMaxStreamsBidi
+                , initialMaxStreamsUni
+                ]
+            ]
 
     serverVersionNegotiation Nothing = return ()
     serverVersionNegotiation (Just peerVerInfo) = do
@@ -381,6 +404,7 @@ sendCCTLSError :: Connection -> TLS.TLSException -> IO ()
 sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongTransportParameter")) = closeConnection conn TransportParameterError "Transport parameter error"
 sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongVersionInformation")) = closeConnection conn VersionNegotiationError "Version negotiation error"
 sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "WrongDatagramSizeParameter")) = closeConnection conn ProtocolViolation "0-RTT datagram size violation"
+sendCCTLSError conn (TLS.HandshakeFailed (TLS.Error_Misc "Wrong0RTTLimitParameter")) = closeConnection conn ProtocolViolation "0-RTT limits lowered"
 sendCCTLSError conn e = closeConnection conn err msg
   where
     tlserr = getErrorCause e

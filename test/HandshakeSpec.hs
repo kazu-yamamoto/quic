@@ -7,6 +7,7 @@ import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
+import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import Network.TLS (Group (..), HandshakeMode13 (..))
@@ -97,6 +98,12 @@ spec = do
                                 }
                         }
             test0RTTFlowControl cc sc waitS
+        it "keeps a resumed connection to the limits the server gives now" $ do
+            testLoweredLimits testClientConfig sc0 waitS
+                `shouldReturn` (PreSharedKey, 3)
+        it "refuses 0-RTT accepted with the limits lowered" $ do
+            testLowered0RTT testClientConfig sc0{scUse0RTT = True} waitS
+                `shouldThrow` protocolViolation
         it "sends 0-RTT data without waiting for the handshake" $ do
             let sc = sc0{scUse0RTT = True}
             test0RTTSendsEarly sc waitS
@@ -357,3 +364,72 @@ testHandshake3 cc1 cc2 sc waitS selector = do
         sendStream s "bye"
         closeStream s
         putMVar mvar ()
+
+-- | A first connection to a server allowing a hundred streams, for its
+--   resumption information.
+resumeFrom :: ClientConfig -> ServerConfig -> IO () -> IO ResumptionInfo
+resumeFrom cc sc waitS =
+    E.bracket (forkIO $ S.run sc1 serv) killThread $ \_ -> do
+        waitS
+        C.run cc $ \conn -> do
+            s <- stream conn
+            sendStream s "first"
+            shutdownStream s
+            _ <- recvStream s 1024
+            threadDelay 50000
+            getResumptionInfo conn
+  where
+    sc1 = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 100}}
+    serv conn = do
+        s <- acceptStream conn
+        _ <- recvStream s 1024
+        sendStream s "bye"
+        closeStream s
+
+-- | The same server, as far as its session tickets go, then allowing
+--   three streams.  RFC 9000 Sec 7.4.1 has the client keep to what it
+--   remembers only for 0-RTT.  The limits only ever rose on the client, so
+--   a resumed connection went on opening streams up to the hundred, and the
+--   server closed it with STREAM_LIMIT_ERROR.
+--
+-- Answers how the second connection went and how many streams it opened
+-- in a second and a half.
+testLoweredLimits
+    :: ClientConfig -> ServerConfig -> IO () -> IO (HandshakeMode13, Int)
+testLoweredLimits cc1 sc waitS = do
+    res <- resumeFrom cc1 sc waitS
+    threadDelay 100000
+    E.bracket (forkIO $ S.run sc2 serv) killThread $ \_ -> do
+        waitS
+        C.run cc1{ccResumption = res} $ \conn -> do
+            opened <- newIORef (0 :: Int)
+            _ <- Timeout.timeout 1500000 $ forever $ do
+                s <- stream conn
+                sendStream s "x"
+                atomicModifyIORef' opened $ \x -> (x + 1, ())
+            (,) <$> (handshakeMode <$> getConnectionInfo conn) <*> readIORef opened
+  where
+    sc2 = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 3}}
+    serv conn = forever $ void $ acceptStream conn
+
+-- | As above, but with 0-RTT, which the server accepts with fifty streams
+--   where it gave a hundred before: RFC 9000 Sec 7.4.1 says it MUST NOT.
+--   The client opens one stream, within either, so that it is the client
+--   that notices.
+testLowered0RTT :: ClientConfig -> ServerConfig -> IO () -> IO ()
+testLowered0RTT cc1 sc waitS = do
+    res <- resumeFrom cc1 sc waitS
+    threadDelay 100000
+    E.bracket (forkIO $ S.run sc2 serv) killThread $ \_ -> do
+        waitS
+        C.run cc1{ccResumption = res, ccUse0RTT = True} $ \conn -> do
+            s <- stream conn
+            sendStream s "x"
+            threadDelay 1000000
+  where
+    sc2 = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 50}}
+    serv conn = forever $ void $ acceptStream conn
+
+protocolViolation :: QUICException -> Bool
+protocolViolation (TransportErrorIsSent ProtocolViolation _) = True
+protocolViolation _ = False
