@@ -2,6 +2,7 @@
 
 module RecoverySpec where
 
+import Control.Concurrent.STM
 import Data.ByteString.Short ()
 import qualified Data.Sequence as Seq
 import Data.UnixTime
@@ -11,6 +12,18 @@ import Network.QUIC.Internal
 
 spec :: Spec
 spec = do
+    describe "lost candidates" $ do
+        it "are released only by an ACK in the 1-RTT space" $ do
+            cs <- newConnState Client
+            ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+            let lost = (sp 1 True $ UnixTime 0 0){spEncryptionLevel = RTT1Level}
+                candidates = (\(SentPackets db) -> db) <$> readTVarIO (lostCandidates ldcc)
+            atomically $ writeTVar (lostCandidates ldcc) $ SentPackets $ Seq.singleton lost
+            -- A Handshake ACK for the same packet number is not for it.
+            onAckReceived ldcc HandshakeLevel (AckInfo 1 0 []) 0
+            candidates `shouldReturn` Seq.singleton lost
+            onAckReceived ldcc RTT1Level (AckInfo 1 0 []) 0
+            candidates `shouldReturn` Seq.empty
     describe "persistent congestion" $ do
         it "does not find a pair" $ do
             findDuration (Seq.fromList [sp0]) 0 `shouldBe` Nothing
