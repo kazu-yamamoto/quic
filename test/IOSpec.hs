@@ -12,6 +12,7 @@ import Data.Bits (shiftR)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Data.IORef
+import qualified Data.IntMap.Strict as IntMap
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import qualified System.Timeout as Timeout
@@ -152,6 +153,11 @@ spec = do
             withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
         it "raises the limit on unidirectional streams by their own number" $ do
             withPipe (DropClientPacket []) $ testUniStreams cc sc waitS
+    describe "a stream closed before the peer finishes it" $ do
+        it "is forgotten once the peer answers STOP_SENDING" $ do
+            withPipe (DropClientPacket []) $ testDepartedForgotten cc sc waitS
+        it "is kept within the limit when the peer does not answer" $ do
+            withPipe (DropClientPacket []) $ testDepartedBounded cc sc waitS
     describe "the server's path" $ do
         it "stays put for a short header packet that does not decrypt" $
             testForgedPath cc sc waitS $ \_ (CID dcid) ->
@@ -475,6 +481,65 @@ testOpenStreams cc sc waitS = do
                 else do
                     o <- atomicModifyIORef' openRef $ \x -> (x + 1, x + 1)
                     atomicModifyIORef' maxOpen $ \m -> (max m o, ())
+
+-- | The server reads a byte of each request and closes the stream, the
+--   client never sends a FIN.  What the server kept of each, to give back
+--   the window late frames spend, stayed for as long as the connection did;
+--   STOP_SENDING now has the client reset them, which settles them.
+testDepartedForgotten :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testDepartedForgotten cc sc waitS = do
+    left <- newEmptyMVar
+    withAsync (server left) $ \_ -> do
+        waitS
+        C.run cc $ \conn -> do
+            replicateM_ n $ do
+                strm <- stream conn
+                sendStream strm "x"
+            takeMVar left `shouldReturn` 0
+  where
+    n = 300 :: Int
+    server left = run sc $ \conn -> do
+        replicateM_ n $ do
+            strm <- acceptStream conn
+            _ <- recvStream strm 1
+            closeStream strm
+        let departed = IntMap.size <$> readIORef (departedStreams conn)
+            wait :: Int -> IO Int
+            wait 0 = departed
+            wait k = do
+                d <- departed
+                if d == 0 then return 0 else threadDelay 10000 >> wait (k - 1)
+        wait 300 >>= putMVar left
+
+-- | As above, but the client does not hear the STOP_SENDING.  The streams
+--   it leaves unfinished are not given back to its limit, so the server
+--   keeps no more of them than it allows open at once.
+testDepartedBounded :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testDepartedBounded cc sc0 waitS = do
+    most <- newIORef (0 :: Int)
+    opened <- newIORef (0 :: Int)
+    withAsync (server most) $ \_ -> do
+        waitS
+        C.run cc $ \conn -> do
+            _ <- Timeout.timeout 1500000 $ forever $ do
+                strm <- stream conn
+                sendStream strm "x"
+                atomicModifyIORef' opened $ \x -> (x + 1, ())
+            return ()
+        readIORef opened >>= (`shouldSatisfy` (<= limit))
+        readIORef most >>= (`shouldSatisfy` (<= limit))
+  where
+    limit = initialMaxStreamsBidi $ scParameters sc0
+    sc = sc0{scHooks = (scHooks sc0){onPlainCreated = hide}}
+    hide _ plain = plain{plainFrames = map unstop $ plainFrames plain}
+    unstop StopSending{} = Ping
+    unstop f = f
+    server most = run sc $ \conn -> forever $ do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1
+        closeStream strm
+        d <- IntMap.size <$> readIORef (departedStreams conn)
+        atomicModifyIORef' most $ \m -> (max m d, ())
 
 -- | The server closes the first unidirectional stream and keeps the rest.
 -- The client may then have initial_max_streams_uni plus one.  The limit was
@@ -1044,10 +1109,15 @@ testCloseWhileArriving cc sc0 waitS =
                 strm <- stream conn
                 sendStream strm $ BS.replicate 2048 0
                 threadDelay 2000
-                sendStream strm $ BS.replicate 2048 0
-                shutdownStream strm
+                -- The server's STOP_SENDING may have reset the stream by now.
+                E.handle stopped $ do
+                    sendStream strm $ BS.replicate 2048 0
+                    shutdownStream strm
                 closeStream strm
         r `shouldBe` Just ()
+
+    stopped StreamIsClosed = return ()
+    stopped e = E.throwIO e
 
 testCloseWithoutReading :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testCloseWithoutReading cc sc0 waitS =
@@ -1063,10 +1133,14 @@ testCloseWithoutReading cc sc0 waitS =
         r <- Timeout.timeout 5000000 $ C.run cc $ \conn ->
             replicateM_ 20 $ do
                 strm <- stream conn
-                sendStream strm $ BS.replicate 4096 0
-                shutdownStream strm
+                -- The server's STOP_SENDING may reset the stream meanwhile.
+                E.handle stopped $ do
+                    sendStream strm $ BS.replicate 4096 0
+                    shutdownStream strm
                 closeStream strm
         r `shouldBe` Just ()
+    stopped StreamIsClosed = return ()
+    stopped e = E.throwIO e
 
 -- | Only the closer closed the client's socket, and a connection the peer
 --   ends has none: the socket was left open.

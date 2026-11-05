@@ -94,20 +94,31 @@ delStream Connection{..} strm =
 --
 -- Nothing is kept for a stream the peer has finished: its final size is
 -- known and accounted for, and anything that still arrives for it lies
--- inside that and has been counted already.
-keepDepartedStream :: Connection -> Stream -> IO ()
-keepDepartedStream Connection{..} strm = do
-    b <- getRxBounds strm
-    unless (settled b) $
-        atomicModifyIORef'' departedStreams $
-            IntMap.insert (streamId strm) b
+-- inside that and has been counted already.  Nor for one we only send on.
+-- 'True' if it is kept.
+keepDepartedStream :: Connection -> Stream -> IO Bool
+keepDepartedStream conn strm
+    | sendOnly = return False
+    | otherwise = do
+        b <- getRxBounds strm
+        let kept = not $ settled b
+        when kept $
+            atomicModifyIORef'' (departedStreams conn) $
+                IntMap.insert sid b
+        return kept
+  where
+    sid = streamId strm
+    sendOnly
+        | isClient conn = isClientInitiatedUnidirectional sid
+        | otherwise = isServerInitiatedUnidirectional sid
 
 -- | Is there nothing more this stream can owe?
 settled :: RxBounds -> Bool
 settled RxBounds{..} = rxFinal == Just rxCounted
 
 -- | Noting a frame that arrived for a stream the application has closed,
---   and answering with what the connection's window is owed for it.
+--   and answering with what the connection's window is owed for it, and
+--   whether the stream is now settled and forgotten.
 --
 -- The peer's own flow control counts the offsets it has sent, not the
 -- octets that reached us, so what is owed is measured the same way: the
@@ -115,16 +126,17 @@ settled RxBounds{..} = rxFinal == Just rxCounted
 -- accounted for already.  A retransmission does not move that point and so
 -- is owed nothing, which is what keeps this from counting twice -- the
 -- reassembly that tells a copy from new data went with the stream.
-noteDepartedRxFrame :: Connection -> StreamId -> Int -> Bool -> IO Int
+noteDepartedRxFrame :: Connection -> StreamId -> Int -> Bool -> IO (Int, Bool)
 noteDepartedRxFrame Connection{..} sid end fin =
     atomicModifyIORef' departedStreams note
   where
     note tbl = case IntMap.lookup sid tbl of
-        Nothing -> (tbl, 0)
+        Nothing -> (tbl, (0, False))
         Just b ->
             let b' = account b
-             in ( if settled b' then IntMap.delete sid tbl else IntMap.insert sid b' tbl
-                , rxCounted b' - rxCounted b
+                done = settled b'
+             in ( if done then IntMap.delete sid tbl else IntMap.insert sid b' tbl
+                , (rxCounted b' - rxCounted b, done)
                 )
     account b@RxBounds{..} =
         b

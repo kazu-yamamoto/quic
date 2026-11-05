@@ -31,6 +31,7 @@ module Network.QUIC (
 
     -- ** Closing
     closeStream,
+    closeStreamWith,
     shutdownStream,
     resetStream,
     stopStream,
