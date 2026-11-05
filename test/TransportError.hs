@@ -45,7 +45,8 @@ transportErrorSpec cc0 ms = do
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated largeOffset
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [FlowControlError]
-        it "MUST send STREAM_LIMIT_ERROR if a stream ID exceeding the limit" $ \_ -> do
+        it
+            "MUST send STREAM_LIMIT_ERROR if a stream ID exceeds the limit [Transport 4.6]" $ \_ -> do
             let cc = addHook cc0 $ setOnPlainCreated largeStreamId
             runCnoOp cc ms `shouldThrow` transportErrorsIn [StreamLimitError]
         it
@@ -60,7 +61,7 @@ transportErrorSpec cc0 ms = do
                         addHook cc0 $ setOnTransportParametersCreated setOriginalDestinationConnectionId
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it
-            "MUST send TRANSPORT_PARAMETER_ERROR if preferred_address, is received [Transport 18.2]"
+            "MUST send TRANSPORT_PARAMETER_ERROR if preferred_address is received [Transport 18.2]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setPreferredAddress
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
@@ -85,7 +86,7 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setMaxUdpPayloadSize
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
         it
-            "MUST send TRANSPORT_PARAMETER_ERROR if ack_delay_exponen > 20 [Transport 7.4 and 18.2]"
+            "MUST send TRANSPORT_PARAMETER_ERROR if ack_delay_exponent > 20 [Transport 7.4 and 18.2]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnTransportParametersCreated setAckDelayExponent
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [TransportParameterError]
@@ -140,7 +141,7 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated cryptoBeyondBuffer
                 runCnoOp cc ms `shouldThrow` transportErrorsIn [CryptoBufferExceeded]
         it
-            "MUST send PROTOCOL_VIOLATION if PATH_CHALLENGE in Handshake is received [Transport 17.2.4]"
+            "MUST send PROTOCOL_VIOLATION if PATH_CHALLENGE in Handshake is received [Transport 12.4]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated handshakePathChallenge
                 runCnoOp cc ms `shouldThrow` transportError
@@ -160,7 +161,7 @@ transportErrorSpec cc0 ms = do
                 let cc = addHook cc0 $ setOnPlainCreated handshakeDataBlocked
                 runCnoOp cc ms `shouldThrow` transportError
         it
-            "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.2]"
+            "MUST send PROTOCOL_VIOLATION if reserved bits in Short are non-zero [Transport 17.3.1]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnPlainCreated $ rrBits RTT1Level
                 runCnoOp cc ms `shouldThrow` transportError
@@ -239,15 +240,15 @@ transportErrorSpec cc0 ms = do
                 let cc = cc0{ccALPN = \_ -> return $ Just ["dummy"]}
                 runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.NoApplicationProtocol]
         it
-            "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]"
+            "MUST send missing_extension TLS alert if the quic_transport_parameters extension is not included [TLS 8.2]"
             $ \_ -> do
                 let cc = addHook cc0 $ setOnTLSExtensionCreated (const [])
                 runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
         it
-            "MUST send missing_extension TLS alert if the quic_transport_parameters extension does not included [TLS 8.2]"
+            "MUST send missing_extension TLS alert if only the draft quic_transport_parameters extension (0xffa5) is included [TLS 8.2]"
             $ \_ -> do
                 let f [ExtensionRaw _ v] = [ExtensionRaw (ExtensionID 0xffa5) v]
-                    f _ = error "f"
+                    f xs = xs
                     cc = addHook cc0 $ setOnTLSExtensionCreated f
                 runCnoOp cc ms `shouldThrow` cryptoErrorsIn [TLS.MissingExtension]
         it
@@ -268,9 +269,8 @@ transportErrorSpec cc0 ms = do
                                     }
                         runCnoOp cc ms `shouldThrow` transportError
                 _ -> do
-                    putStrLn
-                        "Warning: 0-RTT is not possible. Skipping this test. Use \"h3spec -s 0-RTT\" next time."
                     when (ccDebugLog cc0) $ print mres
+                    pendingWith "0-RTT is not possible. Use \"h3spec -s 0-RTT\" next time."
 
 ----------------------------------------------------------------
 
