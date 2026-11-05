@@ -175,12 +175,11 @@ closeStreamWith s aerr = do
     -- Outside the guard above: whether or not the FIN goes out, we are done
     -- with the stream, and 'recvStream' has to say so rather than block.
     setRxStreamClosed s
-    delStream conn s
     releaseStream s
 
 -- | Asking the peer to stop sending on a stream we are done with, if it has
 --   not said where the stream ends.  It then resets the stream, and what we
---   keep of it ('keepDepartedStream') is settled and dropped.
+--   keep of it ('departStream') is settled and dropped.
 stopUnfinished :: Stream -> ApplicationProtocolError -> IO ()
 stopUnfinished s aerr = do
     let conn = streamConnection s
@@ -192,7 +191,7 @@ stopUnfinished s aerr = do
     final <- rxFinal <$> getRxBounds s
     unless (sendOnly || closed || isJust final) $ stopStream s aerr
 
--- | Counting a stream as done with, once.
+-- | Taking the stream out of the table and counting it as done with, once.
 --
 -- Only when the application is done with it: closing it or resetting it.  A
 -- RESET_STREAM from the peer takes the stream out of the table, but whatever
@@ -214,8 +213,9 @@ releaseStream s = do
         -- never arrived of a stream whose end is known.  Left uncounted, the
         -- window we advertise stays that much smaller for the rest of the
         -- connection, and enough of them leave the peer blocked by octets
-        -- nobody is waiting for.
-        owed <- takeRxOwed s
+        -- nobody is waiting for.  Where the peer has not said where the
+        -- stream ends, what arrives from here on is owed by what is kept.
+        (owed, kept) <- departStream conn s
         when (owed > 0) $ do
             mx <- updateFlowRx conn owed
             case mx of
@@ -224,9 +224,6 @@ releaseStream s = do
                     sendFrames conn RTT1Level [MaxData newMax]
                     fire conn (Microseconds 50000) $
                         sendFrames conn RTT1Level [MaxData newMax]
-        -- Where the peer has not said, what arrives from here on is still
-        -- owed and the stream is gone, so what it owes is kept without it.
-        kept <- keepDepartedStream conn s
         -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
         unless kept $ releasePeerStream conn $ streamId s
   where
@@ -288,7 +285,6 @@ resetStream s aerr = do
     -- block.  The peer's STOP_SENDING has closed the sending part already
     -- when an application resets a stream because 'sendStream' failed.
     setRxStreamClosed s
-    delStream conn s
     releaseStream s
 
 -- | Asking the peer to stop sending.

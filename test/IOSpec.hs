@@ -6,6 +6,7 @@ module IOSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.STM (readTVarIO)
 import qualified Control.Exception as E
 import Control.Monad
 import Data.Bits (shiftR)
@@ -158,6 +159,8 @@ spec = do
             withPipe (DropClientPacket []) $ testDepartedForgotten cc sc waitS
         it "is kept within the limit when the peer does not answer" $ do
             withPipe (DropClientPacket []) $ testDepartedBounded cc sc waitS
+        it "is forgotten when its FIN crosses the close" $ do
+            withPipe (DropClientPacket []) $ testFinCrossesClose cc sc waitS
     describe "the server's path" $ do
         it "stays put for a short header packet that does not decrypt" $
             testForgedPath cc sc waitS $ \_ (CID dcid) ->
@@ -513,7 +516,7 @@ testDepartedForgotten cc sc waitS = do
             strm <- acceptStream conn
             _ <- recvStream strm 1
             closeStream strm
-        let departed = IntMap.size <$> readIORef (departedStreams conn)
+        let departed = IntMap.size <$> readTVarIO (departedStreams conn)
             wait :: Int -> IO Int
             wait 0 = departed
             wait k = do
@@ -548,8 +551,48 @@ testDepartedBounded cc sc0 waitS = do
         strm <- acceptStream conn
         _ <- recvStream strm 1
         closeStream strm
-        d <- IntMap.size <$> readIORef (departedStreams conn)
+        d <- IntMap.size <$> readTVarIO (departedStreams conn)
         atomicModifyIORef' most $ \m -> (max m d, ())
+
+-- | The server closes each stream as soon as it has read a byte, while the
+--   client's FIN for it is on its way.  The FIN is the only thing that ends
+--   the stream here: the server's STOP_SENDING is hidden.  Every stream is
+--   to be forgotten, and given back to the client's limit, in the end.
+--
+-- Closing used to take the stream out of the table and keep what it owed
+-- in two steps, and a frame handled in between was counted in neither.  The
+-- window was a few microseconds and this does not hit it; it checks that
+-- FINs crossing the close, now one transaction against it, still settle.
+testFinCrossesClose :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testFinCrossesClose cc sc0 waitS = do
+    left <- newEmptyMVar
+    withAsync (server left) $ \_ -> do
+        waitS
+        r <- Timeout.timeout 20000000 $ C.run cc $ \conn -> do
+            replicateM_ n $ do
+                strm <- stream conn
+                sendStream strm "x"
+                shutdownStream strm
+            takeMVar left
+        r `shouldBe` Just 0
+  where
+    n = 2000 :: Int
+    sc = sc0{scHooks = (scHooks sc0){onPlainCreated = hide}}
+    hide _ plain = plain{plainFrames = map unstop $ plainFrames plain}
+    unstop StopSending{} = Ping
+    unstop f = f
+    server left = run sc $ \conn -> do
+        replicateM_ n $ do
+            strm <- acceptStream conn
+            _ <- recvStream strm 1
+            closeStream strm
+        let departed = IntMap.size <$> readTVarIO (departedStreams conn)
+            wait :: Int -> IO Int
+            wait 0 = departed
+            wait k = do
+                d <- departed
+                if d == 0 then return 0 else threadDelay 10000 >> wait (k - 1)
+        wait 300 >>= putMVar left
 
 -- | The server closes the first unidirectional stream and keeps the rest.
 -- The client may then have initial_max_streams_uni plus one.  The limit was
