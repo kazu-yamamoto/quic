@@ -294,8 +294,10 @@ setPeerParams conn _ctx peerExts = do
         -- exactly that many from the end of a datagram to compare against.
         -- A token of some other length could never match one, so it is not
         -- a token.
-        forM_ (statelessResetToken params) $ \(StatelessResetToken srt) ->
-            when (Short.length srt /= 16) sendCCParamError
+        case statelessResetToken params of
+            Nothing -> return ()
+            Just (StatelessResetToken srt) ->
+                when (Short.length srt /= 16) sendCCParamError
         when (isServer conn) $ do
             when (isJust $ originalDestinationConnectionId params) sendCCParamError
             when (isJust $ preferredAddress params) sendCCParamError
@@ -329,7 +331,9 @@ setPeerParams conn _ctx peerExts = do
                     E.throwIO WrongDatagramSizeParameter
 
         setPeerParameters conn params
-        mapM_ (setPeerStatelessResetToken conn) $ statelessResetToken params
+        case statelessResetToken params of
+            Nothing -> return ()
+            Just srt -> setPeerStatelessResetToken conn srt
         setTxMaxData conn $ initialMaxData params
         -- My 'maxIdleTimeout' is already set 'minIdleTimeout'
         -- This selects the minimum of mine and peer's.

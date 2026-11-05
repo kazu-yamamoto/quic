@@ -90,7 +90,11 @@ closure'' conn ldcc frame = do
         if isServer conn
             then return Nothing
             else Just <$> mallocBytes bufsiz `E.onException` free sendbuf
-    let freeBufs = free sendbuf >> mapM_ free mrecvbuf
+    let freeBufs = do
+            free sendbuf
+            case mrecvbuf of
+                Nothing -> return ()
+                Just recvbuf -> free recvbuf
     flip E.onException freeBufs $ do
         -- This must be called before freeResourcesin runClient.
         siz <- encodeCC conn sendbuf bufsiz frame

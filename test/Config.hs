@@ -274,25 +274,27 @@ withPipeWith stray scenario body = do
             -- leaves a client behind breaks the next one however this
             -- chooses, so a test must not leave one behind.
             mhello <- waitForClientHello stop sockC
-            forM_ mhello $ \(bs, saO) -> do
-              writeIORef peerRef $ Just saO
-              n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
-              dropPacket0 <- shouldDrop scenario True n0
-              unless dropPacket0 $ void $ sendTo sockS bs saS
-              relayLoop stop sockC $ \(bs1, sa) -> do
-                -- Only from the client we latched onto.  The connect this
-                -- replaces did that in the kernel; doing it here keeps
-                -- leftovers from the connection that just closed from being
-                -- counted, which would shift the drop indices.
-                when (sa == saO) $ do
-                    recordSize scenario True bs1
-                    n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
-                    dropPacket <- shouldDrop scenario True n
-                    let isCC = BS.length bs1 < 200
-                    when (isCC || not dropPacket) $
-                        delayIf (shouldDelay scenario True n) $
-                            void $
-                                sendTo sockS bs1 saS
+            case mhello of
+                Nothing -> return ()
+                Just (bs, saO) -> do
+                    writeIORef peerRef $ Just saO
+                    n0 <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+                    dropPacket0 <- shouldDrop scenario True n0
+                    unless dropPacket0 $ void $ sendTo sockS bs saS
+                    relayLoop stop sockC $ \(bs1, sa) -> do
+                        -- Only from the client we latched onto.  The connect this
+                        -- replaces did that in the kernel; doing it here keeps
+                        -- leftovers from the connection that just closed from being
+                        -- counted, which would shift the drop indices.
+                        when (sa == saO) $ do
+                            recordSize scenario True bs1
+                            n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
+                            dropPacket <- shouldDrop scenario True n
+                            let isCC = BS.length bs1 < 200
+                            when (isCC || not dropPacket) $
+                                delayIf (shouldDelay scenario True n) $
+                                    void $
+                                        sendTo sockS bs1 saS
         -- from server
         tid1 <- forkIO $ relayLoop stop sockS $ \(bs, _) -> do
             mcids <- readIORef cidsRef
@@ -303,8 +305,10 @@ withPipeWith stray scenario body = do
             let isCC = BS.length bs < 200
             when (isCC || not dropPacket) $ do
                 mpeer <- readIORef peerRef
-                forM_ mpeer $ \sa ->
-                    delayIf (shouldDelay scenario False n) $ void $ sendTo sockC bs sa
+                case mpeer of
+                    Nothing -> return ()
+                    Just sa ->
+                        delayIf (shouldDelay scenario False n) $ void $ sendTo sockC bs sa
         tid2 <- forkIO $ case scenario of
             InjectToClient trigger mk -> do
                 takeMVar trigger

@@ -209,10 +209,12 @@ releaseStream s = do
         let owed = unread + uncounted
         when (owed > 0) $ do
             mx <- updateFlowRx conn owed
-            forM_ mx $ \newMax -> do
-                sendFrames conn RTT1Level [MaxData newMax]
-                fire conn (Microseconds 50000) $
+            case mx of
+                Nothing -> return ()
+                Just newMax -> do
                     sendFrames conn RTT1Level [MaxData newMax]
+                    fire conn (Microseconds 50000) $
+                        sendFrames conn RTT1Level [MaxData newMax]
         -- Where the peer has not said, what arrives from here on is still
         -- owed and the stream is gone, so what it owes is kept without it.
         keepDepartedStream conn s
@@ -249,16 +251,20 @@ recvStream s n = do
         conn = streamConnection s
     -- FLOW CONTROL: MAX_STREAM_DATA: recv: announcing my limit properly
     mxs <- updateStreamFlowRx s len
-    forM_ mxs $ \newMax -> do
-        sendFrames conn RTT1Level [MaxStreamData sid newMax]
-        fire conn (Microseconds 50000) $
+    case mxs of
+        Nothing -> return ()
+        Just newMax -> do
             sendFrames conn RTT1Level [MaxStreamData sid newMax]
+            fire conn (Microseconds 50000) $
+                sendFrames conn RTT1Level [MaxStreamData sid newMax]
     -- FLOW CONTROL: MAX_DATA: recv: announcing my limit properly
     mxc <- updateFlowRx conn len
-    forM_ mxc $ \newMax -> do
-        sendFrames conn RTT1Level [MaxData newMax]
-        fire conn (Microseconds 50000) $
+    case mxc of
+        Nothing -> return ()
+        Just newMax -> do
             sendFrames conn RTT1Level [MaxData newMax]
+            fire conn (Microseconds 50000) $
+                sendFrames conn RTT1Level [MaxData newMax]
     return bs
 
 -- | Closing a stream with an error code.

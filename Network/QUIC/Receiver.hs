@@ -228,7 +228,9 @@ isInitiated conn sid
 -- | Closing the connection over a final size that does not hold together
 --   (RFC 9000 Sec 4.5).
 closeOverFinalSize :: Connection -> Maybe FinalSizeProblem -> IO ()
-closeOverFinalSize conn = mapM_ $ closeConnection conn FinalSizeError . reason
+closeOverFinalSize _ Nothing = return ()
+closeOverFinalSize conn (Just problem) =
+    closeConnection conn FinalSizeError $ reason problem
   where
     reason FinalSizeChanged = "a final size that is not the one already known"
     reason FinalSizeTooSmall = "a final size below what the stream has reached"
@@ -315,9 +317,11 @@ creditDeparted conn sid end fin = do
     owed <- noteDepartedRxFrame conn sid end fin
     when (owed > 0) $ do
         mx <- updateFlowRx conn owed
-        forM_ mx $ \newMax -> do
-            sendFrames conn RTT1Level [MaxData newMax]
-            fire conn (Microseconds 50000) $ sendFrames conn RTT1Level [MaxData newMax]
+        case mx of
+            Nothing -> return ()
+            Just newMax -> do
+                sendFrames conn RTT1Level [MaxData newMax]
+                fire conn (Microseconds 50000) $ sendFrames conn RTT1Level [MaxData newMax]
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -387,10 +391,12 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
                 unless ok' $
                     closeConnection conn FlowControlError "Flow control error for connection"
                 mx <- updateFlowRx conn unarrived
-                forM_ mx $ \newMax -> do
-                    sendFrames conn RTT1Level [MaxData newMax]
-                    fire conn (Microseconds 50000) $
+                case mx of
+                    Nothing -> return ()
+                    Just newMax -> do
                         sendFrames conn RTT1Level [MaxData newMax]
+                        fire conn (Microseconds 50000) $
+                            sendFrames conn RTT1Level [MaxData newMax]
             -- After the two checks above, not before: the application has no
             -- business serving a stream the frame that opened it is about to
             -- close the connection over.  As for a STREAM frame (#131).
@@ -461,33 +467,35 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
     -- acknowledgement crossed it.  Opening the stream anew would hold
     -- the copy to the initial window and call it a flow control error.
     mstrm' <- maybe (openStream conn sid) (return . Just) mstrm
-    forM_ mstrm' $ \strm -> do
-        let len = BS.length dat
-            rx = RxStreamData dat off len fin
-        -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be said
-        -- differently, and nothing may arrive past it.
-        noteRxFrame strm (off + len) fin >>= closeOverFinalSize conn
-        fc <- putRxStreamData strm rx
-        case fc of
-            -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-            OverLimit ->
-                closeConnection conn FlowControlError "Flow control error for stream in 0-RTT"
-            -- Not a flow control error: the peer is inside its window, it is
-            -- just spending it in more pieces than we will hold.  Rate control
-            -- answers with InternalError too.
-            TooFragmented ->
-                closeConnection conn QUIC.InternalError "Too many stream fragments"
-            Duplicated -> return ()
-            Reassembled n -> do
-                addRxCounted strm n
-                ok' <- checkRxMaxData conn n
-                -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-                unless ok' $
-                    closeConnection
-                        conn
-                        FlowControlError
-                        "Flow control error for connection in 0-RTT"
-        deliverStream conn mstrm strm
+    case mstrm' of
+        Nothing -> return ()
+        Just strm -> do
+            let len = BS.length dat
+                rx = RxStreamData dat off len fin
+            -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be said
+            -- differently, and nothing may arrive past it.
+            noteRxFrame strm (off + len) fin >>= closeOverFinalSize conn
+            fc <- putRxStreamData strm rx
+            case fc of
+                -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
+                OverLimit ->
+                    closeConnection conn FlowControlError "Flow control error for stream in 0-RTT"
+                -- Not a flow control error: the peer is inside its window, it is
+                -- just spending it in more pieces than we will hold.  Rate control
+                -- answers with InternalError too.
+                TooFragmented ->
+                    closeConnection conn QUIC.InternalError "Too many stream fragments"
+                Duplicated -> return ()
+                Reassembled n -> do
+                    addRxCounted strm n
+                    ok' <- checkRxMaxData conn n
+                    -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
+                    unless ok' $
+                        closeConnection
+                            conn
+                            FlowControlError
+                            "Flow control error for connection in 0-RTT"
+            deliverStream conn mstrm strm
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
@@ -586,7 +594,9 @@ processFrame conn lvl (StreamDataBlocked sid _) = do
     -- thing to hear only when we have told it nothing may be sent -- an
     -- initial_max_stream_data of zero for that kind of stream.
     mstrm <- maybe (openStream conn sid) (return . Just) mstrm0
-    forM_ mstrm $ deliverStream conn mstrm0
+    case mstrm of
+        Nothing -> return ()
+        Just strm -> deliverStream conn mstrm0 strm
 processFrame conn lvl (StreamsBlocked _dir n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "STREAMS_BLOCKED in Initial or Handshake"
