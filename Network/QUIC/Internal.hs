@@ -14,6 +14,7 @@ module Network.QUIC.Internal (
     module Network.QUIC.Utils,
     module Network.QUIC.Recovery,
     module Network.QUIC.Client.Reader,
+    module Network.QUIC.Client.WatchDog,
     module Network.QUIC.Socket,
 ) where
 
@@ -23,6 +24,7 @@ import Network.QUIC.Client.Reader (
     readerClient,
     rebind,
  )
+import Network.QUIC.Client.WatchDog (watchDogWith, watchSocket)
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector

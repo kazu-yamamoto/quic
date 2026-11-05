@@ -1,5 +1,3 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE InterruptibleFFI #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -9,14 +7,13 @@ module Network.QUIC.Client.Run (
     migrate,
 ) where
 
-import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
-import Foreign.C.Types
 import qualified Network.Socket as NS
 
 import Network.QUIC.Client.Reader
+import Network.QUIC.Client.WatchDog
 import Network.QUIC.Closer
 import Network.QUIC.Common
 import Network.QUIC.Config
@@ -107,7 +104,7 @@ runClient conf client0 isICVN verInfo = do
                 labelMe "concurrently5"
                     >> concurrently (c4 `E.catch` \(_ :: InternalControl) -> return ()) s6
             runThreads = snd <$> c5
-        when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog conn
+        when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog (void $ migrate conn)
         ex <- E.try runThreads
         sendFinal conn
         setConnectionClosed conn
@@ -213,26 +210,3 @@ createClientConnection conf@ClientConfig{..} verInfo = do
 --   But this can also be used even when the value is 'False'.
 migrate :: Connection -> IO Bool
 migrate conn = controlConnection conn ActiveMigration
-
-watchDog :: Connection -> IO ()
-watchDog conn = E.bracket c_open_socket c_close_socket loop
-  where
-    loop s = do
-        ret <- c_watch_socket s
-        case ret of
-            -1 -> loop s
-            -2 -> return ()
-            _ -> do
-                _ <- migrate conn
-                -- prevent calling "migrate" frequently
-                threadDelay 100000
-                loop s
-
-foreign import ccall unsafe "open_socket"
-    c_open_socket :: IO CInt
-
-foreign import ccall interruptible "watch_socket"
-    c_watch_socket :: CInt -> IO CInt
-
-foreign import ccall unsafe "close_socket"
-    c_close_socket :: CInt -> IO CInt
