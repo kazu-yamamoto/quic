@@ -11,12 +11,14 @@ module Network.QUIC.Connection.Stream (
     checkRxMaxStreams,
     updatePeerStreamId,
     checkStreamIdRoom,
+    releasePeerStream,
 ) where
 
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 
 import Network.QUIC.Connection.Misc
+import Network.QUIC.Connection.Timeout
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
@@ -146,3 +148,24 @@ checkStreamIdRoom conn dir = do
          in if base' - base >= max 1 (initialStreams `div` 2)
                 then (conc'{maxStreams = StreamIdBase base'}, Just base')
                 else (conc', Nothing)
+
+-- | Counting a stream of the peer's as done with, and announcing a new
+--   MAX_STREAMS if that is due.  Nothing for a stream we opened.
+releasePeerStream :: Connection -> StreamId -> IO ()
+releasePeerStream conn sid
+    | peers = do
+        mx <- checkStreamIdRoom conn dir
+        case mx of
+            Nothing -> return ()
+            Just nms -> do
+                sendFrames conn RTT1Level [MaxStreams dir nms]
+                fire conn (Microseconds 50000) $
+                    sendFrames conn RTT1Level [MaxStreams dir nms]
+    | otherwise = return ()
+  where
+    peers
+        | isClient conn = isServerInitiated sid
+        | otherwise = isClientInitiated sid
+    dir
+        | isUnidirectional sid = Unidirectional
+        | otherwise = Bidirectional

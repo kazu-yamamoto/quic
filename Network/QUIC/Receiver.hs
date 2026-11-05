@@ -375,10 +375,12 @@ checkRetireOfArrivalCID conn hdr frames = do
     retired = [n | RetireConnectionID n <- frames]
 
 -- | Giving the connection's window back what a frame for a stream the
---   application has closed is owed.
+--   application has closed is owed, and the stream back to the peer's
+--   limit once it has ended.
 creditDeparted :: Connection -> StreamId -> Int -> Bool -> IO ()
 creditDeparted conn sid end fin = do
-    owed <- noteDepartedRxFrame conn sid end fin
+    (owed, done) <- noteDepartedRxFrame conn sid end fin
+    when done $ releasePeerStream conn sid
     when (owed > 0) $ do
         mx <- updateFlowRx conn owed
         case mx of

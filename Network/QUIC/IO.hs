@@ -147,8 +147,16 @@ shutdownStream s = do
 
 -- | Closing a stream without an error.
 --   This sends FIN if necessary.
+--   If the peer has not finished sending on it, this also sends
+--   STOP_SENDING with error code 0; see 'closeStreamWith'.
 closeStream :: Stream -> IO ()
-closeStream s = do
+closeStream s = closeStreamWith s $ ApplicationProtocolError 0
+
+-- | 'closeStream' with the error code of the STOP_SENDING sent if the
+--   peer has not finished sending on the stream.  HTTP\/3, for one, wants
+--   H3_NO_ERROR there (RFC 9114, section 4.1).
+closeStreamWith :: Stream -> ApplicationProtocolError -> IO ()
+closeStreamWith s aerr = do
     let conn = streamConnection s
         sid = streamId s
         -- A unidirectional stream of the peer's has no sending side here.
@@ -163,38 +171,43 @@ closeStream s = do
         setTxStreamClosed s
         putSendStreamQ conn $ TxStreamData s [] 0 True
         waitFinTx s
+    stopUnfinished s aerr
     -- Outside the guard above: whether or not the FIN goes out, we are done
     -- with the stream, and 'recvStream' has to say so rather than block.
     setRxStreamClosed s
     delStream conn s
     releaseStream s
 
--- | Counting a stream of the peer's as done with, once, and announcing a
---   new MAX_STREAMS if that is due.
+-- | Asking the peer to stop sending on a stream we are done with, if it has
+--   not said where the stream ends.  It then resets the stream, and what we
+--   keep of it ('keepDepartedStream') is settled and dropped.
+stopUnfinished :: Stream -> ApplicationProtocolError -> IO ()
+stopUnfinished s aerr = do
+    let conn = streamConnection s
+        sid = streamId s
+        sendOnly =
+            (isClient conn && isClientInitiatedUnidirectional sid)
+                || (isServer conn && isServerInitiatedUnidirectional sid)
+    closed <- (||) <$> isConnectionClosed conn <*> isPeerClosed conn
+    final <- rxFinal <$> getRxBounds s
+    unless (sendOnly || closed || isJust final) $ stopStream s aerr
+
+-- | Counting a stream as done with, once.
 --
 -- Only when the application is done with it: closing it or resetting it.  A
 -- RESET_STREAM from the peer takes the stream out of the table, but whatever
 -- is serving it may be at work yet, and counting it then would let a peer
 -- that opens streams and resets them straight away have any number served
 -- at once.
+--
+-- A stream of the peer's goes back to its limit on streams only once the
+-- peer has finished it too.  Until then the peer may still send on it and
+-- we keep what it owes; given back at once, a peer that never finishes its
+-- streams could have us keep any number of them.
 releaseStream :: Stream -> IO ()
 releaseStream s = do
     first <- markReleased s
     when first $ do
-        when
-            ( (isClient conn && isServerInitiatedBidirectional sid)
-                || (isServer conn && isClientInitiatedBidirectional sid)
-            )
-            $ do
-                -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
-                checkMaxStreams Bidirectional
-        when
-            ( (isClient conn && isServerInitiatedUnidirectional sid)
-                || (isServer conn && isClientInitiatedUnidirectional sid)
-            )
-            $ do
-                -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
-                checkMaxStreams Unidirectional
         -- FLOW CONTROL: MAX_DATA: recv: the octets of this stream the
         -- application will never read.  Left uncounted, the window we
         -- advertise stays that much smaller for the rest of the connection:
@@ -217,18 +230,11 @@ releaseStream s = do
                         sendFrames conn RTT1Level [MaxData newMax]
         -- Where the peer has not said, what arrives from here on is still
         -- owed and the stream is gone, so what it owes is kept without it.
-        keepDepartedStream conn s
+        kept <- keepDepartedStream conn s
+        -- FLOW CONTROL: MAX_STREAMS: recv: announcing my limit properly
+        unless kept $ releasePeerStream conn $ streamId s
   where
     conn = streamConnection s
-    sid = streamId s
-    checkMaxStreams dir = do
-        mx <- checkStreamIdRoom conn dir
-        case mx of
-            Nothing -> return ()
-            Just nms -> do
-                sendFrames conn RTT1Level [MaxStreams dir nms]
-                fire conn (Microseconds 50000) $
-                    sendFrames conn RTT1Level [MaxStreams dir nms]
 
 -- | Accepting a stream initiated by the peer.
 acceptStream :: Connection -> IO Stream
@@ -280,6 +286,7 @@ resetStream s aerr = do
         lvl <- getEncryptionLevel conn
         let frame = ResetStream sid aerr finalSize
         putOutput conn $ OutControl lvl [frame]
+    stopUnfinished s aerr
     -- Outside the guard above: whether or not the RESET_STREAM goes out, we
     -- are done with the stream, and 'recvStream' has to say so rather than
     -- block.  The peer's STOP_SENDING has closed the sending part already
