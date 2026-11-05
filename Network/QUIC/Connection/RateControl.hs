@@ -9,6 +9,7 @@ module Network.QUIC.Connection.RateControl (
     queuedControlLimit,
     statelessResetLimit,
     statelessResetSize,
+    statelessResetSizeFor,
 
     -- * Enforcing
     enforcePathAndCIDFrameLimit,
@@ -67,10 +68,27 @@ queuedControlLimit = 16384
 statelessResetLimit :: PerSecond
 statelessResetLimit = PerSecond 20
 
--- | The size of a stateless reset we send, in octets.  None is sent for
---   a packet a third of this or smaller (RFC 9000, section 10.3).
+-- | The largest stateless reset we send, in octets.
 statelessResetSize :: Int
 statelessResetSize = 1280
+
+-- | The size of a stateless reset in answer to a packet of this many
+--   octets, if one can be sent.
+--
+-- Always smaller than the packet (RFC 9000, section 10.3.3): a reset looks
+-- like a packet for an unknown connection, so two endpoints could answer
+-- each other's resets for ever.  Half of it, so that such a loop ends in a
+-- few rounds, and one octet less for a packet of 43 octets or fewer
+-- (section 10.3).  None below the 21 octets a reset needs.  Being smaller,
+-- it is also under three times the packet (section 10.3).
+statelessResetSizeFor :: Int -> Maybe Int
+statelessResetSizeFor bytes
+    | siz < 21 = Nothing
+    | otherwise = Just siz
+  where
+    siz
+        | bytes <= 43 = bytes - 1
+        | otherwise = min statelessResetSize (bytes `div` 2)
 
 ----------------------------------------------------------------
 
@@ -109,12 +127,6 @@ enforceQueuedControlLimit conn = do
     when (queued > queuedControlLimit) $
         closeConnection conn InternalError "Too many control frames queued"
 
--- | Whether a stateless reset may be sent in answer to a packet of this
---   many octets, under 'statelessResetLimit'.
-withinStatelessResetLimit :: Rate -> Int -> IO Bool
-withinStatelessResetLimit rate bytes
-    -- RFC 9000, section 10.3: "An endpoint MUST NOT send a Stateless
-    -- Reset that is three times or more larger than the packet it
-    -- receives".  Checked first, so that it uses up nothing of the rate.
-    | statelessResetSize >= 3 * bytes = return False
-    | otherwise = addWithin rate 1 statelessResetLimit
+-- | Whether a stateless reset may be sent under 'statelessResetLimit'.
+withinStatelessResetLimit :: Rate -> IO Bool
+withinStatelessResetLimit rate = addWithin rate 1 statelessResetLimit

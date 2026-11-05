@@ -11,6 +11,7 @@ import Control.Monad
 import qualified Data.ByteString as BS
 import Data.IORef
 import qualified Network.Socket as NS
+import qualified Network.Socket.ByteString as NSB
 import qualified System.Timeout as Timeout
 import Test.Hspec
 
@@ -149,6 +150,14 @@ spec = do
             withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
         it "raises the limit on unidirectional streams by their own number" $ do
             withPipe (DropClientPacket []) $ testUniStreams cc sc waitS
+    describe "a stateless reset" $ do
+        it "is smaller than the packet it answers" $ do
+            withAsync (run sc $ \_ -> return ()) $ \_ -> do
+                waitS
+                -- A reset of the server's, sent back to it, as another
+                -- server would.  It used to be answered at the same size.
+                sizes <- resetSizes [1280, 640, 60]
+                sizes `shouldBe` [Just 640, Just 320, Just 30]
     describe "the client's socket" $ do
         it "is closed when the peer ends the connection" $ do
             withPipe (DropClientPacket []) $ testSocketClosed cc sc waitS
@@ -1100,3 +1109,17 @@ testPeerClosed cc sc waitS expected body = do
         _ <- recvStream strm 1024
         sendStream strm "pong"
         putMVar done ()
+
+-- | Sending the server a short header packet of each size for a connection
+--   it does not know, and the size of the stateless reset it answers with.
+resetSizes :: [Int] -> IO [Maybe Int]
+resetSizes lens = do
+    addr : _ <-
+        NS.getAddrInfo
+            (Just NS.defaultHints{NS.addrSocketType = NS.Datagram})
+            (Just "127.0.0.1")
+            (Just "15003")
+    E.bracket (NS.openSocket addr) NS.close $ \s -> forM lens $ \len -> do
+        _ <-
+            NSB.sendTo s (BS.cons 0x40 $ BS.replicate (len - 1) 0x11) $ NS.addrAddress addr
+        fmap (BS.length . fst) <$> Timeout.timeout 1000000 (NSB.recvFrom s 2048)

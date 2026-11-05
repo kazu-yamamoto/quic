@@ -322,8 +322,8 @@ mkBS ptr siz = do
 
 ----------------------------------------------------------------
 
--- | A Stateless Reset carrying the given token: 1280 octets, of which the
---   last sixteen are the token and the rest is noise.
+-- | A Stateless Reset of the given size carrying the given token: the
+--   last sixteen octets are the token and the rest is noise.
 --
 -- RFC 9000 Sec 10.3 fixes the first two bits at 01 -- header form 0 and the
 -- QUIC Bit set -- so that it cannot be told from an ordinary short header
@@ -333,13 +333,12 @@ mkBS ptr siz = do
 -- in it.  We are answering a packet we have no connection for, so whether the
 -- peer asked is exactly what we cannot know.
 --
--- 'statelessResetSize' octets: the flags, the random bytes and the token.
--- The caller sees that it is under three times what it answers (Sec 10.3).
-makeStatelessReset :: StatelessResetToken -> IO ByteString
-makeStatelessReset srt = do
+-- The caller chooses the size with 'statelessResetSizeFor'.
+makeStatelessReset :: Int -> StatelessResetToken -> IO ByteString
+makeStatelessReset siz srt = do
     r <- randomRIO (0, 255)
     let flag = 0x40 .|. (r .&. 0x3f)
-        bodySize = statelessResetSize - 1 - 16
+        bodySize = siz - 1 - 16
 #if MIN_VERSION_random(1,3,0)
     body <- getStdRandom $ uniformByteString bodySize
 #else
