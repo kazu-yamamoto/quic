@@ -33,6 +33,10 @@ import Network.QUIC.Types
 
 -- | Running a QUIC client.
 --   A UDP socket is created according to 'ccServerName' and 'ccPortName'.
+--
+--   If the server closes the connection with NO_ERROR, an operation waiting
+--   on the server throws 'ConnectionIsClosed'.  Otherwise the action runs to
+--   its end, and its result is returned.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 -- Don't use handleLogUnit here because of a return value.
 run conf client = do
@@ -102,7 +106,15 @@ runClient conf client0 isICVN verInfo = do
             c4 = labelMe "concurrently4" >> concurrently_ c3 s5
             c5 =
                 labelMe "concurrently5"
-                    >> concurrently (c4 `E.catch` \(_ :: InternalControl) -> return ()) s6
+                    >> concurrently (c4 `E.catches` handlers) s6
+            -- A peer closing with NO_ERROR leaves the application to finish:
+            -- what waits on the peer gives up with 'ConnectionIsClosed'.
+            handlers =
+                [ E.Handler $ \(_ :: InternalControl) -> return ()
+                , E.Handler $ \e -> case e of
+                    ConnectionIsClosed _ -> return ()
+                    _ -> E.throwIO e
+                ]
             runThreads = snd <$> c5
         when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog (void $ migrate conn)
         ex <- E.try runThreads

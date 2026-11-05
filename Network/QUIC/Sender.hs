@@ -359,7 +359,10 @@ sendP conn = do
         SwStrm tx -> sendTxStreamData conn tx
 
 sendFinal :: Connection -> IO ()
-sendFinal conn = loop 30
+sendFinal conn = do
+    -- Draining: nothing goes to a peer that has closed.
+    closed <- isPeerClosed conn
+    unless closed $ loop 30
   where
     msg = "sendFinal " ++ if isServer conn then "Server" else "Client"
     loop :: Int -> IO ()

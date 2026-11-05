@@ -15,13 +15,12 @@ module Network.QUIC.Stream.Types (
     waitFinTx,
 ) where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Network.Control
 
-import {-# SOURCE #-} Network.QUIC.Connection.Types
+import {-# SOURCE #-} Network.QUIC.Connection.Types (Connection, peerClosedSTM)
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -41,7 +40,7 @@ data Stream = Stream
     , streamRecvQ :: RecvStreamQ -- input bytestring
     , streamReass :: IORef Reass
     -- ^ Fragments which cannot be delivered yet
-    , streamSyncFinTx :: MVar ()
+    , streamSyncFinTx :: TMVar ()
     , streamResetTx :: IORef Bool
     -- ^ Whether our sending part has been reset
     , streamResetRx :: IORef (Maybe ApplicationProtocolError)
@@ -82,7 +81,7 @@ newStream streamConnection streamId txLim rxLim = do
     streamStateRx   <- newIORef emptyStreamState
     streamRecvQ     <- newRecvStreamQ
     streamReass     <- newIORef $ Reass Map.empty Nothing
-    streamSyncFinTx <- newEmptyMVar
+    streamSyncFinTx <- newEmptyTMVarIO
     streamResetTx   <- newIORef False
     streamResetRx   <- newIORef Nothing
     streamReleased  <- newIORef False
@@ -91,10 +90,12 @@ newStream streamConnection streamId txLim rxLim = do
 {- FOURMOLU_ENABLE -}
 
 syncFinTx :: Stream -> IO ()
-syncFinTx s = void $ tryPutMVar (streamSyncFinTx s) ()
+syncFinTx s = void $ atomically $ tryPutTMVar (streamSyncFinTx s) ()
 
 waitFinTx :: Stream -> IO ()
-waitFinTx s = takeMVar $ streamSyncFinTx s
+waitFinTx s =
+    atomically $
+        takeTMVar (streamSyncFinTx s) `orElse` peerClosedSTM (streamConnection s)
 
 ----------------------------------------------------------------
 

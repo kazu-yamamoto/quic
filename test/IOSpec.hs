@@ -152,6 +152,30 @@ spec = do
     describe "the client's socket" $ do
         it "is closed when the peer ends the connection" $ do
             withPipe (DropClientPacket []) $ testSocketClosed cc sc waitS
+    describe "the peer closing with NO_ERROR" $ do
+        it "wakes a client waiting in recvStream" $ do
+            withPipe (DropClientPacket []) $
+                testPeerClosed cc sc waitS Nothing $ \conn -> do
+                    strm <- stream conn
+                    sendStream strm "ping"
+                    void $ recvStream strm 1024
+                    recvStream strm 1024
+        it "wakes a client waiting in acceptStream" $ do
+            withPipe (DropClientPacket []) $
+                testPeerClosed cc sc waitS Nothing $ \conn -> do
+                    strm <- stream conn
+                    sendStream strm "ping"
+                    void $ recvStream strm 1024
+                    void $ acceptStream conn
+                    return ""
+        it "lets a client that is not waiting finish" $ do
+            withPipe (DropClientPacket []) $
+                testPeerClosed cc sc waitS (Just "done") $ \conn -> do
+                    strm <- stream conn
+                    sendStream strm "ping"
+                    void $ recvStream strm 1024
+                    threadDelay 300000
+                    return "done"
     describe "stream state" $ do
         it "can still send after the peer's RESET_STREAM" $ do
             withPipe (DropClientPacket []) $ testSendAfterReset cc sc waitS
@@ -1038,3 +1062,41 @@ testSocketClosed cc sc waitS = do
         strm <- acceptStream conn
         _ <- recvStream strm 1024
         abortConnection conn (ApplicationProtocolError 1) "bye"
+
+-- | The server answers a "ping" and returns, which closes the connection
+--   with NO_ERROR.  A client waiting on the server then gets
+--   'ConnectionIsClosed' at once rather than at the idle timeout, and one
+--   not waiting returns what it returns.  'Nothing' expects the former.
+--   Either way, the client's socket is closed.
+testPeerClosed
+    :: C.ClientConfig
+    -> ServerConfig
+    -> IO ()
+    -> Maybe BS.ByteString
+    -> (Connection -> IO BS.ByteString)
+    -> IO ()
+testPeerClosed cc sc waitS expected body = do
+    done <- newEmptyMVar
+    ref <- newIORef Nothing
+    withAsync (server done) $ \_ -> do
+        waitS
+        r <- Timeout.timeout 3000000 $ E.try $ C.run cc $ \conn -> do
+            getSocket conn >>= writeIORef ref . Just
+            body conn
+        case r of
+            Nothing -> expectationFailure "the client waited for the idle timeout"
+            Just (Left e) -> case (e, expected) of
+                (ConnectionIsClosed _, Nothing) -> return ()
+                _ -> expectationFailure $ show e
+            Just (Right bs) -> Just bs `shouldBe` expected
+        msock <- readIORef ref
+        case msock of
+            Nothing -> expectationFailure "no socket"
+            Just sock -> NS.withFdSocket sock return `shouldReturn` (-1)
+        takeMVar done
+  where
+    server done = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        sendStream strm "pong"
+        putMVar done ()

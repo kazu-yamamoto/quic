@@ -574,7 +574,8 @@ type DatagramQ = TQueue ByteString
 
 data Shared = Shared
     { sharedCloseSent :: IORef Bool
-    , sharedCloseReceived :: IORef Bool
+    , sharedCloseReceived :: TVar (Maybe ReasonPhrase)
+    -- ^ The reason of a CONNECTION_CLOSE(NO_ERROR) from the peer
     , shared1RTTReady :: IORef Bool
     , sharedSendStreamQ :: SendStreamQ
     }
@@ -582,7 +583,7 @@ data Shared = Shared
 newShared :: IO Shared
 newShared = do
     sharedCloseSent <- newIORef False
-    sharedCloseReceived <- newIORef False
+    sharedCloseReceived <- newTVarIO Nothing
     shared1RTTReady <- newIORef False
     sharedSendStreamQ <- newTQueueIO
     return Shared{..}
@@ -591,3 +592,26 @@ newShared = do
 
 mainDone :: Connection -> IO ()
 mainDone conn = atomically $ writeTVar (connDone conn) True
+
+-- | The peer has closed the connection: we drain, so nothing is sent back
+--   (RFC 9000 Sec 10.2.2), and what is waiting on the peer gives up.
+setPeerClosed :: Connection -> ReasonPhrase -> IO ()
+setPeerClosed conn reason = do
+    writeIORef (connCloseSent conn) True
+    atomically $ writeTVar (sharedCloseReceived $ shared conn) $ Just reason
+
+isPeerClosed :: Connection -> IO Bool
+isPeerClosed conn = isJust <$> readTVarIO (sharedCloseReceived $ shared conn)
+
+-- | Waiting for the peer to close, then throwing 'ConnectionIsClosed'.
+--   An alternative for a wait on the peer.
+peerClosedSTM :: Connection -> STM a
+peerClosedSTM conn = do
+    mr <- readTVar $ sharedCloseReceived $ shared conn
+    case mr of
+        Nothing -> retry
+        Just reason -> throwSTM $ ConnectionIsClosed reason
+
+-- | Throwing 'ConnectionIsClosed' if the peer has closed.
+checkPeerClosedSTM :: Connection -> STM ()
+checkPeerClosedSTM conn = peerClosedSTM conn `orElse` return ()

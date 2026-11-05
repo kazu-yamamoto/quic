@@ -114,6 +114,7 @@ split n0 dats0 = loop n0 dats0 id
 checkBlocked :: Stream -> Int -> Bool -> IO (Either Blocked Int)
 checkBlocked s len wait = atomically $ do
     let conn = streamConnection s
+    checkPeerClosedSTM conn
     strmFlow <- readStreamFlowTx s
     connFlow <- readConnectionFlowTx conn
     let strmWindow = txWindowSize strmFlow
@@ -156,7 +157,7 @@ closeStream s = do
         receiveOnly =
             (isClient conn && isServerInitiatedUnidirectional sid)
                 || (isServer conn && isClientInitiatedUnidirectional sid)
-    closed <- isConnectionClosed conn
+    closed <- (||) <$> isConnectionClosed conn <*> isPeerClosed conn
     sclosed <- isTxStreamClosed s
     unless (receiveOnly || closed || sclosed) $ do
         setTxStreamClosed s
@@ -335,4 +336,4 @@ recvDatagramMany = atomically . flushTQueue . connRecvDatagramQ
 
 -- | Receiving a DATAGRAM frame in STM.
 recvDatagramSTM :: Connection -> STM ByteString
-recvDatagramSTM = readTQueue . connRecvDatagramQ
+recvDatagramSTM conn = readTQueue (connRecvDatagramQ conn) `orElse` peerClosedSTM conn
