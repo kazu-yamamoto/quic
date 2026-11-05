@@ -14,6 +14,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Data.IORef
 import qualified Data.IntMap.Strict as IntMap
+import GHC.Conc (getUncaughtExceptionHandler, setUncaughtExceptionHandler)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import qualified System.Timeout as Timeout
@@ -259,6 +260,8 @@ spec = do
             withPipe (DropClientPacket []) $ testServerThrows cc sc waitS
         it "tells the peer before waiting for the application" $ do
             withPipe (DropClientPacket []) $ testSlowApp cc sc waitS
+        it "leaves nothing uncaught when stopped as a connection ends" $ do
+            withPipe (DropClientPacket []) $ noUncaught $ testSlowApp cc sc waitS
     describe "port handover" $ do
         it "ignores a leftover datagram from the connection that just closed" $
             withPipeStray (Randomly 20) $
@@ -1214,6 +1217,23 @@ testSlowApp cc0 sc waitS =
     client = do
         waitS
         C.run cc $ \_conn -> threadDelay 1500000
+
+-- | Running an action and failing if any thread let an exception go
+--   uncaught meanwhile.
+--
+-- Stopping a server told each connection to close by throwing to its main
+-- thread.  'testSlowApp' stops the server while its connection waits for an
+-- application that is slow to unwind, and the exception arrived in the
+-- teardown, where nothing caught it: the runtime reported an uncaught
+-- 'Abort' every time.
+noUncaught :: IO () -> IO ()
+noUncaught act = do
+    caught <- newIORef []
+    old <- getUncaughtExceptionHandler
+    setUncaughtExceptionHandler $ \e ->
+        atomicModifyIORef' caught $ \es -> (show e : es, ())
+    act `E.finally` setUncaughtExceptionHandler old
+    readIORef caught `shouldReturn` []
 
 frameEncodingError :: QUICException -> Bool
 frameEncodingError (TransportErrorIsReceived FrameEncodingError _) = True

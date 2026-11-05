@@ -8,7 +8,6 @@ module Network.QUIC.Server.Run (
     stop,
 ) where
 
-import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
@@ -184,10 +183,6 @@ stopping stvar = atomically $ writeTVar stvar Stopped
 -- Hearing the peers is another matter: once the successor has the port, on
 -- Linux it is the successor that receives.  See Note [Binding the same port
 -- twice].  Sending still works, which is what this relies on.
---
--- Each is ended from a thread of its own, because 'throwTo' waits for the
--- exception to be taken and a connection whose application is slow to
--- unwind would hold up the rest.
 
 -- | Telling every connection to stop, and waiting until none is left.
 --
@@ -198,12 +193,9 @@ stopping stvar = atomically $ writeTVar stvar Stopped
 -- peer heard nothing and sat until its idle timeout.  It is also a thread
 -- reading a descriptor number that the kernel may hand to someone else.
 --
--- Each connection is told once.  Telling it again a second later cannot
--- hurry a connection that is already closing down under 'mask', and what it
--- does reach is the CONNECTION_CLOSE being sent -- which it then interrupts
--- and loses, which is the thing this is here to prevent.  The second pass
--- is only to tell connections that were not yet in the table when the first
--- one looked.
+-- Telling is 'abortConnection', which only asks, so telling a connection
+-- again does nothing.  Every second the table is looked at again, for the
+-- connections that were not in it yet.
 --
 -- There is no cap on the wait.  An application that never finishes with a
 -- connection therefore keeps the server from returning, which is a
@@ -211,18 +203,16 @@ stopping stvar = atomically $ writeTVar stvar Stopped
 -- what this changed.  http3 caps the wait it does of its own, so an H3
 -- connection comes back within that cap however its handler behaves.
 shutdownConnections :: ServerConfig -> Dispatch -> IO ()
-shutdownConnections conf dispatch = loop []
+shutdownConnections conf dispatch = loop
   where
     (err, reason) = scCloseReason conf
     shut conn = abortConnection conn err reason
-    loop told = do
-        conns <- liveConnections dispatch
-        let unTold = [conn | conn <- conns, mainThreadId conn `notElem` told]
-        mapM_ (void . forkIO . shut) unTold
+    loop = do
+        liveConnections dispatch >>= mapM_ shut
         done <- T.timeout 1000000 $ waitNoConnection dispatch
         case done of
             Just () -> return ()
-            Nothing -> loop $ map mainThreadId unTold ++ told
+            Nothing -> loop
 
 -- | Running a dispatcher on each socket.  The caller ends them all
 --   together, by telling them, so there is nothing to undo here for the
@@ -289,6 +279,8 @@ runServer conf server0 dispatch acc = do
                 c2 = labelMe "concurrently2" >> concurrently_ c1 s3
                 c3 = labelMe "concurrently3" >> concurrently_ c2 s4
                 c4 = labelMe "concurrently4" >> concurrently_ c3 s5
+                c4' = labelMe "concurrently4'" >> concurrently_ c4 s7
+                s7 = labelMe "abort watcher" >> watchAbortRequest conn
                 -- Telling the peer here, and not below, because here is the
                 -- one place where it can be done at all: the nested
                 -- 'concurrently_'s above have waited for every protocol
@@ -316,10 +308,10 @@ runServer conf server0 dispatch acc = do
                 c5 =
                     labelMe "concurrently5"
                         >> concurrently_
-                            (tellThenRaise (c4 `E.catch` \(_ :: InternalControl) -> return ()))
+                            (tellThenRaise (c4' `E.catch` \(_ :: InternalControl) -> return ()))
                             s6
                 runThreads = c5
-            ex <- E.try runThreads
+            ex <- E.try runThreads >>= abortRequested conn
             sendFinal conn
             setConnectionClosed conn
             closure conn ldcc ex

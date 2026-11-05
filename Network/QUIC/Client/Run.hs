@@ -110,9 +110,11 @@ runClient conf client0 isICVN verInfo = do
             c2 = labelMe "concurrently2" >> concurrently_ c1 s3
             c3 = labelMe "concurrently3" >> concurrently_ c2 s4
             c4 = labelMe "concurrently4" >> concurrently_ c3 s5
+            c4' = labelMe "concurrently4'" >> concurrently_ c4 s7
+            s7 = labelMe "abort watcher" >> watchAbortRequest conn
             c5 =
                 labelMe "concurrently5"
-                    >> concurrently (c4 `E.catches` handlers) s6
+                    >> concurrently (c4' `E.catches` handlers) s6
             -- A peer closing with NO_ERROR leaves the application to finish:
             -- what waits on the peer gives up with 'ConnectionIsClosed'.
             handlers =
@@ -123,7 +125,7 @@ runClient conf client0 isICVN verInfo = do
                 ]
             runThreads = snd <$> c5
         when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog (void $ migrate conn)
-        ex <- E.try runThreads
+        ex <- E.try runThreads >>= abortRequested conn
         sendFinal conn
         setConnectionClosed conn
         closure conn ldcc ex
