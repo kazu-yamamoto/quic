@@ -241,6 +241,16 @@ spec = do
             withPipe (DropClientPacket []) $ testCloseWhileArriving cc sc waitS
         it "counts a reset stream's final size against the connection" $ do
             withPipe (DropClientPacket []) $ testResetCountsAgainstTheWindow cc sc waitS
+        it "holds a reset stream's final size to the stream's limit" $ do
+            withPipe (DropClientPacket []) $ testResetOverStreamLimit cc sc waitS
+        it "counts the gaps of a stream against the connection" $ do
+            withPipe (DropClientPacket []) $ testGapCountsAgainstTheWindow cc sc waitS
+        it "holds a closed stream to the stream's limit" $ do
+            withPipe (DropClientPacket []) $
+                testDepartedOverLimit (100000, 1000) cc sc waitS
+        it "holds a closed stream to the connection's limit" $ do
+            withPipe (DropClientPacket []) $
+                testDepartedOverLimit (1000, 100000) cc sc waitS
     describe "closing" $ do
         it "tells the peer when the application gives up" $ do
             withPipe (DropClientPacket []) $ testServerThrows cc sc waitS
@@ -1019,6 +1029,100 @@ testResetCountsAgainstTheWindow cc0 sc0 waitS =
     client = do
         waitS
         C.run cc $ \_conn -> threadDelay 1000000
+
+-- | RFC 9000, section 4.5: the final size counts against the stream's
+--   limit as well as the connection's.  Only the connection's was checked,
+--   so a reset could claim far more than the stream was ever allowed.
+testResetOverStreamLimit :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testResetOverStreamLimit cc0 sc0 waitS =
+    withAsync quietServer $ \_ -> client `shouldThrow` flowControlError
+  where
+    sc =
+        sc0
+            { scParameters =
+                (scParameters sc0)
+                    { initialMaxData = 1000000
+                    , initialMaxStreamDataBidiRemote = 1000
+                    }
+            }
+    quietServer = run sc $ \conn -> forever $ void $ acceptStream conn
+    cc = cc0{ccHooks = (ccHooks cc0){onPlainCreated = inject}}
+    inject lvl plain
+        | lvl == RTT1Level =
+            plain
+                { plainFrames =
+                    ResetStream 0 (ApplicationProtocolError 0) 5000 : plainFrames plain
+                }
+        | otherwise = plain
+    client = do
+        waitS
+        C.run cc $ \_conn -> threadDelay 1000000
+
+-- | RFC 9000, section 4.1: what the peer has spent is the largest offset
+--   it has sent on each stream, gaps and all.  One octet at offset five
+--   thousand spends five thousand and one, well past this server's thousand;
+--   only the one octet was counted.
+testGapCountsAgainstTheWindow
+    :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testGapCountsAgainstTheWindow cc0 sc0 waitS =
+    withAsync quietServer $ \_ -> client `shouldThrow` flowControlError
+  where
+    sc = sc0{scParameters = (scParameters sc0){initialMaxData = 1000}}
+    quietServer = run sc $ \conn -> forever $ void $ acceptStream conn
+    cc = cc0{ccHooks = (ccHooks cc0){onPlainCreated = inject}}
+    inject lvl plain
+        | lvl == RTT1Level =
+            plain{plainFrames = StreamF 0 5000 ["x"] False : plainFrames plain}
+        | otherwise = plain
+    client = do
+        waitS
+        C.run cc $ \_conn -> threadDelay 1000000
+
+-- | A stream the application has closed, and the peer has not finished, is
+--   still held to the limits it was sent under: here a frame for it goes
+--   past the limit given as (connection, stream).  Nothing was checked for
+--   such a frame.  The server's STOP_SENDING is hidden, so that the client
+--   does not reset the stream and end it.
+testDepartedOverLimit
+    :: (Int, Int) -> C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testDepartedOverLimit (connLim, strmLim) cc0 sc0 waitS =
+    withAsync server $ \_ -> client `shouldThrow` flowControlError
+  where
+    sc =
+        sc0
+            { scParameters =
+                (scParameters sc0)
+                    { initialMaxData = connLim
+                    , initialMaxStreamDataBidiRemote = strmLim
+                    }
+            , scHooks = (scHooks sc0){onPlainCreated = hide}
+            }
+    hide _ plain = plain{plainFrames = map unstop $ plainFrames plain}
+    unstop StopSending{} = Ping
+    unstop f = f
+    server = run sc $ \conn -> forever $ do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1
+        closeStream strm
+    -- One octet at offset 5000 of stream 0, past whichever limit is the
+    -- smaller, along with the data of stream 4, which goes out only once
+    -- the server has closed stream 0.
+    cc = cc0{ccHooks = (ccHooks cc0){onPlainCreated = inject}}
+    inject lvl plain
+        | lvl == RTT1Level && any onStream4 (plainFrames plain) =
+            plain{plainFrames = StreamF 0 5000 ["x"] False : plainFrames plain}
+        | otherwise = plain
+    onStream4 (StreamF 4 _ _ _) = True
+    onStream4 _ = False
+    client = do
+        waitS
+        C.run cc $ \conn -> do
+            s0 <- stream conn
+            sendStream s0 "x"
+            threadDelay 300000
+            s1 <- stream conn
+            sendStream s1 "y"
+            threadDelay 1000000
 
 -- | RFC 9000, section 10.2: an endpoint that ends a connection sends
 --   CONNECTION_CLOSE.  Anything thrown in here that is not already on its way

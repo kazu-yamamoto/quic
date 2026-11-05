@@ -304,7 +304,7 @@ data Connection = Connection
     , -- | What a stream the application has closed still owes the
       -- connection's window, for as long as the peer has not finished it.
       -- See 'Network.QUIC.Connection.StreamTable.keepDepartedStream'.
-      departedStreams   :: IORef (IntMap RxBounds)
+      departedStreams   :: IORef (IntMap Departed)
     , myStreamId        :: TVar Concurrency -- C:0 S:1
     , myUniStreamId     :: TVar Concurrency -- C:2 S:3
     , peerStreamId      :: IORef Concurrency -- C:1 S:0

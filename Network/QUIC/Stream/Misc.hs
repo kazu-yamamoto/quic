@@ -17,9 +17,8 @@ module Network.QUIC.Stream.Misc (
     getRxBounds,
     noteRxFrame,
     noteRxFinalSize,
-    addRxCounted,
-    takeRxUncounted,
-    takeRxUnread,
+    addRxCredited,
+    takeRxOwed,
     --
     readStreamFlowTx,
     addTxStreamData,
@@ -164,70 +163,52 @@ data FinalSizeProblem
       DataPastFinalSize
     deriving (Eq, Show)
 
--- | Taking in where one STREAM frame says the stream reaches, and whether it
---   ends it.  Nothing is counted here: a frame may still turn out to be a
---   duplicate, and only what is taken counts.
 -- | What the receiving side has seen of where this stream ends.
 getRxBounds :: Stream -> IO RxBounds
 getRxBounds Stream{..} = readIORef streamRxBounds
 
-noteRxFrame :: Stream -> Int -> Bool -> IO (Maybe FinalSizeProblem)
+-- | Answering with how far the frame takes the stream past what has been
+--   seen of it: what the connection's flow controller is to count as
+--   received for it (RFC 9000 Sec 4.1).  A copy of what was seen is 0.
+noteRxFrame :: Stream -> Int -> Bool -> IO (Either FinalSizeProblem Int)
 noteRxFrame Stream{..} end fin = atomicModifyIORef' streamRxBounds note
   where
     note b@RxBounds{..}
         | fin = case rxFinal of
             Just f
-                | f /= end -> (b, Just FinalSizeChanged)
+                | f /= end -> (b, Left FinalSizeChanged)
             _
-                | end < rxHighest -> (b, Just FinalSizeTooSmall)
-                | otherwise ->
-                    (b{rxFinal = Just end, rxHighest = max rxHighest end}, Nothing)
+                | end < rxHighest -> (b, Left FinalSizeTooSmall)
+                | otherwise -> (b{rxFinal = Just end, rxHighest = end}, Right (end - rxHighest))
         | otherwise = case rxFinal of
             Just f
-                | end > f -> (b, Just DataPastFinalSize)
-            _ -> (b{rxHighest = max rxHighest end}, Nothing)
+                | end > f -> (b, Left DataPastFinalSize)
+            _ -> (b{rxHighest = max rxHighest end}, Right (max 0 (end - rxHighest)))
 
 -- | The same for the final size a RESET_STREAM carries.
-noteRxFinalSize :: Stream -> Int -> IO (Maybe FinalSizeProblem)
+noteRxFinalSize :: Stream -> Int -> IO (Either FinalSizeProblem Int)
 noteRxFinalSize s end = noteRxFrame s end True
 
--- | Counting octets the connection's flow controller has taken for the
---   stream.
-addRxCounted :: Stream -> Int -> IO ()
-addRxCounted Stream{..} n =
-    atomicModifyIORef'' streamRxBounds $ \b -> b{rxCounted = rxCounted b + n}
+-- | Counting octets as consumed on the stream's behalf though the
+--   application has not read them.
+addRxCredited :: Stream -> Int -> IO ()
+addRxCredited Stream{..} n =
+    atomicModifyIORef'' streamRxBounds $ \b -> b{rxCredited = rxCredited b + n}
 
--- | The octets the peer spent on the stream that will never arrive, and
---   which the connection's flow controller has therefore not counted.
+-- | What the connection's flow controller has counted as received for the
+--   stream and nobody has counted as consumed: what is owed back once the
+--   application is done with it.
 --
--- RFC 9000 Sec 4.5: "A receiver SHOULD use the final size to account for all
--- bytes sent on the stream in its connection-level flow controller."  Left
--- uncounted, the window we advertise falls behind what the peer believes it
--- has spent, by the tail of every stream it resets, until it has none left.
---
--- Answered once: whatever is asked for here is counted from then on.
-takeRxUncounted :: Stream -> IO Int
-takeRxUncounted Stream{..} = atomicModifyIORef' streamRxBounds take'
-  where
-    take' b@RxBounds{..} = case rxFinal of
-        Just f
-            | f > rxCounted ->
-                (b{rxCounted = f, rxCredited = rxCredited + f - rxCounted}, f - rxCounted)
-        _ -> (b, 0)
-
--- | The octets of the stream the connection's flow controller has counted
---   and the application will never read.
---
--- What it read it has already counted itself, in 'recvStream'.  What it
--- leaves -- a request whose body a server answers without reading, say --
--- was counted as received and is never counted as consumed, so the window we
--- advertise stays that much smaller for the rest of the connection.  The peer
--- is then blocked by octets nobody is waiting for.
+-- What it read it has already counted itself, in 'recvStream'.  The rest --
+-- a request body a server answers without reading, or what was lost on the
+-- way of a stream whose end is known -- was spent by the peer all the same,
+-- and left uncounted the window we advertise stays that much smaller for
+-- the rest of the connection.
 --
 -- Answered once for each octet: what is answered here is counted as
 -- credited.
-takeRxUnread :: Stream -> IO Int
-takeRxUnread Stream{..} = do
+takeRxOwed :: Stream -> IO Int
+takeRxOwed Stream{..} = do
     consumed <- rxfConsumed <$> readIORef streamFlowRx
     atomicModifyIORef' streamRxBounds $ take' consumed
   where
@@ -235,4 +216,4 @@ takeRxUnread Stream{..} = do
         | owed > 0 = (b{rxCredited = rxCredited + owed}, owed)
         | otherwise = (b, 0)
       where
-        owed = rxCounted - consumed - rxCredited
+        owed = rxHighest - consumed - rxCredited

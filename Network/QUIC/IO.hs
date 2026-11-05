@@ -208,18 +208,14 @@ releaseStream :: Stream -> IO ()
 releaseStream s = do
     first <- markReleased s
     when first $ do
-        -- FLOW CONTROL: MAX_DATA: recv: the octets of this stream the
-        -- application will never read.  Left uncounted, the window we
-        -- advertise stays that much smaller for the rest of the connection:
-        -- a server that answers a request without reading its body pays for
-        -- that body until the connection ends, and enough of them leave the
-        -- peer blocked by octets nobody is waiting for.
-        unread <- takeRxUnread s
-        -- And, if the peer has said where the stream ends, the rest of it:
-        -- RFC 9000 Sec 4.5 has a receiver account for every octet sent on a
-        -- stream, and what was lost on the way was still spent.
-        uncounted <- takeRxUncounted s
-        let owed = unread + uncounted
+        -- FLOW CONTROL: MAX_DATA: recv: what the connection counted as
+        -- received for this stream and the application will never read:
+        -- a request body a server answers without reading, say, or what
+        -- never arrived of a stream whose end is known.  Left uncounted, the
+        -- window we advertise stays that much smaller for the rest of the
+        -- connection, and enough of them leave the peer blocked by octets
+        -- nobody is waiting for.
+        owed <- takeRxOwed s
         when (owed > 0) $ do
             mx <- updateFlowRx conn owed
             case mx of
