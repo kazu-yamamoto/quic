@@ -169,6 +169,8 @@ spec = do
                         , BS.replicate 1024 0x11
                         ]
         it "follows a client that rebinds" $ testRebindPath cc sc waitS
+        it "goes back when the new one is not validated" $
+            testSpuriousMigration cc sc waitS
     describe "a stateless reset" $ do
         it "is smaller than the packet it answers" $ do
             withAsync (run sc $ \_ -> return ()) $ \_ -> do
@@ -1215,3 +1217,28 @@ testRebindPath cc sc waitS = do
                         threadDelay 100000
                         wait (n - 1)
             wait 20
+
+-- | RFC 9000 Sec 9.3.2: a packet of the client's, forwarded from another
+--   address, moves the server there, and the validation of that address
+--   fails.  The server waited for the PATH_RESPONSE for ever and went on
+--   sending to the address that never answered.
+testSpuriousMigration :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testSpuriousMigration cc sc waitS = do
+    paths <- newEmptyMVar
+    trigger <- newEmptyMVar
+    withPipe (ForwardAside trigger) $
+        withAsync (pathEchoServer sc paths) $ \_ -> do
+            waitS
+            C.run cc $ \conn -> do
+                strm <- stream conn
+                echo strm "ping1" `shouldReturn` Just "ping1"
+                before <- takeMVar paths
+                putMVar trigger ()
+                -- Answered on the spurious path, and so not heard until
+                -- the server has given up on it.
+                sendStream strm "ping2"
+                Timeout.timeout 8000000 (recvStream strm 1024)
+                    `shouldReturn` Just "ping2"
+                _ <- takeMVar paths
+                echo strm "ping3" `shouldReturn` Just "ping3"
+                takeMVar paths `shouldReturn` before
