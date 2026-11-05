@@ -3,27 +3,62 @@
 
 ## 0.3.20
 
-* The dispatchers run under a `ThreadManager` and are waited for before
-  the listening sockets are closed, instead of being killed.
-* Every socket this library closes is closed with `close(2)`, rather than
-  with `close` and the IO manager it goes through to tell a waiter.  Each
-  is closed where no thread can be inside a call on it; the entries below
-  are what it took to make that true.
-* Requires network 3.2.12: on Windows, giving up on a receive there
-  cancels only that receive, not a send of the sender's on the same
-  socket.
-* A socket `rebind` retires is left by the reader however it ends, and
-  closed by the sender, the only other thread which sends on it, between
-  two sends.  `rebind` used to close it after a delay long enough that
-  the reader probably had left, and loses its `Microseconds` argument.
-* `killReaders` sees the threads out rather than only throwing at them, so
-  a caller which goes on to use what they were using is not racing them.
-  The closer is one: it sends and receives on the connection's socket
-  after `killReaders`, and then closes it.
-* A client's reader leaves its socket for the sender on an idle timeout
-  too, rather than closing it where the sender may be inside a send on
-  it.  What ends the connection there is the receiver, which throws
-  `ConnectionIsTimeout` at the same deadline.
+Requires network 3.2.12, and allows tls 2.5.  `closeStream` and
+`resetStream` now send STOP_SENDING while the peer has not finished the
+stream, and `closeStreamWith` gives its error code.  `abortConnection`
+returns at once instead of waiting for the exception to be taken.
+`Network.QUIC.Internal.rebind` loses its `Microseconds` argument.
+
+* Keep held stream fragments disjoint
+  [#179](https://github.com/kazu-yamamoto/quic/pull/179)
+* Give RESET_STREAM the final size of what was queued
+  [#180](https://github.com/kazu-yamamoto/quic/pull/180)
+* Scale ACK Delay by the peer's ack_delay_exponent
+  [#181](https://github.com/kazu-yamamoto/quic/pull/181)
+* Cap the size of ACK frames
+  [#182](https://github.com/kazu-yamamoto/quic/pull/182)
+* Discard Version Negotiation and Retry once a packet is processed
+  [#183](https://github.com/kazu-yamamoto/quic/pull/183)
+* Fail version negotiation when no version is in common
+  [#184](https://github.com/kazu-yamamoto/quic/pull/184)
+* Keep the dispatcher receiving after any number of failed receives
+  [#185](https://github.com/kazu-yamamoto/quic/pull/185)
+* Answer every STOP_SENDING and NEW_CONNECTION_ID
+  [#186](https://github.com/kazu-yamamoto/quic/pull/186)
+* Honor the peer's max_udp_payload_size
+  [#187](https://github.com/kazu-yamamoto/quic/pull/187)
+* Decode a packet number against the largest in its own space
+  [#188](https://github.com/kazu-yamamoto/quic/pull/188)
+* Close with FRAME_ENCODING_ERROR on a frame cut short
+  [#189](https://github.com/kazu-yamamoto/quic/pull/189)
+* Close the socket rebind replaced even if the connection ends first
+  [#190](https://github.com/kazu-yamamoto/quic/pull/190)
+* Close the socket rebind makes if its connect fails
+  [#191](https://github.com/kazu-yamamoto/quic/pull/191)
+* Close the client's socket when the peer ends the connection
+  [#192](https://github.com/kazu-yamamoto/quic/pull/192)
+* Stop the watch dog instead of spinning when its socket fails
+  [#193](https://github.com/kazu-yamamoto/quic/pull/193)
+* Let the client honor a CONNECTION_CLOSE with NO_ERROR
+  [#194](https://github.com/kazu-yamamoto/quic/pull/194)
+* Make a stateless reset smaller than the packet it answers
+  [#195](https://github.com/kazu-yamamoto/quic/pull/195)
+* Move the server to a new path only for a packet that decrypts
+  [#196](https://github.com/kazu-yamamoto/quic/pull/196)
+* Give up a path validation in time and go back to the old path
+  [#197](https://github.com/kazu-yamamoto/quic/pull/197)
+* Bound the streams kept after the application closes them
+  [#198](https://github.com/kazu-yamamoto/quic/pull/198)
+* Close our sockets only where no thread is inside a call on them
+  [#199](https://github.com/kazu-yamamoto/quic/pull/199)
+* Count received stream data by the largest offset
+  [#200](https://github.com/kazu-yamamoto/quic/pull/200)
+* Take a stream out of the table and note its frames in one transaction each
+  [#201](https://github.com/kazu-yamamoto/quic/pull/201)
+* Use remembered limits only for 0-RTT and refuse ones lowered under it
+  [#202](https://github.com/kazu-yamamoto/quic/pull/202)
+* Ask a connection to abort instead of throwing to its main thread
+  [#203](https://github.com/kazu-yamamoto/quic/pull/203)
 
 ## 0.3.19
 
@@ -39,7 +74,7 @@
 * The dispatcher's receive tells a closed socket from a datagram's
   failure with network's `isClosedSocketError` rather than by comparing
   the error type here.
-* Requires network 3.2.10 and network-run 0.7.
+* Requires network 3.2.10.
 * The closer's drain gives up on its receive at the deadline rather than
   having `timeout` abandon it, so the six calls it could leave behind, and
   the close which ended them, are gone.
