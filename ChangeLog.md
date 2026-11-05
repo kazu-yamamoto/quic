@@ -8,7 +8,10 @@
 * Every socket this library closes is closed with `close(2)`, rather than
   with `close` and the IO manager it goes through to tell a waiter.  Each
   is closed where no thread can be inside a call on it; the entries below
-  are what it took to make that true.  Requires network 3.2.11.
+  are what it took to make that true.
+* Requires network 3.2.12: on Windows, giving up on a receive there
+  cancels only that receive, not a send of the sender's on the same
+  socket.
 * A socket `rebind` retires is left by the reader however it ends, and
   closed by the sender, the only other thread which sends on it, between
   two sends.  `rebind` used to close it after a delay long enough that
