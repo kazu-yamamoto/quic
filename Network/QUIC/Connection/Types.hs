@@ -319,6 +319,9 @@ data Connection = Connection
     , bytesTx           :: IORef Int
     , bytesRx           :: IORef Int
     , connDone          :: TVar Bool
+    , connAbortRequest  :: TVar (Maybe (ApplicationProtocolError, ReasonPhrase))
+    -- ^ What 'Network.QUIC.Connection.Misc.abortConnection' asked to close
+    --   the connection with, for its protocol threads to act on.
     , -- TLS
       pendingQ          :: Array EncryptionLevel (TVar [ReceivedPacket])
     , ciphers           :: IOArray EncryptionLevel Cipher
@@ -432,6 +435,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     bytesTx           <- newIORef 0
     bytesRx           <- newIORef 0
     connDone          <- newTVarIO False
+    connAbortRequest  <- newTVarIO Nothing
     connRetiredSocks  <- newIORef []
     -- TLS
     pendingQ          <- makePendingQ

@@ -38,9 +38,19 @@ module Network.QUIC.Connection.Misc (
     sendFrames,
     closeConnection,
     abortConnection,
+    watchAbortRequest,
+    abortRequested,
 ) where
 
-import Control.Concurrent.STM (TVar, atomically, writeTVar)
+import Control.Concurrent.STM (
+    TVar,
+    atomically,
+    modifyTVar',
+    readTVar,
+    readTVarIO,
+    retry,
+    writeTVar,
+ )
 import qualified Control.Exception as E
 import Network.Socket (SockAddr, Socket, unsafeClose)
 import qualified System.ThreadManager as T
@@ -294,6 +304,36 @@ closeConnection _conn err desc = E.throwIO quicexc
     quicexc = TransportErrorIsSent err desc
 
 -- | Closing a connection with an application protocol error.
+--
+-- This asks and returns; the connection's protocol threads act on it
+-- ('watchAbortRequest').  It used to throw to the connection's main thread,
+-- and a connection that had just ended took the exception where nothing
+-- caught it: in its teardown, or on the way out of the thread running it,
+-- where the runtime reported it as uncaught.  A server stopping caught one
+-- of its connections there now and then.  A connection already over now
+-- just never looks.  The first request is the one acted on.
 abortConnection
     :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
-abortConnection conn err desc = E.throwTo (mainThreadId conn) $ Abort err desc
+abortConnection Connection{..} err desc =
+    atomically $ modifyTVar' connAbortRequest $ \r -> r <|> Just (err, desc)
+
+-- | A connection's ending, as 'abortConnection' asked for it if it did.
+--   An application that asks and returns at once can see the protocol
+--   threads end before they have acted on it; it is what it asked for all
+--   the same.
+abortRequested
+    :: Connection -> Either E.SomeException a -> IO (Either E.SomeException a)
+abortRequested Connection{..} ex@(Right _) = do
+    req <- readTVarIO connAbortRequest
+    return $ case req of
+        Nothing -> ex
+        Just (err, desc) -> Left $ E.toException $ Abort err desc
+abortRequested _ ex = return ex
+
+-- | Waiting for 'abortConnection' and raising 'Abort' when it is asked:
+--   one of a connection's protocol threads, so that it ends the connection
+--   as any of them failing does.
+watchAbortRequest :: Connection -> IO ()
+watchAbortRequest Connection{..} = do
+    (err, desc) <- atomically $ readTVar connAbortRequest >>= maybe retry return
+    E.throwIO $ Abort err desc
