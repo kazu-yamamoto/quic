@@ -8,7 +8,9 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import qualified Control.Exception as E
 import Control.Monad
+import Data.Bits (shiftR)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as Short
 import Data.IORef
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
@@ -150,6 +152,23 @@ spec = do
             withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
         it "raises the limit on unidirectional streams by their own number" $ do
             withPipe (DropClientPacket []) $ testUniStreams cc sc waitS
+    describe "the server's path" $ do
+        it "stays put for a short header packet that does not decrypt" $
+            testForgedPath cc sc waitS $ \_ (CID dcid) ->
+                BS.concat [BS.singleton 0x40, Short.fromShort dcid, BS.replicate 1100 0x11]
+        it "stays put for a Handshake packet that does not decrypt" $
+            testForgedPath cc sc waitS $ \ver (CID dcid) ->
+                let Version v = ver
+                    typ = if ver == Version2 then 0x30 else 0x20
+                 in BS.concat
+                        [ BS.singleton (0xc0 + typ)
+                        , BS.pack [fromIntegral (v `shiftR` n) | n <- [24, 16, 8, 0]]
+                        , BS.singleton (fromIntegral $ Short.length dcid)
+                        , Short.fromShort dcid
+                        , BS.pack [0, 0x44, 0x00]
+                        , BS.replicate 1024 0x11
+                        ]
+        it "follows a client that rebinds" $ testRebindPath cc sc waitS
     describe "a stateless reset" $ do
         it "is smaller than the packet it answers" $ do
             withAsync (run sc $ \_ -> return ()) $ \_ -> do
@@ -1123,3 +1142,76 @@ resetSizes lens = do
         _ <-
             NSB.sendTo s (BS.cons 0x40 $ BS.replicate (len - 1) 0x11) $ NS.addrAddress addr
         fmap (BS.length . fst) <$> Timeout.timeout 1000000 (NSB.recvFrom s 2048)
+
+-- | A server that echoes, and tells after each echo where it sent it.
+pathEchoServer :: ServerConfig -> MVar NS.SockAddr -> IO ()
+pathEchoServer sc paths = run sc $ \conn -> do
+    strm <- acceptStream conn
+    let loop = do
+            bs <- recvStream strm 1024
+            unless (bs == "") $ do
+                sendStream strm bs
+                peerSockAddr <$> getPathInfo conn >>= putMVar paths
+                loop
+    loop
+
+echo :: Stream -> BS.ByteString -> IO (Maybe BS.ByteString)
+echo strm bs = do
+    sendStream strm bs
+    Timeout.timeout 2000000 $ recvStream strm 1024
+
+-- | RFC 9000 Sec 9.3: only a packet that decrypts moves the peer.  The
+--   server took a new address from any packet with its CID on it, before
+--   decrypting it, and sent everything there from then on.
+testForgedPath
+    :: C.ClientConfig
+    -> ServerConfig
+    -> IO ()
+    -> (Version -> CID -> BS.ByteString)
+    -> IO ()
+testForgedPath cc sc waitS forge = do
+    paths <- newEmptyMVar
+    withPipe (DropClientPacket []) $
+        withAsync (pathEchoServer sc paths) $ \_ -> do
+            waitS
+            C.run cc $ \conn -> do
+                strm <- stream conn
+                echo strm "ping1" `shouldReturn` Just "ping1"
+                before <- takeMVar paths
+                ver <- getVersion conn
+                dcid <- getPeerCID conn
+                addr : _ <-
+                    NS.getAddrInfo
+                        (Just NS.defaultHints{NS.addrSocketType = NS.Datagram})
+                        (Just "127.0.0.1")
+                        (Just "15003")
+                E.bracket (NS.openSocket addr) NS.close $ \s ->
+                    void $ NSB.sendTo s (forge ver dcid) $ NS.addrAddress addr
+                threadDelay 300000
+                echo strm "ping2" `shouldReturn` Just "ping2"
+                takeMVar paths `shouldReturn` before
+
+-- | A client that moves to a new port is still followed, now that the move
+--   is taken from decrypted packets.
+testRebindPath :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testRebindPath cc sc waitS = do
+    paths <- newEmptyMVar
+    -- Straight to the server: the relay would drop the new port.
+    let cc' = cc{C.ccPortName = "15003"}
+    withAsync (pathEchoServer sc paths) $ \_ -> do
+        waitS
+        C.run cc' $ \conn -> do
+            strm <- stream conn
+            echo strm "ping1" `shouldReturn` Just "ping1"
+            before <- takeMVar paths
+            void $ controlConnection conn NATRebinding
+            -- The first echo may still go out on the old path, while the
+            -- new one is being validated.
+            let wait (0 :: Int) = expectationFailure "the server never moved"
+                wait n = do
+                    echo strm "ping" `shouldReturn` Just "ping"
+                    p <- takeMVar paths
+                    when (p == before) $ do
+                        threadDelay 100000
+                        wait (n - 1)
+            wait 20

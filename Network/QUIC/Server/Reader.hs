@@ -39,7 +39,6 @@ import Network.Socket (
     Socket,
  )
 import qualified Network.Socket.ByteString as NSB
-import System.Log.FastLogger
 import qualified System.ThreadManager as T
 
 import Network.QUIC.Common
@@ -51,7 +50,6 @@ import Network.QUIC.Imports
 import Network.QUIC.Logger
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
-import Network.QUIC.Qlog
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -472,29 +470,11 @@ dispatch
                 alive <- getAlive conn
                 when alive $ do
                     void $ setSocket conn mysock -- fixme
-                    curCID <- getMyCID conn
-                    -- setMyCID is not called here since setMyCID is
-                    -- done in Receiver.
-                    let cidChanged = curCID /= dCID
-                    mPathInfo <- findPathInfo conn peersa
-                    case mPathInfo of
-                        Nothing -> do
-                            -- Taken here, before the thread rather than
-                            -- inside it, so that a peer sending from an
-                            -- address this connection has not seen gets one
-                            -- thread for the migration and not one for every
-                            -- packet.  'findPathInfo' knows the address in
-                            -- use and the one before it and nothing else, so
-                            -- a sender that moves its port -- which asks no
-                            -- spoofing of it -- is unknown every time, and
-                            -- this runs on packets nothing has authenticated
-                            -- yet.
-                            claimed <- claimMigration conn
-                            when claimed $
-                                forkManaged conn "QUIC migration" $
-                                    onClientMigration conn dCID peersa cidChanged
-                        _ -> return ()
-                    writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
+                    -- Whether the peer has moved is for the receiver to say,
+                    -- once the packet has decrypted: anyone who has seen the
+                    -- CID can send one from anywhere.
+                    let rpkt = mkReceivedPacket cpkt tim siz lvl
+                    writeRecvQ (connRecvQ conn) rpkt{rpPeerAddr = Just peersa}
 ----------------------------------------------------------------
 dispatch
     Dispatch{..}
@@ -514,29 +494,10 @@ dispatch
             Just conn -> do
                 -- fixme: is this block necessary?
                 void $ setSocket conn mysock
-                mPathInfo <- findPathInfo conn peersa
-                when (isNothing mPathInfo) $ do
-                    pathInfo <- newPathInfo peersa
-                    addPathInfo conn pathInfo
+                -- No new path from here: this packet has not decrypted, and
+                -- the peer may not migrate during the handshake anyway
+                -- (RFC 9000 Sec 9).
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 
 recvServer :: RecvQ -> IO ReceivedPacket
 recvServer = readRecvQ
-
--- | Carry out the migration the caller has claimed with 'claimMigration'.
-onClientMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
-onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
-    -- fixme: should not block
-    mcidinfo <-
-        if cidChanged
-            then timeout (Microseconds 100000) "onClientMigration" $ waitPeerCID conn
-            else return Nothing -- PathChallenge only, no RetireConnectionID
-    let msg = "Migration: " <> bhow peersa <> " (" <> bhow newdCID <> ")"
-    qlogDebug conn $ Debug $ toLogStr msg
-    connDebugLog conn $ "debug: onClientMigration: " <> msg
-    pathInfo <- newPathInfo peersa
-    -- assumed that this PathInfo is not stored in PeerInfo
-    addPathInfo conn pathInfo
-    validatePath conn pathInfo mcidinfo
-  where
-    logAction msg = connDebugLog conn ("debug: onClientMigration: " <> msg)
