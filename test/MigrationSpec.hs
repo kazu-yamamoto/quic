@@ -56,14 +56,19 @@ spec = do
         it "closes the socket it replaced even if the connection ends first" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             oldSock <- getSocket clientConn
+            -- A reader on the socket, as 'runClient' has.
+            peersa <- peerSockAddr <$> getPathInfo clientConn
+            connect oldSock peersa
+            retired <- getSocketRetire clientConn
+            forkManaged clientConn "QUIC reader" $ readerClient retired oldSock clientConn
+            threadDelay 100000
             rebind clientConn
-            -- Over before the old socket's delay is up.
+            -- Over at once, torn down as 'runClient' does.
             setDead clientConn
-            threadDelay 300000
+            killReaders clientConn
+            freeResources clientConn
             -- A closed socket has its descriptor taken away.
             withFdSocket oldSock return `shouldReturn` (-1)
-            newRetired <- getSocketRetire clientConn
-            atomically $ writeTVar newRetired True
 
         it "leaves its socket for the sender when rebind has swapped it out" $ do
             (clientConn, _) <- makeConnections serverConf Version1
@@ -96,7 +101,7 @@ spec = do
             retired <- getSocketRetire clientConn
             tid <- forkIO $ readerClient retired sock clientConn
             threadDelay 100000
-            newSock <- natRebinding peersa
+            newSock <- natRebinding False peersa
             newRetired <- newTVarIO False
             _ <- swapSocket clientConn newSock newRetired
             -- As 'killReaders' does: thrown at, not told.
@@ -124,7 +129,7 @@ spec = do
         it "closes a socket it was left even if nothing drains it" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             peersa <- peerSockAddr <$> getPathInfo clientConn
-            sock <- natRebinding peersa
+            sock <- natRebinding False peersa
             -- getSocketName says nothing of an unbound socket on Windows.
             connect sock peersa
             retireSocket clientConn sock
