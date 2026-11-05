@@ -24,6 +24,21 @@ spec = do
             candidates `shouldReturn` Seq.singleton lost
             onAckReceived ldcc RTT1Level (AckInfo 1 0 []) 0
             candidates `shouldReturn` Seq.empty
+    describe "PTO" $ do
+        it "is armed for the space that expires first" $ do
+            cs <- newConnState Server
+            ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+            -- Far in the future so that the timer does not fire.
+            now <- getTimeMicrosecond
+            let at lvl pn s =
+                    (sp pn True $ now `addMicroseconds` Microseconds (s * 1000000))
+                        { spEncryptionLevel = lvl
+                        , spSentBytes = 1200
+                        , spPlainPacket = PlainPacket (Short $ toCID "") (Plain (Flags 0) pn [Ping] 0)
+                        }
+            onPacketSent ldcc $ at HandshakeLevel 0 100
+            onPacketSent ldcc $ at InitialLevel 1 200
+            fmap snd <$> getPtoTimeAndSpace ldcc `shouldReturn` Just HandshakeLevel
     describe "persistent congestion" $ do
         it "does not find a pair" $ do
             findDuration (Seq.fromList [sp0]) 0 `shouldBe` Nothing
