@@ -7,7 +7,8 @@ Requires network 3.2.12, and allows tls 2.5.  `closeStream` and
 `resetStream` now send STOP_SENDING while the peer has not finished the
 stream, and `closeStreamWith` gives its error code.  `abortConnection`
 returns at once instead of waiting for the exception to be taken.
-`Network.QUIC.Internal.rebind` loses its `Microseconds` argument.
+`Network.QUIC.Internal.rebind` loses its `Microseconds` argument, and
+the `Delay` of an ACK frame is a newtype of its own, with `noDelay`.
 
 * Keep held stream fragments disjoint
   [#179](https://github.com/kazu-yamamoto/quic/pull/179)
