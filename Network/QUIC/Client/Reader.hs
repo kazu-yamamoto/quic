@@ -17,7 +17,7 @@ import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Data.List (intersect)
-import Network.Socket (Socket, close, getSocketName)
+import Network.Socket (Socket, getSocketName)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Common
@@ -41,13 +41,12 @@ data ReaderEnd = Retired | TimedOut
 --   replaced, and when the connection has been idle for too long.
 --
 --   Nothing is closed and nothing is thrown to make it return: the receive
---   and both of those are waited for at once.  The socket it was reading is
---   the caller's to close afterwards -- __not at once, though__: nothing
---   here says when this has returned, so a caller which closes before it
---   has is back to closing a socket under a reader.  'rebind' leaves the
---   delay it is given before closing, for that.
+--   and both of those are waited for at once.  A socket retired by 'rebind'
+--   is left for the sender here rather than closed by the caller, which
+--   cannot see when this has returned and would be closing it under a
+--   reader.
 readerClient :: TVar Bool -> Socket -> Connection -> IO ()
-readerClient retired s0 conn = handleLogUnit logAction $ do
+readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ do
     labelMe "readerClient"
     wait
     connected <- getSockConnected conn
@@ -63,6 +62,16 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
                         | otherwise -> return $ Right bs
     loop recv
   where
+    -- A socket 'rebind' swapped out is nobody's but the retired list's,
+    -- so it is left there however this thread ends -- told, thrown at or
+    -- failed.  One still the connection's belongs to the closer, which
+    -- reads and sends on it after this.
+    --
+    -- Left rather than closed because the sender may be inside a send on
+    -- it; it closes them between two sends.
+    leave = do
+        current <- getSocketRetire conn
+        when (current /= retired) $ retireSocket conn s0
     wait = do
         bound <- E.handle (throughAsync (return False)) $ do
             _ <- getSocketName s0
@@ -78,9 +87,13 @@ readerClient retired s0 conn = handleLogUnit logAction $ do
                 ((readTVar retired >>= STM.check) $> Retired)
                     `orElse` ((readTVar expired >>= STM.check) $> TimedOut)
         case ebs of
-            -- The socket belongs to whoever retired it; it closes it.
+            -- 'leave' has it.
             Left Retired -> return ()
-            Left TimedOut -> close s0
+            -- What ends the connection on an idle timeout is the
+            -- receiver throwing 'ConnectionIsTimeout'; this thread only
+            -- stops reading.  The socket goes the same way as a retired
+            -- one, because the sender may be inside a send on it.
+            Left TimedOut -> retireSocket conn s0
             Right bs -> do
                 now <- getTimeMicrosecond
                 let quicBit = greaseQuicBit $ getMyParameters conn
@@ -247,7 +260,7 @@ controlConnection' conn ChangeClientCID = do
 -- So -> Co: PathChallenge (validatePath)
 -- Co -> So: PathResponse (processFrame)
 controlConnection' conn NATRebinding = do
-    rebind conn $ Microseconds 5000 -- nearly 0
+    rebind conn
     return True
 ----------------------------------------------------------------
 -- ActiveMigration (-A)
@@ -265,28 +278,25 @@ controlConnection' conn ActiveMigration = do
         Nothing -> return False
         mcidinfo -> do
             peersa <- peerSockAddr <$> getPathInfo conn
-            rebind conn $ Microseconds 5000000
+            rebind conn
             -- Sending PathChallenge, RetireConnectionID and NewConnectionID RPT
             pathInfo <- newPathInfo peersa
             addPathInfo conn pathInfo
             validatePath conn pathInfo mcidinfo
 
-rebind :: Connection -> Microseconds -> IO ()
-rebind conn microseconds = do
+rebind :: Connection -> IO ()
+rebind conn = do
     peersa <- peerSockAddr <$> getPathInfo conn
     connected <- getSockConnected conn
     newSock <- natRebinding connected peersa
     newRetired <- newTVarIO False
-    (oldSock, oldRetired) <- swapSocket conn newSock newRetired
+    (_, oldRetired) <- swapSocket conn newSock newRetired
     (forkManaged conn "QUIC reader" $ readerClient newRetired newSock conn)
         `E.finally` do
             -- Telling the old reader to go rather than closing the socket
             -- under it: a close ends a thread blocked on a descriptor only
-            -- because the event manager says so, and a descriptor number is
-            -- reused.  Said even if the fork above failed, since the old
-            -- socket is not this connection's any more either way.
+            -- because the event manager says so.  The reader leaves it for
+            -- the sender instead.  Said even if the fork above failed,
+            -- since the old socket is not this connection's any more
+            -- either way.
             atomically $ writeTVar oldRetired True
-            -- Not 'fire', which does nothing for a connection no longer
-            -- alive: one that ended within the delay kept the old socket
-            -- open for good.  Nothing else closes it.
-            fire' microseconds $ close oldSock
