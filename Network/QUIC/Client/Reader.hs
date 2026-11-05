@@ -270,7 +270,6 @@ controlConnection' conn ActiveMigration = do
             pathInfo <- newPathInfo peersa
             addPathInfo conn pathInfo
             validatePath conn pathInfo mcidinfo
-            return True
 
 rebind :: Connection -> Microseconds -> IO ()
 rebind conn microseconds = do

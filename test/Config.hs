@@ -27,7 +27,7 @@ import qualified Data.ByteString as BS
 import Data.IORef
 import qualified Data.List as L
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (isNothing)
+import Data.Maybe (isJust, isNothing)
 import Network.Socket
 import Network.Socket.ByteString
 import Network.TLS hiding (Version)
@@ -166,6 +166,10 @@ data Scenario
     | -- | Record the size of every short-header datagram, with whether it
       --   came from the client.
       RecordSizes (IORef [(Bool, Int)])
+    | -- | Once the MVar is filled, send the client's next short-header
+      --   datagram to the server from another socket, which answers
+      --   nothing: an on-path attacker's spurious migration.
+      ForwardAside (MVar ())
 
 withPipe :: Scenario -> IO () -> IO ()
 withPipe = withPipeWith False
@@ -203,39 +207,41 @@ withPipeWith stray scenario body = do
     irefC <- newIORef 0
     irefS <- newIORef 0
     E.bracket (openSocket addrC) close $ \sockC ->
-        E.bracket (openSocket addrS) close $ \sockS -> do
-            setSocketOption sockC ReuseAddr 1
-            setSocketOption sockS ReuseAddr 1
-            bind sockC saC
-            -- Bound, not connected.  A connected UDP socket turns an ICMP
-            -- port-unreachable from the peer into ECONNREFUSED on the next
-            -- operation, and the peers here come and go with every test, so
-            -- the relay was being killed by a reply to something it had sent
-            -- to an address that had just closed.  It surfaced on the
-            -- receive, not the send:
-            --
-            --   DIED C->S: Network.Socket.recvBuf: does not exist
-            --              (Connection refused)
-            --
-            -- and since these are forkIO threads with nobody watching, the
-            -- relay simply stopped.  The client then sent Initial packets
-            -- until the idle timeout and heard nothing.
-            addrAny <- resolve "0"
-            bind sockS $ addrAddress addrAny
-            when stray $
-                E.bracket (openSocket addrC) close $ \sock -> do
-                    void $ sendTo sock (BS.pack [0x40, 1, 2, 3]) saC
-                    void $ sendTo sock (BS.pack [0xc0, 1, 2, 3]) saC
+        E.bracket (openSocket addrS) close $ \sockS ->
+            E.bracket (openSocket addrS) close $ \sockA -> do
+                setSocketOption sockC ReuseAddr 1
+                setSocketOption sockS ReuseAddr 1
+                bind sockC saC
+                -- Bound, not connected.  A connected UDP socket turns an ICMP
+                -- port-unreachable from the peer into ECONNREFUSED on the next
+                -- operation, and the peers here come and go with every test, so
+                -- the relay was being killed by a reply to something it had sent
+                -- to an address that had just closed.  It surfaced on the
+                -- receive, not the send:
+                --
+                --   DIED C->S: Network.Socket.recvBuf: does not exist
+                --              (Connection refused)
+                --
+                -- and since these are forkIO threads with nobody watching, the
+                -- relay simply stopped.  The client then sent Initial packets
+                -- until the idle timeout and heard nothing.
+                addrAny <- resolve "0"
+                bind sockS $ addrAddress addrAny
+                bind sockA $ addrAddress addrAny
+                when stray $
+                    E.bracket (openSocket addrC) close $ \sock -> do
+                        void $ sendTo sock (BS.pack [0x40, 1, 2, 3]) saC
+                        void $ sendTo sock (BS.pack [0xc0, 1, 2, 3]) saC
 
-            -- The relaying threads have to stop before the sockets close.
-            -- Run at the end of body instead, the kills are skipped whenever
-            -- body throws, and the threads are then left in recv on a socket
-            -- the bracket has just closed.  That surfaces as "threadWait:
-            -- invalid argument (Bad file descriptor)" from a thread nobody is
-            -- watching, and buries whatever the test was really failing on.
-            E.bracket (startRelay saS sockC sockS irefC irefS) stopRelay $ \_ -> body
+                -- The relaying threads have to stop before the sockets close.
+                -- Run at the end of body instead, the kills are skipped whenever
+                -- body throws, and the threads are then left in recv on a socket
+                -- the bracket has just closed.  That surfaces as "threadWait:
+                -- invalid argument (Bad file descriptor)" from a thread nobody is
+                -- watching, and buries whatever the test was really failing on.
+                E.bracket (startRelay saS sockC sockS sockA irefC irefS) stopRelay $ \_ -> body
   where
-    startRelay saS sockC sockS irefC irefS = do
+    startRelay saS sockC sockS sockA irefC irefS = do
         stop <- newTVarIO False
         -- Where to send what comes back from the server.  Set once the client
         -- has introduced itself, which is before the server can have anything
@@ -291,10 +297,16 @@ withPipeWith stray scenario body = do
                             n <- atomicModifyIORef' irefC $ \x -> (x + 1, x)
                             dropPacket <- shouldDrop scenario True n
                             let isCC = BS.length bs1 < 200
+                            aside <- case scenario of
+                                ForwardAside trigger
+                                    | BS.head bs1 .&. 0x80 == 0 ->
+                                        isJust <$> tryTakeMVar trigger
+                                _ -> return False
+                            let sock = if aside then sockA else sockS
                             when (isCC || not dropPacket) $
                                 delayIf (shouldDelay scenario True n) $
                                     void $
-                                        sendTo sockS bs1 saS
+                                        sendTo sock bs1 saS
         -- from server
         tid1 <- forkIO $ relayLoop stop sockS $ \(bs, _) -> do
             mcids <- readIORef cidsRef

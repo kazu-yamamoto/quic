@@ -14,6 +14,7 @@ module Network.QUIC.Connection.Misc (
     clearSocket,
     getPathInfo,
     addPathInfo,
+    restorePathInfo,
     findPathInfo,
     getPeerAuthCIDs,
     setPeerAuthCIDs,
@@ -104,6 +105,10 @@ addPathInfo :: Connection -> PathInfo -> IO ()
 addPathInfo Connection{..} newpi = atomicModifyIORef'' peerInfo add
   where
     add (PeerInfo oldpi _) = PeerInfo newpi $ Just oldpi
+
+-- | Going back to a path, forgetting the one in use.
+restorePathInfo :: Connection -> PathInfo -> IO ()
+restorePathInfo Connection{..} oldpi = writeIORef peerInfo $ PeerInfo oldpi Nothing
 
 findPathInfo :: Connection -> SockAddr -> IO (Maybe PathInfo)
 findPathInfo Connection{..} sa = do

@@ -43,6 +43,9 @@ import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
+import Network.QUIC.Recovery
+import Network.QUIC.Recovery.Persistent (calcPTO)
+import Network.QUIC.Recovery.Types (initialRTT)
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -346,7 +349,9 @@ isStatelessRestTokenValid Connection{..} srt = srtCheck <$> readTVarIO peerCIDDB
 
 ----------------------------------------------------------------
 
-validatePath :: Connection -> PathInfo -> Maybe CIDInfo -> IO ()
+-- | Validating the path, and whether it was validated.  False when no
+--   PATH_RESPONSE came in time: the validation is abandoned.
+validatePath :: Connection -> PathInfo -> Maybe CIDInfo -> IO Bool
 validatePath conn pathInfo Nothing = do
     pdat <- newPathData
     setChallenges conn pathInfo pdat
@@ -398,11 +403,20 @@ claimMigration Connection{..} = atomically $ do
             writeTVar migrationState MigrationStarted
             return True
 
-waitResponse :: Connection -> IO ()
-waitResponse Connection{..} = atomically $ do
-    state <- readTVar migrationState
-    check (state == RecvResponse)
-    writeTVar migrationState NonMigration
+-- | Waiting for the PATH_RESPONSE, for three times the larger of the PTO
+--   and the PTO of a new path (RFC 9000 Sec 8.2.4).  It used to wait for
+--   ever, and no other migration could start meanwhile.
+waitResponse :: Connection -> IO Bool
+waitResponse Connection{..} = do
+    pto <- getPTO connLDCC
+    let Microseconds us = 3 * max pto (calcPTO initialRTT Nothing)
+    expired <- registerDelay us
+    atomically $ do
+        state <- readTVar migrationState
+        timedOut <- readTVar expired
+        check (state == RecvResponse || timedOut)
+        writeTVar migrationState NonMigration
+        return (state == RecvResponse)
 
 checkResponse :: Connection -> PathData -> IO ()
 checkResponse Connection{..} pdat = do
