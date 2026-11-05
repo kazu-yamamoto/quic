@@ -1,6 +1,7 @@
 module FrameSpec where
 
 import qualified Control.Exception as E
+import qualified Data.ByteString as BS
 import Data.Word
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Utils (fillBytes)
@@ -12,6 +13,14 @@ import Network.QUIC.Internal
 
 spec :: Spec
 spec = do
+    describe "ACK_ECN" $ do
+        it "is decoded as ACK with its ECN counts skipped" $ do
+            let ack = Ack (AckInfo 5 2 [(1, 0)]) noDelay
+            bs <- encodeFrames [ack, Ping]
+            -- Type 0x03, then the three ECN counts after the ranges.
+            let (body, ping) = BS.splitAt (BS.length bs - 2) $ BS.drop 1 bs
+                ecn = BS.concat [BS.singleton 0x03, body, BS.pack [1, 2, 0x40, 3], ping]
+            decodeFramesBS ecn `shouldReturn` Just [ack, Ping]
     describe "countZero" $ do
         it "counts 0 correctly" $ do
             let siz = 512

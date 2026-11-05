@@ -183,8 +183,8 @@ decodeFrame rbuf = do
     case ftyp :: FrameType of
         0x00 -> decodePadding rbuf
         0x01 -> return Ping
-        0x02 -> decodeAck rbuf
-        -- 0x03 -> Ack with ECN Counts
+        0x02 -> decodeAck rbuf False
+        0x03 -> decodeAck rbuf True
         0x04 -> decodeResetStream rbuf
         0x05 -> decodeStopSending rbuf
         0x06 -> decodeCrypto rbuf
@@ -264,13 +264,16 @@ decodeCrypto rbuf = do
     cdata <- extractByteString rbuf len
     return $ CryptoF off cdata
 
-decodeAck :: ReadBuffer -> IO Frame
-decodeAck rbuf = do
+-- | ACK, or ACK with ECN counts (type 0x03).  The counts are skipped:
+--   no packet is sent ECN-capable, so there is nothing to validate.
+decodeAck :: ReadBuffer -> Bool -> IO Frame
+decodeAck rbuf ecn = do
     largest <- fromIntegral <$> decodeInt' rbuf
     delay <- decodeDelay rbuf
     count <- fromIntegral <$> decodeInt' rbuf
     range1 <- fromIntegral <$> decodeInt' rbuf
     ranges <- getRanges count id
+    when ecn $ replicateM_ 3 $ void $ decodeInt' rbuf
     return $ Ack (AckInfo largest range1 ranges) delay
   where
     getRanges 0 build = return $ build []
@@ -384,7 +387,8 @@ decodePathResponse rbuf =
 
 decodeDatagram :: ReadBuffer -> Bool -> IO Frame
 decodeDatagram rbuf hasLen = do
-    len <- if hasLen
-             then fromIntegral <$> decodeInt' rbuf
-             else remainingSize rbuf
+    len <-
+        if hasLen
+            then fromIntegral <$> decodeInt' rbuf
+            else remainingSize rbuf
     Datagram hasLen <$> extractByteString rbuf len
