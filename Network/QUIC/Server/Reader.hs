@@ -458,12 +458,16 @@ dispatch
     (cpkt@(CryptPacket (Short dCID) _), lvl, siz) = do
         mconn <- lookupConnectionDict dstTable dCID
         case mconn of
-            Nothing -> do
-                ok <- withinStatelessResetLimit statelessResetRate bytes
-                when ok $ do
-                    statelessReset <- makeStatelessReset $ genStatelessReset dCID
-                    send' statelessReset
-                    logAction $ "Stateless reset is sent to " <> bhow peersa
+            -- The size first, so that a packet too small to answer uses
+            -- up nothing of the rate.
+            Nothing -> case statelessResetSizeFor bytes of
+                Nothing -> return ()
+                Just rsiz -> do
+                    ok <- withinStatelessResetLimit statelessResetRate
+                    when ok $ do
+                        statelessReset <- makeStatelessReset rsiz $ genStatelessReset dCID
+                        send' statelessReset
+                        logAction $ "Stateless reset is sent to " <> bhow peersa
             Just conn -> do
                 alive <- getAlive conn
                 when alive $ do
