@@ -136,14 +136,18 @@ onAckReceived ldcc@LDCC{..} lvl ackInfo@(AckInfo largestAcked _ _) ackDelay = do
 
 releaseLostCandidates
     :: LDCC -> EncryptionLevel -> (SentPacket -> Bool) -> IO (Seq SentPacket)
-releaseLostCandidates ldcc@LDCC{..} lvl predicate = do
-    packets <- atomically $ do
-        SentPackets db <- readTVar lostCandidates
-        let (pkts, db') = Seq.partition predicate db
-        writeTVar lostCandidates $ SentPackets db'
-        return pkts
-    removePacketNumbers ldcc lvl packets
-    return packets
+releaseLostCandidates ldcc@LDCC{..} lvl predicate
+    -- Lost candidates are 1-RTT packets; an ACK in another space
+    -- shares their packet numbers but does not acknowledge them.
+    | lvl /= RTT1Level = return Seq.empty
+    | otherwise = do
+        packets <- atomically $ do
+            SentPackets db <- readTVar lostCandidates
+            let (pkts, db') = Seq.partition predicate db
+            writeTVar lostCandidates $ SentPackets db'
+            return pkts
+        removePacketNumbers ldcc lvl packets
+        return packets
 
 onPacketsAcked :: LDCC -> Seq SentPacket -> IO ()
 onPacketsAcked ldcc@LDCC{..} ackedPackets = metricsUpdated ldcc $ do

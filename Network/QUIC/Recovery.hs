@@ -45,6 +45,8 @@ module Network.QUIC.Recovery (
     fixSentPacket,
     LDCC,
     newLDCC,
+    lostCandidates,
+    SentPackets (..),
     qlogSent,
 ) where
 
