@@ -7,6 +7,7 @@ module Network.QUIC.Receiver (
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
+import Network.Socket (SockAddr)
 import Network.TLS (AlertDescription (..))
 import System.Log.FastLogger
 
@@ -56,6 +57,8 @@ receiver conn = handleLogT logAction body
         rpkt <- recvTimeout
         let CryptPacket hdr _ = rpCryptPacket rpkt
             cid = headerMyCID hdr
+        -- Before 'setMyCID' below, which makes it the one in use.
+        cidChanged <- (/= cid) <$> getMyCID conn
         included <- myCIDsInclude conn cid
         case included of
             Just nseq -> do
@@ -76,7 +79,7 @@ receiver conn = handleLogT logAction body
                     writeIORef (sentRetirePriorTo conn) False
                     unless sent $
                         sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
-                processReceivedPacket conn rpkt
+                processReceivedPacket' conn (Just cidChanged) rpkt
                 shouldUpdatePeer <-
                     if shouldUpdate
                         then shouldUpdatePeerCID conn
@@ -140,7 +143,12 @@ processReceivedPacketHandshake conn rpkt = do
                 processReceivedPacket conn rpkt
 
 processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
-processReceivedPacket conn rpkt = do
+processReceivedPacket conn = processReceivedPacket' conn Nothing
+
+-- | With whether the packet came on a CID other than the one in use, once
+--   the handshake is over: only then may the peer migrate.
+processReceivedPacket' :: Connection -> Maybe Bool -> ReceivedPacket -> IO ()
+processReceivedPacket' conn mcidChanged rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
         tim = rpTimeRecevied rpkt
@@ -167,6 +175,7 @@ processReceivedPacket conn rpkt = do
             enforcePathAndCIDFrameLimit conn plainFrames
             -- For Ping, record PPN first, then send an ACK.
             onPacketReceived (connLDCC conn) lvl plainPacketNumber
+            largest <- (plainPacketNumber >) <$> getPeerPacketNumber conn lvl
             setPeerPacketNumber conn lvl plainPacketNumber
             qlogReceived conn (PlainPacket hdr plain) tim
             let ackEli = any ackEliciting plainFrames
@@ -181,6 +190,11 @@ processReceivedPacket conn rpkt = do
             -- What the frames above made us queue, a NEW_CONNECTION_ID
             -- flood in particular, must not pile up for good.
             enforceQueuedControlLimit conn
+            case (mcidChanged, rpPeerAddr rpkt) of
+                (Just cidChanged, Just peersa)
+                    | largest && any (not . isProbing) plainFrames ->
+                        checkMigration conn (headerMyCID hdr) peersa cidChanged
+                _ -> return ()
             when ackEli $ do
                 case lvl of
                     RTT0Level -> return ()
@@ -296,6 +310,50 @@ deliverStream conn found strm =
 -- addressed to another.  A retransmission cannot either -- it goes to a
 -- connection ID we still have, and the retired one we no longer answer on
 -- at all.
+-- | RFC 9000 Sec 9.3: the peer has moved when a packet that decrypts,
+--   carries a non-probing frame and is the largest so far comes from a new
+--   address.  Nothing before decryption: anyone who has seen the CID can
+--   send a packet from anywhere.
+checkMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
+checkMigration conn dCID peersa cidChanged = do
+    mPathInfo <- findPathInfo conn peersa
+    case mPathInfo of
+        Just _ -> return ()
+        Nothing -> do
+            -- Claimed before the thread rather than inside it, so that a
+            -- peer moving gets one thread for the migration and not one
+            -- for every packet.
+            claimed <- claimMigration conn
+            when claimed $
+                forkManaged conn "QUIC migration" $
+                    onClientMigration conn dCID peersa cidChanged
+
+-- | Frames that do not move the peer (RFC 9000 Sec 9.1).
+isProbing :: Frame -> Bool
+isProbing Padding{} = True
+isProbing PathChallenge{} = True
+isProbing PathResponse{} = True
+isProbing NewConnectionID{} = True
+isProbing _ = False
+
+-- | Carry out the migration the caller has claimed with 'claimMigration'.
+onClientMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
+onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
+    -- fixme: should not block
+    mcidinfo <-
+        if cidChanged
+            then timeout (Microseconds 100000) "onClientMigration" $ waitPeerCID conn
+            else return Nothing -- PathChallenge only, no RetireConnectionID
+    let msg = "Migration: " <> bhow peersa <> " (" <> bhow newdCID <> ")"
+    qlogDebug conn $ Debug $ toLogStr msg
+    connDebugLog conn $ "debug: onClientMigration: " <> msg
+    pathInfo <- newPathInfo peersa
+    -- assumed that this PathInfo is not stored in PeerInfo
+    addPathInfo conn pathInfo
+    validatePath conn pathInfo mcidinfo
+  where
+    logAction msg = connDebugLog conn ("debug: onClientMigration: " <> msg)
+
 checkRetireOfArrivalCID :: Connection -> Header -> [Frame] -> IO ()
 checkRetireOfArrivalCID conn hdr frames = do
     mseq <- myCIDsInclude conn $ headerMyCID hdr
