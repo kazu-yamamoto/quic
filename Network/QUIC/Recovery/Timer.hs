@@ -64,7 +64,7 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
                     return Nothing
                 else do
                     rtt <- readIORef recoveryRTT
-                    lvl <- getEncryptionLevel ldcc
+                    lvl <- antiDeadlockLevel ldcc
                     let pto = backOff (calcPTO rtt $ Just lvl) (ptoCount rtt)
                     ptoTime <- getFutureTimeMicrosecond pto
                     return $ Just (ptoTime, lvl)
@@ -73,24 +73,31 @@ getPtoTimeAndSpace ldcc@LDCC{..} = do
             let lvls
                     | completed = [InitialLevel, HandshakeLevel, RTT1Level]
                     | otherwise = [InitialLevel, HandshakeLevel]
-            loop lvls
+            loop lvls Nothing
   where
-    loop :: [EncryptionLevel] -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
-    loop [] = return Nothing
-    loop (l : ls) = do
+    -- RFC 9002 A.8: the space whose PTO expires first, not the first
+    -- space with packets in flight.
+    loop
+        :: [EncryptionLevel]
+        -> Maybe (TimeMicrosecond, EncryptionLevel)
+        -> IO (Maybe (TimeMicrosecond, EncryptionLevel))
+    loop [] r = return r
+    loop (l : ls) r = do
         notInFlight <- noInFlightPacket ldcc l
         if notInFlight
-            then loop ls
+            then loop ls r
             else do
                 LossDetection{..} <- readIORef (lossDetection ! l)
                 if timeOfLastAckElicitingPacket == timeMicrosecond0
-                    then loop ls
+                    then loop ls r
                     else do
                         rtt <- readIORef recoveryRTT
                         let pto0 = backOff (calcPTO rtt $ Just l) (ptoCount rtt)
                             pto = max pto0 kGranularity
                             ptoTime = timeOfLastAckElicitingPacket `addMicroseconds` pto
-                        return $ Just (ptoTime, l)
+                        case r of
+                            Just (t0, _) | t0 <= ptoTime -> loop ls r
+                            _ -> loop ls $ Just (ptoTime, l)
 
 ----------------------------------------------------------------
 
@@ -235,8 +242,8 @@ onLossDetectionTimeout ldcc@LDCC{..} = do
                         -- to earn more anti-amplification credit,
                         -- a Handshake packet proves address ownership.
                         validated <- peerCompletedAddressValidation ldcc
-                        when validated $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: RTT1"
-                        lvl' <- getEncryptionLevel ldcc -- fixme
+                        when validated $ qlogDebug ldcc $ Debug "onLossDetectionTimeout: validated"
+                        lvl' <- antiDeadlockLevel ldcc
                         sendPing ldcc lvl'
 
                 metricsUpdated ldcc $

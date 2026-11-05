@@ -26,6 +26,7 @@ module Network.QUIC.Recovery (
     -- Persistent
     findDuration,
     getPTO,
+    getPtoTimeAndSpace,
     -- Release
     releaseByRetry,
     releaseOldest,
