@@ -48,7 +48,7 @@ data Stream = Stream
     -- ^ The error code of a RESET_STREAM from the peer
     , streamReleased :: IORef Bool
     -- ^ Whether we are done with it and have counted it so
-    , streamRxBounds :: IORef RxBounds
+    , streamRxBounds :: TVar RxBounds
     -- ^ What has been seen of the stream's end (RFC 9000 Sec 4.5)
     }
 
@@ -94,7 +94,7 @@ newStream streamConnection streamId txLim rxLim = do
     streamResetTx   <- newIORef False
     streamResetRx   <- newIORef Nothing
     streamReleased  <- newIORef False
-    streamRxBounds  <- newIORef emptyRxBounds
+    streamRxBounds  <- newTVarIO emptyRxBounds
     return Stream{..}
 {- FOURMOLU_ENABLE -}
 

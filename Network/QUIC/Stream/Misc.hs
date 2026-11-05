@@ -16,9 +16,13 @@ module Network.QUIC.Stream.Misc (
     FinalSizeProblem (..),
     getRxBounds,
     noteRxFrame,
+    noteRxFrameSTM,
     noteRxFinalSize,
+    getRxBoundsSTM,
     addRxCredited,
-    takeRxOwed,
+    addRxCreditedSTM,
+    takeRxOwedSTM,
+    getRxConsumed,
     --
     readStreamFlowTx,
     addTxStreamData,
@@ -165,39 +169,51 @@ data FinalSizeProblem
 
 -- | What the receiving side has seen of where this stream ends.
 getRxBounds :: Stream -> IO RxBounds
-getRxBounds Stream{..} = readIORef streamRxBounds
+getRxBounds Stream{..} = readTVarIO streamRxBounds
 
 -- | Answering with how far the frame takes the stream past what has been
 --   seen of it: what the connection's flow controller is to count as
 --   received for it (RFC 9000 Sec 4.1).  A copy of what was seen is 0.
 noteRxFrame :: Stream -> Int -> Bool -> IO (Either FinalSizeProblem Int)
-noteRxFrame Stream{..} end fin = atomicModifyIORef' streamRxBounds note
+noteRxFrame s end fin = atomically $ noteRxFrameSTM s end fin
+
+-- | 'noteRxFrame' as part of a transaction: see
+--   'Network.QUIC.Connection.StreamTable.noteRxArrival'.
+noteRxFrameSTM :: Stream -> Int -> Bool -> STM (Either FinalSizeProblem Int)
+noteRxFrameSTM Stream{..} end fin = stateTVar streamRxBounds $ \b -> note b
   where
     note b@RxBounds{..}
         | fin = case rxFinal of
             Just f
-                | f /= end -> (b, Left FinalSizeChanged)
+                | f /= end -> (Left FinalSizeChanged, b)
             _
-                | end < rxHighest -> (b, Left FinalSizeTooSmall)
-                | otherwise -> (b{rxFinal = Just end, rxHighest = end}, Right (end - rxHighest))
+                | end < rxHighest -> (Left FinalSizeTooSmall, b)
+                | otherwise -> (Right (end - rxHighest), b{rxFinal = Just end, rxHighest = end})
         | otherwise = case rxFinal of
             Just f
-                | end > f -> (b, Left DataPastFinalSize)
-            _ -> (b{rxHighest = max rxHighest end}, Right (max 0 (end - rxHighest)))
+                | end > f -> (Left DataPastFinalSize, b)
+            _ -> (Right (max 0 (end - rxHighest)), b{rxHighest = max rxHighest end})
 
 -- | The same for the final size a RESET_STREAM carries.
 noteRxFinalSize :: Stream -> Int -> IO (Either FinalSizeProblem Int)
 noteRxFinalSize s end = noteRxFrame s end True
 
+-- | 'getRxBounds' as part of a transaction.
+getRxBoundsSTM :: Stream -> STM RxBounds
+getRxBoundsSTM Stream{..} = readTVar streamRxBounds
+
 -- | Counting octets as consumed on the stream's behalf though the
 --   application has not read them.
 addRxCredited :: Stream -> Int -> IO ()
-addRxCredited Stream{..} n =
-    atomicModifyIORef'' streamRxBounds $ \b -> b{rxCredited = rxCredited b + n}
+addRxCredited s n = atomically $ addRxCreditedSTM s n
+
+addRxCreditedSTM :: Stream -> Int -> STM ()
+addRxCreditedSTM Stream{..} n =
+    modifyTVar' streamRxBounds $ \b -> b{rxCredited = rxCredited b + n}
 
 -- | What the connection's flow controller has counted as received for the
---   stream and nobody has counted as consumed: what is owed back once the
---   application is done with it.
+--   stream and nobody has counted as consumed, given what the application
+--   has consumed: what is owed back once the application is done with it.
 --
 -- What it read it has already counted itself, in 'recvStream'.  The rest --
 -- a request body a server answers without reading, or what was lost on the
@@ -207,13 +223,15 @@ addRxCredited Stream{..} n =
 --
 -- Answered once for each octet: what is answered here is counted as
 -- credited.
-takeRxOwed :: Stream -> IO Int
-takeRxOwed Stream{..} = do
-    consumed <- rxfConsumed <$> readIORef streamFlowRx
-    atomicModifyIORef' streamRxBounds $ take' consumed
+takeRxOwedSTM :: Stream -> Int -> STM Int
+takeRxOwedSTM Stream{..} consumed = stateTVar streamRxBounds take'
   where
-    take' consumed b@RxBounds{..}
-        | owed > 0 = (b{rxCredited = rxCredited + owed}, owed)
-        | otherwise = (b, 0)
+    take' b@RxBounds{..}
+        | owed > 0 = (owed, b{rxCredited = rxCredited + owed})
+        | otherwise = (0, b)
       where
         owed = rxHighest - consumed - rxCredited
+
+-- | What the application has read of the stream, as its window counts it.
+getRxConsumed :: Stream -> IO Int
+getRxConsumed Stream{..} = rxfConsumed <$> readIORef streamFlowRx

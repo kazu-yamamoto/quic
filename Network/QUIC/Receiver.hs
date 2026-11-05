@@ -373,7 +373,7 @@ checkRetireOfArrivalCID conn hdr frames = do
   where
     retired = [n | RetireConnectionID n <- frames]
 
--- | Counting as received what a frame takes a stream past what has been
+-- | Counting as received what a frame took a stream past what had been
 --   seen of it, and refusing it if that is past the connection's limit.
 --
 -- RFC 9000 Sec 4.1 has the octets received be "the sum of the largest
@@ -381,20 +381,18 @@ checkRetireOfArrivalCID conn hdr frames = do
 -- They were the octets reassembled instead, so a stream's gaps -- what the
 -- peer sent and we never saw -- were counted by nobody, and a peer could go
 -- past its limit by them unnoticed.
-countRx :: Connection -> Stream -> Int -> Bool -> IO Int
-countRx conn strm end fin = do
-    r <- noteRxFrame strm end fin
-    case r of
-        Left problem -> do
-            closeOverFinalSize conn problem
-            return 0 -- not reached: closeConnection throws
-        Right n -> do
-            -- FLOW CONTROL: MAX_DATA: recv: rejecting if over my limit
-            when (n > 0) $ do
-                ok <- checkRxMaxData conn n
-                unless ok $
-                    closeConnection conn FlowControlError "Flow control error for connection"
-            return n
+countedRx :: Connection -> Either FinalSizeProblem Int -> IO Int
+countedRx conn r = case r of
+    Left problem -> do
+        closeOverFinalSize conn problem
+        return 0 -- not reached: closeConnection throws
+    Right n -> do
+        -- FLOW CONTROL: MAX_DATA: recv: rejecting if over my limit
+        when (n > 0) $ do
+            ok <- checkRxMaxData conn n
+            unless ok $
+                closeConnection conn FlowControlError "Flow control error for connection"
+        return n
 
 -- | Counting octets nobody will read as consumed, and announcing a new
 --   MAX_DATA if that is due.
@@ -410,9 +408,12 @@ giveBack conn n = when (n > 0) $ do
 -- | A frame for a stream the application has closed: counted as received
 --   and, since nobody will read it, as consumed, and the stream given back
 --   to the peer's limit once it has ended.
-creditDeparted :: Connection -> StreamId -> Int -> Bool -> IO ()
-creditDeparted conn sid end fin = do
-    r <- noteDepartedRxFrame conn sid end fin
+creditDeparted
+    :: Connection
+    -> StreamId
+    -> Either (TransportError, ReasonPhrase) (Int, Bool)
+    -> IO ()
+creditDeparted conn sid r =
     case r of
         Left (err, why) -> closeConnection conn err why
         Right (n, done) -> do
@@ -423,6 +424,51 @@ creditDeparted conn sid end fin = do
                     closeConnection conn FlowControlError "Flow control error for connection"
             giveBack conn n
             when done $ releasePeerStream conn sid
+
+-- | A STREAM frame whose stream id has been looked over.
+receiveStreamFrame
+    :: Connection -> ReasonPhrase -> StreamId -> Offset -> ByteString -> Bool -> IO ()
+receiveStreamFrame conn space sid off dat fin = do
+    -- FLOW CONTROL: MAX_DATA: recv: counted by how far it takes the stream,
+    -- before the reassembly drops what it has seen already.
+    a <- noteRxArrival conn sid end fin False
+    case a of
+        ArrivedLive strm r -> take' (Just strm) strm r
+        -- The stream is closed and the data goes nowhere, but the peer spent
+        -- its connection window on it and is owed that back.
+        ArrivedDeparted r -> creditDeparted conn sid r
+        ArrivedNowhere -> do
+            guardStream conn sid Nothing
+            -- Nothing when the stream has been closed.  What arrives for it
+            -- now is a copy of something already received, sent again
+            -- because our acknowledgement crossed it.  Opening the stream
+            -- anew would hold the copy to the initial window and call it a
+            -- flow control error.
+            mstrm <- openStream conn sid
+            case mstrm of
+                Nothing -> return ()
+                Just strm -> noteRxFrame strm end fin >>= take' Nothing strm
+  where
+    len = BS.length dat
+    end = off + len
+    take' found strm r = do
+        -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be
+        -- said differently, and nothing may arrive past it.
+        _ <- countedRx conn r
+        fc <- putRxStreamData strm $ RxStreamData dat off len fin
+        case fc of
+            -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
+            OverLimit ->
+                closeConnection conn FlowControlError $
+                    "Flow control error for stream in " <> space
+            -- Not a flow control error: the peer is inside its window, it is
+            -- just spending it in more pieces than we will hold.  Rate
+            -- control answers with InternalError too.
+            TooFragmented ->
+                closeConnection conn QUIC.InternalError "Too many stream fragments"
+            Duplicated -> return ()
+            Reassembled _ -> return ()
+        deliverStream conn found strm
 
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
@@ -456,8 +502,6 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
     unless ok $ closeConnection conn StreamLimitError "stream id is too large"
-    mstrm0 <- findStream conn sid
-    guardStream conn sid mstrm0
     -- RFC 9000 Sec 3.2: "The receiving part of a stream initiated by a peer
     -- ... is created when the first STREAM, STREAM_DATA_BLOCKED, or
     -- RESET_STREAM frame is received for that stream."  Only a STREAM frame
@@ -470,45 +514,58 @@ processFrame conn lvl (ResetStream sid aerr finlen) = do
     -- then said its piece and been ignored, and ours waited on 'recvStream'
     -- for a stream that would never end, until the idle timeout.
     --
-    -- 'openStream' answers Nothing for a stream that has been closed since,
-    -- so a late copy does not open one anew.
-    mstrm <- maybe (openStream conn sid) (return . Just) mstrm0
-    onResetStreamReceived2 (connHooks conn) mstrm aerr finlen
-    case mstrm of
+    -- FLOW CONTROL: MAX_DATA: recv: what the final size takes the stream
+    -- past will never arrive, and nobody will read it, so it is given back
+    -- at once.  Left to the close, a peer resetting streams the application
+    -- is slow to close is kept waiting.
+    a <- noteRxArrival conn sid finlen True True
+    case a of
+        ArrivedLive strm r -> reset (Just strm) strm r
         -- As for a STREAM frame arriving for a stream the application has
         -- closed: this says where the stream ends, so what the peer spent on
         -- it is known in full and owed in full.
-        Nothing -> creditDeparted conn sid finlen True
-        Just strm -> do
-            -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit.
-            -- The final size is what the peer spent on the stream, and it
-            -- was taken however far past the stream's limit it was.
-            lim <- getRxMaxStreamData strm
-            when (finlen > lim) $
-                closeConnection conn FlowControlError "Flow control error for stream"
-            -- RFC 9000 Sec 4.5, as for a STREAM frame that ends the stream.
-            -- FLOW CONTROL: MAX_DATA: recv: what the final size takes the
-            -- stream past will never arrive, and nobody will read it, so it
-            -- is given back at once.  Left to the close, a peer resetting
-            -- streams the application is slow to close is kept waiting.
-            beyond <- countRx conn strm finlen True
-            addRxCredited strm beyond
-            giveBack conn beyond
-            -- After the two checks above, not before: the application has no
-            -- business serving a stream the frame that opened it is about to
-            -- close the connection over.  As for a STREAM frame (#131).
-            deliverStream conn mstrm0 strm
-            onResetStreamReceived (connHooks conn) strm aerr
-            -- Before the pseudo FIN below, so that whoever reads it can
-            -- tell it was not a real one.
-            setResetReceived strm aerr
-            -- RESET_STREAM ends the peer's sending part alone
-            -- (RFC 9000, section 3.2).  Our own sending part is untouched,
-            -- so that a reply to what the peer sent before the reset can
-            -- still go out.  It used to be closed here as well, and
-            -- 'sendStream' then threw StreamIsClosed.
-            setRxStreamClosed strm
-            delStream conn strm
+        ArrivedDeparted r -> do
+            onResetStreamReceived2 (connHooks conn) Nothing aerr finlen
+            creditDeparted conn sid r
+        ArrivedNowhere -> do
+            guardStream conn sid Nothing
+            -- 'openStream' answers Nothing for a stream that has been closed
+            -- since, so a late copy does not open one anew.
+            mstrm <- openStream conn sid
+            case mstrm of
+                Nothing -> onResetStreamReceived2 (connHooks conn) Nothing aerr finlen
+                Just strm -> do
+                    r <- noteRxFinalSize strm finlen
+                    case r of
+                        Right n -> addRxCredited strm n
+                        Left _ -> return ()
+                    reset Nothing strm r
+  where
+    reset found strm r = do
+        onResetStreamReceived2 (connHooks conn) (Just strm) aerr finlen
+        -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit.
+        -- The final size is what the peer spent on the stream, and it was
+        -- taken however far past the stream's limit it was.
+        lim <- getRxMaxStreamData strm
+        when (finlen > lim) $
+            closeConnection conn FlowControlError "Flow control error for stream"
+        -- RFC 9000 Sec 4.5, as for a STREAM frame that ends the stream.
+        countedRx conn r >>= giveBack conn
+        -- After the two checks above, not before: the application has no
+        -- business serving a stream the frame that opened it is about to
+        -- close the connection over.  As for a STREAM frame (#131).
+        deliverStream conn found strm
+        onResetStreamReceived (connHooks conn) strm aerr
+        -- Before the pseudo FIN below, so that whoever reads it can
+        -- tell it was not a real one.
+        setResetReceived strm aerr
+        -- RESET_STREAM ends the peer's sending part alone
+        -- (RFC 9000, section 3.2).  Our own sending part is untouched,
+        -- so that a reply to what the peer sent before the reset can
+        -- still go out.  It used to be closed here as well, and
+        -- 'sendStream' then threw StreamIsClosed.
+        setRxStreamClosed strm
+        delStream conn strm
 processFrame conn lvl (StopSending sid err) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "STOP_SENDING"
@@ -557,36 +614,7 @@ processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
     unless ok $ closeConnection conn StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection conn StreamStateError "send-only stream"
-    mstrm <- findStream conn sid
-    guardStream conn sid mstrm
-    -- Nothing when the stream has been closed.  What arrives for it now
-    -- is a copy of something already received, sent again because our
-    -- acknowledgement crossed it.  Opening the stream anew would hold
-    -- the copy to the initial window and call it a flow control error.
-    mstrm' <- maybe (openStream conn sid) (return . Just) mstrm
-    case mstrm' of
-        Nothing -> return ()
-        Just strm -> do
-            let len = BS.length dat
-                rx = RxStreamData dat off len fin
-            -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be said
-            -- differently, and nothing may arrive past it.
-            -- FLOW CONTROL: MAX_DATA: recv: counted by how far it takes the
-            -- stream, before the reassembly drops what it has seen already.
-            _ <- countRx conn strm (off + len) fin
-            fc <- putRxStreamData strm rx
-            case fc of
-                -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-                OverLimit ->
-                    closeConnection conn FlowControlError "Flow control error for stream in 0-RTT"
-                -- Not a flow control error: the peer is inside its window, it is
-                -- just spending it in more pieces than we will hold.  Rate control
-                -- answers with InternalError too.
-                TooFragmented ->
-                    closeConnection conn QUIC.InternalError "Too many stream fragments"
-                Duplicated -> return ()
-                Reassembled _ -> return ()
-            deliverStream conn mstrm strm
+    receiveStreamFrame conn "0-RTT" sid off dat fin
 processFrame conn RTT1Level (StreamF sid _ [""] False) = do
     -- FLOW CONTROL: MAX_STREAMS: recv: rejecting if over my limit
     ok <- checkRxMaxStreams conn sid
@@ -602,38 +630,7 @@ processFrame conn RTT1Level (StreamF sid off (dat : _) fin) = do
     unless ok $ closeConnection conn StreamLimitError "stream id is too large"
     when (isSendOnly conn sid) $
         closeConnection conn StreamStateError "send-only stream"
-    mstrm <- findStream conn sid
-    guardStream conn sid mstrm
-    -- Nothing when the stream has been closed.  What arrives for it now
-    -- is a copy of something already received, sent again because our
-    -- acknowledgement crossed it.  Opening the stream anew would hold
-    -- the copy to the initial window and call it a flow control error.
-    mstrm' <- maybe (openStream conn sid) (return . Just) mstrm
-    case mstrm' of
-        -- The stream is closed and the data goes nowhere, but the peer spent
-        -- its connection window on it and is owed that back.
-        Nothing -> creditDeparted conn sid (off + BS.length dat) fin
-        Just strm -> do
-            let len = BS.length dat
-                rx = RxStreamData dat off len fin
-            -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be
-            -- said differently, and nothing may arrive past it.
-            -- FLOW CONTROL: MAX_DATA: recv: counted by how far it takes the
-            -- stream, before the reassembly drops what it has seen already.
-            _ <- countRx conn strm (off + len) fin
-            fc <- putRxStreamData strm rx
-            case fc of
-                -- FLOW CONTROL: MAX_STREAM_DATA: recv: rejecting if over my limit
-                OverLimit ->
-                    closeConnection conn FlowControlError "Flow control error for stream in 1-RTT"
-                -- Not a flow control error: the peer is inside its window, it
-                -- is just spending it in more pieces than we will hold.  Rate
-                -- control answers with InternalError too.
-                TooFragmented ->
-                    closeConnection conn QUIC.InternalError "Too many stream fragments"
-                Duplicated -> return ()
-                Reassembled _ -> return ()
-            deliverStream conn mstrm strm
+    receiveStreamFrame conn "1-RTT" sid off dat fin
 processFrame conn lvl (MaxData n) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "MAX_DATA in Initial or Handshake"

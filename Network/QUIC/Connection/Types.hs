@@ -300,11 +300,11 @@ data Connection = Connection
       peerPacketNumber  :: Array EncryptionLevel (IORef PacketNumber)
     -- ^ The largest the peer has sent, by level.  0-RTT and 1-RTT share
     --   one, as they share a packet number space.
-    , streamTable       :: IORef StreamTable
+    , streamTable       :: TVar StreamTable
     , -- | What a stream the application has closed still owes the
       -- connection's window, for as long as the peer has not finished it.
-      -- See 'Network.QUIC.Connection.StreamTable.keepDepartedStream'.
-      departedStreams   :: IORef (IntMap Departed)
+      -- See 'Network.QUIC.Connection.StreamTable.departStream'.
+      departedStreams   :: TVar (IntMap Departed)
     , myStreamId        :: TVar Concurrency -- C:0 S:1
     , myUniStreamId     :: TVar Concurrency -- C:2 S:3
     , peerStreamId      :: IORef Concurrency -- C:1 S:0
@@ -416,8 +416,8 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     delayedAckCancel  <- newIORef (return ())
     -- State
     peerPacketNumber  <- newPeerPacketNumber
-    streamTable       <- newIORef emptyStreamTable
-    departedStreams   <- newIORef IntMap.empty
+    streamTable       <- newTVarIO emptyStreamTable
+    departedStreams   <- newTVarIO IntMap.empty
     myStreamId        <- newTVarIO (newConcurrency rl Bidirectional 0)
     myUniStreamId     <- newTVarIO (newConcurrency rl Unidirectional 0)
     peerStreamId      <- newIORef peerConcurrency
