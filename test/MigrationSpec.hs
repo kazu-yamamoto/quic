@@ -1,10 +1,11 @@
 module MigrationSpec where
 
 import Control.Concurrent
-import Control.Concurrent.Async (mapConcurrently)
+import Control.Concurrent.Async (mapConcurrently, wait, withAsync)
 import Control.Concurrent.STM
 import Control.Monad (void)
 import Network.Socket (connect, getSocketName, withFdSocket)
+import qualified System.Timeout as T
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -22,6 +23,25 @@ spec = do
     -- -- which asks no spoofing of it -- is therefore unknown on every
     -- packet it sends.  One of those packets is a migration; the rest are
     -- nothing.  See #167.
+    -- RFC 9000 Sec 8.2.1: a challenge lost was not sent again, so one
+    -- loss failed the validation.  It is sent again, each time with a new
+    -- payload, and a late answer to an earlier one still counts.
+    describe "validatePath" $
+        it "sends the challenge again with a new payload until answered" $ do
+            (_, serverConn) <- makeConnections serverConf Version1
+            pathInfo <- getPathInfo serverConn >>= newPathInfo . peerSockAddr
+            withAsync (validatePath serverConn pathInfo Nothing) $ \validation -> do
+                let challenge = do
+                        out <- T.timeout 3000000 $ atomically $ takeOutputSTM serverConn
+                        case out of
+                            Just (OutPathProbe _ [PathChallenge pdat]) -> return pdat
+                            _ -> fail "no challenge"
+                p1 <- challenge
+                p2 <- challenge
+                p2 `shouldNotBe` p1
+                checkResponse serverConn p1
+                wait validation `shouldReturn` True
+
     describe "claimMigration" $ do
         it "gives the migration to one caller and refuses the rest" $ do
             (_, serverConn) <- makeConnections serverConf Version1

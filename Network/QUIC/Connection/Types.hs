@@ -115,7 +115,8 @@ newCIDDB cid =
 data MigrationState
     = NonMigration
     | MigrationStarted
-    | SendChallenge PathInfo PathData
+    | -- | The challenges sent so far, the latest first.
+      SendChallenge PathInfo [PathData]
     | RecvResponse
     | MigrationAbandoned
 

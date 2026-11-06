@@ -357,7 +357,7 @@ validatePath conn pathInfo Nothing = do
     pdat <- newPathData
     setChallenges conn pathInfo pdat
     putOutput conn $ challengeOutput conn pathInfo [PathChallenge pdat]
-    waitResponse conn
+    waitResponse conn pathInfo
 validatePath conn pathInfo (Just cidInfo) = do
     pdat <- newPathData
     setChallenges conn pathInfo pdat
@@ -377,7 +377,7 @@ validatePath conn pathInfo (Just cidInfo) = do
                 return []
     let frames = extra ++ [PathChallenge pdat, RetireConnectionID retiredSeqNum]
     putOutput conn $ challengeOutput conn pathInfo frames
-    waitResponse conn
+    waitResponse conn pathInfo
 
 -- | A server sends the challenge to the path it is for, which may not be
 --   the one in use by the time it leaves.  A client's socket may be
@@ -389,7 +389,7 @@ challengeOutput conn pathInfo frames
 
 setChallenges :: Connection -> PathInfo -> PathData -> IO ()
 setChallenges Connection{..} pathInfo pdat =
-    atomically $ writeTVar migrationState $ SendChallenge pathInfo pdat
+    atomically $ writeTVar migrationState $ SendChallenge pathInfo [pdat]
 
 -- | Take on the migration, if no one has it.
 --
@@ -415,17 +415,44 @@ claimMigration Connection{..} = atomically $ do
 -- | Waiting for the PATH_RESPONSE, for three times the larger of the PTO
 --   and the PTO of a new path (RFC 9000 Sec 8.2.4).  It used to wait for
 --   ever, and no other migration could start meanwhile.
-waitResponse :: Connection -> IO Bool
-waitResponse Connection{..} = do
+--
+-- A challenge is sent again, with a new payload, every one of those
+--   periods (Sec 8.2.1): a lost one is not resent, and with only one a
+--   single loss failed the validation.
+waitResponse :: Connection -> PathInfo -> IO Bool
+waitResponse conn@Connection{..} pathInfo = do
     pto <- getPTO connLDCC
-    let Microseconds us = 3 * max pto (calcPTO initialRTT Nothing)
-    expired <- registerDelay us
-    atomically $ do
-        state <- readTVar migrationState
-        timedOut <- readTVar expired
-        check (state == RecvResponse || state == MigrationAbandoned || timedOut)
-        writeTVar migrationState NonMigration
-        return (state == RecvResponse)
+    let period = max pto (calcPTO initialRTT Nothing)
+        Microseconds total = 3 * period
+        Microseconds every = period
+    expired <- registerDelay total
+    let loop = do
+            again <- registerDelay every
+            r <- atomically $ do
+                state <- readTVar migrationState
+                timedOut <- readTVar expired
+                resend <- readTVar again
+                if state == RecvResponse || state == MigrationAbandoned || timedOut
+                    then do
+                        writeTVar migrationState NonMigration
+                        return $ Just (state == RecvResponse)
+                    else if resend then return Nothing else retry
+            case r of
+                Just ok -> return ok
+                Nothing -> do
+                    pdat <- newPathData
+                    sent <- atomically $ do
+                        state <- readTVar migrationState
+                        case state of
+                            SendChallenge p pdats -> do
+                                writeTVar migrationState $ SendChallenge p (pdat : pdats)
+                                return True
+                            _ -> return False
+                    when sent $
+                        putOutput conn $
+                            challengeOutput conn pathInfo [PathChallenge pdat]
+                    loop
+    loop
 
 -- | RFC 9000 Sec 9.3.2: a newer packet from the last validated address
 --   ends the validation of the new one, which then fails at once and
@@ -441,8 +468,8 @@ checkResponse :: Connection -> PathData -> IO ()
 checkResponse Connection{..} pdat = do
     state <- readTVarIO migrationState
     case state of
-        SendChallenge pathInfo pdat'
-            | pdat == pdat' -> atomically $ do
+        SendChallenge pathInfo pdats
+            | pdat `elem` pdats -> atomically $ do
                 writeTVar migrationState RecvResponse
                 writeTVar (addressValidated pathInfo) True
         _ -> return ()
