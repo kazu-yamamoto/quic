@@ -1,9 +1,13 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module MigrationSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async (mapConcurrently, wait, withAsync)
 import Control.Concurrent.STM
 import Control.Monad (void)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as Short
 import Network.Socket (connect, getSocketName, withFdSocket)
 import qualified System.Timeout as T
 import Test.Hspec
@@ -34,13 +38,64 @@ spec = do
                 let challenge = do
                         out <- T.timeout 3000000 $ atomically $ takeOutputSTM serverConn
                         case out of
-                            Just (OutPathProbe _ [PathChallenge pdat]) -> return pdat
+                            Just (OutPathProbe _ _ [PathChallenge pdat]) -> return pdat
                             _ -> fail "no challenge"
                 p1 <- challenge
                 p2 <- challenge
                 p2 `shouldNotBe` p1
                 checkResponse serverConn p1
                 wait validation `shouldReturn` True
+
+    -- RFC 9000 Sec 9.5: a client that changed its CID to move gets a new
+    -- CID of its own on the new path, while the old path keeps the old
+    -- one; the old one was given up at once, and the old path's challenge
+    -- went out with the new.
+    describe "validateMigration" $ do
+        let next conn = do
+                out <- T.timeout 4000000 $ atomically $ takeOutputSTM conn
+                maybe (fail "no output") return out
+            setup = do
+                (_, serverConn) <- makeConnections serverConf Version1
+                old <- getPeerCID serverConn
+                let new = toCID "\1\2\3\4\5\6\7\8"
+                    srt = StatelessResetToken $ Short.toShort $ BS.replicate 16 1
+                _ <- addPeerCID serverConn $ newCIDInfo 1 new srt
+                pathInfo <- getPathInfo serverConn >>= newPathInfo . peerSockAddr
+                return (serverConn, old, new, pathInfo)
+            challenges conn = do
+                o1 <- next conn
+                o2 <- next conn
+                case (o1, o2) of
+                    ( OutPathProbe _ mcid [PathChallenge _]
+                        , OutPathProbe _ Nothing [PathChallenge pdat]
+                        ) -> return (mcid, pdat)
+                    _ -> fail "not two challenges"
+        it "keeps the old CID for the old path and retires it once moved" $ do
+            (conn, old, new, pathInfo) <- setup
+            withAsync (validateMigration conn pathInfo True) $ \v -> do
+                (mcid, pdat) <- challenges conn
+                mcid `shouldBe` Just old
+                getPeerCID conn `shouldReturn` new
+                checkResponse conn pdat
+                wait v `shouldReturn` True
+                o <- next conn
+                case o of
+                    OutControl RTT1Level [RetireConnectionID 0] -> return ()
+                    _ -> fail "old CID not retired"
+        it "goes back to the old CID and retires the new one if not moved" $ do
+            (conn, old, _, pathInfo) <- setup
+            withAsync (validateMigration conn pathInfo True) $ \v -> do
+                (mcid, _) <- challenges conn
+                mcid `shouldBe` Just old
+                wait v `shouldReturn` False
+                getPeerCID conn `shouldReturn` old
+                -- After the challenges sent again.
+                let retired = do
+                        o <- next conn
+                        case o of
+                            OutControl RTT1Level [RetireConnectionID n] -> return n
+                            _ -> retired
+                retired `shouldReturn` 1
 
     describe "claimMigration" $ do
         it "gives the migration to one caller and refuses the rest" $ do

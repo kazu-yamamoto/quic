@@ -26,6 +26,7 @@ module Network.QUIC.Connection.Migration (
     abandonMigration,
     checkResponse,
     validatePath,
+    validateMigration,
     getMyRetirePriorTo,
     setMyRetirePriorTo,
     getPeerRetirePriorTo,
@@ -39,6 +40,7 @@ import qualified Data.Map.Strict as Map
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
+import Network.QUIC.Connection.Timeout (timeout)
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
@@ -358,6 +360,20 @@ validatePath conn pathInfo Nothing = do
     setChallenges conn pathInfo pdat
     putOutput conn $ challengeOutput conn pathInfo [PathChallenge pdat]
     waitResponse conn pathInfo
+validatePath conn pathInfo (Just cidInfo)
+    -- RFC 9000 Sec 9.5: the CID of the old path is kept for it until the
+    -- new one is validated, so that no CID is sent on both.
+    | isServer conn = do
+        pdat <- newPathData
+        setChallenges conn pathInfo pdat
+        putOutput conn $ challengeOutput conn pathInfo [PathChallenge pdat]
+        ok <- waitResponse conn pathInfo
+        when ok $ retire $ cidInfoSeq cidInfo
+        return ok
+  where
+    retire n = do
+        retirePeerCID conn n
+        putOutput conn $ OutControl RTT1Level [RetireConnectionID n]
 validatePath conn pathInfo (Just cidInfo) = do
     pdat <- newPathData
     setChallenges conn pathInfo pdat
@@ -379,12 +395,48 @@ validatePath conn pathInfo (Just cidInfo) = do
     putOutput conn $ challengeOutput conn pathInfo frames
     waitResponse conn pathInfo
 
+-- | A server's part in a client's move to the path given, whether the
+--   path is validated.  Both paths are challenged (RFC 9000 Sec 9.3.3).  If
+--   the client changed its CID, the new path gets a new CID of the client's
+--   and the old path keeps its own (Sec 9.5); the one of the path given up
+--   is retired.
+validateMigration :: Connection -> PathInfo -> Bool -> IO Bool
+validateMigration conn pathInfo cidChanged = do
+    mold <-
+        if cidChanged
+            then timeout (Microseconds 100000) "validateMigration" $ waitPeerCID conn
+            else return Nothing -- PathChallenge only, no RetireConnectionID
+    oldPathInfo <- getPathInfo conn
+    -- assumed that this PathInfo is not stored in PeerInfo
+    addPathInfo conn pathInfo
+    -- A peer still on the old path answers from it and so ends a spurious
+    -- migration at once (Sec 9.3.2).
+    oldChallenge <- newPathData
+    putOutput conn $
+        OutPathProbe oldPathInfo (cidInfoCID <$> mold) [PathChallenge oldChallenge]
+    ok <- validatePath conn pathInfo mold
+    unless ok $ do
+        -- Sec 9.3.2: back to the last validated address.  The one that
+        -- failed is forgotten, so that a packet from it starts afresh.
+        restorePathInfo conn oldPathInfo
+        case mold of
+            Nothing -> return ()
+            Just old -> do
+                spurious <- atomically $ do
+                    db <- readTVar $ peerCIDDB conn
+                    setPeerCID conn old (triggeredByMe db)
+                    return $ usedCIDInfo db
+                let n = cidInfoSeq spurious
+                retirePeerCID conn n
+                putOutput conn $ OutControl RTT1Level [RetireConnectionID n]
+    return ok
+
 -- | A server sends the challenge to the path it is for, which may not be
 --   the one in use by the time it leaves.  A client's socket may be
 --   connected, and so cannot be given an address.
 challengeOutput :: Connection -> PathInfo -> [Frame] -> Output
 challengeOutput conn pathInfo frames
-    | isServer conn = OutPathProbe pathInfo frames
+    | isServer conn = OutPathProbe pathInfo Nothing frames
     | otherwise = OutControl RTT1Level frames
 
 setChallenges :: Connection -> PathInfo -> PathData -> IO ()
