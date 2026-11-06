@@ -7,7 +7,7 @@ module Network.QUIC.Types.Packet where
 import Codec.Serialise
 import Data.Ix
 import GHC.Generics
-import Network.Socket (SockAddr)
+import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC (ExtensionID (EID_QuicTransportParameters, ExtensionID))
 import Text.Printf
 
@@ -183,8 +183,8 @@ data ReceivedPacket = ReceivedPacket
     , rpTimeRecevied :: TimeMicrosecond
     , rpReceivedBytes :: Int
     , rpEncryptionLevel :: EncryptionLevel
-    , rpPeerAddr :: Maybe SockAddr
-    -- ^ Where a server received it from
+    , rpPeerAddr :: Maybe (Socket, SockAddr)
+    -- ^ On which socket a server received it, and from where
     }
     deriving (Eq, Show)
 

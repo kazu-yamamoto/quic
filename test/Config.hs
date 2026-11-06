@@ -170,6 +170,9 @@ data Scenario
       --   datagram to the server from another socket, which answers
       --   nothing: an on-path attacker's spurious migration.
       ForwardAside (MVar ())
+    | -- | As 'ForwardAside', but from an IPv6 socket to the server's
+      --   @[::1]:15003@, a socket of the server other than the client's.
+      ForwardAside6 (MVar ())
 
 withPipe :: Scenario -> IO () -> IO ()
 withPipe = withPipeWith False
@@ -239,9 +242,19 @@ withPipeWith stray scenario body = do
                 -- the bracket has just closed.  That surfaces as "threadWait:
                 -- invalid argument (Bad file descriptor)" from a thread nobody is
                 -- watching, and buries whatever the test was really failing on.
-                E.bracket (startRelay saS sockC sockS sockA irefC irefS) stopRelay $ \_ -> body
+                E.bracket aside6 (mapM_ (close . fst)) $ \m6 ->
+                    E.bracket (startRelay saS sockC sockS sockA m6 irefC irefS) stopRelay $ \_ -> body
   where
-    startRelay saS sockC sockS sockA irefC irefS = do
+    -- Only for 'ForwardAside6', so that no other test needs IPv6.
+    aside6 = case scenario of
+        ForwardAside6 _ -> do
+            a6 <- NE.head <$> getAddrInfo (Just hints6) (Just "::1") (Just "15003")
+            s6 <- openSocket a6
+            any6 <- NE.head <$> getAddrInfo (Just hints6) (Just "::1") (Just "0")
+            bind s6 $ addrAddress any6
+            return $ Just (s6, addrAddress a6)
+        _ -> return Nothing
+    startRelay saS sockC sockS sockA m6 irefC irefS = do
         stop <- newTVarIO False
         -- Where to send what comes back from the server.  Set once the client
         -- has introduced itself, which is before the server can have anything
@@ -301,12 +314,18 @@ withPipeWith stray scenario body = do
                                 ForwardAside trigger
                                     | BS.head bs1 .&. 0x80 == 0 ->
                                         isJust <$> tryTakeMVar trigger
+                                ForwardAside6 trigger
+                                    | BS.head bs1 .&. 0x80 == 0 ->
+                                        isJust <$> tryTakeMVar trigger
                                 _ -> return False
-                            let sock = if aside then sockA else sockS
+                            let (sock, dst) = case (aside, m6) of
+                                    (True, Just (s6, sa6)) -> (s6, sa6)
+                                    (True, Nothing) -> (sockA, saS)
+                                    _ -> (sockS, saS)
                             when (isCC || not dropPacket) $
                                 delayIf (shouldDelay scenario True n) $
                                     void $
-                                        sendTo sock bs1 saS
+                                        sendTo sock bs1 dst
         -- from server
         tid1 <- forkIO $ relayLoop stop sockS $ \(bs, _) -> do
             mcids <- readIORef cidsRef
@@ -369,6 +388,7 @@ withPipeWith stray scenario body = do
             , addrFlags = [AI_NUMERICHOST]
             , addrFamily = AF_INET
             }
+    hints6 = hints{addrFamily = AF_INET6}
     resolve port =
         NE.head <$> getAddrInfo (Just hints) (Just "127.0.0.1") (Just port)
     shouldDrop (Randomly n) _ _ = do

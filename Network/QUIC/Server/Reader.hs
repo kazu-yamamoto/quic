@@ -25,8 +25,8 @@ module Network.QUIC.Server.Reader (
 ) where
 
 import Control.Concurrent.STM
-import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
+import qualified Control.Monad.STM as STM
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
@@ -35,9 +35,9 @@ import Network.ByteOrder
 import Network.Control (LRUCacheRef, Rate, newRate)
 import qualified Network.Control as LRUCache
 import Network.Socket (
-    isClosedSocketError,
     SockAddr (..),
     Socket,
+    isClosedSocketError,
  )
 import qualified Network.Socket.ByteString as NSB
 import qualified System.ThreadManager as T
@@ -487,19 +487,18 @@ dispatch
             Just conn -> do
                 alive <- getAlive conn
                 when alive $ do
-                    void $ setSocket conn mysock -- fixme
                     -- Whether the peer has moved is for the receiver to say,
                     -- once the packet has decrypted: anyone who has seen the
                     -- CID can send one from anywhere.
                     let rpkt = mkReceivedPacket cpkt tim siz lvl
-                    writeRecvQ (connRecvQ conn) rpkt{rpPeerAddr = Just peersa}
+                    writeRecvQ (connRecvQ conn) rpkt{rpPeerAddr = Just (mysock, peersa)}
 ----------------------------------------------------------------
 dispatch
     Dispatch{..}
     _
     _
     logAction
-    mysock
+    _
     peersa
     _
     _
@@ -510,8 +509,6 @@ dispatch
         case mconn of
             Nothing -> logAction $ "CID no match: " <> bhow dCID <> ", " <> bhow peersa
             Just conn -> do
-                -- fixme: is this block necessary?
-                void $ setSocket conn mysock
                 -- No new path from here: this packet has not decrypted, and
                 -- the peer may not migrate during the handshake anyway
                 -- (RFC 9000 Sec 9).

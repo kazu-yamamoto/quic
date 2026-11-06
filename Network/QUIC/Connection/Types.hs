@@ -244,10 +244,20 @@ data PathInfo = PathInfo
     , pathAbandoned :: TVar Bool
     -- ^ Gone back from: a send waiting for its anti-amplification
     --   credit goes to the path now in use instead.
+    , pathSocket :: Maybe Socket
+    -- ^ A server's socket for the path, the one its packets came in on.
+    --   'Nothing' for a client, which sends on the connection's socket.
     }
 
 newPathInfo :: SockAddr -> IO PathInfo
-newPathInfo peerSockAddr = do
+newPathInfo = newPathInfo' Nothing
+
+-- | A server's path, on the socket its packets came in on.
+newPathInfoOn :: Socket -> SockAddr -> IO PathInfo
+newPathInfoOn = newPathInfo' . Just
+
+newPathInfo' :: Maybe Socket -> SockAddr -> IO PathInfo
+newPathInfo' pathSocket peerSockAddr = do
     pathBytesTx <- newTVarIO 0
     pathBytesRx <- newTVarIO 0
     addressValidated <- newTVarIO False

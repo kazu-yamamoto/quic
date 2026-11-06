@@ -344,11 +344,11 @@ createServerConnection
 createServerConnection conf@ServerConfig{..} dispatch Accept{..} = do
     retire0 <- newTVarIO False
     sref <- newIORef (accMySocket, retire0)
-    pathInfo <- newPathInfo accPeerSockAddr
+    pathInfo <- newPathInfoOn accMySocket accPeerSockAddr
     piref <- newIORef $ PeerInfo pathInfo Nothing
     let send buf siz = void $ do
-            (sock, _) <- readIORef sref
             PeerInfo pinfo _ <- readIORef piref
+            sock <- maybe (fst <$> readIORef sref) return $ pathSocket pinfo
             NS.sendBufTo sock buf siz $ peerSockAddr pinfo
         recv = recvServer accRecvQ
     let myCID = fromJust $ initSrcCID accMyAuthCIDs

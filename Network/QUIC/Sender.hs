@@ -50,7 +50,7 @@ sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
     send pathInfo buf bytes = case mdst of
         Nothing -> connSend conn buf bytes
         Just _ -> do
-            (s, _) <- readIORef $ connSocket conn
+            s <- maybe (getSocket conn) return $ pathSocket pathInfo
             void $ NS.sendBufTo s buf bytes $ peerSockAddr pathInfo
     SizedBuffer buf0 bufsiz0 = encryptRes conn
     ldcc = connLDCC conn

@@ -8,6 +8,7 @@ module Network.QUIC.Connection.Misc (
     getVersion,
     getOriginalVersion,
     getSocket,
+    getPathSocket,
     setSocket,
     getSocketRetire,
     swapSocket,
@@ -86,6 +87,12 @@ getOriginalVersion = chosenVersion . origVersionInfo
 
 getSocket :: Connection -> IO Socket
 getSocket Connection{..} = fst <$> readIORef connSocket
+
+-- | The socket the path in use sends on: a server's path has its own.
+getPathSocket :: Connection -> IO Socket
+getPathSocket conn = do
+    PeerInfo pinfo _ <- readIORef $ peerInfo conn
+    maybe (getSocket conn) return $ pathSocket pinfo
 
 -- | Swapping the socket alone, leaving the reader of the old one to be
 --   retired through the variable they share.
