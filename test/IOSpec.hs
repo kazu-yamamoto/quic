@@ -1462,7 +1462,9 @@ testRebindPath cc sc waitS = do
 -- | RFC 9000 Sec 9.3.2: a packet of the client's, forwarded from another
 --   address, moves the server there, and the validation of that address
 --   fails.  The server waited for the PATH_RESPONSE for ever and went on
---   sending to the address that never answered.
+--   sending to the address that never answered.  Then it waited for the
+--   validation to time out (about 3 s), though the client's next packets
+--   came from the old address; they now send it back at once.
 testSpuriousMigration :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testSpuriousMigration cc sc waitS = do
     paths <- newEmptyMVar
@@ -1476,9 +1478,9 @@ testSpuriousMigration cc sc waitS = do
                 before <- takeMVar paths
                 putMVar trigger ()
                 -- Answered on the spurious path, and so not heard until
-                -- the server has given up on it.
+                -- the server is back on the old one.
                 sendStream strm "ping2"
-                Timeout.timeout 8000000 (recvStream strm 1024)
+                Timeout.timeout 1500000 (recvStream strm 1024)
                     `shouldReturn` Just "ping2"
                 _ <- takeMVar paths
                 echo strm "ping3" `shouldReturn` Just "ping3"

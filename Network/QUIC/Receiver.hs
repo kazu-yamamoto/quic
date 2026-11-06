@@ -316,7 +316,10 @@ deliverStream conn found strm =
 checkMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
 checkMigration conn dCID peersa cidChanged = do
     mPathInfo <- findPathInfo conn peersa
+    current <- peerSockAddr <$> getPathInfo conn
     case mPathInfo of
+        -- The previous path: the peer is still there.
+        Just _ | peersa /= current -> abandonMigration conn
         Just _ -> return ()
         Nothing -> do
             -- Claimed before the thread rather than inside it, so that a

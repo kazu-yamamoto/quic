@@ -141,7 +141,10 @@ addPathInfo Connection{..} newpi = atomicModifyIORef'' peerInfo add
 
 -- | Going back to a path, forgetting the one in use.
 restorePathInfo :: Connection -> PathInfo -> IO ()
-restorePathInfo Connection{..} oldpi = writeIORef peerInfo $ PeerInfo oldpi Nothing
+restorePathInfo Connection{..} oldpi = do
+    PeerInfo failed _ <- readIORef peerInfo
+    writeIORef peerInfo $ PeerInfo oldpi Nothing
+    atomically $ writeTVar (pathAbandoned failed) True
 
 findPathInfo :: Connection -> SockAddr -> IO (Maybe PathInfo)
 findPathInfo Connection{..} sa = do
