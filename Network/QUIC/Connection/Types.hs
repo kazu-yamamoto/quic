@@ -7,6 +7,7 @@ module Network.QUIC.Connection.Types where
 
 import Control.Concurrent
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.ByteString.Internal
@@ -325,9 +326,9 @@ data Connection = Connection
     , bytesTx           :: IORef Int
     , bytesRx           :: IORef Int
     , connDone          :: TVar Bool
-    , connAbortRequest  :: TVar (Maybe (ApplicationProtocolError, ReasonPhrase))
-    -- ^ What 'Network.QUIC.Connection.Misc.abortConnection' asked to close
-    --   the connection with, for its protocol threads to act on.
+    , connAbortRequest  :: TVar (Maybe E.SomeException)
+    -- ^ How 'Network.QUIC.Connection.Misc.requestEnd' asked the connection
+    --   to end, for its protocol threads to act on.
     , -- TLS
       pendingQ          :: Array EncryptionLevel (TVar [ReceivedPacket])
     , ciphers           :: IOArray EncryptionLevel Cipher

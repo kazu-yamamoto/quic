@@ -38,6 +38,7 @@ module Network.QUIC.Connection.Misc (
     sendFrames,
     closeConnection,
     abortConnection,
+    requestEnd,
     watchAbortRequest,
     abortRequested,
 ) where
@@ -317,10 +318,16 @@ closeConnection _conn err desc = E.throwIO quicexc
 -- just never looks.  The first request is the one acted on.
 abortConnection
     :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
-abortConnection Connection{..} err desc =
-    atomically $ modifyTVar' connAbortRequest $ \r -> r <|> Just (err, desc)
+abortConnection conn err desc = requestEnd conn $ Abort err desc
 
--- | A connection's ending, as 'abortConnection' asked for it if it did.
+-- | Asking the connection's protocol threads to end it with this
+--   exception, as 'abortConnection' does.  For threads outside them, such
+--   as a reader, which used to throw to the connection's main thread.
+requestEnd :: E.Exception e => Connection -> e -> IO ()
+requestEnd Connection{..} e =
+    atomically $ modifyTVar' connAbortRequest $ \r -> r <|> Just (E.toException e)
+
+-- | A connection's ending, as 'requestEnd' asked for it if it did.
 --   An application that asks and returns at once can see the protocol
 --   threads end before they have acted on it; it is what it asked for all
 --   the same.
@@ -328,15 +335,13 @@ abortRequested
     :: Connection -> Either E.SomeException a -> IO (Either E.SomeException a)
 abortRequested Connection{..} ex@(Right _) = do
     req <- readTVarIO connAbortRequest
-    return $ case req of
-        Nothing -> ex
-        Just (err, desc) -> Left $ E.toException $ Abort err desc
+    return $ maybe ex Left req
 abortRequested _ ex = return ex
 
--- | Waiting for 'abortConnection' and raising 'Abort' when it is asked:
+-- | Waiting for 'requestEnd' and raising what it was asked with:
 --   one of a connection's protocol threads, so that it ends the connection
 --   as any of them failing does.
 watchAbortRequest :: Connection -> IO ()
 watchAbortRequest Connection{..} = do
-    (err, desc) <- atomically $ readTVar connAbortRequest >>= maybe retry return
-    E.throwIO $ Abort err desc
+    e <- atomically $ readTVar connAbortRequest >>= maybe retry return
+    E.throwIO e

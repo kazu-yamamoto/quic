@@ -61,6 +61,9 @@ spec = do
             testInjected cc sc waitS $ \dcid scid ->
                 encodeRetryPacket $
                     RetryPacket Version2 dcid (toCID "forged") "token" (Left scid)
+    describe "a stateless reset to the client" $
+        it "ends the connection with ConnectionIsReset" $
+            testStatelessResetReceived cc sc waitS
     describe "max_udp_payload_size" $ do
         it "bounds the datagrams each side sends" $ do
             let small p = p{maxUdpPayloadSize = 1200}
@@ -764,6 +767,32 @@ testInjected cc sc waitS mk = do
         consumeBytes strm 10000
         assertEndOfStream strm
         putMVar mvar ()
+
+-- | A stateless reset with the token the server gave.  The client's reader
+--   threw 'ConnectionIsReset' to the connection's main thread; it now asks
+--   the protocol threads to end with it.
+testStatelessResetReceived :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testStatelessResetReceived cc sc waitS = do
+    trigger <- newEmptyMVar
+    tokenVar <- newEmptyMVar
+    let mk _ _ = readMVar tokenVar >>= makeStatelessReset 64
+    withPipe (InjectToClient trigger mk) $
+        withAsync (run sc $ \_ -> threadDelay 5_000_000) $ \_ -> do
+            waitS
+            noUncaught $
+                C.run cc (go trigger tokenVar) `shouldThrow` isReset
+  where
+    go trigger tokenVar conn = do
+        waitEstablished conn
+        mtoken <- statelessResetToken <$> getPeerParameters conn
+        case mtoken of
+            Nothing -> expectationFailure "no stateless_reset_token"
+            Just token -> do
+                putMVar tokenVar token
+                putMVar trigger ()
+                threadDelay 3_000_000
+    isReset ConnectionIsReset = True
+    isReset _ = False
 
 -- | The server asks the client to stop sending on @n@ streams at once.
 testStopMany :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
