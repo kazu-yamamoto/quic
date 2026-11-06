@@ -6,6 +6,7 @@ module Network.QUIC.Connection.StreamTable (
     claimPeerStream,
     findStream,
     addStream,
+    resetTxStreamLimits,
     delStream,
     departStream,
     Arrival (..),
@@ -76,6 +77,17 @@ addStream conn@Connection{..} sid = do
                 newStream conn sid txLim rxLim
     atomically $ modifyTVar' streamTable $ insertStream sid strm
     return strm
+
+-- | 0-RTT rejected (RFC 9001 Sec 4.6.2): the streams the client opened
+--   under the remembered limits are held to what the server gives now.
+resetTxStreamLimits :: Connection -> Parameters -> IO ()
+resetTxStreamLimits Connection{..} serverParams = do
+    strms <- tableStreams <$> readTVarIO streamTable
+    forM_ strms $ \strm -> do
+        let sid = streamId strm
+        when (sid >= 0 && isClientInitiated sid) $
+            resetTxMaxStreamData strm $
+                serverInitial sid serverParams
 
 delStream :: Connection -> Stream -> IO ()
 delStream Connection{..} strm =
