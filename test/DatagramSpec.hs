@@ -49,7 +49,7 @@ spec = do
         -- "If a client stores the value of the max_datagram_frame_size transport parameter with their 0-RTT state, they MUST validate that the new value of the max_datagram_frame_size transport parameter sent by the server in the handshake is greater than or equal to the stored value; if not, the client MUST terminate the connection with error PROTOCOL_VIOLATION."
         it "Client MUST reject 0-RTT downgrade server parameters" $ do
             let scInit = sc0 { scMaxDatagramFrameSize = 1024 }
-                scDowngrade = sc0 { scMaxDatagramFrameSize = 500 }
+                scDowngrade = lowerSentDatagramSize sc0 { scMaxDatagramFrameSize = 1024 }
                 cc0RTT = testClientConfig { ccMaxDatagramFrameSize = 1024 }
             testDatagram0RTTDowngrade cc0RTT scInit scDowngrade
 
@@ -96,7 +96,7 @@ spec = do
         -- "When servers decide to accept 0-RTT data, they MUST send a max_datagram_frame_size transport parameter greater than or equal to the value they sent to the client..."
         it "Server MUST NOT downgrade max_datagram_frame_size on 0-RTT" $ do
             let scInit = sc0 { scMaxDatagramFrameSize = 1024 }
-                scDowngrade = sc0 { scMaxDatagramFrameSize = 500 }
+                scDowngrade = lowerSentDatagramSize sc0 { scMaxDatagramFrameSize = 1024 }
                 cc0RTT = testClientConfig { ccMaxDatagramFrameSize = 1024 }
 
             mvar <- newEmptyMVar
@@ -288,6 +288,12 @@ testDatagram0RTT cc1 sc1 = do
         when (handshakeMode info == RTT0) $ do
             recv <- recvDatagram conn
             recv `shouldBe` "0rtt_client_data"
+
+-- | A server that keeps max_datagram_frame_size and so accepts 0-RTT, but
+--   sends a lower one: what the client is to catch (RFC 9221 Sec 3).
+lowerSentDatagramSize :: ServerConfig -> ServerConfig
+lowerSentDatagramSize sc =
+    sc { scHooks = (scHooks sc) { onTransportParametersCreated = \p -> p { maxDatagramFrameSize = 500 } } }
 
 testDatagram0RTTRejected :: ClientConfig -> ServerConfig -> ServerConfig -> IO ()
 testDatagram0RTTRejected cc1 scInit scLower = do
