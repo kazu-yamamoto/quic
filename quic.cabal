@@ -131,7 +131,7 @@ library
         base16-bytestring >=1.0 && <1.1,
         bytestring >=0.10,
         containers,
-        crypto-token >=0.2.0 && <0.3,
+        crypto-token >=0.2.1 && <0.3,
         crypton >=2.1.0 && <2.3,
         crypton-x509 >=1.9.0 && <1.11,
         crypton-x509-store >=1.9.0 && <1.11,
