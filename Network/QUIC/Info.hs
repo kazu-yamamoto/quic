@@ -12,7 +12,7 @@ import qualified Network.Socket as NS
 -- | Getting information about a connection.
 getConnectionInfo :: Connection -> IO ConnectionInfo
 getConnectionInfo conn = do
-    sock <- getSocket conn
+    sock <- getPathSocket conn
     -- fixme: this is undefined
     mysa <- NS.getSocketName sock
     peersa <- peerSockAddr <$> getPathInfo conn

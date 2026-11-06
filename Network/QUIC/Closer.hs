@@ -76,7 +76,7 @@ closure' conn ldcc frame = do
 
 closure'' :: Connection -> LDCC -> Frame -> IO ()
 closure'' conn ldcc frame = do
-    sock <- getSocket conn
+    sock <- getPathSocket conn
     peersa <- peerSockAddr <$> getPathInfo conn
     connected <- getSockConnected conn
     -- send

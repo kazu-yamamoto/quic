@@ -7,7 +7,7 @@ module Network.QUIC.Receiver (
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
-import Network.Socket (SockAddr)
+import Network.Socket (SockAddr, Socket)
 import Network.TLS (AlertDescription (..))
 import System.Log.FastLogger
 
@@ -191,9 +191,9 @@ processReceivedPacket' conn mcidChanged rpkt = do
             -- flood in particular, must not pile up for good.
             enforceQueuedControlLimit conn
             case (mcidChanged, rpPeerAddr rpkt) of
-                (Just cidChanged, Just peersa)
+                (Just cidChanged, Just (sock, peersa))
                     | largest && any (not . isProbing) plainFrames ->
-                        checkMigration conn (headerMyCID hdr) peersa cidChanged
+                        checkMigration conn (headerMyCID hdr) sock peersa cidChanged
                 _ -> return ()
             when ackEli $ do
                 case lvl of
@@ -313,8 +313,8 @@ deliverStream conn found strm =
 --   carries a non-probing frame and is the largest so far comes from a new
 --   address.  Nothing before decryption: anyone who has seen the CID can
 --   send a packet from anywhere.
-checkMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
-checkMigration conn dCID peersa cidChanged = do
+checkMigration :: Connection -> CID -> Socket -> SockAddr -> Bool -> IO ()
+checkMigration conn dCID sock peersa cidChanged = do
     mPathInfo <- findPathInfo conn peersa
     current <- peerSockAddr <$> getPathInfo conn
     case mPathInfo of
@@ -328,7 +328,7 @@ checkMigration conn dCID peersa cidChanged = do
             claimed <- claimMigration conn
             when claimed $
                 forkManaged conn "QUIC migration" $
-                    onClientMigration conn dCID peersa cidChanged
+                    onClientMigration conn dCID sock peersa cidChanged
 
 -- | Frames that do not move the peer (RFC 9000 Sec 9.1).
 isProbing :: Frame -> Bool
@@ -339,8 +339,8 @@ isProbing NewConnectionID{} = True
 isProbing _ = False
 
 -- | Carry out the migration the caller has claimed with 'claimMigration'.
-onClientMigration :: Connection -> CID -> SockAddr -> Bool -> IO ()
-onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
+onClientMigration :: Connection -> CID -> Socket -> SockAddr -> Bool -> IO ()
+onClientMigration conn newdCID sock peersa cidChanged = handleLogUnit logAction $ do
     -- fixme: should not block
     mcidinfo <-
         if cidChanged
@@ -350,7 +350,7 @@ onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
     qlogDebug conn $ Debug $ toLogStr msg
     connDebugLog conn $ "debug: onClientMigration: " <> msg
     oldPathInfo <- getPathInfo conn
-    pathInfo <- newPathInfo peersa
+    pathInfo <- newPathInfoOn sock peersa
     -- assumed that this PathInfo is not stored in PeerInfo
     addPathInfo conn pathInfo
     -- RFC 9000 Sec 9.3.3: a challenge on the old path too.  A peer still

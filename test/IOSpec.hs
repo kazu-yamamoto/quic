@@ -188,6 +188,12 @@ spec = do
             testSpuriousMigration cc sc waitS 1500000
         -- RFC 9000 Sec 9.3.3.  The new path answers nothing, so a
         -- PATH_CHALLENGE in the client's qlog came on the old one.
+        -- The server's socket for a path is the one its packets came in
+        -- on.  It used to be the last socket any packet came in on, and the
+        -- IPv4 old path was then challenged through the IPv6 socket.
+        it "sends each path's packets on that path's socket" $ do
+            let sc46 = sc{scAddresses = [("127.0.0.1", 15003), ("::1", 15003)]}
+            testSpuriousMigration6 cc sc46 waitS
         it "challenges the old path too" $
             withTempDir "quic-old-path-qlog" $ \dir -> do
                 testSpuriousMigration cc{ccQLog = Just dir} sc waitS 1500000
@@ -767,6 +773,27 @@ testInjected cc sc waitS mk = do
         consumeBytes strm 10000
         assertEndOfStream strm
         putMVar mvar ()
+
+-- | 'testSpuriousMigration', with the client's packet forwarded to the
+--   server's IPv6 socket.
+testSpuriousMigration6 :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testSpuriousMigration6 cc sc waitS = do
+    paths <- newEmptyMVar
+    trigger <- newEmptyMVar
+    withPipe (ForwardAside6 trigger) $
+        withAsync (pathEchoServer sc paths) $ \_ -> do
+            waitS
+            C.run cc $ \conn -> do
+                strm <- stream conn
+                echo strm "ping1" `shouldReturn` Just "ping1"
+                original <- takeMVar paths
+                putMVar trigger ()
+                sendStream strm "ping2"
+                Timeout.timeout 1500000 (recvStream strm 1024)
+                    `shouldReturn` Just "ping2"
+                _ <- takeMVar paths
+                echo strm "ping3" `shouldReturn` Just "ping3"
+                takeMVar paths `shouldReturn` original
 
 -- | A stateless reset with the token the server gave.  The client's reader
 --   threw 'ConnectionIsReset' to the connection's main thread; it now asks
