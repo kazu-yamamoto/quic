@@ -45,7 +45,7 @@ decodePacket :: ByteString -> Bool -> IO (PacketI, ByteString)
 decodePacket bs checkQuicBit = E.handle handler $ withReadBuffer bs $ \rbuf -> do
     save rbuf
     proFlags <- Flags <$> read8 rbuf
-    if checkQuicBit && not (isQuic proFlags)
+    if checkQuicBit && not (isQuic proFlags) && not isVN
         then
             return (PacketIB BrokenPacket len, "")
         else do
@@ -87,6 +87,9 @@ decodePacket bs checkQuicBit = E.handle handler $ withReadBuffer bs $ \rbuf -> d
                     return $ PacketIC crypt HandshakeLevel siz
     handler BufferOverrun = return (PacketIB BrokenPacket len, "")
     len = BS.length bs
+    -- RFC 9000 Sec 17.2.1: all but the first bit of a Version Negotiation
+    -- packet are arbitrary, so it has no QUIC bit to check.
+    isVN = isLong (BS.head bs) && BS.take 4 (BS.drop 1 bs) == "\0\0\0\0"
 
 makeShortCrypt :: ByteString -> ReadBuffer -> IO Crypt
 makeShortCrypt bs rbuf = do
