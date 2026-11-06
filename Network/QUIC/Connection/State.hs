@@ -171,7 +171,8 @@ waitAntiAmplificationFree Connection{..} pathInfo siz = do
 checkAntiAmplificationFreeSTM :: PathInfo -> Int -> STM Bool
 checkAntiAmplificationFreeSTM PathInfo{..} siz = do
     validated <- readTVar addressValidated
-    if validated
+    abandoned <- readTVar pathAbandoned
+    if validated || abandoned
         then return True
         else do
             tx <- readTVar pathBytesTx

@@ -23,6 +23,7 @@ module Network.QUIC.Connection.Migration (
     setPeerStatelessResetToken,
     isStatelessRestTokenValid,
     claimMigration,
+    abandonMigration,
     checkResponse,
     validatePath,
     getMyRetirePriorTo,
@@ -414,9 +415,19 @@ waitResponse Connection{..} = do
     atomically $ do
         state <- readTVar migrationState
         timedOut <- readTVar expired
-        check (state == RecvResponse || timedOut)
+        check (state == RecvResponse || state == MigrationAbandoned || timedOut)
         writeTVar migrationState NonMigration
         return (state == RecvResponse)
+
+-- | RFC 9000 Sec 9.3.2: a newer packet from the last validated address
+--   ends the validation of the new one, which then fails at once and
+--   sends us back there.
+abandonMigration :: Connection -> IO ()
+abandonMigration Connection{..} = atomically $ do
+    s <- readTVar migrationState
+    case s of
+        SendChallenge{} -> writeTVar migrationState MigrationAbandoned
+        _ -> return ()
 
 checkResponse :: Connection -> PathData -> IO ()
 checkResponse Connection{..} pdat = do

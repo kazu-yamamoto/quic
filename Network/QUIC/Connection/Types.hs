@@ -116,12 +116,14 @@ data MigrationState
     | MigrationStarted
     | SendChallenge PathInfo PathData
     | RecvResponse
+    | MigrationAbandoned
 
 {- FOURMOLU_DISABLE -}
 instance Eq MigrationState where
     NonMigration     == NonMigration     = True
     MigrationStarted == MigrationStarted = True
     RecvResponse     == RecvResponse     = True
+    MigrationAbandoned == MigrationAbandoned = True
     _                == _                = False
 {- FOURMOLU_ENABLE -}
 
@@ -237,6 +239,9 @@ data PathInfo = PathInfo
     , pathBytesTx :: TVar Int -- TVar for anti amplification
     , pathBytesRx :: TVar Int -- TVar for anti amplification
     , addressValidated :: TVar Bool
+    , pathAbandoned :: TVar Bool
+    -- ^ Gone back from: a send waiting for its anti-amplification
+    --   credit goes to the path now in use instead.
     }
 
 newPathInfo :: SockAddr -> IO PathInfo
@@ -244,6 +249,7 @@ newPathInfo peerSockAddr = do
     pathBytesTx <- newTVarIO 0
     pathBytesRx <- newTVarIO 0
     addressValidated <- newTVarIO False
+    pathAbandoned <- newTVarIO False
     return PathInfo{..}
 
 ----------------------------------------------------------------
