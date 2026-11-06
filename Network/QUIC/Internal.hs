@@ -16,6 +16,7 @@ module Network.QUIC.Internal (
     module Network.QUIC.Client.Reader,
     module Network.QUIC.Client.WatchDog,
     module Network.QUIC.Socket,
+    sendOutput,
 ) where
 
 import Network.QUIC.Client.Reader (
@@ -35,6 +36,7 @@ import Network.QUIC.Parameters
 import Network.QUIC.QLogger
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
+import Network.QUIC.Sender (sendOutput)
 import Network.QUIC.Socket
 import Network.QUIC.Stream
 import Network.QUIC.TLS

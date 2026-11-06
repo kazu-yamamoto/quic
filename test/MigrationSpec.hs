@@ -97,6 +97,21 @@ spec = do
                             _ -> retired
                 retired `shouldReturn` 1
 
+    -- The PTO probe is for the path in use.  A PATH_CHALLENGE for another
+    -- path took it, and the probe went to that path instead.
+    describe "a path probe" $
+        it "leaves a pending PTO probe for the path in use" $ do
+            (_, serverConn) <- makeConnections serverConf Version1
+            let ldcc = connLDCC serverConn
+            -- What 'run' sets up, so that the window is open.
+            setInitialCongestionWindow ldcc 1200
+            pathInfo <- getPathInfo serverConn >>= newPathInfo . peerSockAddr
+            atomically $ writeTVar (addressValidated pathInfo) True
+            sendPing ldcc RTT1Level
+            pdat <- newPathData
+            sendOutput serverConn $ OutPathProbe pathInfo Nothing [PathChallenge pdat]
+            atomically (isEmptyPingSTM ldcc) `shouldReturn` False
+
     describe "claimMigration" $ do
         it "gives the migration to one caller and refuses the rest" $ do
             (_, serverConn) <- makeConnections serverConf Version1
