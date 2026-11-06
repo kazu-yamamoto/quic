@@ -356,7 +356,7 @@ validatePath :: Connection -> PathInfo -> Maybe CIDInfo -> IO Bool
 validatePath conn pathInfo Nothing = do
     pdat <- newPathData
     setChallenges conn pathInfo pdat
-    putOutput conn $ OutControl RTT1Level [PathChallenge pdat]
+    putOutput conn $ challengeOutput conn pathInfo [PathChallenge pdat]
     waitResponse conn
 validatePath conn pathInfo (Just cidInfo) = do
     pdat <- newPathData
@@ -376,8 +376,16 @@ validatePath conn pathInfo (Just cidInfo) = do
             else
                 return []
     let frames = extra ++ [PathChallenge pdat, RetireConnectionID retiredSeqNum]
-    putOutput conn $ OutControl RTT1Level frames
+    putOutput conn $ challengeOutput conn pathInfo frames
     waitResponse conn
+
+-- | A server sends the challenge to the path it is for, which may not be
+--   the one in use by the time it leaves.  A client's socket may be
+--   connected, and so cannot be given an address.
+challengeOutput :: Connection -> PathInfo -> [Frame] -> Output
+challengeOutput conn pathInfo frames
+    | isServer conn = OutPathProbe pathInfo frames
+    | otherwise = OutControl RTT1Level frames
 
 setChallenges :: Connection -> PathInfo -> PathData -> IO ()
 setChallenges Connection{..} pathInfo pdat =

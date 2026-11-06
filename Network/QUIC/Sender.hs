@@ -461,6 +461,9 @@ adjustForRetransmit conn (Datagram{} : xs) = adjustForRetransmit conn xs
 -- frames are sent just once."  The peer sends a new PATH_CHALLENGE if
 -- it needs one.  Resent, a PATH_RESPONSE flood would never leave us.
 adjustForRetransmit conn (PathResponse{} : xs) = adjustForRetransmit conn xs
+-- RFC 9000 Sec 13.3: a new payload each time, so never resent.  Resent, it
+-- also went to the path in use, whichever path it was for.
+adjustForRetransmit conn (PathChallenge{} : xs) = adjustForRetransmit conn xs
 adjustForRetransmit conn (x : xs) = do
     rs <- adjustForRetransmit conn xs
     return (x : rs)
