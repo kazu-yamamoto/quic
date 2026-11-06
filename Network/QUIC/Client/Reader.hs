@@ -12,10 +12,10 @@ module Network.QUIC.Client.Reader (
 
 import Control.Concurrent
 import Control.Concurrent.STM
-import Data.Functor (($>))
-import qualified Control.Monad.STM as STM
 import qualified Control.Exception as E
+import qualified Control.Monad.STM as STM
 import qualified Data.ByteString as BS
+import Data.Functor (($>))
 import Data.List (intersect)
 import Network.Socket (Socket, getSocketName)
 import qualified Network.Socket.ByteString as NSB
@@ -120,7 +120,7 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
                 nextVerInfo = case myVers `intersect` peerVers of
                     vers@(ver : _) -> VersionInfo ver vers
                     _ -> brokenVersionInfo
-            E.throwTo (mainThreadId conn) $ VerNego nextVerInfo
+            requestEnd conn $ VerNego nextVerInfo
     putQ t (PacketIC pkt@(CryptPacket hdr crypt) lvl siz) = do
         let cid = headerMyCID hdr
         included <- myCIDsInclude conn cid
@@ -137,7 +137,7 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
                     when isStatelessReset $ do
                         qlogReceived conn StatelessReset t
                         connDebugLog conn "debug: connection is reset statelessly"
-                        E.throwTo (mainThreadId conn) ConnectionIsReset
+                        requestEnd conn ConnectionIsReset
                 _ -> return () -- really invalid, just ignore
     putQ t (PacketIR pkt@(RetryPacket ver dCID sCID token ex)) = do
         qlogReceived conn pkt t

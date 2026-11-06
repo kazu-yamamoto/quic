@@ -134,6 +134,13 @@ spec = do
                         te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
             testHandshake3 cc1 cc2 sc waitS handshakeFailure
+        it "reconnects with the version a Version Negotiation offers" $ do
+            let cc = testClientConfig{ccVersion = Version2, ccVersions = [Version2, Version1]}
+                sc = sc0{scVersions = [Version1]}
+            E.bracket (forkIO $ S.run sc $ \_ -> threadDelay 2000000) killThread $ \_ -> do
+                waitS
+                C.run cc (\conn -> waitEstablished conn >> getVersion conn)
+                    `shouldReturn` Version1
         it "fails with no version in common" $ do
             let cc1 = testClientConfig{ccVersion = Version1, ccVersions = [Version1]}
                 cc2 = testClientConfig
