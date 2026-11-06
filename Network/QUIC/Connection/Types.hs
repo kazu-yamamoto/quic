@@ -561,6 +561,8 @@ data Output
     = OutControl EncryptionLevel [Frame]
     | OutHandshake [(EncryptionLevel, ByteString)]
     | OutRetrans PlainPacket
+    | -- | 1-RTT frames for a path other than the one in use.
+      OutPathProbe PathInfo [Frame]
 
 -- | The control frames of an output, which 'queuedControls' counts.
 --   Not data, which flow control bounds, nor what is never resent.
@@ -568,6 +570,7 @@ countControls :: Output -> Int
 countControls (OutControl _ frames) = length $ filter isControl frames
 countControls (OutRetrans (PlainPacket _ plain)) = length $ filter isControl $ plainFrames plain
 countControls OutHandshake{} = 0
+countControls (OutPathProbe _ frames) = length $ filter isControl frames
 
 isControl :: Frame -> Bool
 isControl Padding{} = False

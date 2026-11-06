@@ -11,6 +11,7 @@ import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
 import Foreign.Ptr (plusPtr)
+import qualified Network.Socket as NS
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -39,9 +40,18 @@ cryptoFrame conn crypto lvl = do
 ----------------------------------------------------------------
 
 sendPacket :: Connection -> [SentPacket] -> IO ()
-sendPacket _ [] = return ()
-sendPacket conn spkts0 = getMaxPacketSize conn >>= go
+sendPacket conn = sendPacketTo conn Nothing
+
+-- | Sending to the path in use, or to the one given.
+sendPacketTo :: Connection -> Maybe PathInfo -> [SentPacket] -> IO ()
+sendPacketTo _ _ [] = return ()
+sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
   where
+    send pathInfo buf bytes = case mdst of
+        Nothing -> connSend conn buf bytes
+        Just _ -> do
+            (s, _) <- readIORef $ connSocket conn
+            void $ NS.sendBufTo s buf bytes $ peerSockAddr pathInfo
     SizedBuffer buf0 bufsiz0 = encryptRes conn
     ldcc = connLDCC conn
     -- RFC 9002 section 7: "packets containing only ACK frames do not count
@@ -98,14 +108,14 @@ sendPacket conn spkts0 = getMaxPacketSize conn >>= go
                 when (isJust mx) $ qlogDebug conn $ Debug "probe new"
                 (sentPackets, leftsiz) <- buildPackets buf0 bufsiz0 maxSiz spkts0 id
                 let bytes = bufsiz0 - leftsiz
-                pathInfo <- getPathInfo conn
+                pathInfo <- maybe (getPathInfo conn) return mdst
                 when (isServer conn) $
                     waitAntiAmplificationFree conn pathInfo bytes
                 -- If the secret of this level (e.g. HandshakeLevel)
                 -- is already dropped, bytes is 0.
                 when (bytes > 0) $ do
                     now <- getTimeMicrosecond
-                    connSend conn buf0 bytes
+                    send pathInfo buf0 bytes
                     addTxBytes conn bytes
                     addPathTxBytes pathInfo bytes
                     forM_ sentPackets $ \sentPacket0 -> do
@@ -414,6 +424,8 @@ sendOutput conn (OutHandshake lcs0) = do
     sendCryptoFragments conn lcs
     when (any (\(l, _) -> l == HandshakeLevel) lcs) $
         discardClientInitialPacketNumberSpace conn
+sendOutput conn (OutPathProbe pathInfo frames) =
+    construct conn RTT1Level frames False >>= sendPacketTo conn (Just pathInfo)
 sendOutput conn (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0
     let lvl = levelFromHeader hdr0
@@ -506,13 +518,13 @@ limitation = 1040
 
 -- | Upper bound on what a stream frame takes on top of its data
 streamFrameMaxOverhead :: Int
-streamFrameMaxOverhead
-    = sum
-    [ 1 -- type
-    , 8 -- stream ID
-    , 8 -- offset
-    , 2 -- length
-    ]
+streamFrameMaxOverhead =
+    sum
+        [ 1 -- type
+        , 8 -- stream ID
+        , 8 -- offset
+        , 2 -- length
+        ]
 
 packFin :: Connection -> Stream -> Bool -> IO Bool
 packFin _ _ True = return True

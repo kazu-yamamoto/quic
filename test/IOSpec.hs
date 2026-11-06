@@ -180,7 +180,13 @@ spec = do
                         ]
         it "follows a client that rebinds" $ testRebindPath cc sc waitS
         it "goes back when the new one is not validated" $
-            testSpuriousMigration cc sc waitS
+            testSpuriousMigration cc sc waitS 1500000
+        -- RFC 9000 Sec 9.3.3.  A max_ack_delay of 2 s keeps the client from
+        -- resending from the old path in time; the challenge sent there
+        -- makes it answer from there at once.
+        it "challenges the old path too" $ do
+            let sc' = sc{scParameters = (scParameters sc){maxAckDelay = Milliseconds 2000}}
+            testSpuriousMigration cc sc' waitS 500000
     describe "a stateless reset" $ do
         it "is smaller than the packet it answers" $ do
             withAsync (run sc $ \_ -> return ()) $ \_ -> do
@@ -1465,8 +1471,8 @@ testRebindPath cc sc waitS = do
 --   sending to the address that never answered.  Then it waited for the
 --   validation to time out (about 3 s), though the client's next packets
 --   came from the old address; they now send it back at once.
-testSpuriousMigration :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
-testSpuriousMigration cc sc waitS = do
+testSpuriousMigration :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
+testSpuriousMigration cc sc waitS within = do
     paths <- newEmptyMVar
     trigger <- newEmptyMVar
     withPipe (ForwardAside trigger) $
@@ -1480,7 +1486,7 @@ testSpuriousMigration cc sc waitS = do
                 -- Answered on the spurious path, and so not heard until
                 -- the server is back on the old one.
                 sendStream strm "ping2"
-                Timeout.timeout 1500000 (recvStream strm 1024)
+                Timeout.timeout within (recvStream strm 1024)
                     `shouldReturn` Just "ping2"
                 _ <- takeMVar paths
                 echo strm "ping3" `shouldReturn` Just "ping3"

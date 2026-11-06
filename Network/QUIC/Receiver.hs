@@ -353,6 +353,10 @@ onClientMigration conn newdCID peersa cidChanged = handleLogUnit logAction $ do
     pathInfo <- newPathInfo peersa
     -- assumed that this PathInfo is not stored in PeerInfo
     addPathInfo conn pathInfo
+    -- RFC 9000 Sec 9.3.3: a challenge on the old path too.  A peer still
+    -- there answers from it and so ends a spurious migration at once.
+    oldChallenge <- newPathData
+    putOutput conn $ OutPathProbe oldPathInfo [PathChallenge oldChallenge]
     ok <- validatePath conn pathInfo mcidinfo
     -- RFC 9000 Sec 9.3.2: back to the last validated address.  The one
     -- that failed is forgotten, so that a packet from it starts afresh.
