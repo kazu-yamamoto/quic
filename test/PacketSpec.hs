@@ -12,14 +12,21 @@ import Data.Tuple (swap)
 import Foreign.Ptr (plusPtr)
 import Test.Hspec
 
-import Network.QUIC.Internal
 import Control.Concurrent.STM
+import Network.QUIC.Internal
 
 import Config
 
 spec :: Spec
 spec = do
     serverConf <- runIO makeTestServerConfig
+    describe "Version Negotiation" $ do
+        it "is decoded without its QUIC bit even when the bit is checked" $ do
+            let vn = VersionNegotiationPacket (toCID "dcid") (toCID "scid") [Version1]
+            bs0 <- encodeVersionNegotiationPacket vn
+            let bs = BS.cons (BS.head bs0 .&. 0xbf) $ BS.tail bs0
+            pkts <- decodePackets bs True
+            [p | PacketIV p <- pkts] `shouldBe` [vn]
     describe "test vector" $ do
         it "describes example of Client Initial version 1" $ do
             conns <- makeConnections serverConf Version1
