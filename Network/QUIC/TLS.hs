@@ -75,6 +75,38 @@ clientHandshaker callbacks ClientConfig{..} ver myAuthCIDs establish use0RTT = d
             { debugKeyLogger = ccKeyLog
             }
 
+-- | The parameters a server accepting 0-RTT must not lower (RFC 9000
+--   Sec 7.4.1, and RFC 9221 Sec 3 for max_datagram_frame_size).
+zeroRTTLimits :: Parameters -> Parameters
+zeroRTTLimits p =
+    baseParameters
+        { activeConnectionIdLimit = activeConnectionIdLimit p
+        , initialMaxData = initialMaxData p
+        , initialMaxStreamDataBidiLocal = initialMaxStreamDataBidiLocal p
+        , initialMaxStreamDataBidiRemote = initialMaxStreamDataBidiRemote p
+        , initialMaxStreamDataUni = initialMaxStreamDataUni p
+        , initialMaxStreamsBidi = initialMaxStreamsBidi p
+        , initialMaxStreamsUni = initialMaxStreamsUni p
+        , maxDatagramFrameSize = maxDatagramFrameSize p
+        }
+
+-- | Whether the parameters now keep to those remembered.
+keeps0RTTLimits :: Parameters -> Parameters -> Bool
+keeps0RTTLimits remembered now =
+    and
+        [ f now >= f remembered
+        | f <-
+            [ activeConnectionIdLimit
+            , initialMaxData
+            , initialMaxStreamDataBidiLocal
+            , initialMaxStreamDataBidiRemote
+            , initialMaxStreamDataUni
+            , initialMaxStreamsBidi
+            , initialMaxStreamsUni
+            , maxDatagramFrameSize
+            ]
+        ]
+
 parametersToExtensionRaw :: Version -> Parameters -> [ExtensionRaw]
 parametersToExtensionRaw ver params = [ExtensionRaw tpId eParams]
   where
@@ -105,11 +137,27 @@ serverHandshaker callbacks ServerConfig{..} ver getParams =
     sshared =
         defaultShared
             { sharedCredentials = scCredentials
-            , sharedSessionManager = scSessionManager
+            , sharedSessionManager = mgr
             }
+    -- RFC 9000 Sec 7.4.1: what 0-RTT is held to is kept with the session,
+    -- and 0-RTT is refused if the server now allows less.
+    mgr =
+        scSessionManager
+            { sessionEstablish = \sid sdata -> do
+                remembered <- zeroRTTLimits <$> getParams
+                sessionEstablish scSessionManager sid $
+                    sdata{sessionAppData = Just $ encodeParameters remembered}
+            }
+    accept0RTT sdata = do
+        ok <- onAccept0RTT scTlsHooks sdata
+        now <- getParams
+        return $ case sessionAppData sdata >>= decodeParameters of
+            Just remembered -> ok && keeps0RTTLimits remembered now
+            Nothing -> False
     hook =
         scTlsHooks
-            { onALPNClientSuggest = case scALPN of
+            { onAccept0RTT = accept0RTT
+            , onALPNClientSuggest = case scALPN of
                 Nothing -> onALPNClientSuggest scTlsHooks
                 Just io -> Just $ io ver
             , onEncryptedExtensionsCreating = \exts0 -> do

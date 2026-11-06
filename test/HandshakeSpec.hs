@@ -104,8 +104,20 @@ spec = do
         it "drops the remembered limits when 0-RTT is rejected" $ do
             testRejected0RTTLimits testClientConfig sc0 waitS
                 `shouldReturn` (PreSharedKey, 3)
+        it "refuses 0-RTT when the server allows less than it did" $ do
+            let lower sc = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 50}}
+            testLowered0RTT testClientConfig sc0{scUse0RTT = True} waitS lower
+                `shouldReturn` PreSharedKey
         it "refuses 0-RTT accepted with the limits lowered" $ do
-            testLowered0RTT testClientConfig sc0{scUse0RTT = True} waitS
+            -- Lowered in what is sent only, so that the server accepts.
+            let lower sc =
+                    sc
+                        { scHooks =
+                            (scHooks sc)
+                                { onTransportParametersCreated = \p -> p{initialMaxStreamsBidi = 50}
+                                }
+                        }
+            testLowered0RTT testClientConfig sc0{scUse0RTT = True} waitS lower
                 `shouldThrow` protocolViolation
         it "MUST send FRAME_ENCODING_ERROR on an empty NEW_TOKEN [Transport 19.7]" $ do
             let sc = sc0{scHooks = (scHooks sc0){onPlainCreated = emptyNewToken}}
@@ -455,12 +467,18 @@ testRejected0RTTLimits cc1 sc waitS = do
             }
     serv conn = forever $ void $ acceptStream conn
 
--- | As above, but with 0-RTT, which the server accepts with fifty streams
---   where it gave a hundred before: RFC 9000 Sec 7.4.1 says it MUST NOT.
---   The client opens one stream, within either, so that it is the client
---   that notices.
-testLowered0RTT :: ClientConfig -> ServerConfig -> IO () -> IO ()
-testLowered0RTT cc1 sc waitS = do
+-- | As above, but with 0-RTT and fifty streams where the server gave a
+--   hundred before, lowered as 'lower' says.  RFC 9000 Sec 7.4.1: a
+--   server that lowers them MUST NOT accept 0-RTT, and a client MAY close
+--   on one that does.  The client opens one stream, within either.
+--   Answers how the connection went.
+testLowered0RTT
+    :: ClientConfig
+    -> ServerConfig
+    -> IO ()
+    -> (ServerConfig -> ServerConfig)
+    -> IO HandshakeMode13
+testLowered0RTT cc1 sc waitS lower = do
     res <- resumeFrom cc1 sc waitS
     threadDelay 100000
     E.bracket (forkIO $ S.run sc2 serv) killThread $ \_ -> do
@@ -469,8 +487,10 @@ testLowered0RTT cc1 sc waitS = do
             s <- stream conn
             sendStream s "x"
             threadDelay 1000000
+            handshakeMode <$> getConnectionInfo conn
   where
-    sc2 = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 50}}
+    -- The hundred streams 'resumeFrom' allows, lowered.
+    sc2 = lower sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 100}}
     serv conn = forever $ void $ acceptStream conn
 
 emptyNewToken :: EncryptionLevel -> Plain -> Plain
