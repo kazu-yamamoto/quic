@@ -40,10 +40,19 @@ data Blocked
     | StrmBlocked Stream Int
     deriving (Show)
 
-addTx :: Connection -> Stream -> Int -> IO ()
-addTx conn s len = atomically $ do
-    addTxStreamData s len
+-- | Counting and queueing at once, so that the offset given is the
+--   stream's next one and the queue holds a stream's data in order.
+queueTx :: Connection -> Stream -> [StreamData] -> Int -> IO ()
+queueTx conn s dats len = atomically $ do
+    off <- addTxStreamData s len
     addTxData conn len
+    putSendStreamQSTM conn $ TxStreamData s off dats len False
+
+-- | Queueing the FIN, at the offset the stream has reached.
+queueFin :: Stream -> IO ()
+queueFin s = atomically $ do
+    off <- addTxStreamData s 0
+    putSendStreamQSTM (streamConnection s) $ TxStreamData s off [] 0 True
 
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
@@ -70,13 +79,10 @@ sendStreamMany s dats0 = do
             Right n
                 -- Counted before queued, so that a reset in between takes
                 -- it into the final size.
-                | len == n -> do
-                    addTx conn s n
-                    putSendStreamQ conn $ TxStreamData s dats len False
+                | len == n -> queueTx conn s dats len
                 | otherwise -> do
                     let (dats1, dats2) = split n dats
-                    addTx conn s n
-                    putSendStreamQ conn $ TxStreamData s dats1 n False
+                    queueTx conn s dats1 n
                     flowControl dats2 (len - n) False
             Left blocked -> do
                 -- Read each time round rather than once: the handshake may
@@ -142,7 +148,7 @@ shutdownStream s = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     setTxStreamClosed s
-    putSendStreamQ (streamConnection s) $ TxStreamData s [] 0 True
+    queueFin s
     waitFinTx s
 
 -- | Closing a stream without an error.
@@ -169,7 +175,7 @@ closeStreamWith s aerr = do
     sclosed <- isTxStreamClosed s
     unless (receiveOnly || closed || sclosed) $ do
         setTxStreamClosed s
-        putSendStreamQ conn $ TxStreamData s [] 0 True
+        queueFin s
         waitFinTx s
     stopUnfinished s aerr
     -- Outside the guard above: whether or not the FIN goes out, we are done

@@ -117,10 +117,10 @@ readStreamFlowTx Stream{..} = readTVar streamFlowTx
 
 ----------------------------------------------------------------
 
-addTxStreamData :: Stream -> Int -> STM ()
-addTxStreamData Stream{..} n = modifyTVar' streamFlowTx add
-  where
-    add flow = flow{txfSent = txfSent flow + n}
+-- | Counting what is queued, answering the offset it starts at.
+addTxStreamData :: Stream -> Int -> STM Offset
+addTxStreamData Stream{..} n = stateTVar streamFlowTx $ \flow ->
+    (txfSent flow, flow{txfSent = txfSent flow + n})
 
 setTxMaxStreamData :: Stream -> Int -> IO ()
 setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
