@@ -534,14 +534,14 @@ packFin _ _ True = return True
 packFin conn s False = do
     mx <- tryPeekSendStreamQ conn
     case mx of
-        Just (TxStreamData s1 [] 0 True)
+        Just (TxStreamData s1 _ [] 0 True)
             | streamId s == streamId s1 -> do
                 _ <- takeSendStreamQ conn
                 return True
         _ -> return False
 
 sendTxStreamData :: Connection -> TxStreamData -> IO ()
-sendTxStreamData conn (TxStreamData s dats len fin0) = do
+sendTxStreamData conn (TxStreamData s off dats len fin0) = do
     reset <- isTxStreamReset s
     -- RFC 9000 Sec 3.3: no STREAM frame for a stream in "Reset Sent".
     if reset
@@ -549,12 +549,12 @@ sendTxStreamData conn (TxStreamData s dats len fin0) = do
         else do
             fin <- packFin conn s fin0
             if len < limitation
-                then sendStreamSmall conn s dats fin len
-                else sendStreamLarge conn s dats fin
+                then sendStreamSmall conn s off dats fin len
+                else sendStreamLarge conn s off dats fin
 
-sendStreamSmall :: Connection -> Stream -> [StreamData] -> Bool -> Int -> IO ()
-sendStreamSmall conn s0 dats0 fin0 len0 = do
-    off0 <- getTxStreamOffset s0 len0
+sendStreamSmall
+    :: Connection -> Stream -> Offset -> [StreamData] -> Bool -> Int -> IO ()
+sendStreamSmall conn s0 off0 dats0 fin0 len0 = do
     let sid0 = streamId s0
         frame0 = StreamF sid0 off0 dats0 fin0
         sb = if fin0 then (s0 :) else id
@@ -575,7 +575,7 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
             Just _ -> dropReset mx
     -- What a reset stream has queued goes nowhere; see 'sendTxStreamData'.
     dropReset mx = case mx of
-        Just (TxStreamData s1 _ _ fin1) -> do
+        Just (TxStreamData s1 _ _ _ fin1) -> do
             reset <- isTxStreamReset s1
             if reset
                 then do
@@ -595,26 +595,27 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
         mx <- tryPeek
         case mx of
             Nothing -> return (build [frame], sb [])
-            Just (TxStreamData s1 dats1 len1 fin1) -> do
+            Just (TxStreamData s1 off1 dats1 len1 fin1) -> do
                 -- Entries of the same stream are merged into one frame,
                 -- any other stream needs a frame of its own.
-                let cost
-                        | streamId s1 == streamId s = len1
+                -- Merged only where it follows on.
+                let sid = streamId s
+                    sid1 = streamId s1
+                    (off, dats) = case frame of
+                        StreamF _ o d _ -> (o, d)
+                        _ -> error "sendStreamSmall"
+                    merged = sid == sid1 && off + totalLen dats == off1
+                    cost
+                        | merged = len1
                         | otherwise = len1 + streamFrameMaxOverhead
                     total1 = cost + total
                 if total1 < limitation
                     then do
                         _ <- takeSendStreamQ conn -- cf tryPeek
                         fin1' <- packFin conn s1 fin1 -- must be after takeSendStreamQ
-                        off1 <- getTxStreamOffset s1 len1
-                        let sid = streamId s
-                            sid1 = streamId s1
-                        if sid == sid1
+                        if merged
                             then do
-                                let (off, dats) = case frame of
-                                        StreamF _ o d _ -> (o, d)
-                                        _ -> error "sendStreamSmall"
-                                    frame1 = StreamF sid off (dats ++ dats1) fin1'
+                                let frame1 = StreamF sid off (dats ++ dats1) fin1'
                                     sb1 = if fin1' then sb . (s1 :) else sb
                                 loop s1 frame1 total1 build sb1
                             else do
@@ -624,20 +625,20 @@ sendStreamSmall conn s0 dats0 fin0 len0 = do
                                 loop s1 frame1 total1 build1 sb1
                     else return (build [frame], sb [])
 
-sendStreamLarge :: Connection -> Stream -> [ByteString] -> Bool -> IO ()
-sendStreamLarge conn s dats0 fin0 = do
-    loop dats0
+sendStreamLarge
+    :: Connection -> Stream -> Offset -> [ByteString] -> Bool -> IO ()
+sendStreamLarge conn s off0 dats0 fin0 = do
+    loop off0 dats0
     when fin0 $ syncFinTx s
   where
     sid = streamId s
-    loop [] = return ()
-    loop dats = do
+    loop _ [] = return ()
+    loop off dats = do
         reset <- isTxStreamReset s
-        unless reset $ send dats
-    send dats = do
+        unless reset $ send off dats
+    send off dats = do
         let (dats1, dats2) = splitChunks dats
             len = totalLen dats1
-        off <- getTxStreamOffset s len
         let fin = fin0 && null dats2
             frame = StreamF sid off dats1 fin
         ready <- isConnection1RTTReady conn
@@ -645,7 +646,7 @@ sendStreamLarge conn s dats0 fin0 = do
                 | ready = RTT1Level
                 | otherwise = RTT0Level
         construct conn lvl [frame] False >>= sendPacket conn
-        loop dats2
+        loop (off + len) dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]
 splitChunks :: [ByteString] -> ([ByteString], [ByteString])

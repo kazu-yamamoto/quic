@@ -98,6 +98,9 @@ takeSendStreamQSTM conn = readTQueue $ sharedSendStreamQ $ shared conn
 tryPeekSendStreamQ :: Connection -> IO (Maybe TxStreamData)
 tryPeekSendStreamQ conn = atomically $ tryPeekTQueue $ sharedSendStreamQ $ shared conn
 
+putSendStreamQSTM :: Connection -> TxStreamData -> STM ()
+putSendStreamQSTM conn = writeTQueue (sharedSendStreamQ $ shared conn)
+
 putSendStreamQ :: Connection -> TxStreamData -> IO ()
 putSendStreamQ conn out = atomically $ writeTQueue (sharedSendStreamQ $ shared conn) out
 

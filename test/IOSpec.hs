@@ -28,6 +28,7 @@ import Network.QUIC.Internal
 import Network.QUIC.Server
 
 import Config
+import PacketSpec (makeConnections)
 
 spec :: Spec
 spec = do
@@ -61,6 +62,23 @@ spec = do
             testInjected cc sc waitS $ \dcid scid ->
                 encodeRetryPacket $
                     RetryPacket Version2 dcid (toCID "forged") "token" (Left scid)
+    -- The offset of queued data used to be taken when it was sent.  A
+    -- sender cancelled after taking an entry from the queue lost it, and
+    -- the next entry was then sent at its offset (HTTP/3 got DATA where
+    -- its HEADERS were and closed with H3_FRAME_UNEXPECTED).
+    describe "queued stream data" $
+        it "has its offset from when it was queued" $ do
+            sc0 <- makeTestServerConfig
+            (clientConn, _) <- makeConnections sc0 Version1
+            strm <- addStream clientConn 0
+            setTxMaxData clientConn 1000
+            setTxMaxStreamData strm 1000
+            sendStream strm "HEADER"
+            sendStream strm $ BS.replicate 16 0
+            let offset (TxStreamData _ off _ len _) = (off, len)
+            -- The first one taken and lost: the second keeps its offset.
+            _ <- takeSendStreamQ clientConn
+            offset <$> takeSendStreamQ clientConn `shouldReturn` (6, 16)
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS

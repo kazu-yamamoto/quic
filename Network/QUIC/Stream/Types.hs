@@ -110,7 +110,10 @@ waitFinTx s =
 
 type Length = Int
 
-data TxStreamData = TxStreamData Stream [StreamData] Length Fin
+-- | Data queued for a stream, with the offset it was given when queued.
+--   The offset used to be taken when it was sent, and an entry lost on the
+--   way, by a sender cancelled after taking it, gave its offset to the next.
+data TxStreamData = TxStreamData Stream Offset [StreamData] Length Fin
 
 data RxStreamData = RxStreamData
     { rxstrmData :: StreamData
