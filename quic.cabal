@@ -127,7 +127,7 @@ library
     build-depends:
         base >=4.9 && <5,
         array >=0.5 && <0.6,
-        async,
+        async >=2.2,
         base16-bytestring >=1.0 && <1.1,
         bytestring >=0.10,
         containers,
