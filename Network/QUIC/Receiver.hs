@@ -606,6 +606,9 @@ processFrame conn lvl (CryptoF off cdat) = do
 processFrame conn lvl (NewToken token) = do
     when (isServer conn || lvl /= RTT1Level) $
         closeConnection conn ProtocolViolation "NEW_TOKEN for server or in 1-RTT"
+    -- RFC 9000 Sec 19.7: an empty token is a FRAME_ENCODING_ERROR.
+    when (BS.null token) $
+        closeConnection conn FrameEncodingError "empty NEW_TOKEN"
     when (isClient conn) $ setNewToken conn token
 processFrame conn RTT0Level (StreamF sid off (dat : _) fin) = do
     when (off == 0) $ updatePeerStreamId conn sid

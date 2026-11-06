@@ -104,6 +104,12 @@ spec = do
         it "refuses 0-RTT accepted with the limits lowered" $ do
             testLowered0RTT testClientConfig sc0{scUse0RTT = True} waitS
                 `shouldThrow` protocolViolation
+        it "MUST send FRAME_ENCODING_ERROR on an empty NEW_TOKEN [Transport 19.7]" $ do
+            let sc = sc0{scHooks = (scHooks sc0){onPlainCreated = emptyNewToken}}
+            E.bracket (forkIO $ S.run sc $ \_ -> threadDelay 2000000) killThread $ \_ -> do
+                waitS
+                C.run testClientConfig (\_ -> threadDelay 1000000)
+                    `shouldThrow` frameEncodingErrorSent
         it "sends 0-RTT data without waiting for the handshake" $ do
             let sc = sc0{scUse0RTT = True}
             test0RTTSendsEarly sc waitS
@@ -429,6 +435,16 @@ testLowered0RTT cc1 sc waitS = do
   where
     sc2 = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 50}}
     serv conn = forever $ void $ acceptStream conn
+
+emptyNewToken :: EncryptionLevel -> Plain -> Plain
+emptyNewToken _ plain = plain{plainFrames = map empty $ plainFrames plain}
+  where
+    empty (NewToken _) = NewToken ""
+    empty f = f
+
+frameEncodingErrorSent :: QUICException -> Bool
+frameEncodingErrorSent (TransportErrorIsSent FrameEncodingError _) = True
+frameEncodingErrorSent _ = False
 
 protocolViolation :: QUICException -> Bool
 protocolViolation (TransportErrorIsSent ProtocolViolation _) = True
