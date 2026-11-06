@@ -1,5 +1,42 @@
 # ChangeLog
 
+## 0.3.21
+
+Requires tls 2.5.1 and async 2.2, and allows iproute 1.8 and unix-time
+0.6.  A server now keeps the limits 0-RTT is held to in the session
+(`sessionAppData`, which it overwrites) and refuses 0-RTT if it allows less
+now; a session saved without them, e.g. by tls 2.5.0, gets no 0-RTT.  A
+client whose 0-RTT is not accepted drops the limits it remembered, but
+what it already sent in 0-RTT is still resent as 1-RTT.  In
+`Network.QUIC.Internal`, `connAbortRequest` holds an exception, `Output`
+has `OutPathProbe`, and `SendChallenge` keeps a list of payloads.
+
+* Release lost candidates only on a 1-RTT ACK
+  [#204](https://github.com/kazu-yamamoto/quic/pull/204)
+* Follow RFC 9002 A.8 in choosing the PTO space
+  [#205](https://github.com/kazu-yamamoto/quic/pull/205)
+* Decode ACK_ECN as ACK
+  [#206](https://github.com/kazu-yamamoto/quic/pull/206)
+* Refuse an empty NEW_TOKEN
+  [#207](https://github.com/kazu-yamamoto/quic/pull/207)
+* Do not check the QUIC bit of Version Negotiation
+  [#208](https://github.com/kazu-yamamoto/quic/pull/208)
+* Go back to the old path as soon as the peer is heard there
+  [#209](https://github.com/kazu-yamamoto/quic/pull/209)
+* Challenge the old path too on a migration
+  [#210](https://github.com/kazu-yamamoto/quic/pull/210)
+* Ask the protocol threads to end instead of throwing to the main thread
+  [#211](https://github.com/kazu-yamamoto/quic/pull/211)
+* Reset the remembered limits when 0-RTT is rejected
+  [#212](https://github.com/kazu-yamamoto/quic/pull/212)
+* Refuse 0-RTT when the server allows less than it did
+  [#213](https://github.com/kazu-yamamoto/quic/pull/213)
+* Require async 2.2
+  [#214](https://github.com/kazu-yamamoto/quic/pull/214)
+* Reset the remembered limits whenever 0-RTT is not accepted
+  [#215](https://github.com/kazu-yamamoto/quic/pull/215)
+* Send the path challenge again with a new payload until answered
+  [#216](https://github.com/kazu-yamamoto/quic/pull/216)
 
 ## 0.3.20
 
