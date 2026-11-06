@@ -1,5 +1,25 @@
 # ChangeLog
 
+## 0.3.22
+
+Requires crypto-token 0.2.1.  The public API is unchanged.  In
+`Network.QUIC.Internal`, `TxStreamData` carries its offset, `OutPathProbe`
+carries a CID, `PathInfo` has `pathSocket`, `rpPeerAddr` carries the
+socket, and `Connection` has `peerLimitsReset`.
+
+* Send each path's packets on the socket its packets came in on
+  [#217](https://github.com/kazu-yamamoto/quic/pull/217)
+* Give queued stream data its offset when it is queued
+  [#218](https://github.com/kazu-yamamoto/quic/pull/218)
+* Keep a CID for each path while a migration is validated
+  [#219](https://github.com/kazu-yamamoto/quic/pull/219)
+* Leave the PTO probe for the path in use
+  [#220](https://github.com/kazu-yamamoto/quic/pull/220)
+* Hold a stream added during a reset of the limits to the new ones
+  [#221](https://github.com/kazu-yamamoto/quic/pull/221)
+* Require crypto-token 0.2.1
+  [#222](https://github.com/kazu-yamamoto/quic/pull/222)
+
 ## 0.3.21
 
 Requires tls 2.5.1 and async 2.2, and allows iproute 1.8 and unix-time
