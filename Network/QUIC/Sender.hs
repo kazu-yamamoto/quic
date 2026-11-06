@@ -424,8 +424,14 @@ sendOutput conn (OutHandshake lcs0) = do
     sendCryptoFragments conn lcs
     when (any (\(l, _) -> l == HandshakeLevel) lcs) $
         discardClientInitialPacketNumberSpace conn
-sendOutput conn (OutPathProbe pathInfo frames) =
-    construct conn RTT1Level frames False >>= sendPacketTo conn (Just pathInfo)
+sendOutput conn (OutPathProbe pathInfo mcid frames) =
+    construct conn RTT1Level frames False
+        >>= sendPacketTo conn (Just pathInfo) . map withCID
+  where
+    withCID spkt = case (mcid, spPlainPacket spkt) of
+        (Just cid, PlainPacket Short{} plain) ->
+            spkt{spPlainPacket = PlainPacket (Short cid) plain}
+        _ -> spkt
 sendOutput conn (OutRetrans (PlainPacket hdr0 plain0)) = do
     frames <- adjustForRetransmit conn $ plainFrames plain0
     let lvl = levelFromHeader hdr0

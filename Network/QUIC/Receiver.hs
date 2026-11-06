@@ -342,27 +342,14 @@ isProbing _ = False
 onClientMigration :: Connection -> CID -> Socket -> SockAddr -> Bool -> IO ()
 onClientMigration conn newdCID sock peersa cidChanged = handleLogUnit logAction $ do
     -- fixme: should not block
-    mcidinfo <-
-        if cidChanged
-            then timeout (Microseconds 100000) "onClientMigration" $ waitPeerCID conn
-            else return Nothing -- PathChallenge only, no RetireConnectionID
     let msg = "Migration: " <> bhow peersa <> " (" <> bhow newdCID <> ")"
     qlogDebug conn $ Debug $ toLogStr msg
     connDebugLog conn $ "debug: onClientMigration: " <> msg
-    oldPathInfo <- getPathInfo conn
     pathInfo <- newPathInfoOn sock peersa
-    -- assumed that this PathInfo is not stored in PeerInfo
-    addPathInfo conn pathInfo
-    -- RFC 9000 Sec 9.3.3: a challenge on the old path too.  A peer still
-    -- there answers from it and so ends a spurious migration at once.
-    oldChallenge <- newPathData
-    putOutput conn $ OutPathProbe oldPathInfo [PathChallenge oldChallenge]
-    ok <- validatePath conn pathInfo mcidinfo
-    -- RFC 9000 Sec 9.3.2: back to the last validated address.  The one
-    -- that failed is forgotten, so that a packet from it starts afresh.
-    unless ok $ do
-        connDebugLog conn $ "debug: onClientMigration: no response from " <> bhow peersa
-        restorePathInfo conn oldPathInfo
+    ok <- validateMigration conn pathInfo cidChanged
+    unless ok $
+        connDebugLog conn $
+            "debug: onClientMigration: no response from " <> bhow peersa
   where
     logAction msg = connDebugLog conn ("debug: onClientMigration: " <> msg)
 
