@@ -321,16 +321,14 @@ setPeerParams conn ctx peerExts = do
                 _ -> sendCCVNError
 
     setParams params = do
-        rejected <-
-            if isClient conn
-                then do
-                    is0RTT <- isConnection0RTTReady conn
-                    if is0RTT then check0RTT params else return False
-                else return False
+        -- Also without 0-RTT sent: the limits remembered for it were set
+        -- all the same, and tls may not send it, e.g. with a ticket expired.
+        rejected <- if isClient conn then check0RTT params else return False
         setPeerParameters conn params
         -- RFC 9001 Sec 4.6.2: a client whose 0-RTT is rejected resets what
         -- it set up for it.  What it sent is resent as 1-RTT; the limits it
         -- remembered go, lower or not, for those the server gives now.
+        -- Nothing has raised them before these parameters.
         when rejected $ do
             resetTxMaxData conn $ initialMaxData params
             resetTxMaxStreams conn $ initialMaxStreamsBidi params
@@ -347,7 +345,7 @@ setPeerParams conn ctx peerExts = do
         setTxMaxStreams conn $ initialMaxStreamsBidi params
         setTxUniMaxStreams conn $ initialMaxStreamsUni params
 
-    -- True if 0-RTT was rejected.
+    -- True unless 0-RTT was accepted.
     check0RTT params = do
         minfo <- TLS.contextGetInformation ctx
         let accepted = (minfo >>= TLS.infoTLS13HandshakeMode) == Just TLS.RTT0

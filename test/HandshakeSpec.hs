@@ -104,6 +104,9 @@ spec = do
         it "drops the remembered limits when 0-RTT is rejected" $ do
             testRejected0RTTLimits testClientConfig sc0 waitS
                 `shouldReturn` (PreSharedKey, 3)
+        it "drops the remembered limits when no 0-RTT is sent" $ do
+            testExpired0RTTLimits testClientConfig sc0 waitS
+                `shouldReturn` (FullHandshake, 3)
         it "refuses 0-RTT when the server allows less than it did" $ do
             let lower sc = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 50}}
             testLowered0RTT testClientConfig sc0{scUse0RTT = True} waitS lower
@@ -463,6 +466,31 @@ testRejected0RTTLimits cc1 sc waitS = do
     sc2 =
         sc
             { scUse0RTT = False
+            , scParameters = (scParameters sc){initialMaxStreamsBidi = 3}
+            }
+    serv conn = forever $ void $ acceptStream conn
+
+-- | As above, but the ticket has expired, so tls sends no 0-RTT while the
+--   client has set the limits it remembered for 0-RTT all the same.
+testExpired0RTTLimits
+    :: ClientConfig -> ServerConfig -> IO () -> IO (HandshakeMode13, Int)
+testExpired0RTTLimits cc1 sc waitS = do
+    res <- resumeFrom cc1 sc{scUse0RTT = True, scTicketLifetime = 1} waitS
+    threadDelay 2000000
+    E.bracket (forkIO $ S.run sc2 serv) killThread $ \_ -> do
+        waitS
+        C.run cc1{ccResumption = res, ccUse0RTT = True} $ \conn -> do
+            waitEstablished conn
+            opened <- newIORef (0 :: Int)
+            _ <- Timeout.timeout 1500000 $ forever $ do
+                s <- stream conn
+                sendStream s "x"
+                atomicModifyIORef' opened $ \x -> (x + 1, ())
+            (,) <$> (handshakeMode <$> getConnectionInfo conn) <*> readIORef opened
+  where
+    sc2 =
+        sc
+            { scUse0RTT = True
             , scParameters = (scParameters sc){initialMaxStreamsBidi = 3}
             }
     serv conn = forever $ void $ acceptStream conn
