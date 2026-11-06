@@ -68,8 +68,8 @@ spec = do
     -- its HEADERS were and closed with H3_FRAME_UNEXPECTED).
     describe "queued stream data" $
         it "has its offset from when it was queued" $ do
-            sc0 <- makeTestServerConfig
-            (clientConn, _) <- makeConnections sc0 Version1
+            scq <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scq Version1
             strm <- addStream clientConn 0
             setTxMaxData clientConn 1000
             setTxMaxStreamData strm 1000
