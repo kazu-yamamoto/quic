@@ -337,6 +337,9 @@ data Connection = Connection
     , bytesTx           :: IORef Int
     , bytesRx           :: IORef Int
     , connDone          :: TVar Bool
+    , peerLimitsReset   :: TVar Int
+    -- ^ How many times 'Network.QUIC.Connection.StreamTable.resetTxStreamLimits'
+    --   has run, for a stream being added to tell it missed one.
     , connAbortRequest  :: TVar (Maybe E.SomeException)
     -- ^ How 'Network.QUIC.Connection.Misc.requestEnd' asked the connection
     --   to end, for its protocol threads to act on.
@@ -453,6 +456,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     bytesTx           <- newIORef 0
     bytesRx           <- newIORef 0
     connDone          <- newTVarIO False
+    peerLimitsReset   <- newTVarIO 0
     connAbortRequest  <- newTVarIO Nothing
     connRetiredSocks  <- newIORef []
     -- TLS

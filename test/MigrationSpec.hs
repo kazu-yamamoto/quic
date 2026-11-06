@@ -3,11 +3,12 @@
 module MigrationSpec where
 
 import Control.Concurrent
-import Control.Concurrent.Async (mapConcurrently, wait, withAsync)
+import Control.Concurrent.Async (concurrently, mapConcurrently, wait, withAsync)
 import Control.Concurrent.STM
-import Control.Monad (void)
+import Control.Monad (forM, void)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
+import Network.Control (txfLimit)
 import Network.Socket (connect, getSocketName, withFdSocket)
 import qualified System.Timeout as T
 import Test.Hspec
@@ -111,6 +112,26 @@ spec = do
             pdat <- newPathData
             sendOutput serverConn $ OutPathProbe pathInfo Nothing [PathChallenge pdat]
             atomically (isEmptyPingSTM ldcc) `shouldReturn` False
+
+    -- RFC 9001 Sec 4.6.2: a stream opened as 0-RTT is found rejected is
+    -- held to the server's new limit too.  It read the old parameters,
+    -- missed the reset that ran before it was in the table, and kept them.
+    describe "resetTxStreamLimits" $
+        it "reaches a stream opened while it runs" $ do
+            (clientConn, _) <- makeConnections serverConf Version1
+            base <- getPeerParameters clientConn
+            let params n = base{initialMaxStreamDataBidiRemote = n}
+            limits <- forM [0, 4 .. 4 * 1999] $ \sid -> do
+                setPeerParameters clientConn $ params 100
+                (strm, _) <-
+                    concurrently
+                        (addStream clientConn sid)
+                        ( do
+                            setPeerParameters clientConn $ params 10
+                            resetTxStreamLimits clientConn $ params 10
+                        )
+                txfLimit <$> atomically (readStreamFlowTx strm)
+            filter (/= 10) limits `shouldBe` []
 
     describe "claimMigration" $ do
         it "gives the migration to one caller and refuses the rest" $ do

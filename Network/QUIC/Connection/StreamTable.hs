@@ -61,6 +61,9 @@ findStream Connection{..} sid = lookupStream sid <$> readTVarIO streamTable
 
 addStream :: Connection -> StreamId -> IO Stream
 addStream conn@Connection{..} sid = do
+    -- Read before the parameters: if a reset runs after the read, the
+    -- stream is made again from the parameters it set.
+    resets <- readTVarIO peerLimitsReset
     strm <-
         if isClient conn
             then do
@@ -75,14 +78,20 @@ addStream conn@Connection{..} sid = do
                     serverParams = getMyParameters conn
                     rxLim = serverInitial sid serverParams
                 newStream conn sid txLim rxLim
-    atomically $ modifyTVar' streamTable $ insertStream sid strm
-    return strm
+    added <- atomically $ do
+        resets' <- readTVar peerLimitsReset
+        when (resets' == resets) $ modifyTVar' streamTable $ insertStream sid strm
+        return (resets' == resets)
+    if added then return strm else addStream conn sid
 
 -- | 0-RTT rejected (RFC 9001 Sec 4.6.2): the streams the client opened
 --   under the remembered limits are held to what the server gives now.
 resetTxStreamLimits :: Connection -> Parameters -> IO ()
 resetTxStreamLimits Connection{..} serverParams = do
-    strms <- tableStreams <$> readTVarIO streamTable
+    -- With the parameters already set.
+    strms <- atomically $ do
+        modifyTVar' peerLimitsReset (+ 1)
+        tableStreams <$> readTVar streamTable
     forM_ strms $ \strm -> do
         let sid = streamId strm
         when (sid >= 0 && isClientInitiated sid) $
