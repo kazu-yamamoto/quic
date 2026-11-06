@@ -2,6 +2,7 @@ module Network.QUIC.Stream.Table (
     StreamTable,
     emptyStreamTable,
     lookupStream,
+    tableStreams,
     insertStream,
     deleteStream,
     insertCryptoStreams,
@@ -27,6 +28,10 @@ emptyStreamTable = StreamTable Map.empty
 
 lookupStream :: StreamId -> StreamTable -> Maybe Stream
 lookupStream sid (StreamTable tbl) = Map.lookup sid tbl
+
+-- | The streams in the table, the crypto streams included.
+tableStreams :: StreamTable -> [Stream]
+tableStreams (StreamTable tbl) = Map.elems tbl
 
 insertStream :: StreamId -> Stream -> StreamTable -> StreamTable
 insertStream sid strm (StreamTable tbl) = StreamTable $ Map.insert sid strm tbl

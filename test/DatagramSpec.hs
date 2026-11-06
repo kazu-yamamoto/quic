@@ -53,6 +53,14 @@ spec = do
                 cc0RTT = testClientConfig { ccMaxDatagramFrameSize = 1024 }
             testDatagram0RTTDowngrade cc0RTT scInit scDowngrade
 
+        -- The check above is for 0-RTT accepted only.  Rejected, the
+        -- client takes the value the server gives now (RFC 9001 Sec 4.6.2).
+        it "Client takes a lower max_datagram_frame_size when 0-RTT is rejected" $ do
+            let scInit = sc0 { scMaxDatagramFrameSize = 1024 }
+                scLower = sc0 { scMaxDatagramFrameSize = 500, scUse0RTT = False }
+                cc0RTT = testClientConfig { ccMaxDatagramFrameSize = 1024 }
+            testDatagram0RTTRejected cc0RTT scInit scLower
+
         -- "An endpoint MUST NOT send DATAGRAM frames until it has received the max_datagram_frame_size transport parameter with a non-zero value"
         it "Endpoint MUST NOT send DATAGRAM if not negotiated" $ do
             let scDtgm = sc0 { scMaxDatagramFrameSize = 0 }
@@ -280,6 +288,27 @@ testDatagram0RTT cc1 sc1 = do
         when (handshakeMode info == RTT0) $ do
             recv <- recvDatagram conn
             recv `shouldBe` "0rtt_client_data"
+
+testDatagram0RTTRejected :: ClientConfig -> ServerConfig -> ServerConfig -> IO ()
+testDatagram0RTTRejected cc1 scInit scLower = do
+    mvar <- newEmptyMVar
+    smgr <- newSessionManager
+    let scInit' = scInit { scSessionManager = smgr, scUse0RTT = True, scHooks = (scHooks scInit) { onServerReady = putMVar mvar () } }
+    res <- E.bracket (forkIO $ S.run scInit' (\c -> waitEstablished c >> threadDelay 100000)) killThread $ \_ -> do
+        takeMVar mvar
+        C.run cc1 $ \conn -> do
+            waitEstablished conn
+            threadDelay 50000
+            getResumptionInfo conn
+    let cc2 = cc1 { ccResumption = res, ccUse0RTT = True }
+    mvar2 <- newEmptyMVar
+    let scLower' = scLower { scSessionManager = smgr, scHooks = (scHooks scLower) { onServerReady = putMVar mvar2 () } }
+    E.bracket (forkIO $ E.handle (\(E.SomeException _) -> return ()) $ S.run scLower' (\c -> waitEstablished c >> threadDelay 2000000)) killThread $ \_ -> do
+        takeMVar mvar2
+        C.run cc2 (\conn -> do
+            waitEstablished conn
+            sendDatagram conn (BS.replicate 400 0x41)
+            handshakeMode <$> getConnectionInfo conn) `shouldReturn` PreSharedKey
 
 testDatagram0RTTDowngrade :: ClientConfig -> ServerConfig -> ServerConfig -> IO ()
 testDatagram0RTTDowngrade cc1 scInit scDowngrade = do

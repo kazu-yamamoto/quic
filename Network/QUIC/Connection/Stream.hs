@@ -8,6 +8,8 @@ module Network.QUIC.Connection.Stream (
     waitMyNewUniStreamId,
     setTxMaxStreams,
     setTxUniMaxStreams,
+    resetTxMaxStreams,
+    resetTxUniMaxStreams,
     checkRxMaxStreams,
     updatePeerStreamId,
     checkStreamIdRoom,
@@ -60,6 +62,17 @@ setTxMaxStreams Connection{..} = set myStreamId
 
 setTxUniMaxStreams :: Connection -> Int -> IO ()
 setTxUniMaxStreams Connection{..} = set myUniStreamId
+
+-- | Setting the limits on the streams I may open even lower: only for
+--   0-RTT rejected.
+resetTxMaxStreams :: Connection -> Int -> IO ()
+resetTxMaxStreams Connection{..} = reset myStreamId
+
+resetTxUniMaxStreams :: Connection -> Int -> IO ()
+resetTxUniMaxStreams Connection{..} = reset myUniStreamId
+
+reset :: TVar Concurrency -> Int -> IO ()
+reset tvar mx = atomically $ modifyTVar' tvar $ \conc -> conc{maxStreams = StreamIdBase mx}
 
 -- | Raising the limit on the streams I may open.
 --

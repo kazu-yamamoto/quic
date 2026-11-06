@@ -39,6 +39,7 @@ module Network.QUIC.Stream (
     readStreamFlowTx,
     addTxStreamData,
     setTxMaxStreamData,
+    resetTxMaxStreamData,
     getRxMaxStreamData,
     updateStreamFlowRx,
 
@@ -53,6 +54,7 @@ module Network.QUIC.Stream (
     StreamTable,
     emptyStreamTable,
     lookupStream,
+    tableStreams,
     insertStream,
     deleteStream,
     insertCryptoStreams,

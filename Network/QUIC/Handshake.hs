@@ -321,25 +321,21 @@ setPeerParams conn ctx peerExts = do
                 _ -> sendCCVNError
 
     setParams params = do
-        when (isClient conn) $ do
-            is0RTT <- isConnection0RTTReady conn
-            when is0RTT $ do
-                storedParams <- getPeerParameters conn
-                let storedMaxDatagram = maxDatagramFrameSize storedParams
-                    newMaxDatagram = maxDatagramFrameSize params
-                when (storedMaxDatagram > 0 && newMaxDatagram < storedMaxDatagram) $
-                    E.throwIO WrongDatagramSizeParameter
-                -- RFC 9000 Sec 7.4.1: "If 0-RTT data is accepted by the
-                -- server, the server MUST NOT reduce any limits".  The limits
-                -- only ever rise here, so one lowered all the same was kept
-                -- at the old value, and the server closed the connection over
-                -- what it had itself allowed before.
-                minfo <- TLS.contextGetInformation ctx
-                let accepted = (minfo >>= TLS.infoTLS13HandshakeMode) == Just TLS.RTT0
-                when (accepted && lowered storedParams params) $
-                    E.throwIO Wrong0RTTLimitParameter
-
+        rejected <-
+            if isClient conn
+                then do
+                    is0RTT <- isConnection0RTTReady conn
+                    if is0RTT then check0RTT params else return False
+                else return False
         setPeerParameters conn params
+        -- RFC 9001 Sec 4.6.2: a client whose 0-RTT is rejected resets what
+        -- it set up for it.  What it sent is resent as 1-RTT; the limits it
+        -- remembered go, lower or not, for those the server gives now.
+        when rejected $ do
+            resetTxMaxData conn $ initialMaxData params
+            resetTxMaxStreams conn $ initialMaxStreamsBidi params
+            resetTxUniMaxStreams conn $ initialMaxStreamsUni params
+            resetTxStreamLimits conn params
         case statelessResetToken params of
             Nothing -> return ()
             Just srt -> setPeerStatelessResetToken conn srt
@@ -350,6 +346,23 @@ setPeerParams conn ctx peerExts = do
         setMaxAckDaley (connLDCC conn) $ milliToMicro $ maxAckDelay params
         setTxMaxStreams conn $ initialMaxStreamsBidi params
         setTxUniMaxStreams conn $ initialMaxStreamsUni params
+
+    -- True if 0-RTT was rejected.
+    check0RTT params = do
+        minfo <- TLS.contextGetInformation ctx
+        let accepted = (minfo >>= TLS.infoTLS13HandshakeMode) == Just TLS.RTT0
+        when accepted $ do
+            storedParams <- getPeerParameters conn
+            -- RFC 9221 Sec 3, for 0-RTT accepted only.
+            let storedMaxDatagram = maxDatagramFrameSize storedParams
+                newMaxDatagram = maxDatagramFrameSize params
+            when (storedMaxDatagram > 0 && newMaxDatagram < storedMaxDatagram) $
+                E.throwIO WrongDatagramSizeParameter
+            -- RFC 9000 Sec 7.4.1: "If 0-RTT data is accepted by the
+            -- server, the server MUST NOT reduce any limits".
+            when (lowered storedParams params) $
+                E.throwIO Wrong0RTTLimitParameter
+        return $ not accepted
 
     lowered old new =
         or

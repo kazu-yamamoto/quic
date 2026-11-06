@@ -101,6 +101,9 @@ spec = do
         it "keeps a resumed connection to the limits the server gives now" $ do
             testLoweredLimits testClientConfig sc0 waitS
                 `shouldReturn` (PreSharedKey, 3)
+        it "drops the remembered limits when 0-RTT is rejected" $ do
+            testRejected0RTTLimits testClientConfig sc0 waitS
+                `shouldReturn` (PreSharedKey, 3)
         it "refuses 0-RTT accepted with the limits lowered" $ do
             testLowered0RTT testClientConfig sc0{scUse0RTT = True} waitS
                 `shouldThrow` protocolViolation
@@ -423,6 +426,33 @@ testLoweredLimits cc1 sc waitS = do
             (,) <$> (handshakeMode <$> getConnectionInfo conn) <*> readIORef opened
   where
     sc2 = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 3}}
+    serv conn = forever $ void $ acceptStream conn
+
+-- | As above, but the client sends 0-RTT, which the server rejects.  RFC
+--   9001 Sec 4.6.2: the client then resets what it set up for 0-RTT.  It
+--   kept the hundred streams it remembered and the server closed it with
+--   STREAM_LIMIT_ERROR.
+testRejected0RTTLimits
+    :: ClientConfig -> ServerConfig -> IO () -> IO (HandshakeMode13, Int)
+testRejected0RTTLimits cc1 sc waitS = do
+    res <- resumeFrom cc1 sc{scUse0RTT = True} waitS
+    threadDelay 100000
+    E.bracket (forkIO $ S.run sc2 serv) killThread $ \_ -> do
+        waitS
+        C.run cc1{ccResumption = res, ccUse0RTT = True} $ \conn -> do
+            waitEstablished conn
+            opened <- newIORef (0 :: Int)
+            _ <- Timeout.timeout 1500000 $ forever $ do
+                s <- stream conn
+                sendStream s "x"
+                atomicModifyIORef' opened $ \x -> (x + 1, ())
+            (,) <$> (handshakeMode <$> getConnectionInfo conn) <*> readIORef opened
+  where
+    sc2 =
+        sc
+            { scUse0RTT = False
+            , scParameters = (scParameters sc){initialMaxStreamsBidi = 3}
+            }
     serv conn = forever $ void $ acceptStream conn
 
 -- | As above, but with 0-RTT, which the server accepts with fifty streams

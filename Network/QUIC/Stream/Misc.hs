@@ -27,6 +27,7 @@ module Network.QUIC.Stream.Misc (
     readStreamFlowTx,
     addTxStreamData,
     setTxMaxStreamData,
+    resetTxMaxStreamData,
     --
     getRxMaxStreamData,
     addRxStreamData,
@@ -127,6 +128,12 @@ setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
     set flow
         | txfLimit flow < n = flow{txfLimit = n}
         | otherwise = flow
+
+-- | Setting the limit even lower: only for 0-RTT rejected, when the
+--   remembered limit goes (RFC 9001 Sec 4.6.2).
+resetTxMaxStreamData :: Stream -> Int -> IO ()
+resetTxMaxStreamData Stream{..} n =
+    atomically $ modifyTVar' streamFlowTx $ \flow -> flow{txfLimit = n}
 
 ----------------------------------------------------------------
 

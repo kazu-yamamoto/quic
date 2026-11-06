@@ -15,6 +15,7 @@ module Network.QUIC.Connection.State (
     readConnectionFlowTx,
     addTxData,
     setTxMaxData,
+    resetTxMaxData,
     getRxMaxData,
     updateFlowRx,
     checkRxMaxData,
@@ -119,6 +120,11 @@ setTxMaxData Connection{..} n = atomically $ modifyTVar' flowTx set
     set flow
         | txfLimit flow < n = flow{txfLimit = n}
         | otherwise = flow
+
+-- | 'setTxMaxData' that may lower: only for 0-RTT rejected.
+resetTxMaxData :: Connection -> Int -> IO ()
+resetTxMaxData Connection{..} n =
+    atomically $ modifyTVar' flowTx $ \flow -> flow{txfLimit = n}
 
 ----------------------------------------------------------------
 
