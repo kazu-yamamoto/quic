@@ -4,6 +4,7 @@ module Network.QUIC.Sender (
     sender,
     mkHeader,
     sendFinal,
+    sendOutput,
 ) where
 
 import Control.Concurrent
@@ -71,14 +72,16 @@ sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
     -- timeout ends it.
     ackOnly = all (not . spAckEliciting) spkts0
     go maxSiz = do
-        mx <-
-            if ackOnly
-                then return Nothing
-                else
-                    atomically
-                        ( (Just <$> takePingSTM ldcc)
-                            `orElse` (Nothing <$ checkWindowOpenSTM ldcc maxSiz)
-                        )
+        mx <- case mdst of
+            _ | ackOnly -> return Nothing
+            -- For another path: the PTO probe is for the path in use, so
+            -- it is left for that and only the window is waited for.
+            Just _ -> Nothing <$ atomically (checkWindowOpenSTM ldcc maxSiz)
+            Nothing ->
+                atomically
+                    ( (Just <$> takePingSTM ldcc)
+                        `orElse` (Nothing <$ checkWindowOpenSTM ldcc maxSiz)
+                    )
         case mx of
             -- A PTO probe is the one packet allowed past a full congestion
             -- window.  Normally sendPingPacket is the right way to spend it:

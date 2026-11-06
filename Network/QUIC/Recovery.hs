@@ -3,6 +3,7 @@ module Network.QUIC.Recovery (
     checkWindowOpenSTM,
     isEmptyPingSTM,
     takePingSTM,
+    sendPing,
     speedup,
     resender,
     -- LossRecovery.hs
@@ -60,3 +61,4 @@ import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types
+import Network.QUIC.Recovery.Utils (sendPing)
