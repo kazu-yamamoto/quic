@@ -17,6 +17,8 @@ import qualified Data.IntMap.Strict as IntMap
 import GHC.Conc (getUncaughtExceptionHandler, setUncaughtExceptionHandler)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
+import System.Directory (listDirectory)
+import System.FilePath ((</>))
 import qualified System.Timeout as Timeout
 import Test.Hspec
 
@@ -180,7 +182,14 @@ spec = do
                         ]
         it "follows a client that rebinds" $ testRebindPath cc sc waitS
         it "goes back when the new one is not validated" $
-            testSpuriousMigration cc sc waitS
+            testSpuriousMigration cc sc waitS 1500000
+        -- RFC 9000 Sec 9.3.3.  The new path answers nothing, so a
+        -- PATH_CHALLENGE in the client's qlog came on the old one.
+        it "challenges the old path too" $
+            withTempDir "quic-old-path-qlog" $ \dir -> do
+                testSpuriousMigration cc{ccQLog = Just dir} sc waitS 1500000
+                logs <- listDirectory dir >>= mapM (BS.readFile . (dir </>))
+                any ("path_challenge" `BS.isInfixOf`) logs `shouldBe` True
     describe "a stateless reset" $ do
         it "is smaller than the packet it answers" $ do
             withAsync (run sc $ \_ -> return ()) $ \_ -> do
@@ -520,12 +529,12 @@ testDepartedForgotten cc sc waitS = do
             _ <- recvStream strm 1
             closeStream strm
         let departed = IntMap.size <$> readTVarIO (departedStreams conn)
-            wait :: Int -> IO Int
-            wait 0 = departed
-            wait k = do
+            settle :: Int -> IO Int
+            settle 0 = departed
+            settle k = do
                 d <- departed
-                if d == 0 then return 0 else threadDelay 10000 >> wait (k - 1)
-        wait 300 >>= putMVar left
+                if d == 0 then return 0 else threadDelay 10000 >> settle (k - 1)
+        settle 300 >>= putMVar left
 
 -- | As above, but the client does not hear the STOP_SENDING.  The streams
 --   it leaves unfinished are not given back to its limit, so the server
@@ -590,12 +599,12 @@ testFinCrossesClose cc sc0 waitS = do
             _ <- recvStream strm 1
             closeStream strm
         let departed = IntMap.size <$> readTVarIO (departedStreams conn)
-            wait :: Int -> IO Int
-            wait 0 = departed
-            wait k = do
+            settle :: Int -> IO Int
+            settle 0 = departed
+            settle k = do
                 d <- departed
-                if d == 0 then return 0 else threadDelay 10000 >> wait (k - 1)
-        wait 300 >>= putMVar left
+                if d == 0 then return 0 else threadDelay 10000 >> settle (k - 1)
+        settle 300 >>= putMVar left
 
 -- | The server closes the first unidirectional stream and keeps the rest.
 -- The client may then have initial_max_streams_uni plus one.  The limit was
@@ -1420,7 +1429,7 @@ testForgedPath cc sc waitS forge = do
             C.run cc $ \conn -> do
                 strm <- stream conn
                 echo strm "ping1" `shouldReturn` Just "ping1"
-                before <- takeMVar paths
+                original <- takeMVar paths
                 ver <- getVersion conn
                 dcid <- getPeerCID conn
                 addr : _ <-
@@ -1432,7 +1441,7 @@ testForgedPath cc sc waitS forge = do
                     void $ NSB.sendTo s (forge ver dcid) $ NS.addrAddress addr
                 threadDelay 300000
                 echo strm "ping2" `shouldReturn` Just "ping2"
-                takeMVar paths `shouldReturn` before
+                takeMVar paths `shouldReturn` original
 
 -- | A client that moves to a new port is still followed, now that the move
 --   is taken from decrypted packets.
@@ -1446,18 +1455,18 @@ testRebindPath cc sc waitS = do
         C.run cc' $ \conn -> do
             strm <- stream conn
             echo strm "ping1" `shouldReturn` Just "ping1"
-            before <- takeMVar paths
+            original <- takeMVar paths
             void $ controlConnection conn NATRebinding
             -- The first echo may still go out on the old path, while the
             -- new one is being validated.
-            let wait (0 :: Int) = expectationFailure "the server never moved"
-                wait n = do
+            let untilMoved (0 :: Int) = expectationFailure "the server never moved"
+                untilMoved n = do
                     echo strm "ping" `shouldReturn` Just "ping"
                     p <- takeMVar paths
-                    when (p == before) $ do
+                    when (p == original) $ do
                         threadDelay 100000
-                        wait (n - 1)
-            wait 20
+                        untilMoved (n - 1)
+            untilMoved 20
 
 -- | RFC 9000 Sec 9.3.2: a packet of the client's, forwarded from another
 --   address, moves the server there, and the validation of that address
@@ -1465,8 +1474,8 @@ testRebindPath cc sc waitS = do
 --   sending to the address that never answered.  Then it waited for the
 --   validation to time out (about 3 s), though the client's next packets
 --   came from the old address; they now send it back at once.
-testSpuriousMigration :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
-testSpuriousMigration cc sc waitS = do
+testSpuriousMigration :: C.ClientConfig -> ServerConfig -> IO () -> Int -> IO ()
+testSpuriousMigration cc sc waitS within = do
     paths <- newEmptyMVar
     trigger <- newEmptyMVar
     withPipe (ForwardAside trigger) $
@@ -1475,13 +1484,13 @@ testSpuriousMigration cc sc waitS = do
             C.run cc $ \conn -> do
                 strm <- stream conn
                 echo strm "ping1" `shouldReturn` Just "ping1"
-                before <- takeMVar paths
+                original <- takeMVar paths
                 putMVar trigger ()
                 -- Answered on the spurious path, and so not heard until
                 -- the server is back on the old one.
                 sendStream strm "ping2"
-                Timeout.timeout 1500000 (recvStream strm 1024)
+                Timeout.timeout within (recvStream strm 1024)
                     `shouldReturn` Just "ping2"
                 _ <- takeMVar paths
                 echo strm "ping3" `shouldReturn` Just "ping3"
-                takeMVar paths `shouldReturn` before
+                takeMVar paths `shouldReturn` original
