@@ -2,6 +2,7 @@ module Network.QUIC.Types.Queue where
 
 import Control.Concurrent.STM
 import Control.Monad (when)
+import Data.ByteString (ByteString)
 
 import Network.QUIC.Types.Packet
 
@@ -60,3 +61,36 @@ prependRecvQ :: RecvQ -> ReceivedPacket -> STM ()
 prependRecvQ (RecvQ q qlen) x = do
     unGetTQueue q x
     modifyTVar' qlen (+ 1)
+
+----------------------------------------------------------------
+
+-- | How many DATAGRAM frames a connection may have waiting for the
+--   application.  Each fits in a packet, so this is a megabyte and a half
+--   or so (#226).
+datagramQLimit :: Int
+datagramQLimit = 1024
+
+data DatagramQ = DatagramQ (TQueue ByteString) (TVar Int)
+
+newDatagramQ :: IO DatagramQ
+newDatagramQ = DatagramQ <$> newTQueueIO <*> newTVarIO 0
+
+readDatagramQSTM :: DatagramQ -> STM ByteString
+readDatagramQSTM (DatagramQ q qlen) = do
+    x <- readTQueue q
+    modifyTVar' qlen (subtract 1)
+    return x
+
+flushDatagramQSTM :: DatagramQ -> STM [ByteString]
+flushDatagramQSTM (DatagramQ q qlen) = do
+    writeTVar qlen 0
+    flushTQueue q
+
+-- | Queue a DATAGRAM, or drop it if 'datagramQLimit' are already waiting.
+--   RFC 9221 Sec 5 lets a receiver drop DATAGRAM frames.
+writeDatagramQ :: DatagramQ -> ByteString -> IO ()
+writeDatagramQ (DatagramQ q qlen) x = atomically $ do
+    n <- readTVar qlen
+    when (n < datagramQLimit) $ do
+        writeTQueue q x
+        writeTVar qlen $! n + 1

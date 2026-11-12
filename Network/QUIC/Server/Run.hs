@@ -367,7 +367,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} = do
     (debugLog, dclean) <- dirDebugLogger scDebugLog ocid `E.onException` qclean
     flip E.onException (dclean >> qclean) $ do
         debugLog $ "Original CID: " <> bhow ocid
-        connRecvDatagramQ <- newTQueueIO
+        connRecvDatagramQ <- newDatagramQ
         conn <-
             serverConnection
                 conf

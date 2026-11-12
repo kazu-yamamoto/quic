@@ -606,8 +606,6 @@ type OutputQ = TQueue Output
 
 type SendStreamQ = TQueue TxStreamData
 
-type DatagramQ = TQueue ByteString
-
 data Shared = Shared
     { sharedCloseSent :: IORef Bool
     , sharedCloseReceived :: TVar (Maybe ReasonPhrase)
