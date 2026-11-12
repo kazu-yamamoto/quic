@@ -5,7 +5,7 @@ module MigrationSpec where
 import Control.Concurrent
 import Control.Concurrent.Async (concurrently, mapConcurrently, wait, withAsync)
 import Control.Concurrent.STM
-import Control.Monad (forM, void)
+import Control.Monad (forM, forM_, void)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Network.Control (txfLimit)
@@ -51,6 +51,27 @@ spec = do
     -- CID of its own on the new path, while the old path keeps the old
     -- one; the old one was given up at once, and the old path's challenge
     -- went out with the new.
+    -- #223: a NEW_CONNECTION_ID retiring every CID it does not bring
+    -- left none to use, and the connection ended with INTERNAL_ERROR.
+    describe "addPeerCIDAndRetire" $ do
+        let cid :: Int -> CID
+            cid i = toCID $ BS.replicate 8 $ fromIntegral i
+            srt i = StatelessResetToken $ Short.toShort $ BS.replicate 16 $ fromIntegral i
+            info i = newCIDInfo i (cid i) (srt i)
+        it "moves to the new CID when all the others are retired" $ do
+            (_, serverConn) <- makeConnections serverConf Version1
+            addPeerCIDAndRetire serverConn (info 1) 1 `shouldReturn` Just [0]
+            getPeerCID serverConn `shouldReturn` cid 1
+        it "lets a CID exceed the limit when the excess is retired" $ do
+            (_, serverConn) <- makeConnections serverConf Version1
+            let lim = activeConnectionIdLimit $ getMyParameters serverConn
+            forM_ [1 .. lim - 1] $ \i ->
+                addPeerCIDAndRetire serverConn (info i) 0 `shouldReturn` Just []
+            addPeerCIDAndRetire serverConn (info lim) 0 `shouldReturn` Nothing
+            addPeerCIDAndRetire serverConn (info lim) lim
+                `shouldReturn` Just [0 .. lim - 1]
+            getPeerCID serverConn `shouldReturn` cid lim
+
     describe "validateMigration" $ do
         let next conn = do
                 out <- T.timeout 4000000 $ atomically $ takeOutputSTM conn
