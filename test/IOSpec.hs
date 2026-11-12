@@ -212,6 +212,8 @@ spec = do
             withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
         it "raises the limit on unidirectional streams by their own number" $ do
             withPipe (DropClientPacket []) $ testUniStreams cc sc waitS
+        it "ignores STOP_SENDING for a unidirectional stream it has closed" $ do
+            withPipe (DropClientPacket []) $ testStopClosedUni cc sc waitS
     describe "a stream closed before the peer finishes it" $ do
         it "is forgotten once the peer answers STOP_SENDING" $ do
             withPipe (DropClientPacket []) $ testDepartedForgotten cc sc waitS
@@ -693,6 +695,44 @@ testUniStreams cc sc waitS = do
         forever $ do
             strm <- acceptStream conn
             recvStream strm 1
+
+-- | A unidirectional stream used to be checked against the counter of
+--   bidirectional ones, so a client that had opened none of those closed the
+--   connection with STREAM_STATE_ERROR on a STOP_SENDING for stream 2.
+testStopClosedUni :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testStopClosedUni cc sc waitS = do
+    closed <- newEmptyMVar
+    stopped <- newEmptyMVar
+    withAsync (server closed stopped) $ \_ -> client closed stopped
+  where
+    client closed stopped = do
+        waitS
+        C.run cc $ \conn -> do
+            uni <- unidirectionalStream conn
+            sendStream uni "x"
+            closeStream uni
+            putMVar closed ()
+            () <- takeMVar stopped
+            threadDelay 200000
+            strm <- stream conn
+            sendStream strm "ping"
+            shutdownStream strm
+            recvStream strm 4 `shouldReturn` "pong"
+    server closed stopped = run sc $ \conn -> do
+        uni <- acceptStream conn
+        recvStream uni 1 `shouldReturn` "x"
+        () <- takeMVar closed
+        -- Sent as is: 'stopStream' sends nothing for a stream whose FIN
+        -- has arrived, and a peer's may cross it.
+        sendFrames
+            conn
+            RTT1Level
+            [StopSending (streamId uni) $ ApplicationProtocolError 0]
+        putMVar stopped ()
+        strm <- acceptStream conn
+        _ <- recvStream strm 4
+        sendStream strm "pong"
+        shutdownStream strm
 
 testRecvStreamClientStopFirst
     :: C.ClientConfig -> ServerConfig -> IO () -> IO ()

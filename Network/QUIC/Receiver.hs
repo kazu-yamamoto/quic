@@ -258,11 +258,10 @@ guardStream conn sid Nothing =
         )
 guardStream _ _ _ = return ()
 
--- fixme: what about unidirection stream?
 streamNotCreatedYet :: Connection -> StreamId -> ReasonPhrase -> IO ()
 streamNotCreatedYet conn sid emsg
     | isInitiated conn sid = do
-        curSid <- getMyStreamId conn
+        curSid <- getMyStreamId conn sid
         when (sid > curSid) $
             closeConnection conn StreamStateError emsg
 streamNotCreatedYet _ _ _ = return ()

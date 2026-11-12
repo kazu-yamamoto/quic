@@ -28,9 +28,13 @@ import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
-getMyStreamId :: Connection -> IO Int
-getMyStreamId Connection{..} = do
-    next <- currentStream <$> readTVarIO myStreamId
+-- | The last stream we opened of the kind 'StreamId' is.
+getMyStreamId :: Connection -> StreamId -> IO Int
+getMyStreamId Connection{..} sid = do
+    let tvar
+            | isUnidirectional sid = myUniStreamId
+            | otherwise = myStreamId
+    next <- currentStream <$> readTVarIO tvar
     return $ next - 4
 
 possibleMyStreams :: Connection -> IO Int
