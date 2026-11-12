@@ -180,7 +180,7 @@ makeConnections conf v = do
     -- dummy
     let clientConf = testClientConfig
     (sock, peersa) <- clientSocket "127.0.0.1" "2000"
-    q <- newRecvQ
+    q <- newRecvQ =<< newRecvBudget maxBound
     retire <- newTVarIO False
     sref <- newIORef (sock, retire)
     pathInfo <- newPathInfo peersa

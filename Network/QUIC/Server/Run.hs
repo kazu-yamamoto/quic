@@ -234,7 +234,7 @@ runServer
     -> Dispatch
     -> Accept
     -> IO ()
-runServer conf server0 dispatch acc = do
+runServer conf server0 dispatch acc = (`E.finally` closeRecvQ (accRecvQ acc)) $ do
     labelMe "QUIC runServer"
     E.bracket open clse $ \(ConnRes conn myAuthCIDs _reader) ->
         handleLogUnit (debugLog conn) $ do

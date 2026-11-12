@@ -43,7 +43,7 @@ spec = do
     -- anyone who can see a connection ID can fill it.  See #167.
     describe "RecvQ" $ do
         it "keeps what it has taken and drops what is past the limit" $ do
-            q <- newRecvQ
+            q <- newRecvQ =<< newRecvBudget maxBound
             mapM_ (writeRecvQ q . numbered) [1 .. recvQLimit + 100]
             ns <- replicateM recvQLimit (number <$> readRecvQ q)
             -- The packets kept are the ones that arrived first: what is
@@ -52,7 +52,7 @@ spec = do
             ns `shouldBe` [1 .. recvQLimit]
             Timeout.timeout 100000 (readRecvQ q) `shouldReturn` Nothing
         it "takes back a packet it had already taken, full or not" $ do
-            q <- newRecvQ
+            q <- newRecvQ =<< newRecvBudget maxBound
             mapM_ (writeRecvQ q . numbered) [1 .. recvQLimit]
             -- Putting back what was put off for want of keys is not the
             -- same as taking something new on, and the limit does not apply
@@ -60,6 +60,29 @@ spec = do
             -- for.
             atomically $ prependRecvQ q $ numbered 0
             number <$> readRecvQ q `shouldReturn` 0
+        -- #170: what one connection may queue times the number of
+        -- connections was a limit on nothing.
+        it "shares a budget with the other queues of the endpoint" $ do
+            budget <- newRecvBudget 3600 -- three packets of 1200
+            q1 <- newRecvQ budget
+            q2 <- newRecvQ budget
+            mapM_ (writeRecvQ q1 . numbered) [1, 2]
+            mapM_ (writeRecvQ q2 . numbered) [3, 4]
+            number <$> readRecvQ q1 `shouldReturn` 1
+            writeRecvQ q2 $ numbered 5
+            number <$> readRecvQ q2 `shouldReturn` 3
+            number <$> readRecvQ q2 `shouldReturn` 5
+        it "gives back what a closed queue holds and takes no more" $ do
+            budget <- newRecvBudget 2400
+            q1 <- newRecvQ budget
+            q2 <- newRecvQ budget
+            mapM_ (writeRecvQ q1 . numbered) [1, 2]
+            closeRecvQ q1
+            writeRecvQ q1 $ numbered 3
+            mapM_ (writeRecvQ q2 . numbered) [4, 5]
+            number <$> readRecvQ q2 `shouldReturn` 4
+            number <$> readRecvQ q2 `shouldReturn` 5
+            Timeout.timeout 100000 (readRecvQ q1) `shouldReturn` Nothing
     -- RFC 9000 Sec 19.3: the field counts units of 2 ^ ack_delay_exponent
     -- microseconds, and it is a varint, so up to 2 ^ 62 - 1 of them.
     describe "ackDelayMicro" $ do
