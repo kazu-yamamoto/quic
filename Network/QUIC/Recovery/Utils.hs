@@ -25,10 +25,11 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
+-- | Resending the ack-eliciting packets lost.  Lost ACK-only packets need
+--   nothing: a PING for them used to send a probe outside the congestion
+--   window and resend a packet that was not lost.
 retransmit :: LDCC -> Seq SentPacket -> IO ()
-retransmit ldcc lostPackets
-    | null packetsToBeResent = getEncryptionLevel ldcc >>= sendPing ldcc
-    | otherwise = mapM_ put packetsToBeResent
+retransmit ldcc lostPackets = mapM_ put packetsToBeResent
   where
     packetsToBeResent = Seq.filter spAckEliciting lostPackets
     put = putRetrans ldcc . spPlainPacket

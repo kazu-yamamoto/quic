@@ -31,6 +31,8 @@ module Network.QUIC.Recovery (
     -- Release
     releaseByRetry,
     releaseOldest,
+    onPacketsLost,
+    retransmit,
     -- Timer
     beforeAntiAmp,
     ldccTimer,
@@ -48,6 +50,9 @@ module Network.QUIC.Recovery (
     LDCC,
     newLDCC,
     lostCandidates,
+    recoveryCC,
+    ptoPing,
+    congestionRecoveryStartTime,
     SentPackets (..),
     qlogSent,
 ) where
@@ -61,4 +66,4 @@ import Network.QUIC.Recovery.Persistent
 import Network.QUIC.Recovery.Release
 import Network.QUIC.Recovery.Timer
 import Network.QUIC.Recovery.Types
-import Network.QUIC.Recovery.Utils (sendPing)
+import Network.QUIC.Recovery.Utils (retransmit, sendPing)

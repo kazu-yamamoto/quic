@@ -63,16 +63,20 @@ releaseOldest ldcc@LDCC{..} lvl = do
 ----------------------------------------------------------------
 
 onPacketsLost :: LDCC -> Seq SentPacket -> IO ()
-onPacketsLost ldcc@LDCC{..} lostPackets = case Seq.viewr lostPackets of
-    EmptyR -> return ()
-    _ :> lastPkt -> do
-        decreaseCC ldcc lostPackets
-        isRecovery <-
-            inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime
-                <$> readTVarIO recoveryCC
-        onCongestionEvent ldcc lostPackets isRecovery
-        mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
+onPacketsLost ldcc@LDCC{..} lostPackets = do
+    decreaseCC ldcc lostPackets
+    -- RFC 9002 B.8: only packets in flight make a congestion event.  An
+    -- ACK-only packet lost used to halve the window.
+    case Seq.viewr inflight of
+        EmptyR -> return ()
+        _ :> lastPkt -> do
+            isRecovery <-
+                inCongestionRecovery (spTimeSent lastPkt) . congestionRecoveryStartTime
+                    <$> readTVarIO recoveryCC
+            onCongestionEvent ldcc inflight isRecovery
+    mapM_ (qlogPacketLost ldcc . LostPacket) lostPackets
   where
+    inflight = Seq.filter ((> 0) . inFlightBytes) lostPackets
     onCongestionEvent = updateCC
 
 ----------------------------------------------------------------

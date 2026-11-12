@@ -4,6 +4,7 @@ module RecoverySpec where
 
 import Control.Concurrent.STM
 import Data.ByteString.Short ()
+import Data.Maybe (isJust)
 import qualified Data.Sequence as Seq
 import Data.UnixTime
 import Test.Hspec
@@ -51,6 +52,28 @@ spec = do
             atomically $ writeTVar (encryptionLevel cs) RTT1Level
             onAckReceived ldcc HandshakeLevel (AckInfo 0 0 []) 0
             getPtoTimeAndSpace ldcc `shouldReturn` Nothing
+    -- RFC 9002 B.8: only packets in flight make a congestion event.
+    describe "a lost packet" $ do
+        let lostWith frames = do
+                cs <- newConnState Client
+                ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+                now <- getTimeMicrosecond
+                let lost =
+                        (sp 1 (any ackEliciting frames) now)
+                            { spEncryptionLevel = RTT1Level
+                            , spSentBytes = 1200
+                            , spPlainPacket = PlainPacket (Short $ toCID "") (Plain (Flags 0) 1 frames 0)
+                            }
+                onPacketsLost ldcc $ Seq.singleton lost
+                retransmit ldcc $ Seq.singleton lost
+                -- A congestion event starts a recovery period.
+                event <- isJust . congestionRecoveryStartTime <$> readTVarIO (recoveryCC ldcc)
+                ping <- readTVarIO $ ptoPing ldcc
+                return (event, ping)
+        it "is no congestion event and needs no PING if it carried only an ACK" $
+            lostWith [Ack (AckInfo 0 0 []) noDelay] `shouldReturn` (False, Nothing)
+        it "is a congestion event if it was in flight" $
+            fst <$> lostWith [Ping] `shouldReturn` True
     describe "persistent congestion" $ do
         it "does not find a pair" $ do
             findDuration (Seq.fromList [sp0]) 0 `shouldBe` Nothing
