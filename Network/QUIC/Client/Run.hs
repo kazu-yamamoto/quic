@@ -162,7 +162,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     -- thread is the only one the socket has ever had.
     flip E.onException (NS.unsafeClose sock) $ do
         when ccSockConnected $ NS.connect sock peersa
-        q <- newRecvQ
+        q <- newRecvQ =<< newRecvBudget maxBound
         retire0 <- newTVarIO False
         sref <- newIORef (sock, retire0)
         pathInfo <- newPathInfo peersa

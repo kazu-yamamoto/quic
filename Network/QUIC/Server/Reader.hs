@@ -146,20 +146,24 @@ waitNoDispatcher Dispatch{..} = T.waitUntilAllGone dispatcherThreads
 
 -- Source CID -> RecvQ
 -- Initials and RTT0 are queued before Conneciton is created.
-newtype RecvQDict = RecvQDict (LRUCacheRef CID RecvQ)
+data RecvQDict = RecvQDict RecvBudget (LRUCacheRef CID RecvQ)
 
 recvQDictSize :: Int
 recvQDictSize = 100
 
+-- | The queues share one budget, the endpoint's (#170).
 newRecvQDict :: IO RecvQDict
-newRecvQDict = RecvQDict <$> LRUCache.newLRUCacheRef recvQDictSize
+newRecvQDict =
+    RecvQDict
+        <$> newRecvBudget recvBudgetLimit
+        <*> LRUCache.newLRUCacheRef recvQDictSize
 
 -- Looking up and insert a new RecvQ if not exist.
 lookupInsertRecvQDict :: RecvQDict -> CID -> IO (RecvQ, Bool)
-lookupInsertRecvQDict (RecvQDict ref) dcid = LRUCache.cached ref dcid newRecvQ
+lookupInsertRecvQDict (RecvQDict budget ref) dcid = LRUCache.cached ref dcid $ newRecvQ budget
 
 lookupRecvQDict :: RecvQDict -> CID -> IO (Maybe RecvQ)
-lookupRecvQDict (RecvQDict ref) dcid = LRUCache.cached' ref dcid
+lookupRecvQDict (RecvQDict _ ref) dcid = LRUCache.cached' ref dcid
 
 ----------------------------------------------------------------
 
