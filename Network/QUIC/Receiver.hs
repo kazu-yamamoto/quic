@@ -11,7 +11,6 @@ import Network.Socket (SockAddr, Socket)
 import Network.TLS (AlertDescription (..))
 import System.Log.FastLogger
 
-import Control.Concurrent.STM
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Connector
@@ -799,7 +798,7 @@ processFrame conn lvl (Datagram hasLen dat) = do
         closeConnection conn ProtocolViolation "DATAGRAM not supported"
     when (1 + lenSize + BS.length dat > limitBytes) $
         closeConnection conn ProtocolViolation "DATAGRAM size violation"
-    atomically $ writeTQueue (connRecvDatagramQ conn) dat
+    writeDatagramQ (connRecvDatagramQ conn) dat
 processFrame conn _ _ = closeConnection conn ProtocolViolation "Frame is not allowed"
 
 -- Return value indicates duplication.

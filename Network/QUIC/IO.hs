@@ -349,8 +349,8 @@ recvDatagram = atomically . recvDatagramSTM
 -- | Receive all available DATAGRAM frames.
 --   This function is non-blocking.
 recvDatagramMany :: Connection -> IO [ByteString]
-recvDatagramMany = atomically . flushTQueue . connRecvDatagramQ
+recvDatagramMany = atomically . flushDatagramQSTM . connRecvDatagramQ
 
 -- | Receiving a DATAGRAM frame in STM.
 recvDatagramSTM :: Connection -> STM ByteString
-recvDatagramSTM conn = readTQueue (connRecvDatagramQ conn) `orElse` peerClosedSTM conn
+recvDatagramSTM conn = readDatagramQSTM (connRecvDatagramQ conn) `orElse` peerClosedSTM conn

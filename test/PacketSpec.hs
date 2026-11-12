@@ -188,7 +188,7 @@ makeConnections conf v = do
     let ver = v
         verInfo = VersionInfo ver [ver]
     genSRT <- makeGenStatelessReset
-    dq <- newTQueueIO
+    dq <- newDatagramQ
     ----
     clientConn <-
         clientConnection

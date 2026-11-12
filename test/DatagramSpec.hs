@@ -3,6 +3,7 @@
 module DatagramSpec where
 
 import Control.Concurrent
+import Control.Concurrent.STM (atomically)
 import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString ()
@@ -138,6 +139,16 @@ spec = do
                         sendDatagram conn (BS.replicate 50 0x41)
                         threadDelay 500
 
+    -- #226: the queue grew for as long as the peer sent faster than the
+    -- application read.
+    describe "the DATAGRAM receive queue" $
+        it "drops what arrives past its limit" $ do
+            q <- newDatagramQ
+            forM_ [1 .. datagramQLimit + 10] $ \_ -> writeDatagramQ q "x"
+            length <$> atomically (flushDatagramQSTM q)
+                `shouldReturn` datagramQLimit
+            writeDatagramQ q "y"
+            atomically (flushDatagramQSTM q) `shouldReturn` ["y"]
     describe "Datagram SHOULD requirements" $ do
         -- "This frame SHOULD be sent as soon as possible... and MAY be coalesced with other frames."
         it "Can send and receive DATAGRAM in 1-RTT" $ do

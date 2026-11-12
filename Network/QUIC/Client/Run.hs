@@ -191,7 +191,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
             let myAuthCIDs = defaultAuthCIDs{initSrcCID = Just myCID}
                 peerAuthCIDs = defaultAuthCIDs{initSrcCID = Just peerCID, origDstCID = Just peerCID}
             genSRT <- makeGenStatelessReset
-            connRecvDatagramQ <- newTQueueIO
+            connRecvDatagramQ <- newDatagramQ
             conn <-
                 clientConnection
                     conf
