@@ -6,7 +6,7 @@ module IOSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.STM (readTVarIO)
+import Control.Concurrent.STM (atomically, readTVarIO)
 import qualified Control.Exception as E
 import Control.Monad
 import Data.Bits (shiftR)
@@ -15,6 +15,7 @@ import qualified Data.ByteString.Short as Short
 import Data.IORef
 import qualified Data.IntMap.Strict as IntMap
 import GHC.Conc (getUncaughtExceptionHandler, setUncaughtExceptionHandler)
+import Network.Control (txfSent)
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 import System.Directory (listDirectory)
@@ -79,6 +80,24 @@ spec = do
             -- The first one taken and lost: the second keeps its offset.
             _ <- takeSendStreamQ clientConn
             offset <$> takeSendStreamQ clientConn `shouldReturn` (6, 16)
+    -- RFC 9000 Sec 4.1: two streams sending at once used to both see the
+    -- same connection window and queue twice what MAX_DATA allowed.
+    describe "the connection window" $
+        it "is not given to two streams sending at once" $ do
+            sc0 <- makeTestServerConfig
+            (clientConn, _) <- makeConnections sc0 Version1
+            overs <- forM [0 .. 999] $ \i -> do
+                s1 <- addStream clientConn (8 * i)
+                s2 <- addStream clientConn (8 * i + 4)
+                setTxMaxStreamData s1 100
+                setTxMaxStreamData s2 100
+                base <- txfSent <$> atomically (readConnectionFlowTx clientConn)
+                setTxMaxData clientConn $ base + 100
+                let send s = Timeout.timeout 1000 $ sendStream s $ BS.replicate 100 0
+                _ <- concurrently (send s1) (send s2)
+                sent <- txfSent <$> atomically (readConnectionFlowTx clientConn)
+                return $ sent - base
+            filter (> 100) overs `shouldBe` []
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS
