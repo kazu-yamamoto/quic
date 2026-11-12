@@ -46,6 +46,8 @@ speedup ldcc@LDCC{..} lvl desc = do
     unless (null packets) $ do
         onPacketsLost ldcc packets
         retransmit ldcc packets
+        -- Nothing to resend: a PING, to hurry the peer along all the same.
+        unless (any spAckEliciting packets) $ sendPing ldcc lvl
         setLossDetectionTimer ldcc
 
 resender :: LDCC -> IO ()
