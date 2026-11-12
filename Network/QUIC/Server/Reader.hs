@@ -350,7 +350,9 @@ dispatch
                                 -- Retry -- but the address it arrives from has
                                 -- proved nothing.
                                 fresh <- isTokenFresh ct
-                                pushToAcceptFirst $ fresh && isTokenAddress ct peersa
+                                if fresh && isTokenAddress ct peersa
+                                    then pushToAcceptFirst True
+                                    else unvalidated
                         -- A token we cannot decrypt is not a token.  RFC 9000
                         -- section 8.1.3: "If the token is invalid, then the
                         -- server SHOULD proceed as if the client did not have
@@ -359,10 +361,15 @@ dispatch
                         -- rubbish than for sending nothing, and turned off
                         -- the anti-amplification limit for an address that
                         -- had proved nothing.
-                        Nothing -> pushToAcceptFirst False
+                        Nothing -> unvalidated
                 Just conn -> writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
       where
         myVersions = scVersions
+        -- An address no token has validated: a Retry if one is required,
+        -- as for an Initial with no token at all.
+        unvalidated
+            | scRequireRetry = sendRetry
+            | otherwise = pushToAcceptFirst False
         pushToAcceptQ myAuthCIDs peerAuthCIDs addrValid = do
             let key = nonZeroLengthCID sCID peersa
             mq <- lookupRecvQDict srcTable key

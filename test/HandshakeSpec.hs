@@ -79,6 +79,21 @@ spec = do
             let cc = testClientConfig
                 sc = sc0{scRequireRetry = True}
             testHandshake cc sc waitS FullHandshake
+        -- A token that proves nothing does not stand in for the Retry.
+        it "requires a Retry of a client with an invalid token" $ do
+            let cc =
+                    testClientConfig
+                        { ccResumption =
+                            (ccResumption testClientConfig)
+                                { resumptionToken = "invalid token"
+                                , resumptionVersion = ccVersion testClientConfig
+                                }
+                        }
+                sc = sc0{scRequireRetry = True}
+            E.bracket (forkIO $ S.run sc $ \_ -> threadDelay 2000000) killThread $ \_ -> do
+                waitS
+                C.run cc (\conn -> waitEstablished conn >> retry <$> getConnectionInfo conn)
+                    `shouldReturn` True
         it "can handshake in the case of resumption" $ do
             let cc = testClientConfig
                 sc = sc0
