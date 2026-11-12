@@ -84,8 +84,8 @@ spec = do
     -- same connection window and queue twice what MAX_DATA allowed.
     describe "the connection window" $
         it "is not given to two streams sending at once" $ do
-            sc0 <- makeTestServerConfig
-            (clientConn, _) <- makeConnections sc0 Version1
+            scw <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scw Version1
             overs <- forM [0 .. 999] $ \i -> do
                 s1 <- addStream clientConn (8 * i)
                 s2 <- addStream clientConn (8 * i + 4)
