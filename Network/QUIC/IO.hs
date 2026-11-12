@@ -42,8 +42,8 @@ data Blocked
 
 -- | Counting and queueing at once, so that the offset given is the
 --   stream's next one and the queue holds a stream's data in order.
-queueTx :: Connection -> Stream -> [StreamData] -> Int -> IO ()
-queueTx conn s dats len = atomically $ do
+queueTx :: Connection -> Stream -> [StreamData] -> Int -> STM ()
+queueTx conn s dats len = do
     off <- addTxStreamData s len
     addTxData conn len
     putSendStreamQSTM conn $ TxStreamData s off dats len False
@@ -74,16 +74,22 @@ sendStreamMany s dats0 = do
     flowControl dats len wait = do
         -- FLOW CONTROL: MAX_STREAM_DATA: send: respecting peer's limit
         -- FLOW CONTROL: MAX_DATA: send: respecting peer's limit
-        eblocked <- checkBlocked s len wait
-        case eblocked of
-            Right n
-                -- Counted before queued, so that a reset in between takes
-                -- it into the final size.
-                | len == n -> queueTx conn s dats len
-                | otherwise -> do
-                    let (dats1, dats2) = split n dats
+        -- The window is taken in the transaction that finds it.  Two
+        -- streams sending at once used to see the same window and send it
+        -- twice over.
+        eblocked <- atomically $ do
+            r <- checkBlocked s len wait
+            case r of
+                Right n -> do
+                    let (dats1, dats2)
+                            | len == n = (dats, [])
+                            | otherwise = split n dats
                     queueTx conn s dats1 n
-                    flowControl dats2 (len - n) False
+                    return $ Right (n, dats2)
+                Left blocked -> return $ Left blocked
+        case eblocked of
+            Right (n, dats2) ->
+                when (n < len) $ flowControl dats2 (len - n) False
             Left blocked -> do
                 -- Read each time round rather than once: the handshake may
                 -- finish while we are waiting for the window, and a BLOCKED
@@ -117,8 +123,8 @@ split n0 dats0 = loop n0 dats0 id
       where
         len = BS.length bs
 
-checkBlocked :: Stream -> Int -> Bool -> IO (Either Blocked Int)
-checkBlocked s len wait = atomically $ do
+checkBlocked :: Stream -> Int -> Bool -> STM (Either Blocked Int)
+checkBlocked s len wait = do
     let conn = streamConnection s
     checkPeerClosedSTM conn
     strmFlow <- readStreamFlowTx s
