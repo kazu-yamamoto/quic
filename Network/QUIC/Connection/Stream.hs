@@ -14,6 +14,8 @@ module Network.QUIC.Connection.Stream (
     updatePeerStreamId,
     checkStreamIdRoom,
     releasePeerStream,
+    setMaxBidiStreams,
+    setMaxUniStreams,
 ) where
 
 import Control.Concurrent.STM
@@ -24,7 +26,6 @@ import Network.QUIC.Connection.Timeout
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
-import Network.QUIC.Parameters
 import Network.QUIC.Types
 
 getMyStreamId :: Connection -> IO Int
@@ -149,16 +150,12 @@ checkStreamIdRoom conn dir = do
             | otherwise = peerUniStreamId conn
     atomicModifyIORef' ref checkConc
   where
-    params = getMyParameters conn
-    initialStreams
-        | dir == Bidirectional = initialMaxStreamsBidi params
-        | otherwise = initialMaxStreamsUni params
     checkConc conc@Concurrency{..} =
         let StreamIdBase base = maxStreams
             closed = closedStreams + 1
-            base' = initialStreams + closed
+            base' = targetStreams + closed
             conc' = conc{closedStreams = closed}
-         in if base' - base >= max 1 (initialStreams `div` 2)
+         in if base' - base >= max 1 (targetStreams `div` 2)
                 then (conc'{maxStreams = StreamIdBase base'}, Just base')
                 else (conc', Nothing)
 
@@ -182,3 +179,34 @@ releasePeerStream conn sid
     dir
         | isUnidirectional sid = Unidirectional
         | otherwise = Bidirectional
+
+-- | Setting how many bidirectional streams the peer may have open at once,
+--   'initialMaxStreamsBidi' to begin with.  A larger number is announced
+--   at once.  MAX_STREAMS cannot go down (RFC 9000 Sec 4.6), so a smaller
+--   one takes effect as the peer's open streams are closed.
+setMaxBidiStreams :: Connection -> Int -> IO ()
+setMaxBidiStreams conn = setMaxStreams conn Bidirectional
+
+-- | 'setMaxBidiStreams' for unidirectional streams.
+setMaxUniStreams :: Connection -> Int -> IO ()
+setMaxUniStreams conn = setMaxStreams conn Unidirectional
+
+setMaxStreams :: Connection -> Direction -> Int -> IO ()
+setMaxStreams conn dir n0 = do
+    mx <- atomicModifyIORef' ref retarget
+    case mx of
+        Nothing -> return ()
+        Just nms -> sendFrames conn RTT1Level [MaxStreams dir nms]
+  where
+    ref
+        | dir == Bidirectional = peerStreamId conn
+        | otherwise = peerUniStreamId conn
+    -- RFC 9000 Sec 4.6: no more than 2^60 streams.
+    n = max 0 $ min n0 (2 ^ (60 :: Int))
+    retarget conc@Concurrency{..} =
+        let StreamIdBase base = maxStreams
+            base' = min (2 ^ (60 :: Int)) (n + closedStreams)
+            conc' = conc{targetStreams = n}
+         in if base' > base
+                then (conc'{maxStreams = StreamIdBase base'}, Just base')
+                else (conc', Nothing)

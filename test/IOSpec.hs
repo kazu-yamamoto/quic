@@ -193,6 +193,21 @@ spec = do
         it "ignores a late copy of the data it received on a stream the peer opened" $ do
             withPipe (DelayClientPacket 300) $ testLateCopy True cc sc waitS
     describe "stream limits" $ do
+        -- #86: the number the peer may have open is no longer fixed.
+        it "announces a raised limit at once and holds a lowered one" $ do
+            scl <- makeTestServerConfig
+            (_, serverConn) <- makeConnections scl Version1
+            let initial = initialMaxStreamsBidi $ getMyParameters serverConn
+            setMaxBidiStreams serverConn $ initial + 10
+            out <- atomically $ takeOutputSTM serverConn
+            case out of
+                OutControl RTT1Level [MaxStreams Bidirectional n] -> n `shouldBe` initial + 10
+                _ -> expectationFailure "no MAX_STREAMS"
+            -- MAX_STREAMS cannot go down, and closing one stream of many
+            -- under a lower target gives the peer no new one.
+            setMaxBidiStreams serverConn 1
+            atomically (isEmptyOutputSTM serverConn) `shouldReturn` True
+            checkStreamIdRoom serverConn Bidirectional `shouldReturn` Nothing
         it "keeps the peer's open bidirectional streams within the limit" $ do
             withPipe (DropClientPacket []) $ testOpenStreams cc sc waitS
         it "raises the limit on unidirectional streams by their own number" $ do

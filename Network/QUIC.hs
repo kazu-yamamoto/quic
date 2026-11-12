@@ -36,6 +36,10 @@ module Network.QUIC (
     resetStream,
     stopStream,
 
+    -- ** Limits on the peer's streams
+    setMaxBidiStreams,
+    setMaxUniStreams,
+
     -- * IO
     recvStream,
     resetReceived,
