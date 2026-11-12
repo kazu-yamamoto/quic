@@ -195,6 +195,8 @@ data Concurrency = Concurrency
     , maxStreams :: StreamIdBase
     , closedStreams :: Int
     -- ^ For the peer's streams: how many of them we are done with
+    , targetStreams :: Int
+    -- ^ For the peer's streams: how many may be open at once (#86)
     }
     deriving (Show)
 
@@ -207,6 +209,7 @@ newConcurrency rl dir n = Concurrency{..}
         | otherwise = if bidi then 1 else 3
     maxStreams = StreamIdBase n
     closedStreams = 0
+    targetStreams = n
 
 -- | The peer-initiated streams of one type that have been opened so far.
 --
