@@ -4,6 +4,7 @@
 module HandshakeSpec where
 
 import Control.Concurrent
+import Control.Concurrent.Async (wait, withAsync)
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
@@ -152,6 +153,31 @@ spec = do
                         te == cryptoError TLS.HandshakeFailure
                     | otherwise = False
             testHandshake3 cc1 cc2 sc waitS handshakeFailure
+        -- RFC 9000 Sec 5.2.2: a connection over the limit is refused with
+        -- CONNECTION_REFUSED, and one ending makes room for another (#170).
+        it "refuses a connection over scMaxConnections" $ do
+            let sc = sc0{scMaxConnections = Just 1}
+            first <- newEmptyMVar
+            done <- newEmptyMVar
+            let holder = C.run testClientConfig $ \conn -> do
+                    waitEstablished conn
+                    putMVar first ()
+                    takeMVar done
+                refused (TransportErrorIsReceived ConnectionRefused _) = True
+                refused _ = False
+                establish = C.run testClientConfig waitEstablished
+                again 0 = establish
+                again n =
+                    establish `E.catch` \(_ :: QUICException) ->
+                        threadDelay 200000 >> again (n - 1 :: Int)
+            E.bracket (forkIO $ S.run sc $ \_ -> threadDelay 10000000) killThread $ \_ -> do
+                waitS
+                withAsync holder $ \h -> do
+                    takeMVar first
+                    establish `shouldThrow` refused
+                    putMVar done ()
+                    wait h
+                again 10
         it "reconnects with the version a Version Negotiation offers" $ do
             let cc = testClientConfig{ccVersion = Version2, ccVersions = [Version2, Version1]}
                 sc = sc0{scVersions = [Version1]}

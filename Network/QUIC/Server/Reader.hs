@@ -9,6 +9,7 @@ module Network.QUIC.Server.Reader (
     liveConnections,
     spawnConnection,
     waitNoConnection,
+    releaseConnection,
     spawnDispatcher,
     waitNoDispatcher,
     tokenMgr,
@@ -70,6 +71,8 @@ data Dispatch = Dispatch
     , stopServerNow :: IO ()
     -- ^ Stopping this server: what the shutdown handler is handed, and
     -- what a connection's 'stop' reaches it by.
+    , connectionCount :: TVar Int
+    -- ^ Connections forked and not yet ended, for 'scMaxConnections'.
     }
 
 newDispatch :: ServerConfig -> IO () -> IO Dispatch
@@ -83,6 +86,7 @@ newDispatch ServerConfig{..} stopNow =
         <*> T.newThreadManager
         <*> T.newThreadManager
         <*> pure stopNow
+        <*> newTVarIO 0
   where
     conf =
         CT.defaultConfig
@@ -127,6 +131,18 @@ liveConnections Dispatch{..} = do
 --   several keys.
 spawnConnection :: Dispatch -> IO () -> IO ()
 spawnConnection Dispatch{..} = T.forkManaged connectionThreads "QUIC connection"
+
+-- | Counting a connection in, unless there are 'scMaxConnections' already.
+reserveConnection :: Dispatch -> Maybe Int -> IO Bool
+reserveConnection Dispatch{..} mlim = atomically $ do
+    n <- readTVar connectionCount
+    if maybe True (n <) mlim
+        then writeTVar connectionCount (n + 1) >> return True
+        else return False
+
+-- | Counting a connection out.
+releaseConnection :: Dispatch -> IO ()
+releaseConnection Dispatch{..} = atomically $ modifyTVar' connectionCount (subtract 1)
 
 -- | Waiting until no connection is running.
 waitNoConnection :: Dispatch -> IO ()
@@ -281,7 +297,7 @@ dispatch
     -> (CryptPacket, EncryptionLevel, Int)
     -> IO ()
 dispatch
-    Dispatch{..}
+    d@Dispatch{..}
     ServerConfig{..}
     forkConnection
     logAction
@@ -349,8 +365,24 @@ dispatch
         myVersions = scVersions
         pushToAcceptQ myAuthCIDs peerAuthCIDs addrValid = do
             let key = nonZeroLengthCID sCID peersa
+            mq <- lookupRecvQDict srcTable key
+            case mq of
+                -- A retransmission of an Initial already accepted.
+                Just q -> writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
+                Nothing -> do
+                    ok <- reserveConnection d scMaxConnections
+                    if ok
+                        then accept myAuthCIDs peerAuthCIDs addrValid key
+                        else -- RFC 9000 Sec 5.2.2: "If a server refuses to
+                        -- accept a new connection, it SHOULD send an Initial
+                        -- packet containing a CONNECTION_CLOSE frame with
+                        -- error code CONNECTION_REFUSED."
+                            encodeInitialRefusal peerVer sCID dCID >>= send'
+        accept myAuthCIDs peerAuthCIDs addrValid key = do
             (q, exist) <- lookupInsertRecvQDict srcTable key
             writeRecvQ q $ mkReceivedPacket cpkt tim siz lvl
+            -- Another dispatcher got there first.
+            when exist $ releaseConnection d
             unless exist $ do
                 let reg = registerConnectionDict dstTable
                     unreg cid =

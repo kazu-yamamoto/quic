@@ -234,7 +234,7 @@ runServer
     -> Dispatch
     -> Accept
     -> IO ()
-runServer conf server0 dispatch acc = (`E.finally` closeRecvQ (accRecvQ acc)) $ do
+runServer conf server0 dispatch acc = (`E.finally` done) $ do
     labelMe "QUIC runServer"
     E.bracket open clse $ \(ConnRes conn myAuthCIDs _reader) ->
         handleLogUnit (debugLog conn) $ do
@@ -316,6 +316,9 @@ runServer conf server0 dispatch acc = (`E.finally` closeRecvQ (accRecvQ acc)) $ 
             setConnectionClosed conn
             closure conn ldcc ex
   where
+    done = do
+        closeRecvQ $ accRecvQ acc
+        releaseConnection dispatch
     open = createServerConnection conf dispatch acc
     -- 'killReaders' stops this connection's own threads and sees them out,
     -- which has to happen before the buffers they use are freed.  Nothing
