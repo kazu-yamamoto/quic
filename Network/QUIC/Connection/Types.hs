@@ -321,6 +321,9 @@ data Connection = Connection
       peerPacketNumber  :: Array EncryptionLevel (IORef PacketNumber)
     -- ^ The largest the peer has sent, by level.  0-RTT and 1-RTT share
     --   one, as they share a packet number space.
+    , peerReceived      :: Array EncryptionLevel (IORef IntSet)
+    -- ^ The packet numbers processed, by space, kept within
+    --   'Network.QUIC.Connection.PacketNumber.receivedWindow' of the largest.
     , streamTable       :: TVar StreamTable
     , -- | What a stream the application has closed still owes the
       -- connection's window, for as long as the peer has not finished it.
@@ -442,7 +445,8 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     delayedAckCount   <- newIORef 0
     delayedAckCancel  <- newIORef (return ())
     -- State
-    peerPacketNumber  <- newPeerPacketNumber
+    peerPacketNumber  <- newPerSpace 0
+    peerReceived      <- newPerSpace IntSet.empty
     streamTable       <- newTVarIO emptyStreamTable
     departedStreams   <- newTVarIO IntMap.empty
     myStreamId        <- newTVarIO (newConcurrency rl Bidirectional 0)
@@ -561,11 +565,11 @@ serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
 
 ----------------------------------------------------------------
 
-newPeerPacketNumber :: IO (Array EncryptionLevel (IORef PacketNumber))
-newPeerPacketNumber = do
-    ini <- newIORef 0
-    app <- newIORef 0
-    hnd <- newIORef 0
+newPerSpace :: a -> IO (Array EncryptionLevel (IORef a))
+newPerSpace x = do
+    ini <- newIORef x
+    app <- newIORef x
+    hnd <- newIORef x
     return $
         listArray
             (InitialLevel, RTT1Level)
