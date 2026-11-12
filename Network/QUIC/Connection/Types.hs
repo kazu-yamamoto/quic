@@ -88,7 +88,7 @@ defaultServerRoleInfo =
 -- cidInfoSRT in CIDInfo is only used in client
 -- which accepts stateless reset.
 data CIDDB = CIDDB
-    { usedCIDInfo :: !CIDInfo
+    { usedCIDInfo :: CIDInfo
     , cidInfos :: IntMap CIDInfo
     , revInfos :: Map CID Int
     , nextSeqNum :: Int -- only for mine (new)
