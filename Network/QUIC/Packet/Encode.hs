@@ -5,10 +5,13 @@ module Network.QUIC.Packet.Encode (
     encodeVersionNegotiationPacket,
     encodeRetryPacket,
     encodePlainPacket,
+    encodeInitialRefusal,
     makeStatelessReset,
 ) where
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Short as Short
+import Foreign.Marshal.Alloc (allocaBytes)
 import System.Random (getStdRandom, randomRIO)
 #if MIN_VERSION_random(1,3,0)
 import System.Random (uniformByteString)
@@ -53,6 +56,36 @@ encodeVersionNegotiationPacket (VersionNegotiationPacket dCID sCID vers) = withW
     return ()
 
 ----------------------------------------------------------------
+
+-- | An Initial packet closing with CONNECTION_REFUSED, made without a
+--   connection: the keys are the ones the client's Destination Connection
+--   ID gives (RFC 9001 Sec 5.2), and that ID is our Source Connection ID.
+encodeInitialRefusal :: Version -> CID -> CID -> IO ByteString
+encodeInitialRefusal ver peerCID origCID =
+    allocaBytes bufLen $ \buf -> allocaBytes bufLen $ \encBuf -> do
+        (coder, protector) <-
+            genNiteCoder False ver defaultCipher $ initialSecrets ver origCID
+        wbuf <- newWriteBuffer buf bufLen
+        (epn, epnLen) <-
+            encodeLongHeaderPP' True wbuf InitialPacketType ver peerCID origCID (Flags 0) 0
+        encodeInt' wbuf 0 -- token
+        (len, _) <-
+            protectPayloadHeader'
+                encBuf
+                defaultCipher
+                coder
+                protector
+                wbuf
+                [ConnectionClose ConnectionRefused 0 Short.empty]
+                0
+                epn
+                epnLen
+                buf
+                Nothing
+                InitialLevel
+        if len < 0 then return BS.empty else BS.packCStringLen (castPtr buf, len)
+  where
+    bufLen = 1500
 
 encodeRetryPacket :: RetryPacket -> IO ByteString
 encodeRetryPacket (RetryPacket ver dCID sCID token (Left odCID)) = withWriteBuffer maximumQUICHeaderSize $ \wbuf -> do
@@ -204,9 +237,22 @@ encodeLongHeaderPP
     -> PacketNumber
     -> IO (EncodedPacketNumber, Int)
 encodeLongHeaderPP conn wbuf pkttyp ver dCID sCID flags pn = do
+    quicBit <- greaseQuicBit <$> getPeerParameters conn
+    encodeLongHeaderPP' quicBit wbuf pkttyp ver dCID sCID flags pn
+
+encodeLongHeaderPP'
+    :: Bool
+    -> WriteBuffer
+    -> LongHeaderPacketType
+    -> Version
+    -> CID
+    -> CID
+    -> Flags Raw
+    -> PacketNumber
+    -> IO (EncodedPacketNumber, Int)
+encodeLongHeaderPP' quicBit wbuf pkttyp ver dCID sCID flags pn = do
     let el@(_, pnLen) = encodePacketNumber 0 {- dummy -} pn
         pp = encodePktNumLength pnLen
-    quicBit <- greaseQuicBit <$> getPeerParameters conn
     Flags flags' <- encodeLongHeaderFlags ver pkttyp flags pp quicBit
     write8 wbuf flags'
     encodeLongHeader wbuf ver dCID sCID
@@ -227,15 +273,46 @@ protectPayloadHeader
     -> Bool
     -> IO (Int, Int)
 protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase = do
-    -- Real size is maximumUdpPayloadSize. But smaller is better.
-    let encBuf = encodeBuf conn
-        encBufLen = 1500 - 20 - 8
-    payloadWithoutPaddingSiz <- encodeFramesWithPadding encBuf encBufLen frames
     cipher <- getCipher conn lvl
+    coder <- getCoder conn lvl keyPhase
+    protector <- getProtector conn lvl
+    protectPayloadHeader'
+        (encodeBuf conn)
+        cipher
+        coder
+        protector
+        wbuf
+        frames
+        pn
+        epn
+        epnLen
+        headerBeg
+        mlen
+        lvl
+
+-- | 'protectPayloadHeader' with what it takes from a connection given.
+protectPayloadHeader'
+    :: Buffer
+    -> Cipher
+    -> Coder
+    -> Protector
+    -> WriteBuffer
+    -> [Frame]
+    -> PacketNumber
+    -> EncodedPacketNumber
+    -> Int
+    -> Buffer
+    -> Maybe Int
+    -> EncryptionLevel
+    -> IO (Int, Int)
+protectPayloadHeader' encBuf cipher coder protector wbuf frames pn epn epnLen headerBeg mlen lvl = do
+    -- Real size is maximumUdpPayloadSize. But smaller is better.
+    let encBufLen = 1500 - 20 - 8
+    payloadWithoutPaddingSiz <- encodeFramesWithPadding encBuf encBufLen frames
     -- before length or packer number
     lengthOrPNBeg <- currentOffset wbuf
     (packetLen, headerLen, plainLen, tagLen, padLen) <-
-        calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz
+        calcLen lengthOrPNBeg payloadWithoutPaddingSiz
     when (lvl /= RTT1Level) $ writeLen (epnLen + plainLen + tagLen)
     pnBeg <- currentOffset wbuf
     writeEpn epnLen
@@ -245,8 +322,6 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
     header <- mkBS headerBeg headerLen
     --
     let sampleBeg = pnBeg `plusPtr` 4
-    coder <- getCoder conn lvl keyPhase
-    protector <- getProtector conn lvl
     setSample protector sampleBeg
     len <- encrypt coder cryptoBeg plaintext (AssDat header) pn
     --
@@ -259,7 +334,7 @@ protectPayloadHeader conn wbuf frames pn epn epnLen headerBeg mlen lvl keyPhase 
             ok <- withMask protector $ protectHeader headerBeg pnBeg epnLen
             return $ if ok then (packetLen, padLen) else (-1, -1)
   where
-    calcLen cipher lengthOrPNBeg payloadWithoutPaddingSiz = do
+    calcLen lengthOrPNBeg payloadWithoutPaddingSiz = do
         let headerLen =
                 (lengthOrPNBeg `minusPtr` headerBeg)
                     -- length: assuming 2byte length

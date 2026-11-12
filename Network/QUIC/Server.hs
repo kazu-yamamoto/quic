@@ -12,6 +12,7 @@ module Network.QUIC.Server (
     scALPN,
     scWantClientCert,
     scRequireRetry,
+    scMaxConnections,
     scUse0RTT,
     scMaxDatagramFrameSize,
     scCiphers,

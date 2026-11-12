@@ -19,6 +19,7 @@ module Network.QUIC.Connection.Crypto (
     initializeCoder,
     initializeCoder1RTT,
     updateCoder1RTT,
+    genNiteCoder,
     getCoder,
     getProtector,
     --
