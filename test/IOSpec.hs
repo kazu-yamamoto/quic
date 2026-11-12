@@ -192,6 +192,26 @@ spec = do
             withPipe (DelayServerPacket 300) $ testLateCopy False cc sc waitS
         it "ignores a late copy of the data it received on a stream the peer opened" $ do
             withPipe (DelayClientPacket 300) $ testLateCopy True cc sc waitS
+    -- RFC 9000 Sec 17.2.3: 0-RTT goes from client to server only.
+    describe "a frame received in 0-RTT" $ do
+        let replied serverConn = do
+                out <- atomically $ takeOutputSTM serverConn
+                case out of
+                    OutControl lvl frames -> return (lvl, frames)
+                    _ -> fail "no control frames"
+        it "has its ACK sent in 1-RTT" $ do
+            scz <- makeTestServerConfig
+            (_, serverConn) <- makeConnections scz Version1
+            processFrame serverConn RTT0Level Ping
+            fst <$> replied serverConn `shouldReturn` RTT1Level
+        it "has its RESET_STREAM sent in 1-RTT" $ do
+            scz <- makeTestServerConfig
+            (_, serverConn) <- makeConnections scz Version1
+            _ <- addStream serverConn 0
+            processFrame serverConn RTT0Level $ StopSending 0 $ ApplicationProtocolError 0
+            (lvl, frames) <- replied serverConn
+            lvl `shouldBe` RTT1Level
+            frames `shouldSatisfy` any isResetStream
     describe "stream limits" $ do
         -- #86: the number the peer may have open is no longer fixed.
         it "announces a raised limit at once and holds a lowered one" $ do
@@ -695,6 +715,10 @@ testUniStreams cc sc waitS = do
         forever $ do
             strm <- acceptStream conn
             recvStream strm 1
+
+isResetStream :: Frame -> Bool
+isResetStream ResetStream{} = True
+isResetStream _ = False
 
 -- | A unidirectional stream used to be checked against the counter of
 --   bidirectional ones, so a client that had opened none of those closed the

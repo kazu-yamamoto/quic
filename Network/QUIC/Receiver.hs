@@ -3,6 +3,7 @@
 
 module Network.QUIC.Receiver (
     receiver,
+    processFrame,
 ) where
 
 import qualified Control.Exception as E
@@ -462,11 +463,18 @@ receiveStreamFrame conn space sid off dat fin = do
             Reassembled _ -> return ()
         deliverStream conn found strm
 
+-- | The level to answer a frame received at: 0-RTT goes from client to
+--   server only, so a server answers 0-RTT in 1-RTT (RFC 9000 Sec 17.2.3).
+replyLevel :: EncryptionLevel -> EncryptionLevel
+replyLevel RTT0Level = RTT1Level
+replyLevel lvl = lvl
+
 processFrame :: Connection -> EncryptionLevel -> Frame -> IO ()
 processFrame _ _ Padding{} = return ()
 processFrame conn lvl Ping = do
     -- see ackEli above
-    when (lvl /= InitialLevel && lvl /= RTT1Level) $ sendFrames conn lvl []
+    when (lvl /= InitialLevel && lvl /= RTT1Level) $
+        sendFrames conn (replyLevel lvl) []
 processFrame conn lvl (Ack ackInfo@(AckInfo largestAcked _ _) ackDelay) = do
     when (lvl == RTT0Level) $ closeConnection conn ProtocolViolation "ACK"
     -- RFC 9000 Sec 19.3.1: walking the ranges down from the largest
@@ -574,7 +582,7 @@ processFrame conn lvl (StopSending sid err) = do
                 -- No more STREAM frames may go out on it.  Without this,
                 -- 'sendStream' went on working after the RESET_STREAM.
                 finalSize <- resetTxStream strm
-                sendFrames conn lvl [ResetStream sid err finalSize]
+                sendFrames conn (replyLevel lvl) [ResetStream sid err finalSize]
 processFrame _ _ (CryptoF _ "") = return ()
 processFrame conn lvl (CryptoF off cdat) = do
     when (lvl == RTT0Level) $
