@@ -133,10 +133,10 @@ spawnConnection :: Dispatch -> IO () -> IO ()
 spawnConnection Dispatch{..} = T.forkManaged connectionThreads "QUIC connection"
 
 -- | Counting a connection in, unless there are 'scMaxConnections' already.
-reserveConnection :: Dispatch -> Maybe Int -> IO Bool
-reserveConnection Dispatch{..} mlim = atomically $ do
+reserveConnection :: Dispatch -> Int -> IO Bool
+reserveConnection Dispatch{..} lim = atomically $ do
     n <- readTVar connectionCount
-    if maybe True (n <) mlim
+    if lim <= 0 || n < lim
         then writeTVar connectionCount (n + 1) >> return True
         else return False
 

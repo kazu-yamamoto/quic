@@ -156,7 +156,7 @@ spec = do
         -- RFC 9000 Sec 5.2.2: a connection over the limit is refused with
         -- CONNECTION_REFUSED, and one ending makes room for another (#170).
         it "refuses a connection over scMaxConnections" $ do
-            let sc = sc0{scMaxConnections = Just 1}
+            let sc = sc0{scMaxConnections = 1}
             first <- newEmptyMVar
             done <- newEmptyMVar
             let holder = C.run testClientConfig $ \conn -> do

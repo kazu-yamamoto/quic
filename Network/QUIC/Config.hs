@@ -194,11 +194,11 @@ data ServerConfig = ServerConfig
     -- ^ Request a certificate from clients.
     , scRequireRetry :: Bool
     -- ^ Requiring QUIC retry.
-    , scMaxConnections :: Maybe Int
+    , scMaxConnections :: Int
     -- ^ How many connections may be open at once.  An Initial packet that
-    --   would open one more is answered with CONNECTION_REFUSED.  'Nothing',
-    --   the default, sets no limit; a server open to the Internet should
-    --   set one.
+    --   would open one more is answered with CONNECTION_REFUSED.  0 or less,
+    --   the default being 0, sets no limit; a server open to the Internet
+    --   should set one.
     , scSessionManager :: SessionManager
     -- ^ A session manager of TLS 1.3.
     , scDebugLog :: Maybe FilePath
@@ -248,7 +248,7 @@ defaultServerConfig =
         , scALPN = Nothing
         , scWantClientCert = False
         , scRequireRetry = False
-        , scMaxConnections = Nothing
+        , scMaxConnections = 0
         , scSessionManager = noSessionManager
         , scDebugLog = Nothing
         , scTicketLifetime = 7200
