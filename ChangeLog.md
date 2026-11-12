@@ -1,5 +1,35 @@
 # ChangeLog
 
+## 0.3.23
+
+Adds `scMaxConnections` to `ServerConfig` and `setMaxBidiStreams` and
+`setMaxUniStreams` to `Network.QUIC`.  In `Network.QUIC.Internal`,
+`newRecvQ` takes a `RecvBudget`, `getMyStreamId` takes a `StreamId`,
+`queueTx` and `checkBlocked` are in `STM`, the DATAGRAM queue is a
+`DatagramQ`, and `setPeerCIDAndRetireCIDs` is replaced by
+`addPeerCIDAndRetire`.
+
+* Take the flow control window in the transaction that finds it
+  [#224](https://github.com/kazu-yamamoto/quic/pull/224)
+* Add a new peer CID along with the retirement it asks for
+  [#225](https://github.com/kazu-yamamoto/quic/pull/225)
+* Drop a DATAGRAM when too many wait for the application
+  [#227](https://github.com/kazu-yamamoto/quic/pull/227)
+* Share one byte budget among a server's receive queues
+  [#228](https://github.com/kazu-yamamoto/quic/pull/228)
+* Refuse a connection over scMaxConnections with CONNECTION_REFUSED
+  [#229](https://github.com/kazu-yamamoto/quic/pull/229)
+* Let the application set how many streams the peer may open
+  [#230](https://github.com/kazu-yamamoto/quic/pull/230)
+* Require a Retry of a client whose token validates nothing
+  [#231](https://github.com/kazu-yamamoto/quic/pull/231)
+* Check a unidirectional stream against the unidirectional streams we opened
+  [#232](https://github.com/kazu-yamamoto/quic/pull/232)
+* Answer a frame received in 0-RTT in 1-RTT
+  [#233](https://github.com/kazu-yamamoto/quic/pull/233)
+* Make no congestion event and send no PING for lost ACK-only packets
+  [#234](https://github.com/kazu-yamamoto/quic/pull/234)
+
 ## 0.3.22
 
 Requires crypto-token 0.2.1.  The public API is unchanged.  In
