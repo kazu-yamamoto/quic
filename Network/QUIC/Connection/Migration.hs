@@ -12,7 +12,7 @@ module Network.QUIC.Connection.Migration (
     getNewMyCID,
     getMyCIDSeqNum,
     setMyCID,
-    setPeerCIDAndRetireCIDs,
+    addPeerCIDAndRetire,
     retirePeerCID,
     retireMyCID,
     isMyCIDSeqNumIssued,
@@ -206,13 +206,26 @@ setPeerRetirePriorTo :: Connection -> Int -> IO ()
 setPeerRetirePriorTo Connection{..} rpt =
     atomically $ modifyTVar' peerCIDDB $ \db -> db{retirePriorTo = rpt}
 
--- | Receiving NewConnectionID
-setPeerCIDAndRetireCIDs :: Connection -> Int -> IO [Int]
-setPeerCIDAndRetireCIDs Connection{..} rpt = atomically $ do
-    db <- readTVar peerCIDDB
-    let (db', ns) = arrange rpt db
-    writeTVar peerCIDDB db'
-    return ns
+-- | Receiving NewConnectionID: adding the CID and retiring those below
+--   Retire Prior To in one go.  Retired first, nothing might be left to use;
+--   added first, the limit is checked only after the retirement
+--   (RFC 9000 Sec 5.1.1).  'Nothing' if the limit is exceeded.
+addPeerCIDAndRetire :: Connection -> CIDInfo -> Int -> IO (Maybe [Int])
+addPeerCIDAndRetire conn@Connection{..} cidInfo rpt = do
+    let lim = activeConnectionIdLimit $ getMyParameters conn
+    atomically $ do
+        db0 <- readTVar peerCIDDB
+        let db1
+                | Map.member (cidInfoCID cidInfo) (revInfos db0) = db0 -- retransmitted
+                | otherwise = add cidInfo db0
+            (db2, ns)
+                | rpt >= retirePriorTo db0 = arrange rpt db1
+                | otherwise = (db1, [])
+        if Map.size (revInfos db2) > lim
+            then return Nothing
+            else do
+                writeTVar peerCIDDB db2
+                return $ Just ns
 
 arrange :: Int -> CIDDB -> (CIDDB, [Int])
 arrange rpt db@CIDDB{..} = (db', dropSeqnums)
@@ -220,11 +233,10 @@ arrange rpt db@CIDDB{..} = (db', dropSeqnums)
     (toDrops, cidInfos') = IntMap.partitionWithKey (\k _ -> k < rpt) cidInfos
     dropSeqnums = IntMap.foldrWithKey (\k _ ks -> k : ks) [] toDrops
     dropCIDs = IntMap.foldr (\c r -> cidInfoCID c : r) [] toDrops
-    -- IntMap.findMin is a partial function.
-    -- But receiver guarantees that there is at least one cidinfo.
+    -- The caller adds a CID at or above rpt first, so one is left.
     usedCIDInfo'
         | cidInfoSeq usedCIDInfo >= rpt = usedCIDInfo
-        | otherwise = snd $ IntMap.findMin cidInfos'
+        | otherwise = maybe usedCIDInfo snd $ IntMap.lookupMin cidInfos'
     revInfos' = foldr Map.delete revInfos dropCIDs
     db' =
         db

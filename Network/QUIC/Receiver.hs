@@ -704,29 +704,7 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
     consistent <- isPeerCIDConsistent conn cidInfo
     unless consistent $
         closeConnection conn ProtocolViolation "NEW_CONNECTION_ID repeated differently"
-    -- Retiring CIDs first then add a new CID.
-    --
-    -- RFC 9000 Sec 5.1.1 says:
-    -- An endpoint MAY send connection IDs that temporarily exceed a
-    -- peer's limit if the NEW_CONNECTION_ID frame also requires the
-    -- retirement of any excess, by including a sufficiently large
-    -- value in the Retire Prior To field.
     prevRetirePriorTo <- getPeerRetirePriorTo conn
-    -- RFC 900 Sec 19.15 says:
-    -- Once a sender indicates a Retire Prior To value, smaller values
-    -- sent in subsequent NEW_CONNECTION_ID frames have no effect. A
-    -- receiver MUST ignore any Retire Prior To fields that do not
-    -- increase the largest received Retire Prior To value.
-    when (retirePriorTo >= prevRetirePriorTo) $ do
-        -- RFC 9000 Sec 5.1.2 says:
-        -- Upon receipt of an increased Retire Prior To field, the
-        -- peer MUST stop using the corresponding connection IDs and
-        -- retire them with RETIRE_CONNECTION_ID frames before adding
-        -- the newly provided connection ID to the set of active
-        -- connection IDs.
-        seqNums <- setPeerCIDAndRetireCIDs conn retirePriorTo -- upadting RPT
-        sendFrames conn RTT1Level $ map RetireConnectionID seqNums
-    -- Adding a new CID
     if seqNum < prevRetirePriorTo
         then
             -- RFC 9000 Sec 19.15 says:
@@ -736,11 +714,27 @@ processFrame conn lvl (NewConnectionID cidInfo retirePriorTo) = do
             -- MUST send a corresponding RETIRE_CONNECTION_ID frame
             -- that retires the newly received connection ID, unless
             -- it has already done so for that sequence number.
+            --
+            -- Retire Prior To is not above seqNum here, so it does not
+            -- increase and is ignored (RFC 9000 Sec 19.15).
             sendFrames conn RTT1Level [RetireConnectionID seqNum]
         else do
-            ng <- not <$> addPeerCID conn cidInfo
-            when ng $
-                closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
+            -- RFC 9000 Sec 5.1.1 says:
+            -- An endpoint MAY send connection IDs that temporarily exceed a
+            -- peer's limit if the NEW_CONNECTION_ID frame also requires the
+            -- retirement of any excess, by including a sufficiently large
+            -- value in the Retire Prior To field.
+            --
+            -- The new CID is added along with the retirement, so that one
+            -- retiring all the others leaves it to use (#223).
+            mseqNums <- addPeerCIDAndRetire conn cidInfo retirePriorTo
+            case mseqNums of
+                Nothing ->
+                    closeConnection conn ConnectionIdLimitError "NEW_CONNECTION_ID limit error"
+                Just seqNums ->
+                    unless (null seqNums) $
+                        sendFrames conn RTT1Level $
+                            map RetireConnectionID seqNums
 processFrame conn RTT1Level (RetireConnectionID sn) = do
     -- RFC 9000 Sec 19.16: "Receipt of a RETIRE_CONNECTION_ID frame
     -- containing a sequence number greater than any previously sent to the
