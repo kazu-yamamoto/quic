@@ -489,8 +489,8 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connKeyPackets    <- newIORef 0
     -- Recovery
     -- Counted as 'putOutput' does, which this cannot use.
-    let put x = atomically $ do
-            let out = OutRetrans x
+    let put x resets = atomically $ do
+            let out = OutRetrans x resets
             writeTQueue outputQ out
             modifyTVar' queuedControls (+ countControls out)
     connLDCC          <- newLDCC connState connQLog put
@@ -583,7 +583,7 @@ data Crypto = InpHandshake EncryptionLevel ByteString deriving (Show)
 data Output
     = OutControl EncryptionLevel [Frame]
     | OutHandshake [(EncryptionLevel, ByteString)]
-    | OutRetrans PlainPacket
+    | OutRetrans PlainPacket StreamResets
     | -- | 1-RTT frames for a path other than the one in use.
       --   The CID, if given, is the one to send with instead of the one in use.
       OutPathProbe PathInfo (Maybe CID) [Frame]
@@ -592,7 +592,7 @@ data Output
 --   Not data, which flow control bounds, nor what is never resent.
 countControls :: Output -> Int
 countControls (OutControl _ frames) = length $ filter isControl frames
-countControls (OutRetrans (PlainPacket _ plain)) = length $ filter isControl $ plainFrames plain
+countControls (OutRetrans (PlainPacket _ plain) _) = length $ filter isControl $ plainFrames plain
 countControls OutHandshake{} = 0
 countControls (OutPathProbe _ _ frames) = length $ filter isControl frames
 

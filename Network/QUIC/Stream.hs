@@ -3,6 +3,7 @@ module Network.QUIC.Stream (
     Stream,
     streamId,
     streamConnection,
+    streamResetTx,
     newStream,
     TxStreamData (..),
     StreamState (..),

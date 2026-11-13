@@ -49,6 +49,10 @@ data Frame
 --   On 32-bit machines, the total number of stream identifiers is limited.
 type StreamId = Int
 
+-- | Whether we have reset the sending part of a stream, sending RESET_STREAM
+--   (RFC 9000 Sec 3.1).  Once reset, never back.
+data TxReset = NotReset | ResetSent deriving (Eq, Show)
+
 -- | Checking if a stream is client-initiated bidirectional.
 isClientInitiatedBidirectional :: StreamId -> Bool
 isClientInitiatedBidirectional sid = (0b11 .&. sid) == 0

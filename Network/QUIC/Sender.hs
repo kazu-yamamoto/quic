@@ -5,6 +5,7 @@ module Network.QUIC.Sender (
     mkHeader,
     sendFinal,
     sendOutput,
+    adjustForRetransmit,
 ) where
 
 import Control.Concurrent
@@ -197,11 +198,13 @@ sendPingPacket conn lvl = do
     when ok $ do
         let ldcc = connLDCC conn
         mp <- releaseOldest ldcc lvl
-        frames <- case mp of
+        (frames, resets) <- case mp of
             Just spkt -> do
                 qlogDebug conn $ Debug "probe old"
                 let PlainPacket _ plain0 = spPlainPacket spkt
-                adjustForRetransmit conn $ plainFrames plain0
+                    resets = spStreamResets spkt
+                frames <- adjustForRetransmit conn resets $ plainFrames plain0
+                return (frames, resets)
             Nothing -> do
                 -- Nothing in flight at this level to resend.  That does not
                 -- mean there is nothing to send: a packet already declared
@@ -210,12 +213,13 @@ sendPingPacket conn lvl = do
                 -- is allowed to ignore and it is not.  Spend the probe on it.
                 mr <- atomically $ takeRetransSTM conn lvl
                 case mr of
-                    Just (PlainPacket _ plain0) -> do
+                    Just (PlainPacket _ plain0, resets) -> do
                         qlogDebug conn $ Debug "probe retrans"
-                        adjustForRetransmit conn $ plainFrames plain0
+                        frames <- adjustForRetransmit conn resets $ plainFrames plain0
+                        return (frames, resets)
                     Nothing -> do
                         qlogDebug conn $ Debug "probe ping"
-                        return [Ping]
+                        return ([Ping], emptyStreamResets)
         -- A probe must elicit an ACK, whatever was left of the packet.
         let frames' = if any ackEliciting frames then frames else Ping : frames
         xs <- construct conn lvl frames' False
@@ -233,7 +237,8 @@ sendPingPacket conn lvl = do
                     addTxBytes conn bytes
                     addPathTxBytes pathInfo bytes
                     let sentPacket0 = fixSentPacket spkt bytes padlen
-                        sentPacket = sentPacket0{spTimeSent = now}
+                        sentPacket =
+                            sentPacket0{spTimeSent = now, spStreamResets = resets}
                     qlogSent conn sentPacket now
                     onPacketSent ldcc sentPacket
 
@@ -435,10 +440,10 @@ sendOutput conn (OutPathProbe pathInfo mcid frames) =
         (Just cid, PlainPacket Short{} plain) ->
             spkt{spPlainPacket = PlainPacket (Short cid) plain}
         _ -> spkt
-sendOutput conn (OutRetrans (PlainPacket hdr0 plain0)) = do
-    frames <- adjustForRetransmit conn $ plainFrames plain0
+sendOutput conn (OutRetrans (PlainPacket hdr0 plain0) resets) = do
+    frames <- adjustForRetransmit conn resets $ plainFrames plain0
     let lvl = levelFromHeader hdr0
-    construct conn lvl frames False >>= sendPacket conn
+    construct conn lvl frames False >>= sendPacket conn . withStreamResets resets
 
 levelFromHeader :: Header -> EncryptionLevel
 levelFromHeader hdr
@@ -447,35 +452,52 @@ levelFromHeader hdr
   where
     lvl = packetEncryptionLevel hdr
 
-adjustForRetransmit :: Connection -> [Frame] -> IO [Frame]
-adjustForRetransmit _ [] = return []
-adjustForRetransmit conn (Padding{} : xs) = adjustForRetransmit conn xs
-adjustForRetransmit conn (Ack{} : xs) = adjustForRetransmit conn xs
-adjustForRetransmit conn (MaxStreamData sid _ : xs) = do
-    mstrm <- findStream conn sid
-    case mstrm of
-        Nothing -> adjustForRetransmit conn xs
-        Just strm -> do
-            newMax <- getRxMaxStreamData strm
-            let r = MaxStreamData sid newMax
-            rs <- adjustForRetransmit conn xs
-            return (r : rs)
-adjustForRetransmit conn (MaxData{} : xs) = do
-    newMax <- getRxMaxData conn
-    let r = MaxData newMax
-    rs <- adjustForRetransmit conn xs
-    return (r : rs)
-adjustForRetransmit conn (Datagram{} : xs) = adjustForRetransmit conn xs
--- RFC 9000 Sec 13.3: "Responses to path validation using PATH_RESPONSE
--- frames are sent just once."  The peer sends a new PATH_CHALLENGE if
--- it needs one.  Resent, a PATH_RESPONSE flood would never leave us.
-adjustForRetransmit conn (PathResponse{} : xs) = adjustForRetransmit conn xs
--- RFC 9000 Sec 13.3: a new payload each time, so never resent.  Resent, it
--- also went to the path in use, whichever path it was for.
-adjustForRetransmit conn (PathChallenge{} : xs) = adjustForRetransmit conn xs
-adjustForRetransmit conn (x : xs) = do
-    rs <- adjustForRetransmit conn xs
-    return (x : rs)
+streamResets :: [Stream] -> StreamResets
+streamResets ss = StreamResets [(streamId s, streamResetTx s) | s <- ss]
+
+-- | Giving the packets the streams whose STREAM frames they may carry.
+withStreamResets :: StreamResets -> [SentPacket] -> [SentPacket]
+withStreamResets resets = map $ \spkt -> spkt{spStreamResets = resets}
+
+adjustForRetransmit :: Connection -> StreamResets -> [Frame] -> IO [Frame]
+adjustForRetransmit conn (StreamResets resets) = go
+  where
+    go [] = return []
+    go (Padding{} : xs) = go xs
+    go (Ack{} : xs) = go xs
+    go (MaxStreamData sid _ : xs) = do
+        mstrm <- findStream conn sid
+        case mstrm of
+            Nothing -> go xs
+            Just strm -> do
+                newMax <- getRxMaxStreamData strm
+                let r = MaxStreamData sid newMax
+                rs <- go xs
+                return (r : rs)
+    go (MaxData{} : xs) = do
+        newMax <- getRxMaxData conn
+        let r = MaxData newMax
+        rs <- go xs
+        return (r : rs)
+    go (Datagram{} : xs) = go xs
+    -- RFC 9000 Sec 13.3: "Responses to path validation using PATH_RESPONSE
+    -- frames are sent just once."  The peer sends a new PATH_CHALLENGE if
+    -- it needs one.  Resent, a PATH_RESPONSE flood would never leave us.
+    go (PathResponse{} : xs) = go xs
+    -- RFC 9000 Sec 13.3: a new payload each time, so never resent.  Resent,
+    -- it also went to the path in use, whichever path it was for.
+    go (PathChallenge{} : xs) = go xs
+    -- RFC 9000 Sec 13.3: stream data is resent "unless the endpoint has sent
+    -- a RESET_STREAM for that stream".
+    go (x@(StreamF sid _ _ _) : xs) = do
+        reset <- case lookup sid resets of
+            Nothing -> return False
+            Just ref -> (== ResetSent) <$> readIORef ref
+        rs <- go xs
+        return $ if reset then rs else x : rs
+    go (x : xs) = do
+        rs <- go xs
+        return (x : rs)
 
 limitationC :: Int
 limitationC = 1024
@@ -567,12 +589,14 @@ sendStreamSmall conn s0 off0 dats0 fin0 len0 = do
     let sid0 = streamId s0
         frame0 = StreamF sid0 off0 dats0 fin0
         sb = if fin0 then (s0 :) else id
-    (frames, streams) <- loop s0 frame0 (len0 + streamFrameMaxOverhead) id sb
+    (frames, streams, carried) <-
+        loop s0 frame0 (len0 + streamFrameMaxOverhead) id sb (s0 :)
     ready <- isConnection1RTTReady conn
     let lvl
             | ready = RTT1Level
             | otherwise = RTT0Level
-    construct conn lvl frames False >>= sendPacket conn
+    construct conn lvl frames False
+        >>= sendPacket conn . withStreamResets (streamResets carried)
     mapM_ syncFinTx streams
   where
     tryPeek = do
@@ -599,11 +623,12 @@ sendStreamSmall conn s0 off0 dats0 fin0 len0 = do
         -> Int
         -> ([Frame] -> [Frame])
         -> ([Stream] -> [Stream])
-        -> IO ([Frame], [Stream])
-    loop s frame total build sb = do
+        -> ([Stream] -> [Stream])
+        -> IO ([Frame], [Stream], [Stream])
+    loop s frame total build sb cb = do
         mx <- tryPeek
         case mx of
-            Nothing -> return (build [frame], sb [])
+            Nothing -> return (build [frame], sb [], cb [])
             Just (TxStreamData s1 off1 dats1 len1 fin1) -> do
                 -- Entries of the same stream are merged into one frame,
                 -- any other stream needs a frame of its own.
@@ -626,13 +651,13 @@ sendStreamSmall conn s0 off0 dats0 fin0 len0 = do
                             then do
                                 let frame1 = StreamF sid off (dats ++ dats1) fin1'
                                     sb1 = if fin1' then sb . (s1 :) else sb
-                                loop s1 frame1 total1 build sb1
+                                loop s1 frame1 total1 build sb1 cb
                             else do
                                 let frame1 = StreamF sid1 off1 dats1 fin1'
                                     build1 = build . (frame :)
                                     sb1 = if fin1' then sb . (s1 :) else sb
-                                loop s1 frame1 total1 build1 sb1
-                    else return (build [frame], sb [])
+                                loop s1 frame1 total1 build1 sb1 (cb . (s1 :))
+                    else return (build [frame], sb [], cb [])
 
 sendStreamLarge
     :: Connection -> Stream -> Offset -> [ByteString] -> Bool -> IO ()
@@ -654,7 +679,8 @@ sendStreamLarge conn s off0 dats0 fin0 = do
         let lvl
                 | ready = RTT1Level
                 | otherwise = RTT0Level
-        construct conn lvl [frame] False >>= sendPacket conn
+        construct conn lvl [frame] False
+            >>= sendPacket conn . withStreamResets (streamResets [s])
         loop (off + len) dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]

@@ -17,6 +17,7 @@ module Network.QUIC.Internal (
     module Network.QUIC.Client.WatchDog,
     module Network.QUIC.Socket,
     sendOutput,
+    adjustForRetransmit,
     processFrame,
     processReceivedPacket,
 ) where
@@ -39,7 +40,7 @@ import Network.QUIC.QLogger
 import Network.QUIC.Qlog
 import Network.QUIC.Receiver (processFrame, processReceivedPacket)
 import Network.QUIC.Recovery
-import Network.QUIC.Sender (sendOutput)
+import Network.QUIC.Sender (adjustForRetransmit, sendOutput)
 import Network.QUIC.Socket
 import Network.QUIC.Stream
 import Network.QUIC.TLS

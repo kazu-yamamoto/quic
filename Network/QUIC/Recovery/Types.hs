@@ -4,6 +4,8 @@
 
 module Network.QUIC.Recovery.Types (
     SentPacket (..),
+    StreamResets (..),
+    emptyStreamResets,
     mkSentPacket,
     fixSentPacket,
     LostPacket (..),
@@ -58,8 +60,20 @@ data SentPacket = SentPacket
     , spPacketNumber :: PacketNumber
     , spPeerPacketNumbers :: PeerPacketNumbers
     , spAckEliciting :: Bool
+    , spStreamResets :: StreamResets
     }
     deriving (Eq, Show)
+
+-- | The streams a packet carries STREAM frames of, each with whether we have
+--   reset it.  The 'IORef's are the streams' own, so a reset after sending
+--   shows here, and a reset stream is not resent (RFC 9000 Sec 13.3).
+newtype StreamResets = StreamResets [(StreamId, IORef TxReset)] deriving (Eq)
+
+instance Show StreamResets where
+    show (StreamResets xs) = "StreamResets " ++ show (map fst xs)
+
+emptyStreamResets :: StreamResets
+emptyStreamResets = StreamResets []
 
 instance Ord SentPacket where
     x <= y = spPacketNumber x <= spPacketNumber y
@@ -82,6 +96,7 @@ mkSentPacket mypn lvl ppkt ppns ackeli =
         , spPacketNumber = mypn
         , spPeerPacketNumbers = ppns
         , spAckEliciting = ackeli
+        , spStreamResets = emptyStreamResets
         }
 
 fixSentPacket :: SentPacket -> Int -> Int -> SentPacket
@@ -284,7 +299,7 @@ makeLossDetection = do
 data LDCC = LDCC
     { ldccState :: ConnState
     , ldccQlogger :: QLogger
-    , putRetrans :: PlainPacket -> IO ()
+    , putRetrans :: PlainPacket -> StreamResets -> IO ()
     , recoveryRTT :: IORef RTT
     , recoveryCC :: TVar CC
     , spaceDiscarded :: Array EncryptionLevel (IORef Bool)
@@ -319,7 +334,8 @@ makePPN = do
         arr = array (InitialLevel, RTT1Level) lst
     return arr
 
-newLDCC :: ConnState -> QLogger -> (PlainPacket -> IO ()) -> IO LDCC
+newLDCC
+    :: ConnState -> QLogger -> (PlainPacket -> StreamResets -> IO ()) -> IO LDCC
 newLDCC cs qLog put =
     LDCC cs qLog put
         <$> newIORef initialRTT
