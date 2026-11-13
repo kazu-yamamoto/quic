@@ -3,6 +3,7 @@ module Network.QUIC.Connection.Queue where
 import Control.Concurrent.STM
 
 import Network.QUIC.Connection.Types
+import Network.QUIC.Recovery (StreamResets)
 import Network.QUIC.Stream
 import Network.QUIC.Types
 
@@ -65,20 +66,24 @@ isEmptyOutputSTM conn = isEmptyTQueue $ outputQ conn
 -- lost it is no longer in the sent-packet database, so 'releaseOldest' cannot
 -- find it; it is here, waiting for a window that may not open until it has
 -- gone out.
-takeRetransSTM :: Connection -> EncryptionLevel -> STM (Maybe PlainPacket)
+takeRetransSTM
+    :: Connection -> EncryptionLevel -> STM (Maybe (PlainPacket, StreamResets))
 takeRetransSTM conn lvl = do
     outs <- flushTQueue (outputQ conn)
     let (found, rest) = pick outs
     mapM_ (writeTQueue (outputQ conn)) rest
     case found of
         Nothing -> return ()
-        Just ppkt ->
-            modifyTVar' (queuedControls conn) (subtract $ countControls $ OutRetrans ppkt)
+        Just (ppkt, resets) ->
+            modifyTVar' (queuedControls conn) $
+                subtract $
+                    countControls $
+                        OutRetrans ppkt resets
     return found
   where
     pick [] = (Nothing, [])
-    pick (o@(OutRetrans ppkt@(PlainPacket hdr _)) : os)
-        | levelOf hdr == lvl = (Just ppkt, os)
+    pick (o@(OutRetrans ppkt@(PlainPacket hdr _) resets) : os)
+        | levelOf hdr == lvl = (Just (ppkt, resets), os)
         | otherwise = let (f, r) = pick os in (f, o : r)
     pick (o : os) = let (f, r) = pick os in (f, o : r)
     levelOf hdr

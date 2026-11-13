@@ -40,7 +40,7 @@ import Network.Control
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Types
-import Network.QUIC.Types (ApplicationProtocolError)
+import Network.QUIC.Types (ApplicationProtocolError, TxReset (..))
 
 ----------------------------------------------------------------
 
@@ -50,12 +50,12 @@ import Network.QUIC.Types (ApplicationProtocolError)
 resetTxStream :: Stream -> IO Offset
 resetTxStream s@Stream{..} = do
     -- Before the read: what is queued after it is dropped, not counted.
-    atomicWriteIORef streamResetTx True
+    atomicWriteIORef streamResetTx ResetSent
     setTxStreamClosed s
     txfSent <$> readTVarIO streamFlowTx
 
 isTxStreamReset :: Stream -> IO Bool
-isTxStreamReset Stream{..} = readIORef streamResetTx
+isTxStreamReset Stream{..} = (== ResetSent) <$> readIORef streamResetTx
 
 getTxStreamOffset :: Stream -> Int -> IO Offset
 getTxStreamOffset Stream{..} len = atomicModifyIORef' streamStateTx get

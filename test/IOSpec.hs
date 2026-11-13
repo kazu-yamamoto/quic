@@ -14,6 +14,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Data.IORef
 import qualified Data.IntMap.Strict as IntMap
+import Data.Maybe (isNothing)
+import qualified Data.Sequence as Seq
 import GHC.Conc (getUncaughtExceptionHandler, setUncaughtExceptionHandler)
 import Network.Control (txfSent)
 import qualified Network.Socket as NS
@@ -80,6 +82,37 @@ spec = do
             -- The first one taken and lost: the second keeps its offset.
             _ <- takeSendStreamQ clientConn
             offset <$> takeSendStreamQ clientConn `shouldReturn` (6, 16)
+    -- RFC 9000 Sec 13.3: stream data is resent unless the stream is reset.
+    describe "a lost STREAM frame" $
+        it "is not resent once its stream is reset" $ do
+            scr <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scr Version1
+            s0 <- addStream clientConn 0
+            s4 <- addStream clientConn 4
+            now <- getTimeMicrosecond
+            let frames = [StreamF 0 0 ["zero"] False, StreamF 4 0 ["four"] False]
+                hdr = Short $ toCID ""
+                spkt =
+                    ( mkSentPacket
+                        1
+                        RTT1Level
+                        (PlainPacket hdr (Plain (Flags 0) 1 frames 0))
+                        emptyPeerPacketNumbers
+                        True
+                    )
+                        { spTimeSent = now
+                        , spStreamResets =
+                            StreamResets [(0, streamResetTx s0), (4, streamResetTx s4)]
+                        }
+            -- Reset after it was sent: the stream also leaves the table.
+            resetStream s0 $ ApplicationProtocolError 0
+            gone <- isNothing <$> findStream clientConn 0
+            gone `shouldBe` True
+            retransmit (connLDCC clientConn) $ Seq.singleton spkt
+            Just (PlainPacket _ plain, resets) <-
+                atomically $ takeRetransSTM clientConn RTT1Level
+            adjustForRetransmit clientConn resets (plainFrames plain)
+                `shouldReturn` [StreamF 4 0 ["four"] False]
     -- RFC 9000 Sec 4.1: two streams sending at once used to both see the
     -- same connection window and queue twice what MAX_DATA allowed.
     describe "the connection window" $

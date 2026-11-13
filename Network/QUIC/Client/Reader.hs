@@ -154,7 +154,7 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
             setRetried conn True
             releaseByRetry (connLDCC conn) >>= mapM_ put
       where
-        put ppkt = putOutput conn $ OutRetrans ppkt
+        put ppkt = putOutput conn $ OutRetrans ppkt emptyStreamResets
 
 -- | Whether a packet from the server has been decrypted or a Retry taken.
 processed :: Connection -> IO Bool

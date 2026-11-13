@@ -32,7 +32,7 @@ retransmit :: LDCC -> Seq SentPacket -> IO ()
 retransmit ldcc lostPackets = mapM_ put packetsToBeResent
   where
     packetsToBeResent = Seq.filter spAckEliciting lostPackets
-    put = putRetrans ldcc . spPlainPacket
+    put spkt = putRetrans ldcc (spPlainPacket spkt) (spStreamResets spkt)
 
 ----------------------------------------------------------------
 

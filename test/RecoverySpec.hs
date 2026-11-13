@@ -16,7 +16,7 @@ spec = do
     describe "lost candidates" $ do
         it "are released only by an ACK in the 1-RTT space" $ do
             cs <- newConnState Client
-            ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+            ldcc <- newLDCC cs (\_ -> return ()) (\_ _ -> return ())
             let lost = (sp 1 True $ UnixTime 0 0){spEncryptionLevel = RTT1Level}
                 candidates = (\(SentPackets db) -> db) <$> readTVarIO (lostCandidates ldcc)
             atomically $ writeTVar (lostCandidates ldcc) $ SentPackets $ Seq.singleton lost
@@ -28,7 +28,7 @@ spec = do
     describe "PTO" $ do
         it "is armed for the space that expires first" $ do
             cs <- newConnState Server
-            ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+            ldcc <- newLDCC cs (\_ -> return ()) (\_ _ -> return ())
             -- Far in the future so that the timer does not fire.
             now <- getTimeMicrosecond
             let at lvl pn s =
@@ -42,13 +42,13 @@ spec = do
             fmap snd <$> getPtoTimeAndSpace ldcc `shouldReturn` Just HandshakeLevel
         it "sends an anti-deadlock probe at the Handshake level once it has the keys" $ do
             cs <- newConnState Client
-            ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+            ldcc <- newLDCC cs (\_ -> return ()) (\_ _ -> return ())
             fmap snd <$> getPtoTimeAndSpace ldcc `shouldReturn` Just InitialLevel
             atomically $ writeTVar (encryptionLevel cs) RTT1Level
             fmap snd <$> getPtoTimeAndSpace ldcc `shouldReturn` Just HandshakeLevel
         it "needs no anti-deadlock probe once a Handshake ACK arrives" $ do
             cs <- newConnState Client
-            ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+            ldcc <- newLDCC cs (\_ -> return ()) (\_ _ -> return ())
             atomically $ writeTVar (encryptionLevel cs) RTT1Level
             onAckReceived ldcc HandshakeLevel (AckInfo 0 0 []) 0
             getPtoTimeAndSpace ldcc `shouldReturn` Nothing
@@ -56,7 +56,7 @@ spec = do
     describe "a lost packet" $ do
         let lostWith frames = do
                 cs <- newConnState Client
-                ldcc <- newLDCC cs (\_ -> return ()) (\_ -> return ())
+                ldcc <- newLDCC cs (\_ -> return ()) (\_ _ -> return ())
                 now <- getTimeMicrosecond
                 let lost =
                         (sp 1 (any ackEliciting frames) now)
