@@ -80,8 +80,10 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
             yield
             wait
     loop recv = do
-        Microseconds ito <- readMinIdleTimeout conn
-        expired <- registerDelay ito
+        mito <- getIdleTimeout conn
+        expired <- case mito of
+            Nothing -> newTVarIO False
+            Just (Microseconds ito) -> registerDelay ito
         ebs <-
             recv $
                 ((readTVar retired >>= STM.check) $> Retired)

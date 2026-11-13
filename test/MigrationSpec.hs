@@ -249,10 +249,13 @@ spec = do
             peersa <- peerSockAddr <$> getPathInfo clientConn
             connect sock peersa
             setMinIdleTimeout clientConn $ Microseconds 100000
+            -- Raised to three times the PTO, which is what it waits.
+            pto <- getPTO $ connLDCC clientConn
             retired <- getSocketRetire clientConn
             done <- newEmptyMVar
             void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
-            returned <- timeout (Microseconds 2000000) "idle reader" $ takeMVar done
+            returned <-
+                timeout (3 * pto + Microseconds 2000000) "idle reader" $ takeMVar done
             returned `shouldBe` Just ()
             void $ getSocketName sock
             closeRetiredSockets clientConn

@@ -82,6 +82,26 @@ spec = do
             -- The first one taken and lost: the second keeps its offset.
             _ <- takeSendStreamQ clientConn
             offset <$> takeSendStreamQ clientConn `shouldReturn` (6, 16)
+    -- RFC 9000 Sec 10.1: 0 is no idle timeout, the effective one is the
+    -- smaller of the two advertised, and it is at least three times the PTO.
+    describe "the idle timeout" $ do
+        it "is the peer's when ours is 0, and none when both are" $ do
+            sci <- makeTestServerConfig
+            (conn, _) <- makeConnections sci Version1
+            writeIORef (minIdleTimeout conn) 0
+            getIdleTimeout conn `shouldReturn` Nothing
+            setMinIdleTimeout conn 0
+            getIdleTimeout conn `shouldReturn` Nothing
+            setMinIdleTimeout conn 20_000_000
+            getIdleTimeout conn `shouldReturn` Just 20_000_000
+            setMinIdleTimeout conn 30_000_000
+            getIdleTimeout conn `shouldReturn` Just 20_000_000
+        it "is at least three times the PTO" $ do
+            sci <- makeTestServerConfig
+            (conn, _) <- makeConnections sci Version1
+            writeIORef (minIdleTimeout conn) 1000
+            pto <- getPTO $ connLDCC conn
+            getIdleTimeout conn `shouldReturn` Just (3 * pto)
     -- RFC 9000 Sec 13.3: stream data is resent unless the stream is reset.
     describe "a lost STREAM frame" $
         it "is not resent once its stream is reset" $ do

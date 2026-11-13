@@ -34,7 +34,7 @@ module Network.QUIC.Connection.Misc (
     killReaders,
     addResource,
     freeResources,
-    readMinIdleTimeout,
+    getIdleTimeout,
     setMinIdleTimeout,
     sendFrames,
     closeConnection,
@@ -63,6 +63,7 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
+import Network.QUIC.Recovery (getPTO)
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -292,14 +293,24 @@ killReaders conn@Connection{..} = do
 
 ----------------------------------------------------------------
 
-readMinIdleTimeout :: Connection -> IO Microseconds
-readMinIdleTimeout Connection{..} = readIORef minIdleTimeout
+-- | The idle timeout in effect, if any (RFC 9000 Sec 10.1): the smaller of
+--   the two advertised, 0 being none, and at least three times the PTO.
+getIdleTimeout :: Connection -> IO (Maybe Microseconds)
+getIdleTimeout Connection{..} = do
+    ito <- readIORef minIdleTimeout
+    if ito == Microseconds 0
+        then return Nothing
+        else do
+            pto <- getPTO connLDCC
+            return $ Just $ max ito (3 * pto)
 
 setMinIdleTimeout :: Connection -> Microseconds -> IO ()
 setMinIdleTimeout Connection{..} us
     | us == Microseconds 0 = return ()
     | otherwise = atomicModifyIORef'' minIdleTimeout modify
   where
+    -- Ours being none, the peer's alone is in effect.
+    modify (Microseconds 0) = us
     modify us0 = min us us0
 
 ----------------------------------------------------------------
