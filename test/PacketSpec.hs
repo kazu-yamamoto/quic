@@ -62,6 +62,43 @@ spec = do
             (PacketIC (CryptPacket _ crypt) lvl _, _) <- decodePacket bin True
             mplain <- decryptCrypt serverConn crypt lvl
             plainPacketNumber <$> mplain `shouldBe` Just 300
+    -- RFC 9000 Sec 12.3: a packet processed already is discarded.
+    describe "a duplicated packet" $ do
+        it "is processed once" $ do
+            (clientConn, serverConn) <- makeConnections serverConf Version1
+            let hdr = Initial Version1 clientChosenCID (toCID "") ""
+                ppkt = PlainPacket hdr $ Plain (Flags 0) 0 [Ping] 0
+            bin <- BS.createAndTrim 4096 $ \buf ->
+                fst <$> encodePlainPacket clientConn (SizedBuffer buf 2048) ppkt Nothing
+            (PacketIC cpkt lvl _, _) <- decodePacket bin True
+            tim <- getTimeMicrosecond
+            let rpkt = mkReceivedPacket cpkt tim (BS.length bin) lvl
+            processReceivedPacket serverConn rpkt
+            processReceivedPacket serverConn rpkt
+            getRxBytes serverConn `shouldReturn` BS.length bin
+        it "is told by its packet number, within the window" $ do
+            (_, conn) <- makeConnections serverConf Version1
+            let record = recordPeerPacketNumber conn
+            record RTT0Level 5 `shouldReturn` True
+            -- 0-RTT and 1-RTT share a packet number space.
+            record RTT1Level 5 `shouldReturn` False
+            record HandshakeLevel 5 `shouldReturn` True
+            record RTT1Level 3 `shouldReturn` True
+            record RTT1Level (5 + receivedWindow + 1) `shouldReturn` True
+            -- Older than the window: taken as a duplicate.
+            record RTT1Level 5 `shouldReturn` False
+            record RTT1Level 6 `shouldReturn` True
+        it "is forgotten with the keys of its space" $ do
+            (_, conn) <- makeConnections serverConf Version1
+            let record = recordPeerPacketNumber conn
+            _ <- record HandshakeLevel 5
+            _ <- record RTT1Level 5
+            dropSecrets conn HandshakeLevel
+            dropSecrets conn RTT0Level
+            record HandshakeLevel 5 `shouldReturn` True
+            -- 0-RTT keys go, but 1-RTT goes on in the same space.
+            record RTT1Level 5 `shouldReturn` False
+
     describe "encodePlainPacket" $ do
         it "leaves the peer a whole header protection sample" $ do
             (senderConn, _) <- makeConnections serverConf Version1

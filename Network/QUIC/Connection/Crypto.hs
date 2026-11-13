@@ -28,6 +28,7 @@ module Network.QUIC.Connection.Crypto (
 ) where
 
 import Control.Concurrent.STM
+import qualified Data.IntSet as IntSet
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Misc
@@ -99,6 +100,9 @@ dropSecrets Connection{..} lvl = do
     writeArray coders lvl initialCoder
     writeArray protectors lvl initialProtector
     when (lvl == InitialLevel) $ writeIORef prevInitialKeys Nothing
+    -- Nothing more is decrypted there.  0-RTT shares its record with 1-RTT.
+    when (lvl == InitialLevel || lvl == HandshakeLevel) $
+        writeIORef (peerReceived ! lvl) IntSet.empty
 
 -- | Keeping the Initial keys we have, before they are replaced with the ones
 --   for a version we chose ourselves.

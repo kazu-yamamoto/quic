@@ -4,6 +4,7 @@
 module Network.QUIC.Receiver (
     receiver,
     processFrame,
+    processReceivedPacket,
 ) where
 
 import qualified Control.Exception as E
@@ -165,7 +166,12 @@ processReceivedPacket' conn mcidChanged rpkt = do
     pathInfo <- getPathInfo conn
     addPathRxBytes pathInfo $ rpReceivedBytes rpkt
     mplain <- decryptCrypt conn crypt lvl
+    dup <- case mplain of
+        Just Plain{..} -> not <$> recordPeerPacketNumber conn lvl plainPacketNumber
+        Nothing -> return False
     case mplain of
+        -- RFC 9000 Sec 12.3: a packet processed already is discarded.
+        Just _ | dup -> qlogDropped conn (hdr, "duplicate" :: String)
         Just plain@Plain{..} -> do
             addRxBytes conn $ rpReceivedBytes rpkt
             when (isIllegalReservedBits plainMarks || isNoFrames plainMarks) $

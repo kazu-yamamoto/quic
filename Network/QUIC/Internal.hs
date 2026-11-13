@@ -18,6 +18,7 @@ module Network.QUIC.Internal (
     module Network.QUIC.Socket,
     sendOutput,
     processFrame,
+    processReceivedPacket,
 ) where
 
 import Network.QUIC.Client.Reader (
@@ -36,7 +37,7 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.QLogger
 import Network.QUIC.Qlog
-import Network.QUIC.Receiver (processFrame)
+import Network.QUIC.Receiver (processFrame, processReceivedPacket)
 import Network.QUIC.Recovery
 import Network.QUIC.Sender (sendOutput)
 import Network.QUIC.Socket
