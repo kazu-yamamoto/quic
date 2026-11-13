@@ -37,8 +37,10 @@ receiver conn = handleLogT logAction body
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
-        ito <- readMinIdleTimeout conn
-        mx <- timeout ito "recvTimeout" $ connRecv conn -- fixme: taking minimum with peer's one
+        mito <- getIdleTimeout conn
+        mx <- case mito of
+            Nothing -> Just <$> connRecv conn
+            Just ito -> timeout ito "recvTimeout" $ connRecv conn
         case mx of
             Nothing -> do
                 st <- getConnectionState conn
