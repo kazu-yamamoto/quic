@@ -88,6 +88,16 @@ spec = do
             -- Older than the window: taken as a duplicate.
             record RTT1Level 5 `shouldReturn` False
             record RTT1Level 6 `shouldReturn` True
+        it "is forgotten with the keys of its space" $ do
+            (_, conn) <- makeConnections serverConf Version1
+            let record = recordPeerPacketNumber conn
+            _ <- record HandshakeLevel 5
+            _ <- record RTT1Level 5
+            dropSecrets conn HandshakeLevel
+            dropSecrets conn RTT0Level
+            record HandshakeLevel 5 `shouldReturn` True
+            -- 0-RTT keys go, but 1-RTT goes on in the same space.
+            record RTT1Level 5 `shouldReturn` False
 
     describe "encodePlainPacket" $ do
         it "leaves the peer a whole header protection sample" $ do
