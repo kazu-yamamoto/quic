@@ -11,6 +11,7 @@ module Network.QUIC.Packet (
     decodePackets,
     decodeCryptPackets,
     decryptCrypt,
+    decryptCryptWithKeys,
     decodeStatelessResetToken,
 
     -- * Frame

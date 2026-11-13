@@ -20,6 +20,7 @@ module Network.QUIC.Internal (
     adjustForRetransmit,
     processFrame,
     processReceivedPacket,
+    processReceivedPacketHandshake,
 ) where
 
 import Network.QUIC.Client.Reader (
@@ -38,7 +39,11 @@ import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.QLogger
 import Network.QUIC.Qlog
-import Network.QUIC.Receiver (processFrame, processReceivedPacket)
+import Network.QUIC.Receiver (
+    processFrame,
+    processReceivedPacket,
+    processReceivedPacketHandshake,
+ )
 import Network.QUIC.Recovery
 import Network.QUIC.Sender (adjustForRetransmit, sendOutput)
 import Network.QUIC.Socket
