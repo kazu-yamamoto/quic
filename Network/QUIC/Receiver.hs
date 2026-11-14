@@ -5,6 +5,7 @@ module Network.QUIC.Receiver (
     receiver,
     processFrame,
     processReceivedPacket,
+    processReceivedPacketHandshake,
 ) where
 
 import qualified Control.Exception as E
@@ -95,7 +96,7 @@ receiver conn = handleLogT logAction body
 
 processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn rpkt = do
-    let CryptPacket hdr _ = rpCryptPacket rpkt
+    let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
         msg =
             "processReceivedPacketHandshake "
@@ -107,43 +108,69 @@ processReceivedPacketHandshake conn rpkt = do
             when (isClient conn) $ do
                 lvl' <- getEncryptionLevel conn
                 speedup (connLDCC conn) lvl' ("not decryptable: " <> toLogStr (show lvl))
+        -- RFC 9000 Sec 7.2 and RFC 9001 Sec 4.9.1: what a packet tells us of
+        -- the connection is taken only once it decrypts, or anyone on the
+        -- path could break the handshake with a packet of garbage.
         Just ()
             | isClient conn -> do
-                when (lvl == InitialLevel) $ do
-                    peercid <- getPeerCID conn
-                    let newPeerCID = headerPeerCID hdr
-                    when (peercid /= headerPeerCID hdr) $
-                        resetPeerCID conn newPeerCID
-                    setPeerAuthCIDs conn $ \auth ->
-                        auth{initSrcCID = Just newPeerCID}
-                case hdr of
+                mver <- case hdr of
                     Initial peerVer _ _ _ -> do
                         myVer <- getVersion conn
-                        let myOrigiVer = getOriginalVersion conn
-                            firstTime = myVer == myOrigiVer
-                        when (firstTime && myVer /= peerVer) $ do
-                            setVersion conn peerVer
-                            dcid <- getClientDstCID conn
-                            initializeCoder conn InitialLevel $ initialSecrets peerVer dcid
-                            qlogDebug conn $ Debug "Version changed"
-                    _ -> return ()
-                processReceivedPacket conn rpkt
+                        let firstTime = myVer == getOriginalVersion conn
+                        return $
+                            if firstTime && myVer /= peerVer
+                                then Just peerVer
+                                else Nothing
+                    _ -> return Nothing
+                case mver of
+                    -- RFC 9368 Sec 4: only a version we offered.
+                    Just peerVer
+                        | peerVer `notElem` otherVersions (origVersionInfo conn) ->
+                            qlogDropped conn (hdr, "unoffered_version" :: String)
+                    _ -> do
+                        dcid <- getClientDstCID conn
+                        mplain <- decryptReceived conn rpkt $ case mver of
+                            Nothing -> decryptCrypt conn crypt lvl
+                            Just peerVer -> do
+                                cipher <- getCipher conn InitialLevel
+                                keys <-
+                                    genNiteCoder True peerVer cipher $
+                                        initialSecrets peerVer dcid
+                                decryptCryptWithKeys conn crypt lvl keys
+                        when (isJust mplain) $ do
+                            case mver of
+                                Nothing -> return ()
+                                Just peerVer -> do
+                                    setVersion conn peerVer
+                                    initializeCoder conn InitialLevel $
+                                        initialSecrets peerVer dcid
+                                    qlogDebug conn $ Debug "Version changed"
+                            when (lvl == InitialLevel) $ do
+                                peercid <- getPeerCID conn
+                                let newPeerCID = headerPeerCID hdr
+                                when (peercid /= newPeerCID) $
+                                    resetPeerCID conn newPeerCID
+                                setPeerAuthCIDs conn $ \auth ->
+                                    auth{initSrcCID = Just newPeerCID}
+                        processDecrypted conn Nothing rpkt mplain
             | otherwise -> do
-                mycid <- getMyCID conn
-                when
-                    ( lvl == HandshakeLevel
-                        || (lvl == InitialLevel && mycid == headerMyCID hdr)
-                    )
-                    $ do
-                        getPathInfo conn >>= setAddressValidated
-                when (lvl == HandshakeLevel) $ do
-                    let ldcc = connLDCC conn
-                    discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
-                    unless discarded $ fire conn (Microseconds 100000) $ do
-                        dropSecrets conn InitialLevel
-                        clearCryptoStream conn InitialLevel
-                        onPacketNumberSpaceDiscarded ldcc InitialLevel
-                processReceivedPacket conn rpkt
+                mplain <- decryptReceived conn rpkt $ decryptCrypt conn crypt lvl
+                when (isJust mplain) $ do
+                    mycid <- getMyCID conn
+                    when
+                        ( lvl == HandshakeLevel
+                            || (lvl == InitialLevel && mycid == headerMyCID hdr)
+                        )
+                        $ do
+                            getPathInfo conn >>= setAddressValidated
+                    when (lvl == HandshakeLevel) $ do
+                        let ldcc = connLDCC conn
+                        discarded <- getAndSetPacketNumberSpaceDiscarded ldcc InitialLevel
+                        unless discarded $ fire conn (Microseconds 100000) $ do
+                            dropSecrets conn InitialLevel
+                            clearCryptoStream conn InitialLevel
+                            onPacketNumberSpaceDiscarded ldcc InitialLevel
+                processDecrypted conn Nothing rpkt mplain
 
 processReceivedPacket :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacket conn = processReceivedPacket' conn Nothing
@@ -152,9 +179,16 @@ processReceivedPacket conn = processReceivedPacket' conn Nothing
 --   the handshake is over: only then may the peer migrate.
 processReceivedPacket' :: Connection -> Maybe Bool -> ReceivedPacket -> IO ()
 processReceivedPacket' conn mcidChanged rpkt = do
-    let CryptPacket hdr crypt = rpCryptPacket rpkt
-        lvl = rpEncryptionLevel rpkt
-        tim = rpTimeRecevied rpkt
+    let CryptPacket _ crypt = rpCryptPacket rpkt
+    mplain <- decryptReceived conn rpkt $ decryptCrypt conn crypt lvl
+    processDecrypted conn mcidChanged rpkt mplain
+  where
+    lvl = rpEncryptionLevel rpkt
+
+-- | Counting the packet for the path, then decrypting it as given.
+decryptReceived
+    :: Connection -> ReceivedPacket -> IO (Maybe Plain) -> IO (Maybe Plain)
+decryptReceived conn rpkt decrypt = do
     -- Before the decryption below.  RFC 9000, section 8.1: "servers MUST
     -- count all of the payload bytes received in datagrams that are uniquely
     -- attributed to a single connection.  This includes datagrams that
@@ -167,7 +201,15 @@ processReceivedPacket' conn mcidChanged rpkt = do
     -- connection does not recover; it hangs until the idle timeout.
     pathInfo <- getPathInfo conn
     addPathRxBytes pathInfo $ rpReceivedBytes rpkt
-    mplain <- decryptCrypt conn crypt lvl
+    decrypt
+
+-- | Processing what 'decryptReceived' gave, 'Nothing' if it did not decrypt.
+processDecrypted
+    :: Connection -> Maybe Bool -> ReceivedPacket -> Maybe Plain -> IO ()
+processDecrypted conn mcidChanged rpkt mplain = do
+    let CryptPacket hdr crypt = rpCryptPacket rpkt
+        lvl = rpEncryptionLevel rpkt
+        tim = rpTimeRecevied rpkt
     dup <- case mplain of
         Just Plain{..} -> not <$> recordPeerPacketNumber conn lvl plainPacketNumber
         Nothing -> return False

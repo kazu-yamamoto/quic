@@ -3,6 +3,7 @@
 
 module Network.QUIC.Packet.Decrypt (
     decryptCrypt,
+    decryptCryptWithKeys,
 ) where
 
 import qualified Data.ByteString as BS
@@ -42,6 +43,12 @@ decryptCrypt conn crypt lvl = do
                         decryptCryptWith conn crypt lvl protector' $
                             \_ -> return coder
             | otherwise -> return Nothing
+
+-- | Decrypting with the keys given, not with the connection's.
+decryptCryptWithKeys
+    :: Connection -> Crypt -> EncryptionLevel -> (Coder, Protector) -> IO (Maybe Plain)
+decryptCryptWithKeys conn crypt lvl (coder, protector) =
+    decryptCryptWith conn crypt lvl protector $ \_ -> return coder
 
 decryptCryptWith
     :: Connection

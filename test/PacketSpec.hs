@@ -99,6 +99,35 @@ spec = do
             -- 0-RTT keys go, but 1-RTT goes on in the same space.
             record RTT1Level 5 `shouldReturn` False
 
+    -- RFC 9000 Sec 7.2 and RFC 9001 Sec 4.9.1: a packet changes nothing of
+    -- the connection unless it decrypts.
+    describe "a packet in the handshake" $ do
+        it "gives the client the server's CID only if it decrypts" $ do
+            let serverInitial corrupt = do
+                    (clientConn, serverConn) <- makeConnections serverConf Version1
+                    let hdr = Initial Version1 (toCID "") (toCID "server") ""
+                    bin <- packetFrom serverConn hdr corrupt
+                    processHandshake clientConn bin
+                    getPeerCID clientConn
+            serverInitial True `shouldReturn` clientChosenCID
+            serverInitial False `shouldReturn` toCID "server"
+        it "leaves the client in its version for one it did not offer" $ do
+            (clientConn, serverConn) <- makeConnections serverConf Version1
+            let hdr = Initial Version2 (toCID "") (toCID "server") ""
+            bin <- packetFrom serverConn hdr False
+            processHandshake clientConn bin
+            getVersion clientConn `shouldReturn` Version1
+            getPeerCID clientConn `shouldReturn` clientChosenCID
+        it "validates the client's address only if it decrypts" $ do
+            let clientInitial corrupt = do
+                    (clientConn, serverConn) <- makeConnections serverConf Version1
+                    let hdr = Initial Version1 clientChosenCID (toCID "") ""
+                    bin <- packetFrom clientConn hdr corrupt
+                    processHandshake serverConn bin
+                    getPathInfo serverConn >>= readTVarIO . addressValidated
+            clientInitial True `shouldReturn` False
+            clientInitial False `shouldReturn` True
+
     describe "encodePlainPacket" $ do
         it "leaves the peer a whole header protection sample" $ do
             (senderConn, _) <- makeConnections serverConf Version1
@@ -139,6 +168,25 @@ spec = do
             forM_ [0 .. 15] $ \n -> do
                 broken <- fst <$> decodePacket (retryWithTrailing n) True
                 broken `shouldSatisfy` isBroken
+
+-- | A packet of a PING, its last octet flipped if @corrupt@.
+packetFrom
+    :: Connection -> Header -> Bool -> IO ByteString
+packetFrom sender hdr corrupt = do
+    let ppkt = PlainPacket hdr $ Plain (Flags 0) 0 [Ping] 0
+    bin <- BS.createAndTrim 4096 $ \buf ->
+        fst <$> encodePlainPacket sender (SizedBuffer buf 2048) ppkt Nothing
+    return $
+        if corrupt
+            then BS.snoc (BS.init bin) (BS.last bin `xor` 0xff)
+            else bin
+
+processHandshake :: Connection -> ByteString -> IO ()
+processHandshake conn bin = do
+    (PacketIC cpkt lvl _, _) <- decodePacket bin True
+    tim <- getTimeMicrosecond
+    processReceivedPacketHandshake conn $
+        mkReceivedPacket cpkt tim (BS.length bin) lvl
 
 -- | An Initial packet from the client, its packet number in one octet as a
 --   peer which has seen @pn - 1@ acknowledged may send it.  Our encoder
