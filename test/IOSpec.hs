@@ -85,7 +85,7 @@ spec = do
     -- A client with a zero-length CID is known by its address until its
     -- connection is set up.  The queue of one that ended used to stay, and
     -- the next connection from the same address went to it unheard.
-    describe "the queue of a connection by its source" $
+    describe "the queue of a connection by its source" $ do
         it "is forgotten when the connection ends" $ do
             dict <- newRecvQDict
             let key = toCID "127.0.0.1:4433"
@@ -100,6 +100,15 @@ spec = do
             deleteRecvQDict dict key q1
             (q2, found2) <- lookupInsertRecvQDict dict key
             (q2 == q1, found2) `shouldBe` (False, False)
+        -- An LRU of 100 used to push it out, and a retransmitted Initial
+        -- then started a second connection.
+        it "is kept however many connections come after it" $ do
+            dict <- newRecvQDict
+            let key = toCID "first and longer"
+            _ <- lookupInsertRecvQDict dict key
+            forM_ [1 .. 200 :: Int] $ \i ->
+                lookupInsertRecvQDict dict $ toCID $ BS.pack [fromIntegral i]
+            snd <$> lookupInsertRecvQDict dict key `shouldReturn` True
     -- RFC 9000 Sec 10.1: 0 is no idle timeout, the effective one is the
     -- smaller of the two advertised, and it is at least three times the PTO.
     describe "the idle timeout" $ do
