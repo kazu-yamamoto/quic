@@ -383,6 +383,9 @@ spec = do
     describe "the client's socket" $ do
         it "is closed when the peer ends the connection" $ do
             withPipe (DropClientPacket []) $ testSocketClosed cc sc waitS
+    describe "a connection the peer ended with an error" $ do
+        it "lets waiting for a state give up" $ do
+            withPipe (DropClientPacket []) $ testWaitStateClosed cc sc waitS
     describe "the peer closing with NO_ERROR" $ do
         it "wakes a client waiting in recvStream" $ do
             withPipe (DropClientPacket []) $
@@ -1608,6 +1611,38 @@ testSocketClosed cc sc waitS = do
         case msock of
             Nothing -> expectationFailure "no socket"
             Just sock -> NS.withFdSocket sock return `shouldReturn` (-1)
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        abortConnection conn (ApplicationProtocolError 1) "bye"
+
+-- | A thread the application forked may wait for a state after the
+--   connection has ended.  Only a peer closing with NO_ERROR woke it, and
+--   one ended otherwise was waited on for ever.
+testWaitStateClosed :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testWaitStateClosed cc sc waitS = do
+    ref <- newIORef Nothing
+    withAsync server $ \_ -> do
+        waitS
+        r <- E.try $ C.run cc $ \conn -> do
+            writeIORef ref $ Just conn
+            strm <- stream conn
+            sendStream strm "ping"
+            void $ recvStream strm 1024
+        case r of
+            Left (ApplicationProtocolErrorIsReceived _ _) -> return ()
+            _ -> expectationFailure $ show r
+        mconn <- readIORef ref
+        case mconn of
+            Nothing -> expectationFailure "no connection"
+            Just conn ->
+                forM_ [wait0RTTReady, wait1RTTReady, waitEstablished] $ \waitFor -> do
+                    w <- Timeout.timeout 1000000 $ E.try $ waitFor conn
+                    case w of
+                        Just (Left (ConnectionIsClosed _)) -> return ()
+                        Nothing -> expectationFailure "waited for ever"
+                        Just ex -> expectationFailure $ show ex
   where
     server = run sc $ \conn -> do
         strm <- acceptStream conn

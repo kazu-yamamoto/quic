@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Connection.State (
@@ -37,6 +38,7 @@ import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Recovery
+import Network.QUIC.Types (QUICException (..))
 
 ----------------------------------------------------------------
 
@@ -79,28 +81,26 @@ isConnectionClosed Connection{..} = atomically $ do
 
 -- | Waiting until 0-RTT data can be sent.
 wait0RTTReady :: Connection -> IO ()
-wait0RTTReady conn@Connection{..} = atomically $ ready `orElse` peerClosedSTM conn
-  where
-    ready = do
-        cs <- readTVar $ connectionState connState
-        check (cs >= ReadyFor0RTT && cs /= Closed)
+wait0RTTReady conn = waitState conn ReadyFor0RTT
 
 -- | Waiting until 1-RTT data can be sent.
 wait1RTTReady :: Connection -> IO ()
-wait1RTTReady conn@Connection{..} = atomically $ ready `orElse` peerClosedSTM conn
-  where
-    ready = do
-        cs <- readTVar $ connectionState connState
-        check (cs >= ReadyFor1RTT && cs /= Closed)
+wait1RTTReady conn = waitState conn ReadyFor1RTT
 
 -- | For clients, waiting until HANDSHAKE_DONE is received.
 --   For servers, waiting until a TLS stack reports that the handshake is complete.
 waitEstablished :: Connection -> IO ()
-waitEstablished conn@Connection{..} = atomically $ ready `orElse` peerClosedSTM conn
+waitEstablished conn = waitState conn Established
+
+-- | A closed connection reaches no state any more: 'ConnectionIsClosed'
+--   is thrown then, rather than waiting for ever.
+waitState :: Connection -> ConnectionState -> IO ()
+waitState conn@Connection{..} st = atomically $ ready `orElse` peerClosedSTM conn
   where
     ready = do
         cs <- readTVar $ connectionState connState
-        check (cs >= Established && cs /= Closed)
+        when (cs == Closed) $ throwSTM $ ConnectionIsClosed "connection is closed"
+        check (cs >= st)
 
 ----------------------------------------------------------------
 
