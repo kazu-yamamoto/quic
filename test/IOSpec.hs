@@ -169,6 +169,25 @@ spec = do
                 sent <- txfSent <$> atomically (readConnectionFlowTx clientConn)
                 return $ sent - base
             filter (> 100) overs `shouldBe` []
+    -- A stream reset while 'sendStream' waits for the window used to have
+    -- its data counted by the connection but not in the final size.
+    describe "a stream reset while sending" $
+        it "takes nothing from the connection window" $ do
+            scr <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scr Version1
+            s <- addStream clientConn 0
+            setTxMaxStreamData s 100
+            base <- txfSent <$> atomically (readConnectionFlowTx clientConn)
+            setTxMaxData clientConn base
+            r <- newEmptyMVar
+            _ <- forkIO $ E.try (sendStream s $ BS.replicate 100 0) >>= putMVar r
+            threadDelay 100000 -- waiting for the window
+            resetStream s $ ApplicationProtocolError 0
+            setTxMaxData clientConn $ base + 100
+            res <- takeMVar r :: IO (Either QUICException ())
+            sent <- txfSent <$> atomically (readConnectionFlowTx clientConn)
+            sent - base `shouldBe` 0
+            either show (const "sent") res `shouldBe` show StreamIsClosed
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS

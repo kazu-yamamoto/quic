@@ -42,7 +42,7 @@ data Stream = Stream
     , streamReass :: IORef Reass
     -- ^ Fragments which cannot be delivered yet
     , streamSyncFinTx :: TMVar ()
-    , streamResetTx :: IORef TxReset
+    , streamResetTx :: TVar TxReset
     -- ^ Whether our sending part has been reset
     , streamResetRx :: IORef (Maybe ApplicationProtocolError)
     -- ^ The error code of a RESET_STREAM from the peer
@@ -91,7 +91,7 @@ newStream streamConnection streamId txLim rxLim = do
     streamRecvQ     <- newRecvStreamQ
     streamReass     <- newIORef $ Reass Map.empty Nothing
     streamSyncFinTx <- newEmptyTMVarIO
-    streamResetTx   <- newIORef NotReset
+    streamResetTx   <- newTVarIO NotReset
     streamResetRx   <- newIORef Nothing
     streamReleased  <- newIORef False
     streamRxBounds  <- newTVarIO emptyRxBounds
