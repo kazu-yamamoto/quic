@@ -4,6 +4,7 @@
 module Network.QUIC.Stream.Misc (
     resetTxStream,
     isTxStreamReset,
+    isTxStreamResetSTM,
     getTxStreamOffset,
     isTxStreamClosed,
     setTxStreamClosed,
@@ -49,13 +50,19 @@ import Network.QUIC.Types (ApplicationProtocolError, TxReset (..))
 --   so nothing goes out past it.
 resetTxStream :: Stream -> IO Offset
 resetTxStream s@Stream{..} = do
-    -- Before the read: what is queued after it is dropped, not counted.
-    atomicWriteIORef streamResetTx ResetSent
+    -- In one transaction with the read: 'queueTx' counts nothing for a
+    -- reset stream, so the final size is all the connection counted for it.
+    final <- atomically $ do
+        writeTVar streamResetTx ResetSent
+        txfSent <$> readTVar streamFlowTx
     setTxStreamClosed s
-    txfSent <$> readTVarIO streamFlowTx
+    return final
 
 isTxStreamReset :: Stream -> IO Bool
-isTxStreamReset Stream{..} = (== ResetSent) <$> readIORef streamResetTx
+isTxStreamReset s = atomically $ isTxStreamResetSTM s
+
+isTxStreamResetSTM :: Stream -> STM Bool
+isTxStreamResetSTM Stream{..} = (== ResetSent) <$> readTVar streamResetTx
 
 getTxStreamOffset :: Stream -> Int -> IO Offset
 getTxStreamOffset Stream{..} len = atomicModifyIORef' streamStateTx get

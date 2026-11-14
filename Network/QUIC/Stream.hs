@@ -18,6 +18,7 @@ module Network.QUIC.Stream (
     -- * Misc
     resetTxStream,
     isTxStreamReset,
+    isTxStreamResetSTM,
     getTxStreamOffset,
     isTxStreamClosed,
     setTxStreamClosed,
