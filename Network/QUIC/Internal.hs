@@ -21,6 +21,9 @@ module Network.QUIC.Internal (
     processFrame,
     processReceivedPacket,
     processReceivedPacketHandshake,
+    newRecvQDict,
+    lookupInsertRecvQDict,
+    deleteRecvQDict,
 ) where
 
 import Network.QUIC.Client.Reader (
@@ -46,6 +49,11 @@ import Network.QUIC.Receiver (
  )
 import Network.QUIC.Recovery
 import Network.QUIC.Sender (adjustForRetransmit, sendOutput)
+import Network.QUIC.Server.Reader (
+    deleteRecvQDict,
+    lookupInsertRecvQDict,
+    newRecvQDict,
+ )
 import Network.QUIC.Socket
 import Network.QUIC.Stream
 import Network.QUIC.TLS

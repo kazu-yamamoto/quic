@@ -82,6 +82,24 @@ spec = do
             -- The first one taken and lost: the second keeps its offset.
             _ <- takeSendStreamQ clientConn
             offset <$> takeSendStreamQ clientConn `shouldReturn` (6, 16)
+    -- A client with a zero-length CID is known by its address until its
+    -- connection is set up.  The queue of one that ended used to stay, and
+    -- the next connection from the same address went to it unheard.
+    describe "the queue of a connection by its source" $
+        it "is forgotten when the connection ends" $ do
+            dict <- newRecvQDict
+            let key = toCID "127.0.0.1:4433"
+            (q1, found1) <- lookupInsertRecvQDict dict key
+            found1 `shouldBe` False
+            (q1', found1') <- lookupInsertRecvQDict dict key
+            (q1' == q1, found1') `shouldBe` (True, True)
+            -- Another connection's queue is not forgotten for this one.
+            q0 <- newRecvQ =<< newRecvBudget maxBound
+            deleteRecvQDict dict key q0
+            snd <$> lookupInsertRecvQDict dict key `shouldReturn` True
+            deleteRecvQDict dict key q1
+            (q2, found2) <- lookupInsertRecvQDict dict key
+            (q2 == q1, found2) `shouldBe` (False, False)
     -- RFC 9000 Sec 10.1: 0 is no idle timeout, the effective one is the
     -- smaller of the two advertised, and it is at least three times the PTO.
     describe "the idle timeout" $ do

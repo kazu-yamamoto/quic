@@ -21,6 +21,10 @@ module Network.QUIC.Server.Reader (
 
     -- * Receiving and reading
     RecvQ,
+    RecvQDict,
+    newRecvQDict,
+    lookupInsertRecvQDict,
+    deleteRecvQDict,
     recvServer,
     ServerState (..),
 ) where
@@ -33,7 +37,7 @@ import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Network.ByteOrder
-import Network.Control (LRUCacheRef, Rate, newRate)
+import Network.Control (LRUCache, Rate, newRate)
 import qualified Network.Control as LRUCache
 import Network.Socket (
     SockAddr (..),
@@ -162,7 +166,7 @@ waitNoDispatcher Dispatch{..} = T.waitUntilAllGone dispatcherThreads
 
 -- Source CID -> RecvQ
 -- Initials and RTT0 are queued before Conneciton is created.
-data RecvQDict = RecvQDict RecvBudget (LRUCacheRef CID RecvQ)
+data RecvQDict = RecvQDict RecvBudget (IORef (LRUCache CID RecvQ))
 
 recvQDictSize :: Int
 recvQDictSize = 100
@@ -172,14 +176,33 @@ newRecvQDict :: IO RecvQDict
 newRecvQDict =
     RecvQDict
         <$> newRecvBudget recvBudgetLimit
-        <*> LRUCache.newLRUCacheRef recvQDictSize
+        <*> newIORef (LRUCache.empty recvQDictSize)
 
 -- Looking up and insert a new RecvQ if not exist.
 lookupInsertRecvQDict :: RecvQDict -> CID -> IO (RecvQ, Bool)
-lookupInsertRecvQDict (RecvQDict budget ref) dcid = LRUCache.cached ref dcid $ newRecvQ budget
+lookupInsertRecvQDict dict@(RecvQDict budget ref) key = do
+    mq <- lookupRecvQDict dict key
+    case mq of
+        Just q -> return (q, True)
+        Nothing -> do
+            q <- newRecvQ budget
+            atomicModifyIORef'' ref $ LRUCache.insert key q
+            return (q, False)
 
 lookupRecvQDict :: RecvQDict -> CID -> IO (Maybe RecvQ)
-lookupRecvQDict (RecvQDict _ ref) dcid = LRUCache.cached' ref dcid
+lookupRecvQDict (RecvQDict _ ref) key = atomicModifyIORef' ref $ \c ->
+    case LRUCache.lookup' key c of
+        Nothing -> (c, Nothing)
+        Just (q, c') -> (c', Just q)
+
+-- | Forgetting the queue of a connection that has ended, unless the key has
+--   another one by now.  Kept, the next connection from the same key, a
+--   client with a zero-length CID on the same address, went to it unheard.
+deleteRecvQDict :: RecvQDict -> CID -> RecvQ -> IO ()
+deleteRecvQDict (RecvQDict _ ref) key q = atomicModifyIORef'' ref $ \c ->
+    case LRUCache.lookup key c of
+        Just q' | q' == q -> LRUCache.delete key c
+        _ -> c
 
 ----------------------------------------------------------------
 
@@ -193,6 +216,8 @@ data Accept = Accept
     , accPacketSize :: Int
     , accRegister :: CID -> Connection -> IO ()
     , accUnregister :: CID -> IO ()
+    , accForget :: IO ()
+    -- ^ Taking the receive queue out of the source table, once ended
     , accAddressValidated :: Bool
     , accTime :: TimeMicrosecond
     }
@@ -405,6 +430,7 @@ dispatch
                             , accPacketSize = bytes
                             , accRegister = reg
                             , accUnregister = unreg
+                            , accForget = deleteRecvQDict srcTable key q
                             , accAddressValidated = addrValid
                             , accTime = tim
                             }
