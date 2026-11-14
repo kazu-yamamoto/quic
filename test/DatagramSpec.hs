@@ -8,6 +8,7 @@ import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString ()
 import qualified Data.ByteString as BS
+import qualified System.Timeout as Timeout
 import Test.Hspec
 
 import Network.QUIC
@@ -139,6 +140,23 @@ spec = do
                         sendDatagram conn (BS.replicate 50 0x41)
                         threadDelay 500
 
+    -- DATAGRAMs were put in one packet however large: the sender died with
+    -- BufferOverrun.
+    describe "DATAGRAMs" $ do
+        it "all arrive when sent back to back" $
+            withDatagramServer sc0 $ \got conn -> do
+                replicateM_ 10 $ sendDatagram conn (BS.replicate 1000 0x41)
+                r <- Timeout.timeout 2000000 $ takeMVar got
+                map BS.length <$> r `shouldBe` Just (replicate 10 1000)
+        it "are refused when too large for a packet" $
+            withDatagramServer sc0 $ \_ conn -> do
+                let tooLarge (ConnectionIsClosed err) =
+                        err == "DATAGRAM too large for a packet"
+                    tooLarge _ = False
+                sendDatagram conn (BS.replicate 1500 0x41) `shouldThrow` tooLarge
+                -- The connection is still there.
+                sendDatagram conn (BS.replicate 1000 0x41)
+
     -- #226: the queue grew for as long as the peer sent faster than the
     -- application read.
     describe "the DATAGRAM receive queue" $
@@ -168,6 +186,27 @@ spec = do
             let scDtgm = sc0 { scMaxDatagramFrameSize = 1024 }
                 ccDtgm = testClientConfig { ccMaxDatagramFrameSize = 1024 }
             testDatagram0RTT ccDtgm scDtgm
+
+-- | A server receiving ten DATAGRAMs into the 'MVar', and a client
+--   running the action.  Both take DATAGRAMs of up to 2000 octets.
+withDatagramServer
+    :: ServerConfig -> (MVar [BS.ByteString] -> Connection -> IO ()) -> IO ()
+withDatagramServer sc0 body = do
+    let scDtgm = sc0 { scMaxDatagramFrameSize = 2000 }
+        ccDtgm = testClientConfig { ccMaxDatagramFrameSize = 2000 }
+    mvar <- newEmptyMVar
+    got <- newEmptyMVar
+    smgr <- newSessionManager
+    let sc' = scDtgm { scSessionManager = smgr
+                     , scHooks = (scHooks scDtgm) { onServerReady = putMVar mvar () } }
+        server conn = do
+            waitEstablished conn
+            replicateM 10 (recvDatagram conn) >>= putMVar got
+    E.bracket (forkIO $ E.handle (\(E.SomeException _) -> return ()) $ S.run sc' server) killThread $ \_ -> do
+        takeMVar mvar
+        C.run ccDtgm $ \conn -> do
+            waitEstablished conn
+            body got conn
 
 injectDatagram1RTT :: EncryptionLevel -> Plain -> Plain
 injectDatagram1RTT lvl plain

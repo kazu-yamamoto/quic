@@ -10,6 +10,10 @@ maximumUdpPayloadSize = 2048 -- no global locking when allocating ByteString
 defaultQUICPacketSize :: Int
 defaultQUICPacketSize = 1200
 
+-- | Room kept in a packet for the header, an ACK frame and the AEAD tag.
+packetOverhead :: Int
+packetOverhead = 160
+
 -- Google paper: UDP payload size = 1350
 --    http://www.audentia-gestion.fr/Recherche-Research-Google/46403.pdf
 
