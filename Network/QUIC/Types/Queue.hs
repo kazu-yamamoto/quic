@@ -41,6 +41,10 @@ newRecvBudget lim = RecvBudget lim <$> newTVarIO 0
 data RecvQ
     = RecvQ (TQueue ReceivedPacket) (TVar Int) (TVar Int) (TVar Bool) RecvBudget
 
+-- | The same queue.
+instance Eq RecvQ where
+    RecvQ q1 _ _ _ _ == RecvQ q2 _ _ _ _ = q1 == q2
+
 newRecvQ :: RecvBudget -> IO RecvQ
 newRecvQ budget =
     RecvQ

@@ -318,6 +318,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
   where
     done = do
         closeRecvQ $ accRecvQ acc
+        accForget acc
         releaseConnection dispatch
     open = createServerConnection conf dispatch acc
     -- 'killReaders' stops this connection's own threads and sees them out,
