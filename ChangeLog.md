@@ -1,5 +1,29 @@
 # ChangeLog
 
+## 0.3.24
+
+`sendDatagram` throws `ConnectionIsClosed` for a DATAGRAM too large for a
+packet.  In `Network.QUIC.Internal`, `getIdleTimeout` replaces
+`readMinIdleTimeout`, `streamResetTx` is a `TVar TxReset`, and
+`adjustForRetransmit` takes `StreamResets`.
+
+* Discard a packet whose packet number is processed already
+  [#235](https://github.com/kazu-yamamoto/quic/pull/235)
+* Resend no STREAM frame of a stream we have reset
+  [#236](https://github.com/kazu-yamamoto/quic/pull/236)
+* Treat an idle timeout of 0 as none and raise it to 3 PTOs
+  [#237](https://github.com/kazu-yamamoto/quic/pull/237)
+* Take what a handshake packet tells only once it decrypts
+  [#238](https://github.com/kazu-yamamoto/quic/pull/238)
+* Forget the receive queue of a connection by its source when it ends
+  [#239](https://github.com/kazu-yamamoto/quic/pull/239)
+* Count nothing for a stream reset while sendStream waits
+  [#240](https://github.com/kazu-yamamoto/quic/pull/240)
+* Keep DATAGRAMs within a packet
+  [#241](https://github.com/kazu-yamamoto/quic/pull/241)
+* Keep the receive queue of a connection by its source until it ends
+  [#242](https://github.com/kazu-yamamoto/quic/pull/242)
+
 ## 0.3.23
 
 Adds `scMaxConnections` to `ServerConfig` and `setMaxBidiStreams` and
