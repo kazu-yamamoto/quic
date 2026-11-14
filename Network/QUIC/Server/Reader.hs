@@ -37,8 +37,7 @@ import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import Network.ByteOrder
-import Network.Control (LRUCache, Rate, newRate)
-import qualified Network.Control as LRUCache
+import Network.Control (Rate, newRate)
 import Network.Socket (
     SockAddr (..),
     Socket,
@@ -166,43 +165,40 @@ waitNoDispatcher Dispatch{..} = T.waitUntilAllGone dispatcherThreads
 
 -- Source CID -> RecvQ
 -- Initials and RTT0 are queued before Conneciton is created.
-data RecvQDict = RecvQDict RecvBudget (IORef (LRUCache CID RecvQ))
-
-recvQDictSize :: Int
-recvQDictSize = 100
+--
+-- One entry per connection, taken out when it ends ('deleteRecvQDict'), so
+-- this is as large as the connections are many.  It was an LRU of 100: an
+-- entry pushed out by newer ones made a retransmitted Initial of its client
+-- start a second connection.
+data RecvQDict = RecvQDict RecvBudget (IORef (Map CID RecvQ))
 
 -- | The queues share one budget, the endpoint's (#170).
 newRecvQDict :: IO RecvQDict
 newRecvQDict =
     RecvQDict
         <$> newRecvBudget recvBudgetLimit
-        <*> newIORef (LRUCache.empty recvQDictSize)
+        <*> newIORef M.empty
 
--- Looking up and insert a new RecvQ if not exist.
+-- | Looking up and inserting a new RecvQ if not exist, at once: two
+--   dispatchers cannot both insert one.
 lookupInsertRecvQDict :: RecvQDict -> CID -> IO (RecvQ, Bool)
-lookupInsertRecvQDict dict@(RecvQDict budget ref) key = do
-    mq <- lookupRecvQDict dict key
-    case mq of
-        Just q -> return (q, True)
-        Nothing -> do
-            q <- newRecvQ budget
-            atomicModifyIORef'' ref $ LRUCache.insert key q
-            return (q, False)
+lookupInsertRecvQDict (RecvQDict budget ref) key = do
+    new <- newRecvQ budget
+    atomicModifyIORef' ref $ \m -> case M.lookup key m of
+        Just q -> (m, (q, True))
+        Nothing -> (M.insert key new m, (new, False))
 
 lookupRecvQDict :: RecvQDict -> CID -> IO (Maybe RecvQ)
-lookupRecvQDict (RecvQDict _ ref) key = atomicModifyIORef' ref $ \c ->
-    case LRUCache.lookup' key c of
-        Nothing -> (c, Nothing)
-        Just (q, c') -> (c', Just q)
+lookupRecvQDict (RecvQDict _ ref) key = M.lookup key <$> readIORef ref
 
 -- | Forgetting the queue of a connection that has ended, unless the key has
 --   another one by now.  Kept, the next connection from the same key, a
 --   client with a zero-length CID on the same address, went to it unheard.
 deleteRecvQDict :: RecvQDict -> CID -> RecvQ -> IO ()
-deleteRecvQDict (RecvQDict _ ref) key q = atomicModifyIORef'' ref $ \c ->
-    case LRUCache.lookup key c of
-        Just q' | q' == q -> LRUCache.delete key c
-        _ -> c
+deleteRecvQDict (RecvQDict _ ref) key q = atomicModifyIORef'' ref $ \m ->
+    case M.lookup key m of
+        Just q' | q' == q -> M.delete key m
+        _ -> m
 
 ----------------------------------------------------------------
 
