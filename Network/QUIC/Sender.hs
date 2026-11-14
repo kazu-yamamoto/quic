@@ -492,7 +492,7 @@ adjustForRetransmit conn (StreamResets resets) = go
     go (x@(StreamF sid _ _ _) : xs) = do
         reset <- case lookup sid resets of
             Nothing -> return False
-            Just ref -> (== ResetSent) <$> readIORef ref
+            Just var -> (== ResetSent) <$> readTVarIO var
         rs <- go xs
         return $ if reset then rs else x : rs
     go (x : xs) = do

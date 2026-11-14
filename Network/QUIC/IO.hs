@@ -78,6 +78,10 @@ sendStreamMany s dats0 = do
         -- streams sending at once used to see the same window and send it
         -- twice over.
         eblocked <- atomically $ do
+            -- Reset meanwhile: counted now, it would be in no final size
+            -- and the connection window would lose it for good.
+            reset <- isTxStreamResetSTM s
+            when reset $ throwSTM StreamIsClosed
             r <- checkBlocked s len wait
             case r of
                 Right n -> do

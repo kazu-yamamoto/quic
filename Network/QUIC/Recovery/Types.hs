@@ -65,9 +65,9 @@ data SentPacket = SentPacket
     deriving (Eq, Show)
 
 -- | The streams a packet carries STREAM frames of, each with whether we have
---   reset it.  The 'IORef's are the streams' own, so a reset after sending
+--   reset it.  The 'TVar's are the streams' own, so a reset after sending
 --   shows here, and a reset stream is not resent (RFC 9000 Sec 13.3).
-newtype StreamResets = StreamResets [(StreamId, IORef TxReset)] deriving (Eq)
+newtype StreamResets = StreamResets [(StreamId, TVar TxReset)] deriving (Eq)
 
 instance Show StreamResets where
     show (StreamResets xs) = "StreamResets " ++ show (map fst xs)
