@@ -417,9 +417,11 @@ sendOutput conn (OutControl RTT1Level []) = do
     unless exist $ construct conn RTT1Level [] False >>= sendPacket conn
 sendOutput conn (OutControl lvl frames) = do
     mout <- tryPeekOutput conn
+    room <- subtract packetOverhead <$> getMaxPacketSize conn
     case mout of
+        -- Merged only where the DATAGRAMs fit in one packet.
         Just (OutControl lvl' frames')
-            | lvl == lvl' -> do
+            | lvl == lvl' && datagramBytes (frames ++ frames') <= room -> do
                 construct conn lvl (frames ++ frames') False >>= sendPacket conn
                 void $ atomically $ takeOutputSTM conn
         _ -> construct conn lvl frames False >>= sendPacket conn
@@ -499,6 +501,10 @@ adjustForRetransmit conn (StreamResets resets) = go
         rs <- go xs
         return (x : rs)
 
+-- | What the DATAGRAM frames take, with an upper bound on their headers.
+datagramBytes :: [Frame] -> Int
+datagramBytes fs = sum [1 + 8 + BS.length dat | Datagram _ dat <- fs]
+
 limitationC :: Int
 limitationC = 1024
 
@@ -548,7 +554,7 @@ threshold :: Int
 threshold = 832
 
 limitation :: Int
-limitation = 1040
+limitation = defaultQUICPacketSize - packetOverhead
 
 -- | Upper bound on what a stream frame takes on top of its data
 streamFrameMaxOverhead :: Int

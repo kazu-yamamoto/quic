@@ -342,6 +342,11 @@ sendDatagram conn dat = do
     when (BS.length dat + frameOverhead > limitBytes) $
         E.throwIO $
             ConnectionIsClosed "DATAGRAM size violation"
+    -- RFC 9221 Sec 5: a DATAGRAM frame cannot be split across packets.
+    room <- subtract packetOverhead <$> getMaxPacketSize conn
+    when (BS.length dat + frameOverhead > room) $
+        E.throwIO $
+            ConnectionIsClosed "DATAGRAM too large for a packet"
     let frame = Datagram False dat
     putOutput conn $ OutControl lvl [frame]
 
