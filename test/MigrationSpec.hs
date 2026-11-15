@@ -243,7 +243,7 @@ spec = do
             getSocketName sock `shouldThrow` anyException
             atomically $ writeTVar newRetired True
 
-        it "leaves its socket for the sender when the connection goes idle" $ do
+        it "leaves its socket to the connection when it goes idle" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             sock <- getSocket clientConn
             peersa <- peerSockAddr <$> getPathInfo clientConn
@@ -257,9 +257,10 @@ spec = do
             returned <-
                 timeout (3 * pto + Microseconds 2000000) "idle reader" $ takeMVar done
             returned `shouldBe` Just ()
-            void $ getSocketName sock
+            -- The sender, between two sends, does not close it under
+            -- the connection.
             closeRetiredSockets clientConn
-            getSocketName sock `shouldThrow` anyException
+            void $ getSocketName sock
 
         it "closes a socket it was left even if nothing drains it" $ do
             (clientConn, _) <- makeConnections serverConf Version1
