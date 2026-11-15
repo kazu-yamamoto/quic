@@ -308,9 +308,11 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                         closure conn ldcc (Left e)
                 c5 =
                     labelMe "concurrently5"
-                        >> concurrently_
-                            (tellThenRaise (c4' `E.catch` exitedNormally))
-                            s6
+                        >> void
+                            ( concurrentlyApp
+                                (tellThenRaise (c4' `E.catch` exitedNormally))
+                                s6
+                            )
                 runThreads = c5
             ex <- E.try runThreads >>= abortRequested conn
             setConnectionEnd conn $ either id (const endedNormally) ex

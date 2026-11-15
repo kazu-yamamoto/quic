@@ -1,6 +1,7 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module IOSpec where
 
@@ -386,6 +387,12 @@ spec = do
     describe "a connection the peer ended with an error" $ do
         it "lets waiting for a state give up" $ do
             withPipe (DropClientPacket []) $ testWaitStateClosed cc sc waitS
+        it "lets the application finish by itself" $ do
+            withPipe (DropClientPacket []) $ testAppFinishes cc sc waitS
+        it "lets the server's application finish by itself" $ do
+            withPipe (DropClientPacket []) $ testServerAppFinishes cc sc waitS
+        it "cancels an application that does not finish" $ do
+            withPipe (DropClientPacket []) $ testAppCancelled cc sc waitS
         it "wakes a thread waiting in acceptStream" $ do
             withPipe (DropClientPacket []) $
                 testForkedWait cc sc waitS $
@@ -1678,6 +1685,77 @@ testWaitStateClosed cc sc waitS = do
                         Just (Left (ConnectionIsClosed _)) -> return ()
                         Nothing -> expectationFailure "waited for ever"
                         Just ex -> expectationFailure $ show ex
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        abortConnection conn (ApplicationProtocolError 1) "bye"
+
+-- | The application of 'run', waiting on the connection when the peer
+--   ends it with an error, is told why rather than cancelled.
+testAppFinishes :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testAppFinishes cc sc waitS = do
+    told <- newEmptyMVar
+    withAsync abortingServer $ \_ -> do
+        waitS
+        r <- E.try $ C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            -- Tidying up takes a moment, which a cancel cut short.
+            void (recvStream strm 1024) `E.catch` \(e :: QUICException) -> do
+                threadDelay 100000
+                putMVar told e
+                E.throwIO e
+        case r of
+            Left (ApplicationProtocolErrorIsReceived _ _) -> return ()
+            _ -> expectationFailure $ show r
+        w <- tryTakeMVar told
+        case w of
+            Just (ApplicationProtocolErrorIsReceived _ _) -> return ()
+            _ -> expectationFailure $ "the application was told " ++ show w
+  where
+    abortingServer = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        abortConnection conn (ApplicationProtocolError 1) "bye"
+
+-- | The same for a server's application, the client ending the connection.
+testServerAppFinishes :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testServerAppFinishes cc sc waitS = do
+    told <- newEmptyMVar
+    let server = run sc $ \conn -> do
+            strm <- acceptStream conn
+            _ <- recvStream strm 1024
+            void (recvStream strm 1024) `E.catch` \(e :: QUICException) -> do
+                threadDelay 100000
+                putMVar told e
+                E.throwIO e
+    withAsync server $ \_ -> do
+        waitS
+        _ <- E.try @QUICException $ C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            threadDelay 100000
+            abortConnection conn (ApplicationProtocolError 1) "bye"
+            threadDelay 1000000 :: IO ()
+        w <- Timeout.timeout 3000000 $ takeMVar told
+        case w of
+            Just (ApplicationProtocolErrorIsReceived _ _) -> return ()
+            _ -> expectationFailure $ "the application was told " ++ show w
+
+-- | One that goes on with something else is cancelled after the grace
+--   period, and 'run' throws why the connection ended.
+testAppCancelled :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testAppCancelled cc sc waitS =
+    withAsync server $ \_ -> do
+        waitS
+        r <- Timeout.timeout 5000000 $ E.try $ C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            threadDelay 10000000
+        case r of
+            Just (Left (ApplicationProtocolErrorIsReceived _ _)) -> return ()
+            _ -> expectationFailure $ show r
   where
     server = run sc $ \conn -> do
         strm <- acceptStream conn

@@ -42,18 +42,24 @@ module Network.QUIC.Connection.Misc (
     requestEnd,
     watchAbortRequest,
     abortRequested,
+    concurrentlyApp,
+    appGracePeriod,
 ) where
 
+import Control.Concurrent.Async (wait, waitCatchSTM, withAsync)
 import Control.Concurrent.STM (
     TVar,
     atomically,
     modifyTVar',
+    orElse,
     readTVar,
     readTVarIO,
+    registerDelay,
     retry,
     writeTVar,
  )
 import qualified Control.Exception as E
+import qualified Control.Monad.STM as STM
 import Network.Socket (SockAddr, Socket, unsafeClose)
 import qualified System.ThreadManager as T
 
@@ -363,3 +369,31 @@ watchAbortRequest :: Connection -> IO ()
 watchAbortRequest Connection{..} = do
     e <- atomically $ readTVar connAbortRequest >>= maybe retry return
     E.throwIO e
+
+----------------------------------------------------------------
+
+-- | 'Control.Concurrent.Async.concurrently' for the protocol threads and
+--   the application.  When the protocol threads fail, the application is
+--   not cancelled at once: what it waits on in the connection throws why
+--   the connection ended, and it has 'appGracePeriod' to finish by itself.
+--   Only then is it cancelled.  The protocol threads' exception is thrown
+--   either way, as it was.
+concurrentlyApp :: IO a -> IO b -> IO (a, b)
+concurrentlyApp protocol app =
+    withAsync protocol $ \ap' -> withAsync app $ \aa -> do
+        r <-
+            atomically $ (Left <$> waitCatchSTM ap') `orElse` (Right <$> waitCatchSTM aa)
+        case r of
+            Left (Right x) -> (,) x <$> wait aa
+            Left (Left e) -> do
+                expired <- registerDelay appGracePeriod
+                atomically $
+                    void (waitCatchSTM aa) `orElse` (readTVar expired >>= STM.check)
+                E.throwIO e
+            Right (Right y) -> (,y) <$> wait ap'
+            Right (Left e) -> E.throwIO e
+
+-- | How long the application has to finish by itself once the protocol
+--   threads have failed (microseconds).
+appGracePeriod :: Int
+appGracePeriod = 1000000
