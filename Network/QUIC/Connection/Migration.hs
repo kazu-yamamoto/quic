@@ -498,8 +498,8 @@ waitResponse :: Connection -> PathInfo -> IO Bool
 waitResponse conn@Connection{..} pathInfo = do
     pto <- getPTO connLDCC
     let period = max pto (calcPTO initialRTT Nothing)
-        Microseconds total = 3 * period
-        Microseconds every = period
+        total = toDelay $ 3 * period
+        every = toDelay period
     expired <- registerDelay total
     let loop = do
             again <- registerDelay every

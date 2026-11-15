@@ -140,4 +140,4 @@ metricsUpdated ldcc@LDCC{..} body = do
         | otherwise = Just (tag, v1)
     numb tag v0 v1
         | v0 == v1 = Nothing
-        | otherwise = Just (tag, v1)
+        | otherwise = Just (tag, fromIntegral v1 :: Int64)

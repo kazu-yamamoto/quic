@@ -19,33 +19,33 @@ import Network.QUIC.Imports
 import Network.QUIC.Types
 
 timeout :: Microseconds -> String -> IO a -> IO (Maybe a)
-timeout (Microseconds ms) _ action = ST.timeout ms action
+timeout us _ action = ST.timeout (toDelay us) action
 
 -- | Waiting for an STM action, giving up after the time given.  The
 --   deadline is waited for beside it rather than thrown at it.
 waitWithin :: Microseconds -> STM a -> IO (Maybe a)
-waitWithin (Microseconds us) act = do
-    expired <- registerDelay us
+waitWithin us act = do
+    expired <- registerDelay $ toDelay us
     atomically $ (Just <$> act) `orElse` (Nothing <$ (readTVar expired >>= check))
 
 fire :: Connection -> Microseconds -> TimeoutCallback -> IO ()
-fire conn (Microseconds microseconds) action = do
+fire conn us action = do
     timmgr <- getSystemTimerManager
-    void $ registerTimeout timmgr microseconds action'
+    void $ registerTimeout timmgr (toDelay us) action'
   where
     action' = do
         alive <- getAlive conn
         when alive action `E.catch` ignore
 
 fire' :: Microseconds -> TimeoutCallback -> IO ()
-fire' (Microseconds microseconds) action = do
+fire' us action = do
     timmgr <- getSystemTimerManager
-    void $ registerTimeout timmgr microseconds action
+    void $ registerTimeout timmgr (toDelay us) action
 
 cfire :: Connection -> Microseconds -> TimeoutCallback -> IO (IO ())
-cfire conn (Microseconds microseconds) action = do
+cfire conn us action = do
     timmgr <- getSystemTimerManager
-    key <- registerTimeout timmgr microseconds action'
+    key <- registerTimeout timmgr (toDelay us) action'
     let cancel = unregisterTimeout timmgr key
     return cancel
   where
@@ -54,4 +54,4 @@ cfire conn (Microseconds microseconds) action = do
         when alive action `E.catch` ignore
 
 delay :: Microseconds -> IO ()
-delay (Microseconds microseconds) = threadDelay microseconds
+delay = threadDelay . toDelay

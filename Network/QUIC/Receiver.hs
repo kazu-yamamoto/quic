@@ -69,7 +69,7 @@ receiver conn = handleLogT logAction body
     waitIdle Nothing = atomically $ ended `orElse` (Got <$> connRecv conn)
     waitIdle mito@(Just (Microseconds us)) = do
         sent0 <- readTVarIO $ connAckElicitingSent conn
-        expired <- registerDelay us
+        expired <- registerDelay $ toDelay (Microseconds us)
         let restarted
                 | sent0 = retry
                 | otherwise = readTVar (connAckElicitingSent conn) >>= STM.check
