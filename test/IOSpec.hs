@@ -6,7 +6,7 @@ module IOSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.STM (atomically, readTVarIO)
+import Control.Concurrent.STM (STM, atomically, orElse, readTVarIO)
 import qualified Control.Exception as E
 import Control.Monad
 import Data.Bits (shiftR)
@@ -400,11 +400,27 @@ spec = do
             withPipe (DropClientPacket []) $
                 testForkedWait cc sc1 waitS $
                     \conn -> void $ stream conn
+        it "wakes a thread waiting in waitReadableSTM" $ do
+            withPipe (DropClientPacket []) $
+                testForkedWait cc sc waitS $ \conn -> do
+                    strm <- stream conn
+                    atomically $ waitReadableSTM strm
+                    void $ recvStream strm 1024
+        it "wakes a thread waiting in waitAcceptableSTM" $ do
+            withPipe (DropClientPacket []) $
+                testForkedWait cc sc waitS $ \conn -> do
+                    atomically $ waitAcceptableSTM conn
+                    void $ acceptStream conn
         it "wakes a thread waiting for flow control in sendStream" $ do
             withPipe (DropClientPacket []) $
                 testForkedWait cc sc waitS $ \conn -> do
                     strm <- stream conn
                     forever $ sendStream strm $ BS.replicate 65536 0
+    describe "waiting in STM" $ do
+        it "waits for data, and then for what a read leaves" $ do
+            withPipe (DropClientPacket []) $ testWaitReadable cc sc waitS
+        it "waits for a stream the peer opens" $ do
+            withPipe (DropClientPacket []) $ testWaitAcceptable cc sc waitS
     describe "the peer closing with NO_ERROR" $ do
         it "wakes a client waiting in recvStream" $ do
             withPipe (DropClientPacket []) $
@@ -1667,6 +1683,61 @@ testWaitStateClosed cc sc waitS = do
         strm <- acceptStream conn
         _ <- recvStream strm 1024
         abortConnection conn (ApplicationProtocolError 1) "bye"
+
+-- | Whether a wait in STM would return now.
+readyNow :: STM () -> IO Bool
+readyNow w = atomically $ (True <$ w) `orElse` return False
+
+-- | 'waitReadableSTM' returns when 'recvStream' would not block: for data,
+--   for what a read left pending, and for the end of the stream once read.
+testWaitReadable :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testWaitReadable cc sc waitS =
+    withAsync server $ \_ -> do
+        waitS
+        r <- Timeout.timeout 5000000 $ C.run cc $ \conn -> do
+            strm <- stream conn
+            readyNow (waitReadableSTM strm) `shouldReturn` False
+            sendStream strm "ping"
+            Timeout.timeout 2000000 (atomically $ waitReadableSTM strm)
+                `shouldReturn` Just ()
+            recvStream strm 3 `shouldReturn` "abc"
+            readyNow (waitReadableSTM strm) `shouldReturn` True
+            rest <- recvAll strm
+            rest `shouldBe` "def"
+            readyNow (waitReadableSTM strm) `shouldReturn` True
+        r `shouldBe` Just ()
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        sendStream strm "abcdef"
+        shutdownStream strm
+        threadDelay 3000000
+    recvAll strm = do
+        bs <- recvStream strm 1024
+        if BS.null bs then return "" else (bs <>) <$> recvAll strm
+
+-- | 'waitAcceptableSTM' returns when 'acceptStream' would not block.
+testWaitAcceptable :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testWaitAcceptable cc sc waitS =
+    withAsync server $ \_ -> do
+        waitS
+        r <- Timeout.timeout 5000000 $ C.run cc $ \conn -> do
+            readyNow (waitAcceptableSTM conn) `shouldReturn` False
+            strm <- stream conn
+            sendStream strm "ping"
+            Timeout.timeout 2000000 (atomically $ waitAcceptableSTM conn)
+                `shouldReturn` Just ()
+            s <- acceptStream conn
+            recvStream s 1024 `shouldReturn` "x"
+        r `shouldBe` Just ()
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        s <- stream conn
+        sendStream s "x"
+        threadDelay 3000000
 
 -- | A thread the application forked, waiting on the connection when the
 --   peer ends it with an error, is told so.  Only a peer closing with
