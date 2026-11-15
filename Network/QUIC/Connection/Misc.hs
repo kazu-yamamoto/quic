@@ -43,10 +43,11 @@ module Network.QUIC.Connection.Misc (
     watchAbortRequest,
     abortRequested,
     concurrentlyApp,
+    runProtocolThreads,
     appGracePeriod,
 ) where
 
-import Control.Concurrent.Async (wait, waitCatchSTM, withAsync)
+import Control.Concurrent.Async (pollSTM, wait, waitCatchSTM, withAsync)
 import Control.Concurrent.STM (
     TVar,
     atomically,
@@ -364,11 +365,14 @@ abortRequested _ ex = return ex
 
 -- | Waiting for 'requestEnd' and raising what it was asked with:
 --   one of a connection's protocol threads, so that it ends the connection
---   as any of them failing does.
+--   as any of them failing does.  Returning once it has ended otherwise.
 watchAbortRequest :: Connection -> IO ()
-watchAbortRequest Connection{..} = do
-    e <- atomically $ readTVar connAbortRequest >>= maybe retry return
-    E.throwIO e
+watchAbortRequest conn@Connection{..} = do
+    me <-
+        atomically $
+            (Just <$> (readTVar connAbortRequest >>= maybe retry return))
+                `orElse` (Nothing <$ connectionEndedSTM conn)
+    mapM_ E.throwIO me
 
 ----------------------------------------------------------------
 
@@ -393,7 +397,29 @@ concurrentlyApp protocol app =
             Right (Right y) -> (,y) <$> wait ap'
             Right (Left e) -> E.throwIO e
 
--- | How long the application has to finish by itself once the protocol
---   threads have failed (microseconds).
+-- | Running the protocol threads until each has returned.  When one
+--   fails, the connection has ended and the others see it and return by
+--   themselves; those still running after 'appGracePeriod' are cancelled
+--   as a last resort.  The first failure is rethrown.
+runProtocolThreads :: [IO ()] -> IO ()
+runProtocolThreads = go []
+  where
+    go as (act : acts) = withAsync act $ \a -> go (a : as) acts
+    go as [] = do
+        mfailed <- atomically $ do
+            rs <- mapM pollSTM as
+            case [e | Just (Left e) <- rs] of
+                e : _ -> return $ Just e
+                []
+                    | all isJust rs -> return Nothing
+                    | otherwise -> retry
+        forM_ mfailed $ \e -> do
+            expired <- registerDelay appGracePeriod
+            atomically $
+                mapM_ waitCatchSTM as `orElse` (readTVar expired >>= STM.check)
+            E.throwIO e
+
+-- | How long the application, and then each protocol thread, has to
+--   finish by itself once the protocol threads have failed (microseconds).
 appGracePeriod :: Int
 appGracePeriod = 1000000

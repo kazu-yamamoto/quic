@@ -3,6 +3,7 @@
 
 module Network.QUIC.Handshake where
 
+import Control.Concurrent.STM (atomically, orElse)
 import qualified Control.Exception as E
 import qualified Data.ByteString.Short as Short
 import Data.List (intersect)
@@ -46,8 +47,11 @@ rxLevelChanged = sendCompleted
 sendCryptoData :: Connection -> Output -> IO ()
 sendCryptoData = putOutput
 
+-- | Throwing why the connection ended, if it does first: the handshaker
+--   is the thread waiting here, and it ends with that.
 recvCryptoData :: Connection -> IO Crypto
-recvCryptoData = takeCrypto
+recvCryptoData conn =
+    atomically $ takeCryptoSTM conn `orElse` connectionEndSTM conn
 
 recvTLS
     :: Connection

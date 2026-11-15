@@ -42,17 +42,16 @@ import Network.QUIC.Types as QUIC
 receiver :: Connection -> IO ()
 receiver conn = handleLogT logAction body
   where
-    body = do
-        loopHandshake
-        loopEstablished
+    body = loopHandshake
+    -- 'Nothing' once another thread has ended the connection.
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
         -- Waited for beside the packet rather than thrown at the wait.
         mito <- getIdleTimeout conn
-        mx <- waitIdle mito
-        case mx of
-            Nothing -> do
+        got <- waitIdle mito
+        case got of
+            Expired -> do
                 st <- getConnectionState conn
                 let msg0
                         | isClient conn = "Client"
@@ -60,12 +59,14 @@ receiver conn = handleLogT logAction body
                     msg = msg0 ++ " " ++ show st
                 qlogDebug conn $ Debug "recv timeout"
                 E.throwIO $ ConnectionIsTimeout msg
-            Just x -> do
+            Got x -> do
                 atomically $ writeTVar (connAckElicitingSent conn) False
-                return x
+                return $ Just x
+            _ -> return Nothing
+    ended = Ended <$ connectionEndedSTM conn
     -- RFC 9000 Sec 10.1: the timer restarts on receiving a packet and on
     -- the first ack-eliciting packet sent after that.
-    waitIdle Nothing = Just <$> atomically (connRecv conn)
+    waitIdle Nothing = atomically $ ended `orElse` (Got <$> connRecv conn)
     waitIdle mito@(Just (Microseconds us)) = do
         sent0 <- readTVarIO $ connAckElicitingSent conn
         expired <- registerDelay us
@@ -74,51 +75,64 @@ receiver conn = handleLogT logAction body
                 | otherwise = readTVar (connAckElicitingSent conn) >>= STM.check
         r <-
             atomically $
-                (Right . Just <$> connRecv conn)
-                    `orElse` (Left () <$ restarted)
-                    `orElse` (Right Nothing <$ (readTVar expired >>= STM.check))
-        either (const $ waitIdle mito) return r
+                ended
+                    `orElse` (Got <$> connRecv conn)
+                    `orElse` (Restarted <$ restarted)
+                    `orElse` (Expired <$ (readTVar expired >>= STM.check))
+        case r of
+            Restarted -> waitIdle mito
+            _ -> return r
     loopHandshake = do
-        rpkt <- recvTimeout
-        processReceivedPacketHandshake conn rpkt
-        established <- isConnectionEstablished conn
-        unless established loopHandshake
-    loopEstablished = forever $ do
-        rpkt <- recvTimeout
-        let CryptPacket hdr _ = rpCryptPacket rpkt
-            cid = headerMyCID hdr
-        -- Before 'setMyCID' below, which makes it the one in use.
-        cidChanged <- (/= cid) <$> getMyCID conn
-        included <- myCIDsInclude conn cid
-        case included of
-            Just nseq -> do
-                -- RFC 9000 Sec 5.1.1: If an endpoint provided fewer
-                -- connection IDs than the peer's
-                -- active_connection_id_limit, it MAY supply a new
-                -- connection ID when it receives a packet with a
-                -- previously unused connection ID.
-                shouldUpdate <- shouldUpdateMyCID conn nseq
-                capOK <- checkPeerCIDCapacity conn
-                when (shouldUpdate && capOK) $ do
-                    setMyCID conn cid
-                    cidInfo <- getNewMyCID conn
-                    when (isServer conn) $ do
-                        register <- getRegister conn
-                        register (cidInfoCID cidInfo) conn
-                    sent <- readIORef (sentRetirePriorTo conn)
-                    writeIORef (sentRetirePriorTo conn) False
-                    unless sent $
-                        sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
-                processReceivedPacket' conn (Just cidChanged) rpkt
-                shouldUpdatePeer <-
-                    if shouldUpdate
-                        then shouldUpdatePeerCID conn
-                        else return False
-                when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
-            _ -> do
-                qlogDropped conn (hdr, "unknown_connection_id" :: String)
-                connDebugLog conn $ bhow cid <> " is unknown"
+        mrpkt <- recvTimeout
+        -- Not 'forM_', which would leave each loop a frame to return to.
+        case mrpkt of
+            Nothing -> return ()
+            Just rpkt -> do
+                processReceivedPacketHandshake conn rpkt
+                established <- isConnectionEstablished conn
+                if established then loopEstablished else loopHandshake
+    loopEstablished = do
+        mrpkt <- recvTimeout
+        case mrpkt of
+            Nothing -> return ()
+            Just rpkt -> do
+                let CryptPacket hdr _ = rpCryptPacket rpkt
+                    cid = headerMyCID hdr
+                -- Before 'setMyCID' below, which makes it the one in use.
+                cidChanged <- (/= cid) <$> getMyCID conn
+                included <- myCIDsInclude conn cid
+                case included of
+                    Just nseq -> do
+                        -- RFC 9000 Sec 5.1.1: If an endpoint provided fewer
+                        -- connection IDs than the peer's
+                        -- active_connection_id_limit, it MAY supply a new
+                        -- connection ID when it receives a packet with a
+                        -- previously unused connection ID.
+                        shouldUpdate <- shouldUpdateMyCID conn nseq
+                        capOK <- checkPeerCIDCapacity conn
+                        when (shouldUpdate && capOK) $ do
+                            setMyCID conn cid
+                            cidInfo <- getNewMyCID conn
+                            when (isServer conn) $ do
+                                register <- getRegister conn
+                                register (cidInfoCID cidInfo) conn
+                            sent <- readIORef (sentRetirePriorTo conn)
+                            writeIORef (sentRetirePriorTo conn) False
+                            unless sent $
+                                sendFrames conn RTT1Level [NewConnectionID cidInfo 0]
+                        processReceivedPacket' conn (Just cidChanged) rpkt
+                        shouldUpdatePeer <-
+                            if shouldUpdate
+                                then shouldUpdatePeerCID conn
+                                else return False
+                        when shouldUpdatePeer $ choosePeerCIDForPrivacy conn
+                    _ -> do
+                        qlogDropped conn (hdr, "unknown_connection_id" :: String)
+                        connDebugLog conn $ bhow cid <> " is unknown"
+                loopEstablished
     logAction msg = connDebugLog conn ("debug: receiver: " <> msg)
+
+data Got = Got ReceivedPacket | Restarted | Expired | Ended
 
 processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn rpkt = do

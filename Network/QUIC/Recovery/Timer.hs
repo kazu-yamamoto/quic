@@ -121,13 +121,23 @@ updateLossDetectionTimer ldcc@LDCC{..} tmi = do
             then atomically $ writeTVar timerInfoQ $ Next tmi
             else updateLossDetectionTimer' ldcc tmi
 
-ldccTimer :: LDCC -> IO ()
-ldccTimer ldcc@LDCC{..} = forever $ do
-    atomically $ do
-        x <- readTVar timerInfoQ
-        check (x /= Empty)
-    delay timerGranularity
-    updateWithNext ldcc
+-- | Returning once @stop@ does.
+ldccTimer :: STM () -> LDCC -> IO ()
+ldccTimer stop ldcc@LDCC{..} = loop
+  where
+    loop = do
+        next <-
+            atomically $
+                ( do
+                    x <- readTVar timerInfoQ
+                    check (x /= Empty)
+                    return True
+                )
+                    `orElse` (False <$ stop)
+        when next $ do
+            delay timerGranularity
+            updateWithNext ldcc
+            loop
 
 updateWithNext :: LDCC -> IO ()
 updateWithNext ldcc@LDCC{..} = do
