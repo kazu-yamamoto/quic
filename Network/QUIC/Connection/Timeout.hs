@@ -1,5 +1,6 @@
 module Network.QUIC.Connection.Timeout (
     timeout,
+    waitWithin,
     fire,
     fire',
     cfire,
@@ -7,6 +8,7 @@ module Network.QUIC.Connection.Timeout (
 ) where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Network.QUIC.Event
 import qualified System.Timeout as ST
@@ -18,6 +20,13 @@ import Network.QUIC.Types
 
 timeout :: Microseconds -> String -> IO a -> IO (Maybe a)
 timeout (Microseconds ms) _ action = ST.timeout ms action
+
+-- | Waiting for an STM action, giving up after the time given.  The
+--   deadline is waited for beside it rather than thrown at it.
+waitWithin :: Microseconds -> STM a -> IO (Maybe a)
+waitWithin (Microseconds us) act = do
+    expired <- registerDelay us
+    atomically $ (Just <$> act) `orElse` (Nothing <$ (readTVar expired >>= check))
 
 fire :: Connection -> Microseconds -> TimeoutCallback -> IO ()
 fire conn (Microseconds microseconds) action = do

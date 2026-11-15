@@ -179,8 +179,8 @@ checkCIDs conn dCID (Right (pseudo0, tag)) = do
     let ok = calculateIntegrityTag ver remoteCID pseudo0 == tag
     return (dCID == localCID && ok)
 
-recvClient :: RecvQ -> IO ReceivedPacket
-recvClient = readRecvQ
+recvClient :: RecvQ -> STM ReceivedPacket
+recvClient = readRecvQSTM
 
 ----------------------------------------------------------------
 
@@ -233,7 +233,7 @@ controlConnection' :: Connection -> ConnectionControl -> IO Bool
 -- Co -> Sn: RetireConnectionID(So)
 -- Cn <- Sn: NewConnectionID (receiver)
 controlConnection' conn ChangeServerCID = do
-    mn <- timeout (Microseconds 1000000) "controlConnection' 1" $ waitPeerCID conn -- fixme
+    mn <- waitPeerCIDWithin conn (Microseconds 1000000) -- fixme
     case mn of
         Nothing -> return False
         Just cidInfo -> do
@@ -277,7 +277,7 @@ controlConnection' conn NATRebinding = do
 -- Cn <- Sn: PathResponse (processFrame)
 controlConnection' conn ActiveMigration = do
     -- Changing peer CID
-    mn <- timeout (Microseconds 1000000) "controlConnection' 2" $ waitPeerCID conn -- fixme
+    mn <- waitPeerCIDWithin conn (Microseconds 1000000) -- fixme
     case mn of
         Nothing -> return False
         mcidinfo -> do

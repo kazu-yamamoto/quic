@@ -19,6 +19,7 @@ module Network.QUIC.Connection.Migration (
     addPeerCID,
     isPeerCIDConsistent,
     waitPeerCID,
+    waitPeerCIDWithin,
     choosePeerCIDForPrivacy,
     setPeerStatelessResetToken,
     isStatelessRestTokenValid,
@@ -40,7 +41,7 @@ import qualified Data.Map.Strict as Map
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
-import Network.QUIC.Connection.Timeout (timeout)
+import Network.QUIC.Connection.Timeout (waitWithin)
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
@@ -156,17 +157,27 @@ choosePeerCIDForPrivacy conn = do
 
 -- | Only for the internal "migration" API
 waitPeerCID :: Connection -> IO CIDInfo
-waitPeerCID conn@Connection{..} = do
-    r <- atomically $ do
-        let ref = peerCIDDB
-        db <- readTVar ref
-        mncid <- pickPeerCID conn
-        check $ isJust mncid
-        let u = usedCIDInfo db
-        setPeerCID conn (fromJust mncid) True
-        return u
+waitPeerCID conn = do
+    r <- atomically $ waitPeerCIDSTM conn
     qlogCIDUpdate conn $ Remote $ cidInfoCID r
     return r
+
+-- | 'waitPeerCID', giving up after the time given.
+waitPeerCIDWithin :: Connection -> Microseconds -> IO (Maybe CIDInfo)
+waitPeerCIDWithin conn tmo = do
+    mr <- waitWithin tmo $ waitPeerCIDSTM conn
+    forM_ mr $ \r -> qlogCIDUpdate conn $ Remote $ cidInfoCID r
+    return mr
+
+waitPeerCIDSTM :: Connection -> STM CIDInfo
+waitPeerCIDSTM conn@Connection{..} = do
+    let ref = peerCIDDB
+    db <- readTVar ref
+    mncid <- pickPeerCID conn
+    check $ isJust mncid
+    let u = usedCIDInfo db
+    setPeerCID conn (fromJust mncid) True
+    return u
 
 pickPeerCID :: Connection -> STM (Maybe CIDInfo)
 pickPeerCID Connection{..} = do
@@ -416,7 +427,7 @@ validateMigration :: Connection -> PathInfo -> Bool -> IO Bool
 validateMigration conn pathInfo cidChanged = do
     mold <-
         if cidChanged
-            then timeout (Microseconds 100000) "validateMigration" $ waitPeerCID conn
+            then waitPeerCIDWithin conn (Microseconds 100000)
             else return Nothing -- PathChallenge only, no RetireConnectionID
     oldPathInfo <- getPathInfo conn
     -- assumed that this PathInfo is not stored in PeerInfo

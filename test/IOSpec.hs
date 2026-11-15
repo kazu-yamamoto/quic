@@ -423,6 +423,9 @@ spec = do
                 testForkedWait cc sc waitS $ \conn -> do
                     strm <- stream conn
                     forever $ sendStream strm $ BS.replicate 65536 0
+    describe "the idle timeout" $ do
+        it "ends a connection with nothing to say" $ do
+            withPipe (DropClientPacket []) $ testIdleTimeout cc sc waitS
     describe "waiting in STM" $ do
         it "waits for data, and then for what a read leaves" $ do
             withPipe (DropClientPacket []) $ testWaitReadable cc sc waitS
@@ -1761,6 +1764,25 @@ testAppCancelled cc sc waitS =
         strm <- acceptStream conn
         _ <- recvStream strm 1024
         abortConnection conn (ApplicationProtocolError 1) "bye"
+
+-- | A connection nobody uses times out on the receiver's deadline, which
+--   is waited for beside the packets rather than thrown at the wait.
+testIdleTimeout :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testIdleTimeout cc0 sc waitS =
+    withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
+        waitS
+        r <- Timeout.timeout 5000000 $ E.try $ C.run cc $ \conn -> do
+            waitEstablished conn
+            threadDelay 10000000
+        case r of
+            Just (Left (ConnectionIsTimeout _)) -> return ()
+            _ -> expectationFailure $ show r
+  where
+    cc =
+        cc0
+            { ccParameters =
+                (ccParameters cc0){maxIdleTimeout = Milliseconds 500}
+            }
 
 -- | Whether a wait in STM would return now.
 readyNow :: STM () -> IO Bool

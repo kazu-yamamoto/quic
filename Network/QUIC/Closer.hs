@@ -106,9 +106,12 @@ closure'' conn ldcc frame = do
         let (recvWithin, clos) = case mrecvbuf of
                 Nothing ->
                     -- The server reads its datagrams from a queue, not from
-                    -- a socket, and a timeout does reach a thread waiting
-                    -- on one.
-                    ( \tmo -> isJust <$> timeout tmo "closer" (void $ connRecv conn)
+                    -- a socket: the deadline is waited for beside it.
+                    ( \(Microseconds us) -> do
+                        expired <- registerDelay us
+                        atomically $
+                            (True <$ connRecv conn)
+                                `orElse` (False <$ (readTVar expired >>= check))
                     , return ()
                     )
                 Just recvbuf ->

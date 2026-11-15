@@ -232,7 +232,7 @@ newOpenedStreams conc = OpenedStreams (currentStream conc) IntSet.empty
 ----------------------------------------------------------------
 
 type Send = Buffer -> Int -> IO ()
-type Recv = IO ReceivedPacket
+type Recv = STM ReceivedPacket
 
 -- For migration, two SockAddr for the peer are contained.
 data PeerInfo = PeerInfo

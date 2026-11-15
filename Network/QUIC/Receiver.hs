@@ -8,7 +8,15 @@ module Network.QUIC.Receiver (
     processReceivedPacketHandshake,
 ) where
 
+import Control.Concurrent.STM (
+    atomically,
+    orElse,
+    readTVar,
+    registerDelay,
+    retry,
+ )
 import qualified Control.Exception as E
+import qualified Control.Monad.STM as STM
 import qualified Data.ByteString as BS
 import Network.Socket (SockAddr, Socket)
 import Network.TLS (AlertDescription (..))
@@ -38,10 +46,12 @@ receiver conn = handleLogT logAction body
     recvTimeout = do
         -- The spec says that CC is not sent when timeout.
         -- But we intentionally sends CC when timeout.
+        -- Waited for beside the packet rather than thrown at the wait.
         mito <- getIdleTimeout conn
-        mx <- case mito of
-            Nothing -> Just <$> connRecv conn
-            Just ito -> timeout ito "recvTimeout" $ connRecv conn
+        expired <- case mito of
+            Nothing -> return retry
+            Just (Microseconds us) -> (readTVar >=> STM.check) <$> registerDelay us
+        mx <- atomically $ (Just <$> connRecv conn) `orElse` (Nothing <$ expired)
         case mx of
             Nothing -> do
                 st <- getConnectionState conn
@@ -98,10 +108,7 @@ processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
-        msg =
-            "processReceivedPacketHandshake "
-                ++ if isServer conn then "Server" else "Client"
-    mx <- timeout (Microseconds 10000) msg $ waitEncryptionLevel conn lvl
+    mx <- waitWithin (Microseconds 10000) $ waitEncryptionLevelSTM conn lvl
     case mx of
         Nothing -> do
             putOffCrypto conn lvl rpkt
