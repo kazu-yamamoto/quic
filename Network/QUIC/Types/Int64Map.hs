@@ -8,6 +8,7 @@ module Network.QUIC.Types.Int64Map (
     empty,
     singleton,
     insert,
+    insertWith,
     delete,
     lookup,
     member,
@@ -19,6 +20,7 @@ module Network.QUIC.Types.Int64Map (
     lookupMin,
     foldrWithKey,
     partitionWithKey,
+    split,
 ) where
 
 #include "MachDeps.h"
@@ -59,6 +61,9 @@ singleton k v = Int64Map $ M.singleton (key k) v
 insert :: Int64 -> a -> Int64Map a -> Int64Map a
 insert k v (Int64Map m) = Int64Map $ M.insert (key k) v m
 
+insertWith :: (a -> a -> a) -> Int64 -> a -> Int64Map a -> Int64Map a
+insertWith f k v (Int64Map m) = Int64Map $ M.insertWith f (key k) v m
+
 delete :: Int64 -> Int64Map a -> Int64Map a
 delete k (Int64Map m) = Int64Map $ M.delete (key k) m
 
@@ -93,3 +98,6 @@ partitionWithKey
     :: (Int64 -> a -> Bool) -> Int64Map a -> (Int64Map a, Int64Map a)
 partitionWithKey p (Int64Map m) =
     let (l, r) = M.partitionWithKey (p . unkey) m in (Int64Map l, Int64Map r)
+
+split :: Int64 -> Int64Map a -> (Int64Map a, Int64Map a)
+split k (Int64Map m) = let (l, r) = M.split (key k) m in (Int64Map l, Int64Map r)
