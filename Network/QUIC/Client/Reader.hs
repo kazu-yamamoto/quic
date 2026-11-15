@@ -34,7 +34,7 @@ import Network.QUIC.Socket
 import Network.QUIC.Types
 
 -- What ended a wait in 'readerClient'.
-data ReaderEnd = Retired | TimedOut
+data ReaderEnd = Retired | Ended
 
 -- | The reader of a client's socket.  It returns when the socket is
 --   retired, which is how 'rebind' ends the reader of the socket it
@@ -80,24 +80,20 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
             yield
             wait
     loop recv = do
-        mito <- getIdleTimeout conn
-        expired <- case mito of
-            Nothing -> newTVarIO False
-            Just (Microseconds ito) -> registerDelay ito
         ebs <-
             recv $
                 ((readTVar retired >>= STM.check) $> Retired)
-                    `orElse` ((readTVar expired >>= STM.check) $> TimedOut)
+                    `orElse` (connectionEndedSTM conn $> Ended)
         case ebs of
             -- 'leave' has it.
             Left Retired -> return ()
-            -- What ends the connection on an idle timeout is the
-            -- receiver throwing 'ConnectionIsTimeout'; this thread only
-            -- stops reading.  The socket is still the connection's, and
-            -- 'leave' leaves it to the closer.  On the retired list, the
-            -- sender closed it before the receiver had timed out and sent
-            -- on it closed, so the connection ended with EBADF instead.
-            Left TimedOut -> return ()
+            -- The connection has ended, on an idle timeout or otherwise;
+            -- the closer reads for itself.  The socket is still the
+            -- connection's, and 'leave' leaves it to the closer.  On the
+            -- retired list, the sender closed it before the receiver had
+            -- timed out and sent on it closed, so the connection ended
+            -- with EBADF instead.
+            Left Ended -> return ()
             Right bs -> do
                 now <- getTimeMicrosecond
                 let quicBit = greaseQuicBit $ getMyParameters conn

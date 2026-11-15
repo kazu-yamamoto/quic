@@ -136,6 +136,7 @@ sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
                         let sentPacket = sentPacket0{spTimeSent = now}
                         qlogSent conn sentPacket now
                         onPacketSent ldcc sentPacket
+                    when (any spAckEliciting sentPackets) $ ackElicitingSent conn
                     -- RFC 9001 Sec 6.6: "Endpoints MUST count the number of
                     -- encrypted packets for each set of keys.  If the total
                     -- number of encrypted packets with the same key exceeds
