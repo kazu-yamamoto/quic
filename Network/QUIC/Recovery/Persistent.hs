@@ -32,8 +32,11 @@ calcPTO RTT{..} mlvl = smoothedRTT + max (rttvar !<<. 2) kGranularity + dly
   where
     dly = getMaxAckDelay mlvl maxAckDelay1RTT
 
+-- | Doubled for each PTO in a row, saturating rather than overflowing.
 backOff :: Microseconds -> Int -> Microseconds
-backOff n cnt = n * (2 ^ cnt)
+backOff (Microseconds n) cnt
+    | cnt >= 62 || n > maxBound `shiftR` cnt = Microseconds maxBound
+    | otherwise = Microseconds $ n `shiftL` cnt
 
 -- Sec 7.8. Persistent Congestion
 inPersistentCongestion :: LDCC -> Seq SentPacket -> IO Bool

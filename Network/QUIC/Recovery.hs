@@ -25,6 +25,7 @@ module Network.QUIC.Recovery (
     fromPeerPacketNumbers,
     nullPeerPacketNumbers,
     -- Persistent
+    backOff,
     findDuration,
     getPTO,
     getPtoTimeAndSpace,

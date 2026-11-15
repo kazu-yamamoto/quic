@@ -236,7 +236,7 @@ initialLossDetection =
 
 ----------------------------------------------------------------
 
-newtype MetricsDiff = MetricsDiff [(String, Int)]
+newtype MetricsDiff = MetricsDiff [(String, Int64)]
 
 ----------------------------------------------------------------
 

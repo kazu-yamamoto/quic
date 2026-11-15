@@ -14,6 +14,7 @@ module Network.QUIC.Types.Time (
     getPastTimeMicrosecond,
     getFutureTimeMicrosecond,
     addMicroseconds,
+    toDelay,
 ) where
 
 import Data.UnixTime
@@ -24,7 +25,7 @@ import Network.QUIC.Imports
 ----------------------------------------------------------------
 
 newtype Milliseconds = Milliseconds Int64 deriving (Eq, Ord, Num, Bits)
-newtype Microseconds = Microseconds Int deriving (Eq, Ord, Num, Bits)
+newtype Microseconds = Microseconds Int64 deriving (Eq, Ord, Num, Bits)
 
 instance Show Milliseconds where
     show (Milliseconds n) = show n
@@ -34,10 +35,10 @@ instance Show Microseconds where
 
 {-# INLINE milliToMicro #-}
 milliToMicro :: Milliseconds -> Microseconds
-milliToMicro (Milliseconds n) = Microseconds (fromIntegral n * 1000)
+milliToMicro (Milliseconds n) = Microseconds (min n (maxBound `div` 1000) * 1000)
 
 microToMilli :: Microseconds -> Milliseconds
-microToMilli (Microseconds n) = Milliseconds (fromIntegral n `div` 1000)
+microToMilli (Microseconds n) = Milliseconds (n `div` 1000)
 
 ----------------------------------------------------------------
 
@@ -62,7 +63,7 @@ elapsedTimeMicrosecond :: UnixTime -> UnixTime -> Microseconds
 elapsedTimeMicrosecond c base = Microseconds elapsed
   where
     UnixDiffTime (CTime s) u = c `diffUnixTime` base
-    elapsed = fromIntegral (s * 1000000 + fromIntegral u)
+    elapsed = fromIntegral s * 1000000 + fromIntegral u
 
 getTimeoutInMicrosecond :: TimeMicrosecond -> IO Microseconds
 getTimeoutInMicrosecond tmout = do
@@ -89,3 +90,8 @@ getFutureTimeMicrosecond (Microseconds us) = do
 
 addMicroseconds :: TimeMicrosecond -> Microseconds -> TimeMicrosecond
 addMicroseconds t (Microseconds n) = t `addUnixDiffTime` microSecondsToUnixDiffTime n
+
+-- | For 'threadDelay' and 'registerDelay', which take an 'Int': past
+--   what it holds, as long as it can.
+toDelay :: Microseconds -> Int
+toDelay (Microseconds n) = fromIntegral $ max 0 $ min n $ fromIntegral (maxBound :: Int)

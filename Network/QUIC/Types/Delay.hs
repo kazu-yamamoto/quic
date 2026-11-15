@@ -15,7 +15,7 @@ import Network.QUIC.Types.Time
 
 -- | The ACK Delay field as sent, in units of 2 ^ ack_delay_exponent
 --   microseconds of the ACK's sender (RFC 9000 Sec 19.3).
-newtype Delay = Delay Int deriving (Eq, Show)
+newtype Delay = Delay Int64 deriving (Eq, Show)
 
 -- | An ACK Delay of zero, whatever the exponent.
 noDelay :: Delay

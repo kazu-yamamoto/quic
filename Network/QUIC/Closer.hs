@@ -108,7 +108,7 @@ closure'' conn ldcc frame = do
                     -- The server reads its datagrams from a queue, not from
                     -- a socket: the deadline is waited for beside it.
                     ( \(Microseconds us) -> do
-                        expired <- registerDelay us
+                        expired <- registerDelay $ toDelay (Microseconds us)
                         atomically $
                             (True <$ connRecv conn)
                                 `orElse` (False <$ (readTVar expired >>= check))
@@ -121,7 +121,7 @@ closure'' conn ldcc frame = do
                     -- Nothing is abandoned, so nothing has to be closed to
                     -- end it either.
                     let recv' (Microseconds us) = do
-                            expired <- registerDelay us
+                            expired <- registerDelay $ toDelay (Microseconds us)
                             let giveUp = check =<< readTVar expired
                                 again = recv' (Microseconds us)
                             if connected

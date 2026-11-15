@@ -159,7 +159,8 @@ updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
   where
     update us = do
         mgr <- getSystemTimerManager
-        key <- registerTimeout mgr us (onLossDetectionTimeout ldcc)
+        key <-
+            registerTimeout mgr (toDelay (Microseconds us)) (onLossDetectionTimeout ldcc)
         mk <- atomicModifyIORef' timerKey (Just key,)
         case mk of
             Nothing -> return ()

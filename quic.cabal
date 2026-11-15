@@ -34,6 +34,8 @@ library
         Network.QUIC.Client
         Network.QUIC.Internal
         Network.QUIC.Server
+        Network.QUIC.Types.Int64Map
+        Network.QUIC.Types.Int64Set
 
     c-sources:          cbits/sysevent.c
     other-modules:
@@ -114,8 +116,6 @@ library
         Network.QUIC.Types.Exception
         Network.QUIC.Types.Frame
         Network.QUIC.Types.Info
-        Network.QUIC.Types.Int64Map
-        Network.QUIC.Types.Int64Set
         Network.QUIC.Types.Integer
         Network.QUIC.Types.Packet
         Network.QUIC.Types.Queue

@@ -127,4 +127,4 @@ inCongestionRecovery sentTime (Just crst) = sentTime <= crst
 ----------------------------------------------------------------
 
 delay :: Microseconds -> IO ()
-delay (Microseconds microseconds) = threadDelay microseconds
+delay us = threadDelay $ toDelay us

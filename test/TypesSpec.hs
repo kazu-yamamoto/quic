@@ -37,6 +37,17 @@ number rpkt =
 
 spec :: Spec
 spec = do
+    -- Microseconds is 64 bits, but what holds them can still be pushed past
+    -- it, and the timers take an Int.
+    describe "Microseconds" $ do
+        it "saturate when backed off too far" $ do
+            backOff (Microseconds 1000000) 70 `shouldBe` Microseconds maxBound
+            backOff (Microseconds 1000000) 3 `shouldBe` Microseconds 8000000
+        it "saturate from milliseconds too large" $
+            milliToMicro (Milliseconds maxBound) `shouldSatisfy` (> Microseconds 0)
+        it "are given to timers within an Int" $ do
+            toDelay (Microseconds maxBound) `shouldBe` maxBound
+            toDelay (Microseconds (-1)) `shouldBe` 0
     -- A server queues a packet having read the connection ID, which is in
     -- the clear, and finds out whether the packet is worth anything later,
     -- when the receiver decrypts it.  So the queue has to hold a bound, or
