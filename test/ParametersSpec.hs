@@ -44,6 +44,14 @@ spec = do
         it "accepts two different parameters" $
             decodeParameters (BS.pack [0x04, 0x01, 0x20, 0x05, 0x01, 0x21])
                 `shouldSatisfy` isJust'
+        -- A key is a variable-length integer: 2^32+4 is not initial_max_data,
+        -- which is 4, cut to 32 bits.
+        it "keeps a key past 32 bits apart from the one it would be cut to" $ do
+            let key = [0xc0, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04]
+            fmap initialMaxData (decodeParameters (BS.pack (key ++ [0x01, 0x21])))
+                `shouldBe` fmap initialMaxData (decodeParameters "")
+            decodeParameters (BS.pack (key ++ [0x01, 0x21, 0x04, 0x01, 0x20]))
+                `shouldSatisfy` isJust'
 
 -- Parameters has no Eq, so keep only whether one came back.
 isNothing' :: Maybe Parameters -> Bool

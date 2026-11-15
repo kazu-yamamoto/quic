@@ -16,8 +16,8 @@ module Network.QUIC.Parameters (
 
 import qualified Control.Exception as E
 import qualified Data.ByteString as BS
-import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.ByteString.Short as Short
 import Network.Control
 import System.IO.Unsafe (unsafeDupablePerformIO)
@@ -31,7 +31,9 @@ encodeParameters = encodeParameterList . toParameterList
 decodeParameters :: ByteString -> Maybe Parameters
 decodeParameters bs = decodeParameterList bs >>= fromParameterList
 
-newtype Key = Key Word32 deriving (Eq, Show)
+-- | A variable-length integer, as on the wire: one past 32 bits is not
+--   another parameter with the low bits of its own.
+newtype Key = Key Int64 deriving (Eq, Ord, Show)
 type Value = ByteString
 
 type ParameterList = [(Key, Value)]
@@ -193,18 +195,16 @@ toVersionInfo bs
 -- on the key as it arrived, before anything decides whether it means
 -- something here.
 fromParameterList :: ParameterList -> Maybe Parameters
-fromParameterList kvs0 = go IntSet.empty params kvs0
+fromParameterList kvs0 = go Set.empty params kvs0
   where
     params = baseParameters
-    go :: IntSet -> Parameters -> ParameterList -> Maybe Parameters
+    go :: Set Key -> Parameters -> ParameterList -> Maybe Parameters
     go _ x [] = Just x
-    go seen x (kv@(Key k, _) : kvs)
-        | key `IntSet.member` seen = Nothing
+    go seen x (kv@(key, _) : kvs)
+        | key `Set.member` seen = Nothing
         | otherwise = do
             x' <- update x kv
-            go (IntSet.insert key seen) x' kvs
-      where
-        key = fromIntegral k
+            go (Set.insert key seen) x' kvs
     update x (OriginalDestinationConnectionId, v) =
         Just x{originalDestinationConnectionId = Just (toCID v)}
     update x (MaxIdleTimeout, v) =
@@ -312,7 +312,7 @@ encodeParameterList kvs = unsafeDupablePerformIO $
         mapM_ (put wbuf) kvs
   where
     put wbuf (Key k, v) = do
-        encodeInt' wbuf $ fromIntegral k
+        encodeInt' wbuf k
         encodeInt' wbuf $ fromIntegral $ BS.length v
         copyByteString wbuf v
 
@@ -331,7 +331,7 @@ decodeParameterList bs =
         if rest1 == 0
             then return $ Just (build [])
             else do
-                key <- fromIntegral <$> decodeInt' rbuf
+                key <- decodeInt' rbuf
                 len <- fromIntegral <$> decodeInt' rbuf
                 val <- extractByteString rbuf len
                 go rbuf (build . ((Key key, val) :))
