@@ -254,15 +254,13 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                     mainDone conn
                 ldcc = connLDCC conn
             -- Each says why it ended, as the sender and the receiver
-            -- already did.  'concurrently_' cancels the others as soon as one
-            -- of them fails, so the one that did not end in AsyncCancelled is
-            -- the one that ended the connection -- and it was these four that
-            -- said nothing, leaving a log of two cancelled threads and no
-            -- reason anywhere.
+            -- already did.  The one that failed is the one that ended the
+            -- connection, and the others return when they see it ended -- it
+            -- was these four that said nothing, leaving no reason anywhere.
             --
-            -- Being cancelled is not worth a line: the sender and the
-            -- receiver already say when the connection is taken down from
-            -- outside, and everything else follows them.
+            -- Being cancelled, the last resort, is not worth a line: the
+            -- sender and the receiver already say when the connection is
+            -- taken down from outside, and everything else follows them.
             let named nm act =
                     act `E.catch` \e -> do
                         case E.fromException e of
@@ -273,24 +271,21 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 s1 = labelMe "handshaker" >> rec (named "handshaker" handshaker)
                 s2 = labelMe "sender" >> rec (sender conn)
                 s3 = labelMe "receiver" >> rec (receiver conn)
-                s4 = labelMe "resender" >> rec (named "resender" (resender ldcc))
-                s5 = labelMe "ldccTimer" >> rec (named "ldccTimer" (ldccTimer ldcc))
+                s4 = labelMe "resender" >> rec (named "resender" (resender ended ldcc))
+                s5 = labelMe "ldccTimer" >> rec (named "ldccTimer" (ldccTimer ended ldcc))
                 s6 = labelMe "QUIC server" >> named "server" server
-                c1 = labelMe "concurrently1" >> concurrently_ s1 s2
-                c2 = labelMe "concurrently2" >> concurrently_ c1 s3
-                c3 = labelMe "concurrently3" >> concurrently_ c2 s4
-                c4 = labelMe "concurrently4" >> concurrently_ c3 s5
-                c4' = labelMe "concurrently4'" >> concurrently_ c4 s7
                 s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn)
+                ended = connectionEndedSTM conn
+                protocol = runProtocolThreads [s1, s2, s3, s4, s5, s7]
                 -- Telling the peer here, and not below, because here is the
-                -- one place where it can be done at all: the nested
-                -- 'concurrently_'s above have waited for every protocol
+                -- one place where it can be done at all:
+                -- 'runProtocolThreads' has waited for every protocol
                 -- thread, so the encode buffer is ours alone -- it is shared
                 -- with the sender -- and the application is still running, so
                 -- nothing has begun waiting for it yet.
                 --
                 -- Below, after 'runThreads', is too late.  The
-                -- 'concurrently_' on this line cancels the application when
+                -- 'concurrentlyApp' on this line cancels the application when
                 -- the protocol threads fail and then waits for it, under
                 -- 'uninterruptibleMask_', for as long as it takes to unwind.
                 -- The CONNECTION_CLOSE waited with it, and a peer told
@@ -310,7 +305,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                     labelMe "concurrently5"
                         >> void
                             ( concurrentlyApp
-                                (tellThenRaise (c4' `E.catch` exitedNormally))
+                                (tellThenRaise (protocol `E.catch` exitedNormally))
                                 s6
                             )
                 runThreads = c5

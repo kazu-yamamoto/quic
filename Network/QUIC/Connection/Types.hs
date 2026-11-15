@@ -659,7 +659,8 @@ isPeerClosed conn = isJust <$> readTVarIO (sharedCloseReceived $ shared conn)
 --   connection being taken down after it ended.
 setConnectionEnd :: Connection -> E.SomeException -> IO ()
 setConnectionEnd conn se
-    | isAsyncException se = return ()
+    -- 'Abort' is asynchronous only in its type: the abort watcher throws it.
+    | isAsyncException se && isNothing (E.fromException se :: Maybe Abort) = return ()
     | otherwise = atomically $ modifyTVar' (connEnd conn) (<|> Just (endReason se))
 
 -- | What a wait on the connection is told: what the application knows.

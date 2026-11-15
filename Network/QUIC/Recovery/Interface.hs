@@ -50,16 +50,28 @@ speedup ldcc@LDCC{..} lvl desc = do
         unless (any spAckEliciting packets) $ sendPing ldcc lvl
         setLossDetectionTimer ldcc
 
-resender :: LDCC -> IO ()
-resender ldcc@LDCC{..} = forever $ do
-    atomically $ do
-        lostPackets <- readTVar lostCandidates
-        check (lostPackets /= emptySentPackets)
-    delay $ Microseconds 10000 -- fixme
-    packets <- atomically $ do
-        SentPackets pkts <- readTVar lostCandidates
-        writeTVar lostCandidates emptySentPackets
-        return pkts
-    when (packets /= Seq.empty) $ do
-        onPacketsLost ldcc packets
-        retransmit ldcc packets
+-- | Returning once @stop@ does.
+resender :: STM () -> LDCC -> IO ()
+resender stop ldcc@LDCC{..} = loop
+  where
+    loop = do
+        lost <-
+            atomically $
+                ( do
+                    lostPackets <- readTVar lostCandidates
+                    check (lostPackets /= emptySentPackets)
+                    return True
+                )
+                    `orElse` (False <$ stop)
+        when lost $ do
+            resend
+            loop
+    resend = do
+        delay $ Microseconds 10000 -- fixme
+        packets <- atomically $ do
+            SentPackets pkts <- readTVar lostCandidates
+            writeTVar lostCandidates emptySentPackets
+            return pkts
+        when (packets /= Seq.empty) $ do
+            onPacketsLost ldcc packets
+            retransmit ldcc packets

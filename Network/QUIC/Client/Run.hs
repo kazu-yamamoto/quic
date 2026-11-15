@@ -7,7 +7,6 @@ module Network.QUIC.Client.Run (
     migrate,
 ) where
 
-import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Network.Socket as NS
@@ -104,18 +103,15 @@ runClient conf client0 isICVN verInfo = do
             s1 = labelMe "handshaker" >> rec handshaker
             s2 = labelMe "sender" >> rec (sender conn)
             s3 = labelMe "receiver" >> rec (receiver conn)
-            s4 = labelMe "resender" >> rec (resender ldcc)
-            s5 = labelMe "ldccTimer" >> rec (ldccTimer ldcc)
+            s4 = labelMe "resender" >> rec (resender ended ldcc)
+            s5 = labelMe "ldccTimer" >> rec (ldccTimer ended ldcc)
             s6 = labelMe "QUIC client" >> client
-            c1 = labelMe "concurrently1" >> concurrently_ s1 s2
-            c2 = labelMe "concurrently2" >> concurrently_ c1 s3
-            c3 = labelMe "concurrently3" >> concurrently_ c2 s4
-            c4 = labelMe "concurrently4" >> concurrently_ c3 s5
-            c4' = labelMe "concurrently4'" >> concurrently_ c4 s7
             s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn)
+            ended = connectionEndedSTM conn
+            protocol = runProtocolThreads [s1, s2, s3, s4, s5, s7]
             c5 =
                 labelMe "concurrently5"
-                    >> concurrentlyApp (c4' `E.catches` handlers) s6
+                    >> concurrentlyApp (protocol `E.catches` handlers) s6
             -- A peer closing with NO_ERROR leaves the application to finish:
             -- what waits on the peer gives up with 'ConnectionIsClosed'.
             handlers =

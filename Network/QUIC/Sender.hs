@@ -358,24 +358,33 @@ sender :: Connection -> IO ()
 sender conn = handleLogT logAction loop
   where
     loop = do
-        exit <- atomically $ do
-            done <- readTVar $ connDone conn
-            a <- isEmptyPingSTM (connLDCC conn)
-            b <- isEmptyOutputSTM conn
-            c <- isEmptyStreamSTM conn
-            if done
-                then return (a && b && c)
-                else if (not a || not b || not c) then return False else retry
-        if exit
-            then
-                E.throwIO ExitConnection
-            else do
+        next <-
+            -- Another thread has ended it: 'sendFinal' sends the rest, and
+            -- an application that saw the end and returned is not a normal
+            -- end, which is what 'ExitConnection' would say.
+            atomically $
+                (Ended <$ connectionEndedSTM conn)
+                    `orElse` ( do
+                                done <- readTVar $ connDone conn
+                                a <- isEmptyPingSTM (connLDCC conn)
+                                b <- isEmptyOutputSTM conn
+                                c <- isEmptyStreamSTM conn
+                                if done
+                                    then return $ if a && b && c then Exit else Send
+                                    else if (not a || not b || not c) then return Send else retry
+                             )
+        case next of
+            Exit -> E.throwIO ExitConnection
+            Ended -> return ()
+            Send -> do
                 -- Between two sends, so this thread is not inside a call
                 -- on any of them.
                 closeRetiredSockets conn
                 sendP conn
                 loop
     logAction msg = connDebugLog conn ("debug: sender: " <> msg)
+
+data Next = Send | Exit | Ended
 
 sendP :: Connection -> IO ()
 sendP conn = atomically (takeSwitch conn) >>= sendSwitch conn

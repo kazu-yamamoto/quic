@@ -7,7 +7,16 @@ module IOSpec where
 
 import Control.Concurrent
 import Control.Concurrent.Async
-import Control.Concurrent.STM (STM, atomically, orElse, readTVarIO)
+import Control.Concurrent.STM (
+    STM,
+    atomically,
+    check,
+    newTVarIO,
+    orElse,
+    readTVar,
+    readTVarIO,
+    writeTVar,
+ )
 import qualified Control.Exception as E
 import Control.Monad
 import Data.Bits (shiftR)
@@ -423,6 +432,33 @@ spec = do
                 testForkedWait cc sc waitS $ \conn -> do
                     strm <- stream conn
                     forever $ sendStream strm $ BS.replicate 65536 0
+    describe "abortConnection" $ do
+        it "wakes a thread waiting in acceptStream at once" $ do
+            withPipe (DropClientPacket []) $ testAbortWakes cc sc waitS
+    describe "the protocol threads" $ do
+        it "return by themselves when one fails" $ do
+            ended <- newTVarIO False
+            let failing = do
+                    atomically $ writeTVar ended True
+                    E.throwIO $ userError "failed"
+                waiting = atomically $ readTVar ended >>= check
+            r <-
+                Timeout.timeout 500000 $
+                    E.try @E.IOException $
+                        runProtocolThreads [waiting, failing, waiting]
+            case r of
+                Just (Left _) -> return ()
+                _ -> expectationFailure $ show r
+        it "cancel one that does not return" $ do
+            cancelled <- newEmptyMVar
+            let stuck =
+                    forever (threadDelay 1000000)
+                        `E.catch` \(e :: E.SomeAsyncException) ->
+                            putMVar cancelled () >> E.throwIO e
+                failing = E.throwIO $ userError "failed"
+            r <- E.try @E.IOException $ runProtocolThreads [stuck, failing]
+            either (const True) (const False) r `shouldBe` True
+            tryTakeMVar cancelled `shouldReturn` Just ()
     describe "the idle timeout" $ do
         it "ends a connection with nothing to say" $ do
             withPipe (DropClientPacket []) $ testIdleTimeout cc sc waitS
@@ -1819,6 +1855,24 @@ testIdleRestart cc0 sc waitS silence =
             { ccParameters =
                 (ccParameters cc0){maxIdleTimeout = Milliseconds 2000}
             }
+
+-- | 'abortConnection' ends the connection for a thread waiting on it,
+--   well within the grace period after which it would be cancelled.
+testAbortWakes :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testAbortWakes cc sc waitS =
+    withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
+        waitS
+        res <- newEmptyMVar
+        _ <- E.try @QUICException $ C.run cc $ \conn -> do
+            waitEstablished conn
+            _ <- forkIO $ E.try (acceptStream conn) >>= putMVar res
+            threadDelay 10000
+            abortConnection conn (ApplicationProtocolError 1) "bye"
+            threadDelay 10000000
+        w <- Timeout.timeout 500000 $ takeMVar res
+        case w of
+            Just (Left (ApplicationProtocolErrorIsSent _ _)) -> return ()
+            _ -> expectationFailure $ show w
 
 -- | Whether a wait in STM would return now.
 readyNow :: STM () -> IO Bool
