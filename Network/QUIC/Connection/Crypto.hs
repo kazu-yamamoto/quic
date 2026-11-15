@@ -4,6 +4,7 @@
 module Network.QUIC.Connection.Crypto (
     setEncryptionLevel,
     waitEncryptionLevel,
+    waitEncryptionLevelSTM,
     putOffCrypto,
     --
     getCipher,
@@ -58,7 +59,10 @@ putOffCrypto Connection{..} lvl rpkt =
     atomically $ modifyTVar' (pendingQ ! lvl) (rpkt :)
 
 waitEncryptionLevel :: Connection -> EncryptionLevel -> IO ()
-waitEncryptionLevel Connection{..} lvl = atomically $ do
+waitEncryptionLevel conn = atomically . waitEncryptionLevelSTM conn
+
+waitEncryptionLevelSTM :: Connection -> EncryptionLevel -> STM ()
+waitEncryptionLevelSTM Connection{..} lvl = do
     l <- readTVar $ encryptionLevel connState
     check (l >= lvl)
 

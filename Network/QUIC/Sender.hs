@@ -72,17 +72,25 @@ sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
     -- ack-eliciting and so is not a probe; twenty seconds later the idle
     -- timeout ends it.
     ackOnly = all (not . spAckEliciting) spkts0
+    waitWindow maxSiz = case mdst of
+        _ | ackOnly -> return Nothing
+        -- For another path: the PTO probe is for the path in use, so
+        -- it is left for that and only the window is waited for.
+        Just _ -> Nothing <$ checkWindowOpenSTM ldcc maxSiz
+        Nothing ->
+            (Just <$> takePingSTM ldcc)
+                `orElse` (Nothing <$ checkWindowOpenSTM ldcc maxSiz)
     go maxSiz = do
-        mx <- case mdst of
-            _ | ackOnly -> return Nothing
-            -- For another path: the PTO probe is for the path in use, so
-            -- it is left for that and only the window is waited for.
-            Just _ -> Nothing <$ atomically (checkWindowOpenSTM ldcc maxSiz)
-            Nothing ->
-                atomically
-                    ( (Just <$> takePingSTM ldcc)
-                        `orElse` (Nothing <$ checkWindowOpenSTM ldcc maxSiz)
-                    )
+        -- Once the connection has ended, nothing acknowledges the bytes in
+        -- flight and the window stays shut: what does not fit is dropped.
+        emx <-
+            atomically $
+                (Right <$> waitWindow maxSiz)
+                    `orElse` (Left () <$ connectionEndedSTM conn)
+        case emx of
+            Left () -> return ()
+            Right mx -> send1 maxSiz mx
+    send1 maxSiz mx =
         case mx of
             -- A PTO probe is the one packet allowed past a full congestion
             -- window.  Normally sendPingPacket is the right way to spend it:
@@ -113,11 +121,13 @@ sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
                 (sentPackets, leftsiz) <- buildPackets buf0 bufsiz0 maxSiz spkts0 id
                 let bytes = bufsiz0 - leftsiz
                 pathInfo <- maybe (getPathInfo conn) return mdst
-                when (isServer conn) $
-                    waitAntiAmplificationFree conn pathInfo bytes
+                free <-
+                    if isServer conn
+                        then waitAntiAmplificationFree conn pathInfo bytes
+                        else return True
                 -- If the secret of this level (e.g. HandshakeLevel)
                 -- is already dropped, bytes is 0.
-                when (bytes > 0) $ do
+                when (free && bytes > 0) $ do
                     now <- getTimeMicrosecond
                     send pathInfo buf0 bytes
                     addTxBytes conn bytes
@@ -367,13 +377,24 @@ sender conn = handleLogT logAction loop
     logAction msg = connDebugLog conn ("debug: sender: " <> msg)
 
 sendP :: Connection -> IO ()
-sendP conn = do
-    x <-
-        atomically
-            ( (SwPing <$> takePingSTM (connLDCC conn))
-                `orElse` (SwOut <$> takeOutputSTM conn)
-                `orElse` (SwStrm <$> takeSendStreamQSTM conn)
-            )
+sendP conn = atomically (takeSwitch conn) >>= sendSwitch conn
+
+-- | 'sendP' if something is queued, whether it was.
+sendPNow :: Connection -> IO Bool
+sendPNow conn = do
+    mx <- atomically $ (Just <$> takeSwitch conn) `orElse` return Nothing
+    case mx of
+        Nothing -> return False
+        Just x -> True <$ sendSwitch conn x
+
+takeSwitch :: Connection -> STM Switch
+takeSwitch conn =
+    (SwPing <$> takePingSTM (connLDCC conn))
+        `orElse` (SwOut <$> takeOutputSTM conn)
+        `orElse` (SwStrm <$> takeSendStreamQSTM conn)
+
+sendSwitch :: Connection -> Switch -> IO ()
+sendSwitch conn x =
     case x of
         SwPing lvl -> sendPingPacket conn lvl
         SwOut out -> sendOutput conn out
@@ -385,14 +406,13 @@ sendFinal conn = do
     closed <- isPeerClosed conn
     unless closed $ loop 30
   where
-    msg = "sendFinal " ++ if isServer conn then "Server" else "Client"
+    -- What is queued already, without waiting for more.  A timeout of
+    -- 10 usec around 'sendP' did this, and could cut a send short.
     loop :: Int -> IO ()
     loop 0 = return ()
     loop n = do
-        mx <- timeout (Microseconds 10) msg $ sendP conn
-        case mx of
-            Nothing -> return ()
-            Just () -> loop (n - 1)
+        sent <- sendPNow conn
+        when sent $ loop (n - 1)
 
 ----------------------------------------------------------------
 

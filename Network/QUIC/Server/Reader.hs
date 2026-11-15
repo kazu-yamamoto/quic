@@ -501,13 +501,10 @@ dispatch
             newdCID <- newCID
             retryToken <-
                 generateRetryToken peerVer scTicketLifetime newdCID sCID dCID peersa
-            mnewtoken <-
-                timeout (Microseconds 100000) "sendRetry" $ encryptToken tokenMgr retryToken
-            case mnewtoken of
-                Nothing -> logAction "retry token stacked"
-                Just newtoken -> do
-                    bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
-                    send' bss
+            -- It reads an IORef and encrypts: nothing to time out.
+            newtoken <- encryptToken tokenMgr retryToken
+            bss <- encodeRetryPacket $ RetryPacket peerVer sCID newdCID newtoken (Left dCID)
+            send' bss
 ----------------------------------------------------------------
 dispatch
     Dispatch{..}
@@ -579,5 +576,5 @@ dispatch
                 -- (RFC 9000 Sec 9).
                 writeRecvQ (connRecvQ conn) $ mkReceivedPacket cpkt tim siz lvl
 
-recvServer :: RecvQ -> IO ReceivedPacket
-recvServer = readRecvQ
+recvServer :: RecvQ -> STM ReceivedPacket
+recvServer = readRecvQSTM

@@ -55,7 +55,11 @@ newRecvQ budget =
         <*> pure budget
 
 readRecvQ :: RecvQ -> IO ReceivedPacket
-readRecvQ (RecvQ q qlen qbytes _ (RecvBudget _ used)) = atomically $ do
+readRecvQ = atomically . readRecvQSTM
+
+-- | 'readRecvQ' in STM, for a wait to give up on beside it.
+readRecvQSTM :: RecvQ -> STM ReceivedPacket
+readRecvQSTM (RecvQ q qlen qbytes _ (RecvBudget _ used)) = do
     x <- readTQueue q
     let n = rpReceivedBytes x
     modifyTVar' qlen (subtract 1)

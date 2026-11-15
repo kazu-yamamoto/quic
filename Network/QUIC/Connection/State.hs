@@ -165,12 +165,18 @@ setAddressValidated :: PathInfo -> IO ()
 setAddressValidated PathInfo{..} = atomically $ writeTVar addressValidated True
 
 -- Three times rule for anti amplification
-waitAntiAmplificationFree :: Connection -> PathInfo -> Int -> IO ()
-waitAntiAmplificationFree Connection{..} pathInfo siz = do
+
+-- | 'False' if the connection ends before the path is free.
+waitAntiAmplificationFree :: Connection -> PathInfo -> Int -> IO Bool
+waitAntiAmplificationFree conn@Connection{..} pathInfo siz = do
     ok <- checkAntiAmplificationFree pathInfo siz
-    unless ok $ do
-        beforeAntiAmp connLDCC
-        atomically (checkAntiAmplificationFreeSTM pathInfo siz >>= check)
+    if ok
+        then return True
+        else do
+            beforeAntiAmp connLDCC
+            atomically $
+                (True <$ (checkAntiAmplificationFreeSTM pathInfo siz >>= check))
+                    `orElse` (False <$ connectionEndedSTM conn)
 
 -- setLossDetectionTimer is called eventually.
 
