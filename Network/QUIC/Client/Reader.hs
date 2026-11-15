@@ -93,9 +93,11 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
             Left Retired -> return ()
             -- What ends the connection on an idle timeout is the
             -- receiver throwing 'ConnectionIsTimeout'; this thread only
-            -- stops reading.  The socket goes the same way as a retired
-            -- one, because the sender may be inside a send on it.
-            Left TimedOut -> retireSocket conn s0
+            -- stops reading.  The socket is still the connection's, and
+            -- 'leave' leaves it to the closer.  On the retired list, the
+            -- sender closed it before the receiver had timed out and sent
+            -- on it closed, so the connection ended with EBADF instead.
+            Left TimedOut -> return ()
             Right bs -> do
                 now <- getTimeMicrosecond
                 let quicBit = greaseQuicBit $ getMyParameters conn
