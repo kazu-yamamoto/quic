@@ -51,7 +51,7 @@ waitMyNewUniStreamId conn@Connection{..} = get conn myUniStreamId
 
 get :: Connection -> TVar Concurrency -> IO Int
 get conn tvar = atomically $ do
-    checkPeerClosedSTM conn
+    checkConnectionEndSTM conn
     conc@Concurrency{..} <- readTVar tvar
     let streamType = currentStream .&. 0b11
         StreamIdBase base = maxStreams

@@ -130,7 +130,7 @@ split n0 dats0 = loop n0 dats0 id
 checkBlocked :: Stream -> Int -> Bool -> STM (Either Blocked Int)
 checkBlocked s len wait = do
     let conn = streamConnection s
-    checkPeerClosedSTM conn
+    checkConnectionEndSTM conn
     strmFlow <- readStreamFlowTx s
     connFlow <- readConnectionFlowTx conn
     let strmWindow = txWindowSize strmFlow
@@ -181,7 +181,7 @@ closeStreamWith s aerr = do
         receiveOnly =
             (isClient conn && isServerInitiatedUnidirectional sid)
                 || (isServer conn && isClientInitiatedUnidirectional sid)
-    closed <- (||) <$> isConnectionClosed conn <*> isPeerClosed conn
+    closed <- (||) <$> isConnectionClosed conn <*> isConnectionEnded conn
     sclosed <- isTxStreamClosed s
     unless (receiveOnly || closed || sclosed) $ do
         setTxStreamClosed s
@@ -203,7 +203,7 @@ stopUnfinished s aerr = do
         sendOnly =
             (isClient conn && isClientInitiatedUnidirectional sid)
                 || (isServer conn && isServerInitiatedUnidirectional sid)
-    closed <- (||) <$> isConnectionClosed conn <*> isPeerClosed conn
+    closed <- (||) <$> isConnectionClosed conn <*> isConnectionEnded conn
     final <- rxFinal <$> getRxBounds s
     unless (sendOnly || closed || isJust final) $ stopStream s aerr
 
@@ -362,4 +362,4 @@ recvDatagramMany = atomically . flushDatagramQSTM . connRecvDatagramQ
 
 -- | Receiving a DATAGRAM frame in STM.
 recvDatagramSTM :: Connection -> STM ByteString
-recvDatagramSTM conn = readDatagramQSTM (connRecvDatagramQ conn) `orElse` peerClosedSTM conn
+recvDatagramSTM conn = readDatagramQSTM (connRecvDatagramQ conn) `orElse` connectionEndSTM conn

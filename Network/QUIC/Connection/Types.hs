@@ -1,6 +1,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StrictData #-}
 
 module Network.QUIC.Connection.Types where
@@ -349,6 +350,9 @@ data Connection = Connection
     , connAbortRequest  :: TVar (Maybe E.SomeException)
     -- ^ How 'Network.QUIC.Connection.Misc.requestEnd' asked the connection
     --   to end, for its protocol threads to act on.
+    , connEnd           :: TVar (Maybe E.SomeException)
+    -- ^ Why the connection ended, however it did: what a wait on the
+    --   connection throws.  The first reason recorded stays.
     , -- TLS
       pendingQ          :: Array EncryptionLevel (TVar [ReceivedPacket])
     , ciphers           :: IOArray EncryptionLevel Cipher
@@ -465,6 +469,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connDone          <- newTVarIO False
     peerLimitsReset   <- newTVarIO 0
     connAbortRequest  <- newTVarIO Nothing
+    connEnd           <- newTVarIO Nothing
     connRetiredSocks  <- newIORef []
     -- TLS
     pendingQ          <- makePendingQ
@@ -635,24 +640,60 @@ mainDone :: Connection -> IO ()
 mainDone conn = atomically $ writeTVar (connDone conn) True
 
 -- | The peer has closed the connection: we drain, so nothing is sent back
---   (RFC 9000 Sec 10.2.2), and what is waiting on the peer gives up.
+--   (RFC 9000 Sec 10.2.2), and what is waiting on the connection gives up.
 setPeerClosed :: Connection -> ReasonPhrase -> IO ()
 setPeerClosed conn reason = do
     writeIORef (connCloseSent conn) True
     atomically $ writeTVar (sharedCloseReceived $ shared conn) $ Just reason
+    setConnectionEnd conn $ E.toException $ ConnectionIsClosed reason
 
 isPeerClosed :: Connection -> IO Bool
 isPeerClosed conn = isJust <$> readTVarIO (sharedCloseReceived $ shared conn)
 
--- | Waiting for the peer to close, then throwing 'ConnectionIsClosed'.
---   An alternative for a wait on the peer.
-peerClosedSTM :: Connection -> STM a
-peerClosedSTM conn = do
-    mr <- readTVar $ sharedCloseReceived $ shared conn
-    case mr of
-        Nothing -> retry
-        Just reason -> throwSTM $ ConnectionIsClosed reason
+-- | Recording why the connection ended, unless a reason is recorded
+--   already.  Asynchronous exceptions say nothing of why: they are the
+--   connection being taken down after it ended.
+setConnectionEnd :: Connection -> E.SomeException -> IO ()
+setConnectionEnd conn se
+    | isAsyncException se = return ()
+    | otherwise = atomically $ modifyTVar' (connEnd conn) (<|> Just (endReason se))
 
--- | Throwing 'ConnectionIsClosed' if the peer has closed.
-checkPeerClosedSTM :: Connection -> STM ()
-checkPeerClosedSTM conn = peerClosedSTM conn `orElse` return ()
+-- | What a wait on the connection is told: what the application knows.
+endReason :: E.SomeException -> E.SomeException
+endReason se
+    | Just (Abort err desc) <- E.fromException se =
+        E.toException $ ApplicationProtocolErrorIsSent err desc
+    | Just ExitConnection <- E.fromException se = endedNormally
+    | Just (_ :: InternalControl) <- E.fromException se =
+        E.toException $ BadThingHappen se
+    | otherwise = se
+
+-- | Recording a synchronous exception as why the connection ended, and
+--   throwing it on.  For each protocol thread: which of them ends the
+--   connection first records it, before the others are taken down.
+recordingEnd :: Connection -> IO a -> IO a
+recordingEnd conn action =
+    action `E.catch` \se -> setConnectionEnd conn se >> E.throwIO se
+
+-- | The protocol threads ending as they should: the application is done.
+--   Any other 'InternalControl' is a failure, not an ending: taken for one,
+--   every protocol thread was gone and the application waited for ever.
+exitedNormally :: InternalControl -> IO ()
+exitedNormally ExitConnection = return ()
+exitedNormally e = E.throwIO e
+
+-- | Why a connection which ended normally did, for those still waiting.
+endedNormally :: E.SomeException
+endedNormally = E.toException $ ConnectionIsClosed "connection is closed"
+
+isConnectionEnded :: Connection -> IO Bool
+isConnectionEnded conn = isJust <$> readTVarIO (connEnd conn)
+
+-- | Waiting for the connection to end, then throwing why it did.
+--   An alternative for a wait on the connection.
+connectionEndSTM :: Connection -> STM a
+connectionEndSTM conn = readTVar (connEnd conn) >>= maybe retry throwSTM
+
+-- | Throwing why the connection ended, if it has.
+checkConnectionEndSTM :: Connection -> STM ()
+checkConnectionEndSTM conn = connectionEndSTM conn `orElse` return ()

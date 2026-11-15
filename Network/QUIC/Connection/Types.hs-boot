@@ -4,4 +4,4 @@ import Control.Concurrent.STM (STM)
 
 data Connection
 
-peerClosedSTM :: Connection -> STM a
+connectionEndSTM :: Connection -> STM a

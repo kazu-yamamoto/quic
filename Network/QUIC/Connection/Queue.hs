@@ -10,7 +10,7 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 takeInput :: Connection -> IO Input
-takeInput conn = atomically $ readTQueue (inputQ conn) `orElse` peerClosedSTM conn
+takeInput conn = atomically $ readTQueue (inputQ conn) `orElse` connectionEndSTM conn
 
 putInput :: Connection -> Input -> IO ()
 putInput conn inp = atomically $ writeTQueue (inputQ conn) inp

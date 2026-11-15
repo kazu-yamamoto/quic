@@ -386,6 +386,25 @@ spec = do
     describe "a connection the peer ended with an error" $ do
         it "lets waiting for a state give up" $ do
             withPipe (DropClientPacket []) $ testWaitStateClosed cc sc waitS
+        it "wakes a thread waiting in acceptStream" $ do
+            withPipe (DropClientPacket []) $
+                testForkedWait cc sc waitS $
+                    \conn -> void $ acceptStream conn
+        it "wakes a thread waiting in recvStream" $ do
+            withPipe (DropClientPacket []) $
+                testForkedWait cc sc waitS $ \conn -> do
+                    strm <- stream conn
+                    void $ recvStream strm 1024
+        it "wakes a thread waiting for a stream the peer allows" $ do
+            let sc1 = sc{scParameters = (scParameters sc){initialMaxStreamsBidi = 1}}
+            withPipe (DropClientPacket []) $
+                testForkedWait cc sc1 waitS $
+                    \conn -> void $ stream conn
+        it "wakes a thread waiting for flow control in sendStream" $ do
+            withPipe (DropClientPacket []) $
+                testForkedWait cc sc waitS $ \conn -> do
+                    strm <- stream conn
+                    forever $ sendStream strm $ BS.replicate 65536 0
     describe "the peer closing with NO_ERROR" $ do
         it "wakes a client waiting in recvStream" $ do
             withPipe (DropClientPacket []) $
@@ -1643,6 +1662,37 @@ testWaitStateClosed cc sc waitS = do
                         Just (Left (ConnectionIsClosed _)) -> return ()
                         Nothing -> expectationFailure "waited for ever"
                         Just ex -> expectationFailure $ show ex
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        abortConnection conn (ApplicationProtocolError 1) "bye"
+
+-- | A thread the application forked, waiting on the connection when the
+--   peer ends it with an error, is told so.  Only a peer closing with
+--   NO_ERROR woke one, and any other ending left it waiting for ever.
+testForkedWait
+    :: C.ClientConfig -> ServerConfig -> IO () -> (Connection -> IO ()) -> IO ()
+testForkedWait cc sc waitS body = do
+    res <- newEmptyMVar
+    tref <- newIORef Nothing
+    withAsync server $ \_ -> do
+        waitS
+        r <- E.try $ C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            tid <- forkIO $ E.try (body conn) >>= putMVar res
+            writeIORef tref $ Just tid
+            void $ recvStream strm 1024
+        case r of
+            Left (ApplicationProtocolErrorIsReceived _ _) -> return ()
+            _ -> expectationFailure $ show r
+        w <- Timeout.timeout 1000000 $ takeMVar res
+        readIORef tref >>= mapM_ killThread
+        case w of
+            Just (Left (ApplicationProtocolErrorIsReceived _ _)) -> return ()
+            Nothing -> expectationFailure "waited for ever"
+            Just ex -> expectationFailure $ show ex
   where
     server = run sc $ \conn -> do
         strm <- acceptStream conn

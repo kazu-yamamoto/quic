@@ -269,18 +269,19 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                             Just AsyncCancelled -> return ()
                             Nothing -> connDebugLog conn $ "debug: " <> nm <> ": " <> bhow e
                         E.throwIO e
-            let s1 = labelMe "handshaker" >> named "handshaker" handshaker
-                s2 = labelMe "sender" >> sender conn
-                s3 = labelMe "receiver" >> receiver conn
-                s4 = labelMe "resender" >> named "resender" (resender ldcc)
-                s5 = labelMe "ldccTimer" >> named "ldccTimer" (ldccTimer ldcc)
+            let rec = recordingEnd conn
+                s1 = labelMe "handshaker" >> rec (named "handshaker" handshaker)
+                s2 = labelMe "sender" >> rec (sender conn)
+                s3 = labelMe "receiver" >> rec (receiver conn)
+                s4 = labelMe "resender" >> rec (named "resender" (resender ldcc))
+                s5 = labelMe "ldccTimer" >> rec (named "ldccTimer" (ldccTimer ldcc))
                 s6 = labelMe "QUIC server" >> named "server" server
                 c1 = labelMe "concurrently1" >> concurrently_ s1 s2
                 c2 = labelMe "concurrently2" >> concurrently_ c1 s3
                 c3 = labelMe "concurrently3" >> concurrently_ c2 s4
                 c4 = labelMe "concurrently4" >> concurrently_ c3 s5
                 c4' = labelMe "concurrently4'" >> concurrently_ c4 s7
-                s7 = labelMe "abort watcher" >> watchAbortRequest conn
+                s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn)
                 -- Telling the peer here, and not below, because here is the
                 -- one place where it can be done at all: the nested
                 -- 'concurrently_'s above have waited for every protocol
@@ -308,10 +309,11 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 c5 =
                     labelMe "concurrently5"
                         >> concurrently_
-                            (tellThenRaise (c4' `E.catch` \(_ :: InternalControl) -> return ()))
+                            (tellThenRaise (c4' `E.catch` exitedNormally))
                             s6
                 runThreads = c5
             ex <- E.try runThreads >>= abortRequested conn
+            setConnectionEnd conn $ either id (const endedNormally) ex
             sendFinal conn
             setConnectionClosed conn
             closure conn ldcc ex
