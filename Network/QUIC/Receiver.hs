@@ -12,8 +12,10 @@ import Control.Concurrent.STM (
     atomically,
     orElse,
     readTVar,
+    readTVarIO,
     registerDelay,
     retry,
+    writeTVar,
  )
 import qualified Control.Exception as E
 import qualified Control.Monad.STM as STM
@@ -48,10 +50,7 @@ receiver conn = handleLogT logAction body
         -- But we intentionally sends CC when timeout.
         -- Waited for beside the packet rather than thrown at the wait.
         mito <- getIdleTimeout conn
-        expired <- case mito of
-            Nothing -> return retry
-            Just (Microseconds us) -> (readTVar >=> STM.check) <$> registerDelay us
-        mx <- atomically $ (Just <$> connRecv conn) `orElse` (Nothing <$ expired)
+        mx <- waitIdle mito
         case mx of
             Nothing -> do
                 st <- getConnectionState conn
@@ -61,7 +60,24 @@ receiver conn = handleLogT logAction body
                     msg = msg0 ++ " " ++ show st
                 qlogDebug conn $ Debug "recv timeout"
                 E.throwIO $ ConnectionIsTimeout msg
-            Just x -> return x
+            Just x -> do
+                atomically $ writeTVar (connAckElicitingSent conn) False
+                return x
+    -- RFC 9000 Sec 10.1: the timer restarts on receiving a packet and on
+    -- the first ack-eliciting packet sent after that.
+    waitIdle Nothing = Just <$> atomically (connRecv conn)
+    waitIdle mito@(Just (Microseconds us)) = do
+        sent0 <- readTVarIO $ connAckElicitingSent conn
+        expired <- registerDelay us
+        let restarted
+                | sent0 = retry
+                | otherwise = readTVar (connAckElicitingSent conn) >>= STM.check
+        r <-
+            atomically $
+                (Right . Just <$> connRecv conn)
+                    `orElse` (Left () <$ restarted)
+                    `orElse` (Right Nothing <$ (readTVar expired >>= STM.check))
+        either (const $ waitIdle mito) return r
     loopHandshake = do
         rpkt <- recvTimeout
         processReceivedPacketHandshake conn rpkt

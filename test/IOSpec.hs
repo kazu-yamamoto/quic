@@ -426,6 +426,10 @@ spec = do
     describe "the idle timeout" $ do
         it "ends a connection with nothing to say" $ do
             withPipe (DropClientPacket []) $ testIdleTimeout cc sc waitS
+        it "restarts on the first ack-eliciting packet sent" $ do
+            silence <- newEmptyMVar
+            withPipe (SilenceServer silence) $
+                testIdleRestart cc sc waitS silence
     describe "waiting in STM" $ do
         it "waits for data, and then for what a read leaves" $ do
             withPipe (DropClientPacket []) $ testWaitReadable cc sc waitS
@@ -1782,6 +1786,38 @@ testIdleTimeout cc0 sc waitS =
         cc0
             { ccParameters =
                 (ccParameters cc0){maxIdleTimeout = Milliseconds 500}
+            }
+
+-- | With the server silenced, the client sends after a second, which
+--   restarts its 2 sec idle timer: the timeout comes after 3 sec, not 2.
+--   Shorter, three times the PTO would be in effect instead.
+testIdleRestart
+    :: C.ClientConfig -> ServerConfig -> IO () -> MVar () -> IO ()
+testIdleRestart cc0 sc waitS silence =
+    withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
+        waitS
+        ref <- newIORef Nothing
+        r <- Timeout.timeout 10000000 $ E.try $ C.run cc $ \conn -> do
+            waitEstablished conn
+            threadDelay 100000
+            putMVar silence ()
+            t0 <- getTimeMicrosecond
+            threadDelay 1000000
+            strm <- stream conn
+            sendStream strm "ping"
+            -- Thrown when the connection ends, which is what is timed.
+            _ <- E.try @QUICException $ recvStream strm 1024
+            getElapsedTimeMicrosecond t0 >>= writeIORef ref . Just
+        elapsed <- readIORef ref
+        case r of
+            Just (Left (ConnectionIsTimeout _)) ->
+                elapsed `shouldSatisfy` maybe False (>= Microseconds 2600000)
+            _ -> expectationFailure $ show r
+  where
+    cc =
+        cc0
+            { ccParameters =
+                (ccParameters cc0){maxIdleTimeout = Milliseconds 2000}
             }
 
 -- | Whether a wait in STM would return now.

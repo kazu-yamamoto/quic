@@ -5,6 +5,7 @@ module MigrationSpec where
 import Control.Concurrent
 import Control.Concurrent.Async (concurrently, mapConcurrently, wait, withAsync)
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import Control.Monad (forM, forM_, void)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
@@ -243,19 +244,18 @@ spec = do
             getSocketName sock `shouldThrow` anyException
             atomically $ writeTVar newRetired True
 
-        it "leaves its socket to the connection when it goes idle" $ do
+        it "leaves its socket to the connection when the connection ends" $ do
             (clientConn, _) <- makeConnections serverConf Version1
             sock <- getSocket clientConn
             peersa <- peerSockAddr <$> getPathInfo clientConn
             connect sock peersa
-            setMinIdleTimeout clientConn $ Microseconds 100000
-            -- Raised to three times the PTO, which is what it waits.
-            pto <- getPTO $ connLDCC clientConn
             retired <- getSocketRetire clientConn
             done <- newEmptyMVar
             void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
+            -- As the receiver's idle timeout does.
+            setConnectionEnd clientConn $ E.toException $ ConnectionIsTimeout "idle"
             returned <-
-                timeout (3 * pto + Microseconds 2000000) "idle reader" $ takeMVar done
+                timeout (Microseconds 2000000) "ended reader" $ takeMVar done
             returned `shouldBe` Just ()
             -- The sender, between two sends, does not close it under
             -- the connection.

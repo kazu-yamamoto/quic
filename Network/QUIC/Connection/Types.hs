@@ -353,6 +353,9 @@ data Connection = Connection
     , connEnd           :: TVar (Maybe E.SomeException)
     -- ^ Why the connection ended, however it did: what a wait on the
     --   connection throws.  The first reason recorded stays.
+    , connAckElicitingSent :: TVar Bool
+    -- ^ Whether an ack-eliciting packet went out since a packet was last
+    --   received: the first one restarts the idle timer (RFC 9000 10.1).
     , -- TLS
       pendingQ          :: Array EncryptionLevel (TVar [ReceivedPacket])
     , ciphers           :: IOArray EncryptionLevel Cipher
@@ -470,6 +473,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     peerLimitsReset   <- newTVarIO 0
     connAbortRequest  <- newTVarIO Nothing
     connEnd           <- newTVarIO Nothing
+    connAckElicitingSent <- newTVarIO False
     connRetiredSocks  <- newIORef []
     -- TLS
     pendingQ          <- makePendingQ
@@ -697,6 +701,12 @@ connectionEndSTM conn = readTVar (connEnd conn) >>= maybe retry throwSTM
 -- | Waiting for the connection to end, without throwing.
 connectionEndedSTM :: Connection -> STM ()
 connectionEndedSTM conn = readTVar (connEnd conn) >>= check . isJust
+
+-- | Telling the idle timer that an ack-eliciting packet was sent.
+ackElicitingSent :: Connection -> IO ()
+ackElicitingSent conn = atomically $ do
+    sent <- readTVar $ connAckElicitingSent conn
+    unless sent $ writeTVar (connAckElicitingSent conn) True
 
 -- | Throwing why the connection ended, if it has.
 checkConnectionEndSTM :: Connection -> STM ()

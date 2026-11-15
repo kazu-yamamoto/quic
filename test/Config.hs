@@ -170,6 +170,8 @@ data Scenario
       --   datagram to the server from another socket, which answers
       --   nothing: an on-path attacker's spurious migration.
       ForwardAside (MVar ())
+    | -- | Once the MVar is filled, drop every datagram from the server.
+      SilenceServer (MVar ())
     | -- | As 'ForwardAside', but from an IPv6 socket to the server's
       --   @[::1]:15003@, a socket of the server other than the client's.
       ForwardAside6 (MVar ())
@@ -333,8 +335,11 @@ withPipeWith stray scenario body = do
             recordSize scenario False bs
             n <- atomicModifyIORef' irefS $ \x -> (x + 1, x)
             dropPacket <- shouldDrop scenario False n
+            silenced <- case scenario of
+                SilenceServer trigger -> isJust <$> tryReadMVar trigger
+                _ -> return False
             let isCC = BS.length bs < 200
-            when (isCC || not dropPacket) $ do
+            when (not silenced && (isCC || not dropPacket)) $ do
                 mpeer <- readIORef peerRef
                 case mpeer of
                     Nothing -> return ()
