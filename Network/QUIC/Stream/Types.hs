@@ -57,12 +57,12 @@ data Stream = Stream
 
 -- | What the receiving side has seen of where a stream ends.
 data RxBounds = RxBounds
-    { rxHighest :: Int
+    { rxHighest :: Int64
     -- ^ The largest offset plus length seen for it.  The connection's flow
     --   controller counts this as received (RFC 9000 Sec 4.1), gaps and all.
-    , rxFinal :: Maybe Int
+    , rxFinal :: Maybe Int64
     -- ^ Its final size, once that is known
-    , rxCredited :: Int
+    , rxCredited :: Int64
     -- ^ Octets counted as consumed on the stream's behalf, over and above
     --   what the application has read
     }
@@ -74,9 +74,9 @@ emptyRxBounds = RxBounds 0 Nothing 0
 -- | What is kept of a stream the application has closed while the peer had
 --   not said where it ends.
 data Departed = Departed
-    { depHighest :: Int
+    { depHighest :: Int64
     -- ^ 'rxHighest' so far
-    , depLimit :: Int
+    , depLimit :: Int64
     -- ^ The stream's receive limit, which nothing raises any more
     }
     deriving (Eq, Show)
@@ -85,7 +85,7 @@ instance Show Stream where
     show s = show $ streamId s
 
 {- FOURMOLU_DISABLE -}
-newStream :: Connection -> Int -> Int -> StreamId -> IO Stream
+newStream :: Connection -> Int64 -> Int64 -> StreamId -> IO Stream
 newStream streamConnection streamId txLim rxLim = do
     streamFlowTx    <- newTVarIO $ newTxFlow txLim
     streamFlowRx    <- newIORef  $ newRxFlow rxLim

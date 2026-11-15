@@ -12,10 +12,6 @@ import qualified Control.Exception as E
 import qualified Crypto.Token as CT
 import Data.Array.IO
 import Data.ByteString.Internal
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
-import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.X509 (CertificateChain)
@@ -32,6 +28,10 @@ import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC
 import qualified System.ThreadManager as T
 
+import Network.QUIC.Types.Int64Map (Int64Map)
+import qualified Network.QUIC.Types.Int64Map as IntMap
+import Network.QUIC.Types.Int64Set (Int64Set)
+import qualified Network.QUIC.Types.Int64Set as IntSet
 import Network.QUIC.Config
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
@@ -90,10 +90,10 @@ defaultServerRoleInfo =
 -- which accepts stateless reset.
 data CIDDB = CIDDB
     { usedCIDInfo :: CIDInfo
-    , cidInfos :: IntMap CIDInfo
-    , revInfos :: Map CID Int
-    , nextSeqNum :: Int -- only for mine (new)
-    , retirePriorTo :: Int
+    , cidInfos :: Int64Map CIDInfo
+    , revInfos :: Map CID Int64
+    , nextSeqNum :: Int64 -- only for mine (new)
+    , retirePriorTo :: Int64
     , triggeredByMe :: Bool -- only for peer's
     }
     deriving (Show)
@@ -188,20 +188,20 @@ initialNegotiated =
 
 ----------------------------------------------------------------
 
-newtype StreamIdBase = StreamIdBase {fromStreamIdBase :: Int}
+newtype StreamIdBase = StreamIdBase {fromStreamIdBase :: Int64}
     deriving (Eq, Show)
 
 data Concurrency = Concurrency
     { currentStream :: StreamId
     , maxStreams :: StreamIdBase
-    , closedStreams :: Int
+    , closedStreams :: Int64
     -- ^ For the peer's streams: how many of them we are done with
-    , targetStreams :: Int
+    , targetStreams :: Int64
     -- ^ For the peer's streams: how many may be open at once (#86)
     }
     deriving (Show)
 
-newConcurrency :: Role -> Direction -> Int -> Concurrency
+newConcurrency :: Role -> Direction -> Int64 -> Concurrency
 newConcurrency rl dir n = Concurrency{..}
   where
     bidi = dir == Bidirectional
@@ -222,7 +222,7 @@ newConcurrency rl dir n = Concurrency{..}
 -- acknowledgement -- must not open it again.
 data OpenedStreams = OpenedStreams
     { openedNext :: StreamId
-    , openedSkipped :: IntSet
+    , openedSkipped :: Int64Set
     }
     deriving (Show)
 
@@ -242,8 +242,8 @@ data PeerInfo = PeerInfo
 
 data PathInfo = PathInfo
     { peerSockAddr :: SockAddr
-    , pathBytesTx :: TVar Int -- TVar for anti amplification
-    , pathBytesRx :: TVar Int -- TVar for anti amplification
+    , pathBytesTx :: TVar Int64 -- TVar for anti amplification
+    , pathBytesRx :: TVar Int64 -- TVar for anti amplification
     , addressValidated :: TVar Bool
     , pathAbandoned :: TVar Bool
     -- ^ Gone back from: a send waiting for its anti-amplification
@@ -322,14 +322,14 @@ data Connection = Connection
       peerPacketNumber  :: Array EncryptionLevel (IORef PacketNumber)
     -- ^ The largest the peer has sent, by level.  0-RTT and 1-RTT share
     --   one, as they share a packet number space.
-    , peerReceived      :: Array EncryptionLevel (IORef IntSet)
+    , peerReceived      :: Array EncryptionLevel (IORef Int64Set)
     -- ^ The packet numbers processed, by space, kept within
     --   'Network.QUIC.Connection.PacketNumber.receivedWindow' of the largest.
     , streamTable       :: TVar StreamTable
     , -- | What a stream the application has closed still owes the
       -- connection's window, for as long as the peer has not finished it.
       -- See 'Network.QUIC.Connection.StreamTable.departStream'.
-      departedStreams   :: TVar (IntMap Departed)
+      departedStreams   :: TVar (Int64Map Departed)
     , myStreamId        :: TVar Concurrency -- C:0 S:1
     , myUniStreamId     :: TVar Concurrency -- C:2 S:3
     , peerStreamId      :: IORef Concurrency -- C:1 S:0
@@ -341,8 +341,8 @@ data Connection = Connection
     , migrationState    :: TVar MigrationState
     , sentRetirePriorTo :: IORef Bool
     , minIdleTimeout    :: IORef Microseconds
-    , bytesTx           :: IORef Int
-    , bytesRx           :: IORef Int
+    , bytesTx           :: IORef Int64
+    , bytesRx           :: IORef Int64
     , connDone          :: TVar Bool
     , peerLimitsReset   :: TVar Int
     -- ^ How many times 'Network.QUIC.Connection.StreamTable.resetTxStreamLimits'
@@ -378,9 +378,9 @@ data Connection = Connection
     -- ^ Whether the peer has been told the connection is over
     , connCloserOwnsSocket :: IORef Bool
     -- ^ Whether the closer has taken the client's socket to close
-    , connAuthFailures  :: IORef Int
+    , connAuthFailures  :: IORef Int64
     -- ^ Packets that have failed authentication, over the whole connection
-    , connKeyPackets    :: IORef Int
+    , connKeyPackets    :: IORef Int64
     -- ^ Packets the 1-RTT key in use has protected
     , -- Recovery
       connLDCC          :: LDCC
@@ -545,7 +545,7 @@ clientConnection ClientConfig{..} verInfo myAuthCIDs peerAuthCIDs =
   where
     ccParameters' =
         ccParameters
-            { maxDatagramFrameSize = ccMaxDatagramFrameSize
+            { maxDatagramFrameSize = fromIntegral ccMaxDatagramFrameSize
             }
 
 serverConnection
@@ -569,7 +569,7 @@ serverConnection ServerConfig{..} verInfo myAuthCIDs peerAuthCIDs =
   where
     scParameters' =
         scParameters
-            { maxDatagramFrameSize = scMaxDatagramFrameSize
+            { maxDatagramFrameSize = fromIntegral scMaxDatagramFrameSize
             }
 
 ----------------------------------------------------------------

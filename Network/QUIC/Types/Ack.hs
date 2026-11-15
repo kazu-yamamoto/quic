@@ -1,12 +1,14 @@
 module Network.QUIC.Types.Ack where
 
-import Data.IntSet (IntSet)
-import qualified Data.IntSet as IntSet
+import Data.Int (Int64)
 
-type PacketNumber = Int
+import Network.QUIC.Types.Int64Set (Int64Set)
+import qualified Network.QUIC.Types.Int64Set as IntSet
 
-type Range = Int
-type Gap = Int
+type PacketNumber = Int64
+
+type Range = Int64
+type Gap = Int64
 
 data AckInfo = AckInfo PacketNumber Range [(Gap, Range)]
     deriving (Eq, Show)
@@ -94,7 +96,7 @@ capAckInfo limit (AckInfo lpn fr grs) = AckInfo lpn fr $ take n grs
     fits k siz = base + varIntLen k + siz <= limit
     n = length $ takeWhile id $ zipWith fits [1 ..] sizes
 
-varIntLen :: Int -> Int
+varIntLen :: Int64 -> Int
 varIntLen i
     | i < 0x40 = 1
     | i < 0x4000 = 2
@@ -118,7 +120,7 @@ fromAckInfoToPred (AckInfo lpn fr grs) =
 
 ----------------------------------------------------------------
 
-newtype PeerPacketNumbers = PeerPacketNumbers IntSet
+newtype PeerPacketNumbers = PeerPacketNumbers Int64Set
     deriving (Eq, Show)
 
 emptyPeerPacketNumbers :: PeerPacketNumbers

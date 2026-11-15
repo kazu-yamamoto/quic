@@ -24,7 +24,7 @@ data ConnectionInfo = ConnectionInfo
     , remoteSockAddr :: NS.SockAddr
     , localCID :: CID
     , remoteCID :: CID
-    , remoteDatagramFrameSize :: Int
+    , remoteDatagramFrameSize :: Int64
     }
 
 instance Show ConnectionInfo where

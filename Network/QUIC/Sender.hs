@@ -153,7 +153,7 @@ sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
                     when (n1rtt > 0) $ do
                         protected <-
                             atomicModifyIORef' (connKeyPackets conn) $
-                                \n -> (n + n1rtt, n + n1rtt)
+                                \n -> let n' = n + fromIntegral n1rtt in (n', n')
                         cipher <- getCipher conn RTT1Level
                         when (protected > confidentialityLimit cipher) $
                             closeConnection
@@ -674,7 +674,7 @@ sendStreamSmall conn s0 off0 dats0 fin0 len0 = do
                     (off, dats) = case frame of
                         StreamF _ o d _ -> (o, d)
                         _ -> error "sendStreamSmall"
-                    merged = sid == sid1 && off + totalLen dats == off1
+                    merged = sid == sid1 && off + fromIntegral (totalLen dats) == off1
                     cost
                         | merged = len1
                         | otherwise = len1 + streamFrameMaxOverhead
@@ -717,7 +717,7 @@ sendStreamLarge conn s off0 dats0 fin0 = do
                 | otherwise = RTT0Level
         construct conn lvl [frame] False
             >>= sendPacket conn . withStreamResets (streamResets [s])
-        loop (off + len) dats2
+        loop (off + fromIntegral len) dats2
 
 -- Typical case: [3, 1024, 1024, 1024, 200]
 splitChunks :: [ByteString] -> ([ByteString], [ByteString])

@@ -75,7 +75,7 @@ spec = do
             let rpkt = mkReceivedPacket cpkt tim (BS.length bin) lvl
             processReceivedPacket serverConn rpkt
             processReceivedPacket serverConn rpkt
-            getRxBytes serverConn `shouldReturn` BS.length bin
+            getRxBytes serverConn `shouldReturn` fromIntegral (BS.length bin)
         it "is told by its packet number, within the window" $ do
             (_, conn) <- makeConnections serverConf Version1
             let record = recordPeerPacketNumber conn

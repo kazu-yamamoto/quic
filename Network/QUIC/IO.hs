@@ -35,9 +35,9 @@ sendStream s dat = sendStreamMany s [dat]
 ----------------------------------------------------------------
 
 data Blocked
-    = BothBlocked Stream Int Int
-    | ConnBlocked Int
-    | StrmBlocked Stream Int
+    = BothBlocked Stream Int64 Int64
+    | ConnBlocked Int64
+    | StrmBlocked Stream Int64
     deriving (Show)
 
 -- | Counting and queueing at once, so that the offset given is the
@@ -136,13 +136,14 @@ checkBlocked s len wait = do
     let strmWindow = txWindowSize strmFlow
         connWindow = txWindowSize connFlow
         minFlow = min strmWindow connWindow
-        n = min len minFlow
+        -- At most len, so an Int.
+        n = fromIntegral $ min (fromIntegral len) minFlow
     when wait $ check (n > 0)
     if n > 0
         then return $ Right n
         else do
-            let cs = len > strmWindow
-                cw = len > connWindow
+            let cs = fromIntegral len > strmWindow
+                cw = fromIntegral len > connWindow
                 blocked
                     | cs && cw = BothBlocked s (txfLimit strmFlow) (txfLimit connFlow)
                     | cs = StrmBlocked s (txfLimit strmFlow)
@@ -273,7 +274,7 @@ recvStream s n = do
             fire conn (Microseconds 50000) $
                 sendFrames conn RTT1Level [MaxStreamData sid newMax]
     -- FLOW CONTROL: MAX_DATA: recv: announcing my limit properly
-    mxc <- updateFlowRx conn len
+    mxc <- updateFlowRx conn $ fromIntegral len
     case mxc of
         Nothing -> return ()
         Just newMax -> do
@@ -339,7 +340,7 @@ sendDatagram conn dat = do
         E.throwIO $
             ConnectionIsClosed "DATAGRAM not supported by peer"
     let frameOverhead = 1 + BS.length (encodeInt (fromIntegral $ BS.length dat))
-    when (BS.length dat + frameOverhead > limitBytes) $
+    when (fromIntegral (BS.length dat + frameOverhead) > limitBytes) $
         E.throwIO $
             ConnectionIsClosed "DATAGRAM size violation"
     -- RFC 9221 Sec 5: a DATAGRAM frame cannot be split across packets.

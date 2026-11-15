@@ -109,13 +109,13 @@ newPathData :: IO PathData
 newPathData = PathData <$> getRandomBytes 8
 
 data CIDInfo = CIDInfo
-    { cidInfoSeq :: Int
+    { cidInfoSeq :: Int64
     , cidInfoCID :: CID
     , cidInfoSRT :: StatelessResetToken
     }
     deriving (Eq, Ord, Show)
 
-newCIDInfo :: Int -> CID -> StatelessResetToken -> CIDInfo
+newCIDInfo :: Int64 -> CID -> StatelessResetToken -> CIDInfo
 newCIDInfo n cid srt =
     CIDInfo
         { cidInfoSeq = n

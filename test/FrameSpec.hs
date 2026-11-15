@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module FrameSpec where
 
 import qualified Control.Exception as E
@@ -13,6 +15,21 @@ import Network.QUIC.Internal
 
 spec :: Spec
 spec = do
+    -- Variable-length integers go up to 2^62 - 1, past a 32-bit Int.
+    describe "62-bit values" $ do
+        it "survive encoding and decoding" $ do
+            let big = 2 ^ (62 :: Int) - 1
+                frames =
+                    [ MaxData big
+                    , MaxStreamData big big
+                    , DataBlocked big
+                    , ResetStream big (ApplicationProtocolError big) big
+                    , StreamF (2 ^ (40 :: Int)) (2 ^ (40 :: Int)) ["x"] False
+                    , RetireConnectionID big
+                    , ConnectionCloseApp (ApplicationProtocolError big) "bye"
+                    ]
+            bs <- encodeFrames frames
+            decodeFramesBS bs `shouldReturn` Just frames
     describe "ACK_ECN" $ do
         it "is decoded as ACK with its ECN counts skipped" $ do
             let ack = Ack (AckInfo 5 2 [(1, 0)]) noDelay

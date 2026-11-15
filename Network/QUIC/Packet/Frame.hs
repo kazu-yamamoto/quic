@@ -259,8 +259,8 @@ countZero beg0 end0
 
 decodeCrypto :: ReadBuffer -> IO Frame
 decodeCrypto rbuf = do
-    off <- fromIntegral <$> decodeInt' rbuf
-    len <- fromIntegral <$> decodeInt' rbuf
+    off <- decodeInt' rbuf
+    len <- decodeLength rbuf
     cdata <- extractByteString rbuf len
     return $ CryptoF off cdata
 
@@ -298,7 +298,7 @@ decodeStopSending rbuf = do
 
 decodeNewToken :: ReadBuffer -> IO Frame
 decodeNewToken rbuf = do
-    len <- fromIntegral <$> decodeInt' rbuf
+    len <- decodeLength rbuf
     NewToken <$> extractByteString rbuf len
 
 decodeStream :: ReadBuffer -> Bool -> Bool -> Bool -> IO Frame
@@ -311,7 +311,7 @@ decodeStream rbuf hasOff hasLen fin = do
     dat <-
         if hasLen
             then do
-                len <- fromIntegral <$> decodeInt' rbuf
+                len <- decodeLength rbuf
                 extractByteString rbuf len
             else do
                 len <- remainingSize rbuf
@@ -351,15 +351,15 @@ decodeStreamsBlocked rbuf dir = StreamsBlocked dir . fromIntegral <$> decodeInt'
 decodeConnectionClose :: ReadBuffer -> IO Frame
 decodeConnectionClose rbuf = do
     err <- TransportError . fromIntegral <$> decodeInt' rbuf
-    ftyp <- fromIntegral <$> decodeInt' rbuf
-    len <- fromIntegral <$> decodeInt' rbuf
+    ftyp <- decodeInt' rbuf
+    len <- decodeLength rbuf
     reason <- extractShortByteString rbuf len
     return $ ConnectionClose err ftyp reason
 
 decodeConnectionCloseApp :: ReadBuffer -> IO Frame
 decodeConnectionCloseApp rbuf = do
-    err <- ApplicationProtocolError . fromIntegral <$> decodeInt' rbuf
-    len <- fromIntegral <$> decodeInt' rbuf
+    err <- ApplicationProtocolError <$> decodeInt' rbuf
+    len <- decodeLength rbuf
     reason <- extractShortByteString rbuf len
     return $ ConnectionCloseApp err reason
 
@@ -389,6 +389,6 @@ decodeDatagram :: ReadBuffer -> Bool -> IO Frame
 decodeDatagram rbuf hasLen = do
     len <-
         if hasLen
-            then fromIntegral <$> decodeInt' rbuf
+            then decodeLength rbuf
             else remainingSize rbuf
     Datagram hasLen <$> extractByteString rbuf len

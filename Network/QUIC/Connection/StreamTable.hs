@@ -18,8 +18,8 @@ module Network.QUIC.Connection.StreamTable (
 ) where
 
 import Control.Concurrent.STM
-import qualified Data.IntMap.Strict as IntMap
-import qualified Data.IntSet as IntSet
+import qualified Network.QUIC.Types.Int64Map as IntMap
+import qualified Network.QUIC.Types.Int64Set as IntSet
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
@@ -120,7 +120,7 @@ delStream Connection{..} strm =
 -- here, or after, and counted in what is kept.  Done in steps, a frame
 -- arriving in between was counted in neither, and a FIN lost that way left
 -- the stream kept for good.
-departStream :: Connection -> Stream -> IO (Int, Bool)
+departStream :: Connection -> Stream -> IO (Int64, Bool)
 departStream conn strm = do
     -- The application's own, which only it moves.
     consumed <- getRxConsumed strm
@@ -144,11 +144,11 @@ departStream conn strm = do
 -- | Where a STREAM or RESET_STREAM frame lands, with what it counts there.
 data Arrival
     = -- | A stream in the table, with how far the frame takes it
-      ArrivedLive Stream (Either FinalSizeProblem Int)
+      ArrivedLive Stream (Either FinalSizeProblem Int64)
     | -- | A stream the application has closed and the peer has not finished:
       --   how far the frame takes it and whether it has ended now, or the
       --   transport error the stream would have refused it with
-      ArrivedDeparted (Either (TransportError, ReasonPhrase) (Int, Bool))
+      ArrivedDeparted (Either (TransportError, ReasonPhrase) (Int64, Bool))
     | -- | Neither: a stream to open, or one closed and done with
       ArrivedNowhere
 
@@ -161,7 +161,7 @@ data Arrival
 -- A copy of what was seen moves nothing.  @unread@ says nobody will read
 -- what moves on a live stream either, the tail a RESET_STREAM gives up: it
 -- is counted as credited here, or 'departStream' could credit it again.
-noteRxArrival :: Connection -> StreamId -> Int -> Bool -> Bool -> IO Arrival
+noteRxArrival :: Connection -> StreamId -> Int64 -> Bool -> Bool -> IO Arrival
 noteRxArrival Connection{..} sid end fin unread = atomically $ do
     found <- lookupStream sid <$> readTVar streamTable
     case found of
@@ -193,21 +193,21 @@ noteRxArrival Connection{..} sid end fin unread = atomically $ do
             , Right (max 0 (end - depHighest), False)
             )
 
-initialRxMaxStreamData :: Connection -> StreamId -> Int
+initialRxMaxStreamData :: Connection -> StreamId -> Int64
 initialRxMaxStreamData conn sid
     | isClient conn = clientInitial sid params
     | otherwise = serverInitial sid params
   where
     params = getMyParameters conn
 
-clientInitial :: StreamId -> Parameters -> Int
+clientInitial :: StreamId -> Parameters -> Int64
 clientInitial sid params
     | isClientInitiatedBidirectional sid = initialMaxStreamDataBidiLocal params
     | isServerInitiatedBidirectional sid = initialMaxStreamDataBidiRemote params
     -- intentionally not using isServerInitiatedUnidirectional
     | otherwise = initialMaxStreamDataUni params
 
-serverInitial :: StreamId -> Parameters -> Int
+serverInitial :: StreamId -> Parameters -> Int64
 serverInitial sid params
     | isServerInitiatedBidirectional sid = initialMaxStreamDataBidiLocal params
     | isClientInitiatedBidirectional sid = initialMaxStreamDataBidiRemote params

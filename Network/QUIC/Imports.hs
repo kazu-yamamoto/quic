@@ -46,7 +46,7 @@ import Data.Word
 import Foreign.ForeignPtr
 import Foreign.Marshal.Utils (copyBytes)
 import Foreign.Ptr
-import Network.ByteOrder
+import Network.ByteOrder hiding (Offset)
 import Network.QUIC.Utils
 import Numeric
 

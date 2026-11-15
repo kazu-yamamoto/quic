@@ -29,7 +29,7 @@ import Network.QUIC.Imports
 import Network.QUIC.Types
 
 -- | The last stream we opened of the kind 'StreamId' is.
-getMyStreamId :: Connection -> StreamId -> IO Int
+getMyStreamId :: Connection -> StreamId -> IO Int64
 getMyStreamId Connection{..} sid = do
     let tvar
             | isUnidirectional sid = myUniStreamId
@@ -37,7 +37,7 @@ getMyStreamId Connection{..} sid = do
     next <- currentStream <$> readTVarIO tvar
     return $ next - 4
 
-possibleMyStreams :: Connection -> IO Int
+possibleMyStreams :: Connection -> IO Int64
 possibleMyStreams Connection{..} = do
     Concurrency{..} <- readTVarIO myStreamId
     let StreamIdBase base = maxStreams
@@ -49,7 +49,7 @@ waitMyNewStreamId conn@Connection{..} = get conn myStreamId
 waitMyNewUniStreamId :: Connection -> IO StreamId
 waitMyNewUniStreamId conn@Connection{..} = get conn myUniStreamId
 
-get :: Connection -> TVar Concurrency -> IO Int
+get :: Connection -> TVar Concurrency -> IO Int64
 get conn tvar = atomically $ do
     checkConnectionEndSTM conn
     conc@Concurrency{..} <- readTVar tvar
@@ -62,21 +62,21 @@ get conn tvar = atomically $ do
 
 -- From "Peer", but set it to "My".
 -- So, using "Tx".
-setTxMaxStreams :: Connection -> Int -> IO ()
+setTxMaxStreams :: Connection -> Int64 -> IO ()
 setTxMaxStreams Connection{..} = set myStreamId
 
-setTxUniMaxStreams :: Connection -> Int -> IO ()
+setTxUniMaxStreams :: Connection -> Int64 -> IO ()
 setTxUniMaxStreams Connection{..} = set myUniStreamId
 
 -- | Setting the limits on the streams I may open even lower: only for
 --   0-RTT rejected.
-resetTxMaxStreams :: Connection -> Int -> IO ()
+resetTxMaxStreams :: Connection -> Int64 -> IO ()
 resetTxMaxStreams Connection{..} = reset myStreamId
 
-resetTxUniMaxStreams :: Connection -> Int -> IO ()
+resetTxUniMaxStreams :: Connection -> Int64 -> IO ()
 resetTxUniMaxStreams Connection{..} = reset myUniStreamId
 
-reset :: TVar Concurrency -> Int -> IO ()
+reset :: TVar Concurrency -> Int64 -> IO ()
 reset tvar mx = atomically $ modifyTVar' tvar $ \conc -> conc{maxStreams = StreamIdBase mx}
 
 -- | Raising the limit on the streams I may open.
@@ -85,7 +85,7 @@ reset tvar mx = atomically $ modifyTVar' tvar $ \conc -> conc{maxStreams = Strea
 -- One of them reordered on the way, or retransmitted after a newer one has
 -- gone out, would otherwise lower the limit.  @setTxMaxData@ and
 -- @setTxMaxStreamData@ guard the limits on data the same way.
-set :: TVar Concurrency -> Int -> IO ()
+set :: TVar Concurrency -> Int64 -> IO ()
 set tvar mx = atomically $ modifyTVar' tvar raise
   where
     raise conc@Concurrency{..}
@@ -147,7 +147,7 @@ checkRxMaxStreams conn@Connection{..} sid = do
 -- tenth of what it opened held over three thousand open within seconds,
 -- against a limit of 64.  The initial number was taken from the limit for
 -- bidirectional streams for unidirectional ones too.
-checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int)
+checkStreamIdRoom :: Connection -> Direction -> IO (Maybe Int64)
 checkStreamIdRoom conn dir = do
     let ref
             | dir == Bidirectional = peerStreamId conn
@@ -188,14 +188,14 @@ releasePeerStream conn sid
 --   'initialMaxStreamsBidi' to begin with.  A larger number is announced
 --   at once.  MAX_STREAMS cannot go down (RFC 9000 Sec 4.6), so a smaller
 --   one takes effect as the peer's open streams are closed.
-setMaxBidiStreams :: Connection -> Int -> IO ()
+setMaxBidiStreams :: Connection -> Int64 -> IO ()
 setMaxBidiStreams conn = setMaxStreams conn Bidirectional
 
 -- | 'setMaxBidiStreams' for unidirectional streams.
-setMaxUniStreams :: Connection -> Int -> IO ()
+setMaxUniStreams :: Connection -> Int64 -> IO ()
 setMaxUniStreams conn = setMaxStreams conn Unidirectional
 
-setMaxStreams :: Connection -> Direction -> Int -> IO ()
+setMaxStreams :: Connection -> Direction -> Int64 -> IO ()
 setMaxStreams conn dir n0 = do
     mx <- atomicModifyIORef' ref retarget
     case mx of

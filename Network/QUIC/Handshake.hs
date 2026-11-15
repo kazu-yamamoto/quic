@@ -115,7 +115,7 @@ handshakeClient conf conn myAuthCIDs = do
         conf
             { ccParameters =
                 (ccParameters conf)
-                    { maxDatagramFrameSize = ccMaxDatagramFrameSize conf
+                    { maxDatagramFrameSize = fromIntegral $ ccMaxDatagramFrameSize conf
                     }
             }
 
@@ -180,7 +180,7 @@ handshakeServer conf conn myAuthCIDs srt =
     params =
         (setCIDsToParameters myAuthCIDs $ scParameters conf)
             { statelessResetToken = Just srt
-            , maxDatagramFrameSize = scMaxDatagramFrameSize conf
+            , maxDatagramFrameSize = fromIntegral $ scMaxDatagramFrameSize conf
             }
 
 handshakeServer'
@@ -264,7 +264,10 @@ setPeerParams conn ctx peerExts = do
             -- RFC 9000 Sec 18.2: "UDP datagrams with payloads larger than
             -- this limit are not likely to be processed by the receiver."
             siz <- getMaxPacketSize conn
-            setMaxPacketSize conn $ min siz $ maxUdpPayloadSize params
+            setMaxPacketSize conn $
+                fromIntegral $
+                    min (fromIntegral siz) $
+                        maxUdpPayloadSize params
             qlogParamsSet conn (params, "remote")
             if isClient conn
                 then

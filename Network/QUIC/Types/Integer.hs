@@ -8,8 +8,10 @@ module Network.QUIC.Types.Integer (
     encodeInt'4,
     decodeInt,
     decodeInt',
+    decodeLength,
 ) where
 
+import qualified Control.Exception as E
 import Data.ByteString.Internal (unsafeCreate)
 import Foreign.Ptr
 import Foreign.Storable
@@ -139,3 +141,13 @@ decodeInt' rbuf = do
     loop r n = do
         b <- fromIntegral <$> read8 rbuf
         loop (r * 256 + b) (n - 1)
+
+-- | A length of what follows in the buffer.  62 bits on the wire, but past
+--   what 'Int' holds it cannot fit, and a 32-bit 'Int' would take its low
+--   bits for another length.
+decodeLength :: ReadBuffer -> IO Int
+decodeLength rbuf = do
+    n <- decodeInt' rbuf
+    if n > fromIntegral (maxBound :: Int)
+        then E.throwIO BufferOverrun
+        else return $ fromIntegral n

@@ -2,12 +2,13 @@
 
 module Network.QUIC.Types.Error where
 
+import Data.Int (Int64)
 import qualified Network.TLS as TLS
 import Network.TLS.QUIC
 import Text.Printf
 
 -- | Transport errors of QUIC.
-newtype TransportError = TransportError Int deriving (Eq)
+newtype TransportError = TransportError Int64 deriving (Eq)
 
 {- FOURMOLU_DISABLE -}
 pattern NoError                 :: TransportError
@@ -95,5 +96,5 @@ cryptoError ad = TransportError ec
     ec = 0x100 + fromIntegral (fromAlertDescription ad)
 
 -- | Application protocol errors of QUIC.
-newtype ApplicationProtocolError = ApplicationProtocolError Int
+newtype ApplicationProtocolError = ApplicationProtocolError Int64
     deriving (Eq, Show)
