@@ -153,13 +153,13 @@ emptyStreamState =
 
 data RecvStreamQ = RecvStreamQ
     { recvStreamQ :: TQueue ByteString
-    , pendingData :: IORef (Maybe ByteString)
-    , endOfStream :: IORef Bool
+    , pendingData :: TVar (Maybe ByteString)
+    , endOfStream :: TVar Bool
     }
 
 newRecvStreamQ :: IO RecvStreamQ
 newRecvStreamQ = do
     recvStreamQ <- newTQueueIO
-    pendingData <- newIORef Nothing
-    endOfStream <- newIORef False
+    pendingData <- newTVarIO Nothing
+    endOfStream <- newTVarIO False
     return RecvStreamQ{..}

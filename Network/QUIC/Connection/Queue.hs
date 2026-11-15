@@ -1,6 +1,7 @@
 module Network.QUIC.Connection.Queue where
 
 import Control.Concurrent.STM
+import Control.Monad (void)
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Recovery (StreamResets)
@@ -11,6 +12,14 @@ import Network.QUIC.Types
 
 takeInput :: Connection -> IO Input
 takeInput conn = atomically $ readTQueue (inputQ conn) `orElse` connectionEndSTM conn
+
+-- | Waiting until 'Network.QUIC.acceptStream' would not block: a stream
+--   the peer opened is waiting, or the connection has ended.
+--
+--   @since 0.4.0
+waitAcceptableSTM :: Connection -> STM ()
+waitAcceptableSTM conn =
+    void (peekTQueue $ inputQ conn) `orElse` connectionEndedSTM conn
 
 putInput :: Connection -> Input -> IO ()
 putInput conn inp = atomically $ writeTQueue (inputQ conn) inp

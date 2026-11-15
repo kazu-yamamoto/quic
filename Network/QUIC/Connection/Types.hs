@@ -694,6 +694,10 @@ isConnectionEnded conn = isJust <$> readTVarIO (connEnd conn)
 connectionEndSTM :: Connection -> STM a
 connectionEndSTM conn = readTVar (connEnd conn) >>= maybe retry throwSTM
 
+-- | Waiting for the connection to end, without throwing.
+connectionEndedSTM :: Connection -> STM ()
+connectionEndedSTM conn = readTVar (connEnd conn) >>= check . isJust
+
 -- | Throwing why the connection ended, if it has.
 checkConnectionEndSTM :: Connection -> STM ()
 checkConnectionEndSTM conn = connectionEndSTM conn `orElse` return ()

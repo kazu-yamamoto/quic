@@ -10,6 +10,7 @@ module Network.QUIC.Stream.Reass (
     tryReassemble,
 ) where
 
+import Control.Concurrent.STM
 import qualified Data.ByteString as BS
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -23,19 +24,19 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 getEndOfStream :: Stream -> IO Bool
-getEndOfStream Stream{..} = readIORef $ endOfStream streamRecvQ
+getEndOfStream Stream{..} = readTVarIO $ endOfStream streamRecvQ
 
 setEndOfStream :: Stream -> IO ()
-setEndOfStream Stream{..} = writeIORef (endOfStream streamRecvQ) True
+setEndOfStream Stream{..} = atomically $ writeTVar (endOfStream streamRecvQ) True
 
 readPendingData :: Stream -> IO (Maybe ByteString)
-readPendingData Stream{..} = readIORef $ pendingData streamRecvQ
+readPendingData Stream{..} = readTVarIO $ pendingData streamRecvQ
 
 writePendingData :: Stream -> ByteString -> IO ()
-writePendingData Stream{..} bs = writeIORef (pendingData streamRecvQ) $ Just bs
+writePendingData Stream{..} bs = atomically $ writeTVar (pendingData streamRecvQ) $ Just bs
 
 clearPendingData :: Stream -> IO ()
-clearPendingData Stream{..} = writeIORef (pendingData streamRecvQ) Nothing
+clearPendingData Stream{..} = atomically $ writeTVar (pendingData streamRecvQ) Nothing
 
 ----------------------------------------------------------------
 

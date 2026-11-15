@@ -28,6 +28,7 @@ module Network.QUIC (
     stream,
     unidirectionalStream,
     acceptStream,
+    waitAcceptableSTM,
 
     -- ** Closing
     closeStream,
@@ -42,6 +43,7 @@ module Network.QUIC (
 
     -- * IO
     recvStream,
+    waitReadableSTM,
     resetReceived,
     sendStream,
     sendStreamMany,
