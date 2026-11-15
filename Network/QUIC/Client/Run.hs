@@ -115,7 +115,7 @@ runClient conf client0 isICVN verInfo = do
             s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn)
             c5 =
                 labelMe "concurrently5"
-                    >> concurrently (c4' `E.catches` handlers) s6
+                    >> concurrentlyApp (c4' `E.catches` handlers) s6
             -- A peer closing with NO_ERROR leaves the application to finish:
             -- what waits on the peer gives up with 'ConnectionIsClosed'.
             handlers =
