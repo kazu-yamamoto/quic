@@ -5,7 +5,7 @@ module Network.QUIC.Stream.Queue where
 import Control.Concurrent.STM
 import Data.ByteString (ByteString)
 
-import {-# SOURCE #-} Network.QUIC.Connection.Types (peerClosedSTM)
+import {-# SOURCE #-} Network.QUIC.Connection.Types (connectionEndSTM)
 import Network.QUIC.Stream.Types
 
 putRecvStreamQ :: Stream -> ByteString -> IO ()
@@ -14,7 +14,7 @@ putRecvStreamQ Stream{..} = atomically . writeTQueue (recvStreamQ streamRecvQ)
 takeRecvStreamQ :: Stream -> IO ByteString
 takeRecvStreamQ Stream{..} =
     atomically $
-        readTQueue (recvStreamQ streamRecvQ) `orElse` peerClosedSTM streamConnection
+        readTQueue (recvStreamQ streamRecvQ) `orElse` connectionEndSTM streamConnection
 
 tryTakeRecvStreamQ :: Stream -> IO (Maybe ByteString)
 tryTakeRecvStreamQ Stream{..} = atomically $ tryReadTQueue $ recvStreamQ streamRecvQ

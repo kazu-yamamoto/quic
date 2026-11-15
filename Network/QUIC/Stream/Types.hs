@@ -21,7 +21,10 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Network.Control
 
-import {-# SOURCE #-} Network.QUIC.Connection.Types (Connection, peerClosedSTM)
+import {-# SOURCE #-} Network.QUIC.Connection.Types (
+    Connection,
+    connectionEndSTM,
+ )
 import Network.QUIC.Imports
 import Network.QUIC.Types
 
@@ -104,7 +107,7 @@ syncFinTx s = void $ atomically $ tryPutTMVar (streamSyncFinTx s) ()
 waitFinTx :: Stream -> IO ()
 waitFinTx s =
     atomically $
-        takeTMVar (streamSyncFinTx s) `orElse` peerClosedSTM (streamConnection s)
+        takeTMVar (streamSyncFinTx s) `orElse` connectionEndSTM (streamConnection s)
 
 ----------------------------------------------------------------
 
