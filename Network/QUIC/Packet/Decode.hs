@@ -74,7 +74,7 @@ decodePacket bs checkQuicBit = E.handle handler $ withReadBuffer bs $ \rbuf -> d
                     siz <- savingSize rbuf
                     return $ PacketIC cpkt RTT0Level siz
                 InitialPacketType -> do
-                    tokenLen <- fromIntegral <$> decodeInt' rbuf
+                    tokenLen <- decodeLength rbuf
                     token <- extractByteString rbuf tokenLen
                     let header = Initial ver dCID sCID token
                     cpkt <- CryptPacket header <$> makeLongCrypt bs rbuf
@@ -100,7 +100,7 @@ makeShortCrypt bs rbuf = do
 
 makeLongCrypt :: ByteString -> ReadBuffer -> IO Crypt
 makeLongCrypt bs rbuf = do
-    len <- fromIntegral <$> decodeInt' rbuf
+    len <- decodeLength rbuf
     here <- savingSize rbuf
     ff rbuf len
     let pkt = BS.take (here + len) bs

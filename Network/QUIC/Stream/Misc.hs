@@ -41,7 +41,7 @@ import Network.Control
 import Network.QUIC.Imports
 import Network.QUIC.Stream.Queue
 import Network.QUIC.Stream.Types
-import Network.QUIC.Types (ApplicationProtocolError, TxReset (..))
+import Network.QUIC.Types (ApplicationProtocolError, Offset, TxReset (..))
 
 ----------------------------------------------------------------
 
@@ -67,7 +67,7 @@ isTxStreamResetSTM Stream{..} = (== ResetSent) <$> readTVar streamResetTx
 getTxStreamOffset :: Stream -> Int -> IO Offset
 getTxStreamOffset Stream{..} len = atomicModifyIORef' streamStateTx get
   where
-    get (StreamState off fin) = (StreamState (off + len) fin, off)
+    get (StreamState off fin) = (StreamState (off + fromIntegral len) fin, off)
 
 isTxStreamClosed :: Stream -> IO Bool
 isTxStreamClosed Stream{..} = do
@@ -84,7 +84,7 @@ setTxStreamClosed Stream{..} = atomicModifyIORef'' streamStateTx set
 getRxStreamOffset :: Stream -> Int -> IO Offset
 getRxStreamOffset Stream{..} len = atomicModifyIORef' streamStateRx get
   where
-    get (StreamState off fin) = (StreamState (off + len) fin, off)
+    get (StreamState off fin) = (StreamState (off + fromIntegral len) fin, off)
 
 isRxStreamClosed :: Stream -> IO Bool
 isRxStreamClosed Stream{..} = do
@@ -127,9 +127,9 @@ readStreamFlowTx Stream{..} = readTVar streamFlowTx
 -- | Counting what is queued, answering the offset it starts at.
 addTxStreamData :: Stream -> Int -> STM Offset
 addTxStreamData Stream{..} n = stateTVar streamFlowTx $ \flow ->
-    (txfSent flow, flow{txfSent = txfSent flow + n})
+    (txfSent flow, flow{txfSent = txfSent flow + fromIntegral n})
 
-setTxMaxStreamData :: Stream -> Int -> IO ()
+setTxMaxStreamData :: Stream -> Int64 -> IO ()
 setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
   where
     set flow
@@ -138,26 +138,27 @@ setTxMaxStreamData Stream{..} n = atomically $ modifyTVar' streamFlowTx set
 
 -- | Setting the limit even lower: only for 0-RTT rejected, when the
 --   remembered limit goes (RFC 9001 Sec 4.6.2).
-resetTxMaxStreamData :: Stream -> Int -> IO ()
+resetTxMaxStreamData :: Stream -> Int64 -> IO ()
 resetTxMaxStreamData Stream{..} n =
     atomically $ modifyTVar' streamFlowTx $ \flow -> flow{txfLimit = n}
 
 ----------------------------------------------------------------
 
-getRxMaxStreamData :: Stream -> IO Int
+getRxMaxStreamData :: Stream -> IO Int64
 getRxMaxStreamData Stream{..} = rxfLimit <$> readIORef streamFlowRx
 
-addRxStreamData :: Stream -> Int -> IO ()
+addRxStreamData :: Stream -> Int64 -> IO ()
 addRxStreamData Stream{..} n = atomicModifyIORef'' streamFlowRx add
   where
     add flow = flow{rxfReceived = rxfReceived flow + n}
 
-updateStreamFlowRx :: Stream -> Int -> IO (Maybe Int)
+updateStreamFlowRx :: Stream -> Int -> IO (Maybe Int64)
 updateStreamFlowRx Stream{..} consumed =
-    atomicModifyIORef' streamFlowRx $ maybeOpenRxWindow consumed FCTMaxData
+    atomicModifyIORef' streamFlowRx $
+        maybeOpenRxWindow (fromIntegral consumed) FCTMaxData
 
 {- cannot be used due to reassemble.
-checkRxMaxStreamData :: Stream -> Int -> IO Bool
+checkRxMaxStreamData :: Stream -> Int64 -> IO Bool
 checkRxMaxStreamData Stream{..} len =
     atomicModifyIORef' streamFlowRx $ checkRxLimit len
 -}
@@ -188,12 +189,12 @@ getRxBounds Stream{..} = readTVarIO streamRxBounds
 -- | Answering with how far the frame takes the stream past what has been
 --   seen of it: what the connection's flow controller is to count as
 --   received for it (RFC 9000 Sec 4.1).  A copy of what was seen is 0.
-noteRxFrame :: Stream -> Int -> Bool -> IO (Either FinalSizeProblem Int)
+noteRxFrame :: Stream -> Int64 -> Bool -> IO (Either FinalSizeProblem Int64)
 noteRxFrame s end fin = atomically $ noteRxFrameSTM s end fin
 
 -- | 'noteRxFrame' as part of a transaction: see
 --   'Network.QUIC.Connection.StreamTable.noteRxArrival'.
-noteRxFrameSTM :: Stream -> Int -> Bool -> STM (Either FinalSizeProblem Int)
+noteRxFrameSTM :: Stream -> Int64 -> Bool -> STM (Either FinalSizeProblem Int64)
 noteRxFrameSTM Stream{..} end fin = stateTVar streamRxBounds $ \b -> note b
   where
     note b@RxBounds{..}
@@ -209,7 +210,7 @@ noteRxFrameSTM Stream{..} end fin = stateTVar streamRxBounds $ \b -> note b
             _ -> (Right (max 0 (end - rxHighest)), b{rxHighest = max rxHighest end})
 
 -- | The same for the final size a RESET_STREAM carries.
-noteRxFinalSize :: Stream -> Int -> IO (Either FinalSizeProblem Int)
+noteRxFinalSize :: Stream -> Int64 -> IO (Either FinalSizeProblem Int64)
 noteRxFinalSize s end = noteRxFrame s end True
 
 -- | 'getRxBounds' as part of a transaction.
@@ -218,10 +219,10 @@ getRxBoundsSTM Stream{..} = readTVar streamRxBounds
 
 -- | Counting octets as consumed on the stream's behalf though the
 --   application has not read them.
-addRxCredited :: Stream -> Int -> IO ()
+addRxCredited :: Stream -> Int64 -> IO ()
 addRxCredited s n = atomically $ addRxCreditedSTM s n
 
-addRxCreditedSTM :: Stream -> Int -> STM ()
+addRxCreditedSTM :: Stream -> Int64 -> STM ()
 addRxCreditedSTM Stream{..} n =
     modifyTVar' streamRxBounds $ \b -> b{rxCredited = rxCredited b + n}
 
@@ -237,7 +238,7 @@ addRxCreditedSTM Stream{..} n =
 --
 -- Answered once for each octet: what is answered here is counted as
 -- credited.
-takeRxOwedSTM :: Stream -> Int -> STM Int
+takeRxOwedSTM :: Stream -> Int64 -> STM Int64
 takeRxOwedSTM Stream{..} consumed = stateTVar streamRxBounds take'
   where
     take' b@RxBounds{..}
@@ -247,5 +248,5 @@ takeRxOwedSTM Stream{..} consumed = stateTVar streamRxBounds take'
         owed = rxHighest - consumed - rxCredited
 
 -- | What the application has read of the stream, as its window counts it.
-getRxConsumed :: Stream -> IO Int
+getRxConsumed :: Stream -> IO Int64
 getRxConsumed Stream{..} = rxfConsumed <$> readIORef streamFlowRx

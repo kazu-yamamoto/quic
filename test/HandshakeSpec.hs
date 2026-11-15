@@ -109,8 +109,8 @@ spec = do
                         { scUse0RTT = True
                         , scParameters =
                             (scParameters sc0)
-                                { initialMaxData = limit
-                                , initialMaxStreamDataBidiRemote = limit
+                                { initialMaxData = fromIntegral limit
+                                , initialMaxStreamDataBidiRemote = fromIntegral limit
                                 }
                         }
             test0RTTFlowControl cc sc waitS

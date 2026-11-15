@@ -36,7 +36,7 @@ data Hooks = Hooks
         :: [(EncryptionLevel, CryptoData)]
         -> ([(EncryptionLevel, CryptoData)], Bool)
     , onResetStreamReceived :: Stream -> ApplicationProtocolError -> IO ()
-    , onResetStreamReceived2 :: Maybe Stream -> ApplicationProtocolError -> Int -> IO ()
+    , onResetStreamReceived2 :: Maybe Stream -> ApplicationProtocolError -> Int64 -> IO ()
     , onServerReady :: IO ()
     , onConnectionEstablished :: ConnectionInfo -> IO ()
     }

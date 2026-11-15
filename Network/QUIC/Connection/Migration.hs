@@ -36,8 +36,8 @@ module Network.QUIC.Connection.Migration (
 ) where
 
 import Control.Concurrent.STM
-import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
+import qualified Network.QUIC.Types.Int64Map as IntMap
 
 import Network.QUIC.Connection.Misc
 import Network.QUIC.Connection.Queue
@@ -60,7 +60,7 @@ getMyCID Connection{..} = cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
 getMyCIDs :: Connection -> IO [CID]
 getMyCIDs Connection{..} = Map.keys . revInfos <$> readIORef myCIDDB
 
-getMyCIDSeqNum :: Connection -> IO Int
+getMyCIDSeqNum :: Connection -> IO Int64
 getMyCIDSeqNum Connection{..} = cidInfoSeq . usedCIDInfo <$> readIORef myCIDDB
 
 getPeerCID :: Connection -> IO CID
@@ -70,12 +70,12 @@ isMyCID :: Connection -> CID -> IO Bool
 isMyCID Connection{..} cid =
     (== cid) . cidInfoCID . usedCIDInfo <$> readIORef myCIDDB
 
-shouldUpdateMyCID :: Connection -> Int -> IO Bool
+shouldUpdateMyCID :: Connection -> Int64 -> IO Bool
 shouldUpdateMyCID Connection{..} nseq = do
     useq <- cidInfoSeq . usedCIDInfo <$> readIORef myCIDDB
     return (nseq > useq)
 
-myCIDsInclude :: Connection -> CID -> IO (Maybe Int)
+myCIDsInclude :: Connection -> CID -> IO (Maybe Int64)
 myCIDsInclude Connection{..} cid =
     Map.lookup cid . revInfos <$> readIORef myCIDDB
 
@@ -128,7 +128,7 @@ addPeerCID conn@Connection{..} cidInfo = do
         db <- readTVar peerCIDDB
         case Map.lookup (cidInfoCID cidInfo) (revInfos db) of
             Nothing -> do
-                let n = Map.size $ revInfos db
+                let n = fromIntegral $ Map.size $ revInfos db
                 if n >= lim
                     then return False
                     else do
@@ -191,7 +191,7 @@ setPeerCID Connection{..} cidInfo pri =
     modifyTVar' peerCIDDB $ set cidInfo pri
 
 -- | After sending RetireConnectionID
-retirePeerCID :: Connection -> Int -> IO ()
+retirePeerCID :: Connection -> Int64 -> IO ()
 retirePeerCID Connection{..} n =
     atomically $ modifyTVar' peerCIDDB $ del n
 
@@ -201,19 +201,19 @@ checkPeerCIDCapacity :: Connection -> IO Bool
 checkPeerCIDCapacity Connection{..} = do
     lim <- activeConnectionIdLimit <$> readIORef peerParameters
     cap <- IntMap.size . cidInfos <$> readIORef myCIDDB
-    return (cap < lim)
+    return (fromIntegral cap < lim)
 
-getMyRetirePriorTo :: Connection -> IO Int
+getMyRetirePriorTo :: Connection -> IO Int64
 getMyRetirePriorTo Connection{..} = retirePriorTo <$> readIORef myCIDDB
 
-setMyRetirePriorTo :: Connection -> Int -> IO ()
+setMyRetirePriorTo :: Connection -> Int64 -> IO ()
 setMyRetirePriorTo Connection{..} rpt =
     modifyIORef' myCIDDB $ \db -> db{retirePriorTo = rpt}
 
-getPeerRetirePriorTo :: Connection -> IO Int
+getPeerRetirePriorTo :: Connection -> IO Int64
 getPeerRetirePriorTo Connection{..} = retirePriorTo <$> readTVarIO peerCIDDB
 
-setPeerRetirePriorTo :: Connection -> Int -> IO ()
+setPeerRetirePriorTo :: Connection -> Int64 -> IO ()
 setPeerRetirePriorTo Connection{..} rpt =
     atomically $ modifyTVar' peerCIDDB $ \db -> db{retirePriorTo = rpt}
 
@@ -221,7 +221,7 @@ setPeerRetirePriorTo Connection{..} rpt =
 --   Retire Prior To in one go.  Retired first, nothing might be left to use;
 --   added first, the limit is checked only after the retirement
 --   (RFC 9000 Sec 5.1.1).  'Nothing' if the limit is exceeded.
-addPeerCIDAndRetire :: Connection -> CIDInfo -> Int -> IO (Maybe [Int])
+addPeerCIDAndRetire :: Connection -> CIDInfo -> Int64 -> IO (Maybe [Int64])
 addPeerCIDAndRetire conn@Connection{..} cidInfo rpt = do
     let lim = activeConnectionIdLimit $ getMyParameters conn
     atomically $ do
@@ -232,18 +232,18 @@ addPeerCIDAndRetire conn@Connection{..} cidInfo rpt = do
             (db2, ns)
                 | rpt >= retirePriorTo db0 = arrange rpt db1
                 | otherwise = (db1, [])
-        if Map.size (revInfos db2) > lim
+        if fromIntegral (Map.size (revInfos db2)) > lim
             then return Nothing
             else do
                 writeTVar peerCIDDB db2
                 return $ Just ns
 
-arrange :: Int -> CIDDB -> (CIDDB, [Int])
+arrange :: Int64 -> CIDDB -> (CIDDB, [Int64])
 arrange rpt db@CIDDB{..} = (db', dropSeqnums)
   where
     (toDrops, cidInfos') = IntMap.partitionWithKey (\k _ -> k < rpt) cidInfos
     dropSeqnums = IntMap.foldrWithKey (\k _ ks -> k : ks) [] toDrops
-    dropCIDs = IntMap.foldr (\c r -> cidInfoCID c : r) [] toDrops
+    dropCIDs = foldr (\c r -> cidInfoCID c : r) [] toDrops
     -- The caller adds a CID at or above rpt first, so one is left.
     usedCIDInfo'
         | cidInfoSeq usedCIDInfo >= rpt = usedCIDInfo
@@ -282,10 +282,10 @@ setMyCID conn@Connection{..} ncid = do
 -- given and already retired is not that -- the frame may simply have been
 -- sent twice -- so it is the ones past everything we have given that are
 -- refused.
-isMyCIDSeqNumIssued :: Connection -> Int -> IO Bool
+isMyCIDSeqNumIssued :: Connection -> Int64 -> IO Bool
 isMyCIDSeqNumIssued Connection{..} n = (n <) . nextSeqNum <$> readIORef myCIDDB
 
-retireMyCID :: Connection -> Int -> IO (Maybe CIDInfo)
+retireMyCID :: Connection -> Int64 -> IO (Maybe CIDInfo)
 retireMyCID Connection{..} n = atomicModifyIORef' myCIDDB $ del' n
 
 ----------------------------------------------------------------
@@ -319,7 +319,7 @@ new cid srt db@CIDDB{..} = (db', cidInfo)
             , revInfos = Map.insert cid nextSeqNum revInfos
             }
 
-del :: Int -> CIDDB -> CIDDB
+del :: Int64 -> CIDDB -> CIDDB
 del n db@CIDDB{..} = db'
   where
     db' = case IntMap.lookup n cidInfos of
@@ -330,7 +330,7 @@ del n db@CIDDB{..} = db'
                 , revInfos = Map.delete (cidInfoCID cidInfo) revInfos
                 }
 
-del' :: Int -> CIDDB -> (CIDDB, Maybe CIDInfo)
+del' :: Int64 -> CIDDB -> (CIDDB, Maybe CIDInfo)
 del' n db@CIDDB{..} = (db', mcidInfo)
   where
     mcidInfo = IntMap.lookup n cidInfos

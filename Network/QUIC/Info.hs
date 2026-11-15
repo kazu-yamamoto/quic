@@ -1,5 +1,6 @@
 module Network.QUIC.Info where
 
+import Data.Int (Int64)
 import Data.ByteString ()
 import Network.QUIC.Connection
 import Network.QUIC.Types
@@ -42,8 +43,8 @@ getConnectionInfo conn = do
 
 -- | Statistics of a connection.
 data ConnectionStats = ConnectionStats
-    { txBytes :: Int
-    , rxBytes :: Int
+    { txBytes :: Int64
+    , rxBytes :: Int64
     }
     deriving (Eq, Show)
 

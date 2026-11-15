@@ -112,9 +112,9 @@ readConnectionFlowTx Connection{..} = readTVar flowTx
 addTxData :: Connection -> Int -> STM ()
 addTxData Connection{..} n = modifyTVar' flowTx add
   where
-    add flow = flow{txfSent = txfSent flow + n}
+    add flow = flow{txfSent = txfSent flow + fromIntegral n}
 
-setTxMaxData :: Connection -> Int -> IO ()
+setTxMaxData :: Connection -> Int64 -> IO ()
 setTxMaxData Connection{..} n = atomically $ modifyTVar' flowTx set
   where
     set flow
@@ -122,42 +122,42 @@ setTxMaxData Connection{..} n = atomically $ modifyTVar' flowTx set
         | otherwise = flow
 
 -- | 'setTxMaxData' that may lower: only for 0-RTT rejected.
-resetTxMaxData :: Connection -> Int -> IO ()
+resetTxMaxData :: Connection -> Int64 -> IO ()
 resetTxMaxData Connection{..} n =
     atomically $ modifyTVar' flowTx $ \flow -> flow{txfLimit = n}
 
 ----------------------------------------------------------------
 
-getRxMaxData :: Connection -> IO Int
+getRxMaxData :: Connection -> IO Int64
 getRxMaxData Connection{..} = rxfLimit <$> readIORef flowRx
 
-updateFlowRx :: Connection -> Int -> IO (Maybe Int)
+updateFlowRx :: Connection -> Int64 -> IO (Maybe Int64)
 updateFlowRx Connection{..} consumed =
     atomicModifyIORef' flowRx $ maybeOpenRxWindow consumed FCTMaxData
 
-checkRxMaxData :: Connection -> Int -> IO Bool
+checkRxMaxData :: Connection -> Int64 -> IO Bool
 checkRxMaxData Connection{..} len =
     atomicModifyIORef' flowRx $ checkRxLimit len
 
 ----------------------------------------------------------------
 
 addTxBytes :: Connection -> Int -> IO ()
-addTxBytes Connection{..} n = modifyIORef' bytesTx (+ n)
+addTxBytes Connection{..} n = modifyIORef' bytesTx (+ fromIntegral n)
 
-getTxBytes :: Connection -> IO Int
+getTxBytes :: Connection -> IO Int64
 getTxBytes Connection{..} = readIORef bytesTx
 
 addRxBytes :: Connection -> Int -> IO ()
-addRxBytes Connection{..} n = modifyIORef' bytesRx (+ n)
+addRxBytes Connection{..} n = modifyIORef' bytesRx (+ fromIntegral n)
 
-getRxBytes :: Connection -> IO Int
+getRxBytes :: Connection -> IO Int64
 getRxBytes Connection{..} = readIORef bytesRx
 
 addPathTxBytes :: PathInfo -> Int -> IO ()
-addPathTxBytes PathInfo{..} n = atomically $ modifyTVar' pathBytesTx (+ n)
+addPathTxBytes PathInfo{..} n = atomically $ modifyTVar' pathBytesTx (+ fromIntegral n)
 
 addPathRxBytes :: PathInfo -> Int -> IO ()
-addPathRxBytes PathInfo{..} n = atomically $ modifyTVar' pathBytesRx (+ n)
+addPathRxBytes PathInfo{..} n = atomically $ modifyTVar' pathBytesRx (+ fromIntegral n)
 
 ----------------------------------------------------------------
 
@@ -189,7 +189,7 @@ checkAntiAmplificationFreeSTM PathInfo{..} siz = do
         else do
             tx <- readTVar pathBytesTx
             rx <- readTVar pathBytesRx
-            return (tx + siz <= 3 * rx)
+            return (tx + fromIntegral siz <= 3 * rx)
 
 checkAntiAmplificationFree :: PathInfo -> Int -> IO Bool
 checkAntiAmplificationFree pathInfo siz =

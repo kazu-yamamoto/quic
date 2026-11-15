@@ -76,7 +76,7 @@ calculateIntegrityTag ver oCID pseudo0 =
 -- The same section gives the numbers: 2^52 for the AES-GCM ciphers and 2^36
 -- for ChaCha20-Poly1305.  An AEAD we do not know gets the smaller of the two,
 -- which is the safe way to be wrong.
-integrityLimit :: Cipher -> Int
+integrityLimit :: Cipher -> Int64
 integrityLimit cipher
     | cipher == cipher13_AES_128_GCM_SHA256 = 2 ^ (52 :: Int)
     | cipher == cipher13_AES_256_GCM_SHA384 = 2 ^ (52 :: Int)
@@ -94,7 +94,7 @@ integrityLimit cipher
 -- ChaCha20-Poly1305 a number "greater than the number of possible packets
 -- (2^62) and so can be disregarded".  An AEAD we do not know gets the
 -- smaller, which is the safe way to be wrong.
-confidentialityLimit :: Cipher -> Int
+confidentialityLimit :: Cipher -> Int64
 confidentialityLimit cipher
     | cipher == cipher13_CHACHA20_POLY1305_SHA256 = 2 ^ (62 :: Int)
     | otherwise = 2 ^ (23 :: Int)

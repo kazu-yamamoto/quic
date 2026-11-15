@@ -3,6 +3,7 @@
 module ReassSpec where
 
 import qualified Data.ByteString as BS
+import Data.Int (Int64)
 import Test.Hspec
 
 import Network.QUIC.Internal
@@ -24,9 +25,9 @@ spec = do
             let put n = putRxStreamData strm $ RxStreamData "x" (n * 2 + 1) 1 False
             -- Odd offsets, so none of them is ever adjacent to another and
             -- none can be delivered: every one has to be held.
-            held <- mapM put [1 .. maxReassFragments]
+            held <- mapM put [1 .. fromIntegral maxReassFragments]
             map isReassembled held `shouldSatisfy` and
-            put (maxReassFragments + 1) `shouldReturn` TooFragmented
+            put (fromIntegral maxReassFragments + 1) `shouldReturn` TooFragmented
         it "keeps taking fragments it can deliver" $ do
             strm <- scratchStream serverConf
             -- In order, so each one goes straight out and nothing is held.
@@ -66,11 +67,12 @@ spec = do
             takeRecvStreamQwithSize strm 100 `shouldReturn` octets 0 25
 
 -- | The octets from one offset up to another, each its offset modulo 256.
-octets :: Int -> Int -> BS.ByteString
+octets :: Int64 -> Int64 -> BS.ByteString
 octets s e = BS.pack $ map fromIntegral [s .. e - 1]
 
-putFrag :: Stream -> Int -> Int -> Bool -> IO FlowCntl
-putFrag strm s e fin = putRxStreamData strm $ RxStreamData (octets s e) s (e - s) fin
+putFrag :: Stream -> Int64 -> Int64 -> Bool -> IO FlowCntl
+putFrag strm s e fin =
+    putRxStreamData strm $ RxStreamData (octets s e) s (fromIntegral (e - s)) fin
 
 scratchStream :: ServerConfig -> IO Stream
 scratchStream serverConf = do

@@ -12,7 +12,7 @@ module Network.QUIC.Recovery.PeerPacketNumbers (
     fromPeerPacketNumbers,
 ) where
 
-import qualified Data.IntSet as IntSet
+import qualified Network.QUIC.Types.Int64Set as IntSet
 
 import Network.QUIC.Imports hiding (range)
 import Network.QUIC.Recovery.Types
@@ -49,7 +49,7 @@ reducePeerPacketNumbers :: LDCC -> EncryptionLevel -> PeerPacketNumbers -> IO ()
 reducePeerPacketNumbers LDCC{..} lvl (PeerPacketNumbers pns) =
     atomicModifyIORef'' (peerPacketNumbers ! lvl) reduce
   where
-    reduce (PeerPacketNumbers pns0) = PeerPacketNumbers (pns0 IntSet.\\ pns)
+    reduce (PeerPacketNumbers pns0) = PeerPacketNumbers (pns0 `IntSet.difference` pns)
 
 {-# INLINE setPreviousRTT1PPNs #-}
 setPreviousRTT1PPNs :: LDCC -> PeerPacketNumbers -> IO ()

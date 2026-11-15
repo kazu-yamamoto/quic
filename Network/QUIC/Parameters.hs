@@ -88,24 +88,24 @@ data Parameters = Parameters
     { originalDestinationConnectionId :: Maybe CID
     , maxIdleTimeout :: Milliseconds
     , statelessResetToken :: Maybe StatelessResetToken -- 16 bytes
-    , maxUdpPayloadSize :: Int
-    , initialMaxData :: Int
-    , initialMaxStreamDataBidiLocal :: Int
-    , initialMaxStreamDataBidiRemote :: Int
-    , initialMaxStreamDataUni :: Int
-    , initialMaxStreamsBidi :: Int
-    , initialMaxStreamsUni :: Int
-    , ackDelayExponent :: Int
+    , maxUdpPayloadSize :: Int64
+    , initialMaxData :: Int64
+    , initialMaxStreamDataBidiLocal :: Int64
+    , initialMaxStreamDataBidiRemote :: Int64
+    , initialMaxStreamDataUni :: Int64
+    , initialMaxStreamsBidi :: Int64
+    , initialMaxStreamsUni :: Int64
+    , ackDelayExponent :: Int64
     , maxAckDelay :: Milliseconds
     , disableActiveMigration :: Bool
     , preferredAddress :: Maybe ByteString -- fixme
-    , activeConnectionIdLimit :: Int
+    , activeConnectionIdLimit :: Int64
     , initialSourceConnectionId :: Maybe CID
     , retrySourceConnectionId :: Maybe CID
     , grease :: Maybe ByteString
     , greaseQuicBit :: Bool
     , versionInformation :: Maybe VersionInfo
-    , maxDatagramFrameSize :: Int
+    , maxDatagramFrameSize :: Int64
     }
     deriving (Eq, Show)
 
@@ -145,19 +145,19 @@ baseParameters =
 -- does hold.  'decodeInt' answers the first two by reading off the end, which
 -- from inside 'unsafeDupablePerformIO' means an exception out of a pure value
 -- -- raised wherever the field is first forced, which is nowhere near here.
-decInt :: ByteString -> Maybe Int
+decInt :: ByteString -> Maybe Int64
 decInt bs = unsafeDupablePerformIO $
     E.handle (\BufferOverrun -> return Nothing) $
         withReadBuffer bs $ \rbuf -> do
             n <- decodeInt' rbuf
             rest <- remainingSize rbuf
-            return $ if rest == 0 then Just (fromIntegral n) else Nothing
+            return $ if rest == 0 then Just n else Nothing
 
-encInt :: Int -> ByteString
-encInt = encodeInt . fromIntegral
+encInt :: Int64 -> ByteString
+encInt = encodeInt
 
 decMilliseconds :: ByteString -> Maybe Milliseconds
-decMilliseconds bs = Milliseconds . fromIntegral <$> decInt bs
+decMilliseconds bs = Milliseconds <$> decInt bs
 
 encMilliseconds :: Milliseconds -> ByteString
 encMilliseconds (Milliseconds n) = encodeInt $ fromIntegral n
@@ -332,7 +332,7 @@ decodeParameterList bs =
             then return $ Just (build [])
             else do
                 key <- decodeInt' rbuf
-                len <- fromIntegral <$> decodeInt' rbuf
+                len <- decodeLength rbuf
                 val <- extractByteString rbuf len
                 go rbuf (build . ((Key key, val) :))
 
@@ -344,13 +344,13 @@ defaultParameters :: Parameters
 defaultParameters =
     baseParameters
         { maxIdleTimeout = idleTimeout -- 30000
-        , maxUdpPayloadSize = maximumUdpPayloadSize -- 2048
-        , initialMaxData = defaultMaxData -- !M
-        , initialMaxStreamDataBidiLocal = defaultMaxStreamData -- 256K
-        , initialMaxStreamDataBidiRemote = defaultMaxStreamData -- 256K
-        , initialMaxStreamDataUni = defaultMaxStreamData -- 256K
-        , initialMaxStreamsBidi = defaultMaxStreams -- 64
-        , initialMaxStreamsUni = defaultMaxStreamsUni -- 10
+        , maxUdpPayloadSize = fromIntegral maximumUdpPayloadSize -- 2048
+        , initialMaxData = fromIntegral defaultMaxData -- !M
+        , initialMaxStreamDataBidiLocal = fromIntegral defaultMaxStreamData -- 256K
+        , initialMaxStreamDataBidiRemote = fromIntegral defaultMaxStreamData -- 256K
+        , initialMaxStreamDataUni = fromIntegral defaultMaxStreamData -- 256K
+        , initialMaxStreamsBidi = fromIntegral defaultMaxStreams -- 64
+        , initialMaxStreamsUni = fromIntegral defaultMaxStreamsUni -- 10
         , activeConnectionIdLimit = 5
         , greaseQuicBit = True
         , maxDatagramFrameSize = 0

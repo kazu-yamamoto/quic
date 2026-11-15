@@ -114,6 +114,8 @@ library
         Network.QUIC.Types.Exception
         Network.QUIC.Types.Frame
         Network.QUIC.Types.Info
+        Network.QUIC.Types.Int64Map
+        Network.QUIC.Types.Int64Set
         Network.QUIC.Types.Integer
         Network.QUIC.Types.Packet
         Network.QUIC.Types.Queue
@@ -142,7 +144,7 @@ library
         iproute >=1.7.12 && <1.9,
         network >=3.2.12,
         network-byte-order >=0.1.7 && <0.2,
-        network-control >=0.1.5 && <0.2,
+        network-control >=0.2 && <0.3,
         ram,
         random >=1.2 && <1.4,
         serialise,

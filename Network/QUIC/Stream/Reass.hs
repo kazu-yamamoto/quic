@@ -108,14 +108,14 @@ data FlowCntl
 putRxStreamData :: Stream -> RxStreamData -> IO FlowCntl
 putRxStreamData s rx@(RxStreamData _ off len _) = do
     lim <- getRxMaxStreamData s
-    if len + off > lim
+    if fromIntegral len + off > lim
         then return OverLimit
         else do
             tryReassemble s rx put putFin
   where
     put "" = return ()
     put d = do
-        addRxStreamData s $ BS.length d
+        addRxStreamData s $ len64 d
         putRecvStreamQ s d
     putFin = putRecvStreamQ s ""
 
@@ -132,7 +132,7 @@ putRxCryptoData
     :: Stream -> Int -> RxStreamData -> (StreamData -> IO ()) -> IO FlowCntl
 putRxCryptoData s lim rx@(RxStreamData _ off len _) put = do
     StreamState off0 _ <- readIORef $ streamStateRx s
-    if off + len > off0 + lim
+    if off + fromIntegral len > off0 + fromIntegral lim
         then return OverLimit
         else tryReassemble s rx put (return ())
 
@@ -147,11 +147,13 @@ tryReassemble
 tryReassemble Stream{..} (RxStreamData dat off len fin) put putFin = do
     StreamState off0 fin0 <- readIORef streamStateRx
     Reass held mfin <- readIORef streamReass
-    let new = uncovered held (max off off0) $ BS.drop (off0 - off) dat
+    -- What is behind the point reached, which is at most all of it.
+    let behind = fromIntegral $ min (len64 dat) $ max 0 (off0 - off)
+        new = uncovered held (max off off0) $ BS.drop behind dat
         newLen = sum $ map (BS.length . snd) new
         -- 'streamFin' is set by the first FIN, or when we stop receiving.
         finNew = fin && not fin0
-        mfin1 = if finNew then Just (off + len) else mfin
+        mfin1 = if finNew then Just (off + fromIntegral len) else mfin
         (ready, held1, off1) = deliverable off0 $ foldr (uncurry Map.insert) held new
         done = mfin1 == Just off1
     if
@@ -173,11 +175,12 @@ uncovered held = go
     go s d
         | BS.null d = []
         | Just (k, v) <- Map.lookupLE s held
-        , k + BS.length v > s =
-            let e = k + BS.length v in go e $ BS.drop (e - s) d
+        , k + len64 v > s =
+            -- Less than the held piece, so an Int.
+            let e = k + len64 v in go e $ BS.drop (fromIntegral (e - s)) d
         | Just (k, _) <- Map.lookupGT s held
-        , k < s + BS.length d =
-            let (d1, d2) = BS.splitAt (k - s) d in (s, d1) : go k d2
+        , k < s + len64 d =
+            let (d1, d2) = BS.splitAt (fromIntegral (k - s)) d in (s, d1) : go k d2
         | otherwise = [(s, d)]
 
 -- | The pieces which follow on from an offset, without a gap.
@@ -188,6 +191,9 @@ deliverable
 deliverable o m = case Map.minViewWithKey m of
     Just ((k, d), m')
         | k == o ->
-            let (ds, m'', o') = deliverable (o + BS.length d) m'
+            let (ds, m'', o') = deliverable (o + len64 d) m'
              in (d : ds, m'', o')
     _ -> ([], m, o)
+
+len64 :: StreamData -> Offset
+len64 = fromIntegral . BS.length

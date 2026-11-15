@@ -29,7 +29,7 @@ module Network.QUIC.Connection.Crypto (
 ) where
 
 import Control.Concurrent.STM
-import qualified Data.IntSet as IntSet
+import qualified Network.QUIC.Types.Int64Set as IntSet
 import Network.TLS.QUIC
 
 import Network.QUIC.Connection.Misc

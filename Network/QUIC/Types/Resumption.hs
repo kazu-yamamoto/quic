@@ -4,6 +4,7 @@
 module Network.QUIC.Types.Resumption where
 
 import Codec.Serialise
+import Data.Int (Int64)
 import GHC.Generics
 import Network.TLS hiding (Version)
 import Network.TLS.QUIC
@@ -19,14 +20,14 @@ data ResumptionInfo = ResumptionInfo
     , resumptionSession :: [(SessionID, SessionData)]
     , resumptionToken :: Token
     , resumptionRetry :: Bool
-    , resumptionActiveConnectionIdLimit :: Int
-    , resumptionInitialMaxData :: Int
-    , resumptionInitialMaxStreamDataBidiLocal :: Int
-    , resumptionInitialMaxStreamDataBidiRemote :: Int
-    , resumptionInitialMaxStreamDataUni :: Int
-    , resumptionInitialMaxStreamsBidi :: Int
-    , resumptionInitialMaxStreamsUni :: Int
-    , resumptionMaxDatagramFrameSize :: Int
+    , resumptionActiveConnectionIdLimit :: Int64
+    , resumptionInitialMaxData :: Int64
+    , resumptionInitialMaxStreamDataBidiLocal :: Int64
+    , resumptionInitialMaxStreamDataBidiRemote :: Int64
+    , resumptionInitialMaxStreamDataUni :: Int64
+    , resumptionInitialMaxStreamsBidi :: Int64
+    , resumptionInitialMaxStreamsUni :: Int64
+    , resumptionMaxDatagramFrameSize :: Int64
     }
     deriving (Eq, Show, Generic)
 

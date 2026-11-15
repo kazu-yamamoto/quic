@@ -23,7 +23,6 @@ import Data.Bits (shiftR)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
 import Data.IORef
-import qualified Data.IntMap.Strict as IntMap
 import Data.Maybe (isNothing)
 import qualified Data.Sequence as Seq
 import GHC.Conc (getUncaughtExceptionHandler, setUncaughtExceptionHandler)
@@ -565,7 +564,7 @@ testTinyWrites cc sc0 waitS = do
     sc =
         sc0
             { scParameters =
-                (scParameters sc0){initialMaxStreamsBidi = 2 * nStreams}
+                (scParameters sc0){initialMaxStreamsBidi = fromIntegral (2 * nStreams)}
             }
 
     client doneVar = do
@@ -622,7 +621,7 @@ testResetStreamFinalSize cc0 sc waitS = do
             consumeBytes strm (BS.length payload)
             stopStream strm aerr
             mres <- Timeout.timeout 5000000 $ takeMVar finalSizeVar
-            mres `shouldBe` Just (BS.length payload)
+            mres `shouldBe` Just (fromIntegral (BS.length payload))
             putMVar doneVar ()
 
     server request payload doneVar = run sc $ \conn -> do
@@ -651,7 +650,7 @@ testResetAfterSend cc0 sc waitS = do
             strm <- stream conn
             sendStream strm "open"
             mres <- Timeout.timeout 5000000 $ takeMVar finalSizeVar
-            mres `shouldBe` Just (BS.length payload)
+            mres `shouldBe` Just (fromIntegral (BS.length payload))
             -- The connection is still there once anything sent after the
             -- RESET_STREAM would have arrived.
             strm2 <- stream conn
@@ -757,7 +756,7 @@ testOpenStreams cc sc waitS = do
     withAsync (server maxOpen) $ \_ -> do
         client
         readIORef maxOpen
-            >>= (`shouldSatisfy` (<= initialMaxStreamsBidi (scParameters sc)))
+            >>= (`shouldSatisfy` (<= fromIntegral (initialMaxStreamsBidi (scParameters sc))))
   where
     client = do
         waitS
@@ -798,7 +797,7 @@ testDepartedForgotten cc sc waitS = do
             strm <- acceptStream conn
             _ <- recvStream strm 1
             closeStream strm
-        let departed = IntMap.size <$> readTVarIO (departedStreams conn)
+        let departed = length <$> readTVarIO (departedStreams conn)
             settle :: Int -> IO Int
             settle 0 = departed
             settle k = do
@@ -821,8 +820,8 @@ testDepartedBounded cc sc0 waitS = do
                 sendStream strm "x"
                 atomicModifyIORef' opened $ \x -> (x + 1, ())
             return ()
-        readIORef opened >>= (`shouldSatisfy` (<= limit))
-        readIORef most >>= (`shouldSatisfy` (<= limit))
+        readIORef opened >>= (`shouldSatisfy` ((<= limit) . fromIntegral))
+        readIORef most >>= (`shouldSatisfy` ((<= limit) . fromIntegral))
   where
     limit = initialMaxStreamsBidi $ scParameters sc0
     sc = sc0{scHooks = (scHooks sc0){onPlainCreated = hide}}
@@ -833,7 +832,7 @@ testDepartedBounded cc sc0 waitS = do
         strm <- acceptStream conn
         _ <- recvStream strm 1
         closeStream strm
-        d <- IntMap.size <$> readTVarIO (departedStreams conn)
+        d <- length <$> readTVarIO (departedStreams conn)
         atomicModifyIORef' most $ \m -> (max m d, ())
 
 -- | The server closes each stream as soon as it has read a byte, while the
@@ -868,7 +867,7 @@ testFinCrossesClose cc sc0 waitS = do
             strm <- acceptStream conn
             _ <- recvStream strm 1
             closeStream strm
-        let departed = IntMap.size <$> readTVarIO (departedStreams conn)
+        let departed = length <$> readTVarIO (departedStreams conn)
             settle :: Int -> IO Int
             settle 0 = departed
             settle k = do
@@ -885,7 +884,7 @@ testUniStreams cc sc waitS = do
     withAsync server $ \_ -> do
         client opened
         readIORef opened
-            >>= (`shouldSatisfy` (<= initialMaxStreamsUni (scParameters sc) + 1))
+            >>= (`shouldSatisfy` (<= fromIntegral (initialMaxStreamsUni (scParameters sc) + 1)))
   where
     client opened = do
         waitS
@@ -1172,7 +1171,7 @@ testMultiSendRecv cc sc waitS times = do
             sendStream strm $ BS.singleton $ fromIntegral n
             replicateM_ times $ sendStream strm chunk
             shutdownStream strm
-            takeMVar (mvars !! n) `shouldReturn` ()
+            takeMVar (mvars !! fromIntegral n) `shouldReturn` ()
     server mvars = run sc loop
       where
         loop conn = do
@@ -1506,8 +1505,8 @@ testDepartedOverLimit (connLim, strmLim) cc0 sc0 waitS =
         sc0
             { scParameters =
                 (scParameters sc0)
-                    { initialMaxData = connLim
-                    , initialMaxStreamDataBidiRemote = strmLim
+                    { initialMaxData = fromIntegral connLim
+                    , initialMaxStreamDataBidiRemote = fromIntegral strmLim
                     }
             , scHooks = (scHooks sc0){onPlainCreated = hide}
             }

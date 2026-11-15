@@ -461,7 +461,7 @@ checkRetireOfArrivalCID conn hdr frames = do
 -- They were the octets reassembled instead, so a stream's gaps -- what the
 -- peer sent and we never saw -- were counted by nobody, and a peer could go
 -- past its limit by them unnoticed.
-countedRx :: Connection -> Either FinalSizeProblem Int -> IO Int
+countedRx :: Connection -> Either FinalSizeProblem Int64 -> IO Int64
 countedRx conn r = case r of
     Left problem -> do
         closeOverFinalSize conn problem
@@ -476,7 +476,7 @@ countedRx conn r = case r of
 
 -- | Counting octets nobody will read as consumed, and announcing a new
 --   MAX_DATA if that is due.
-giveBack :: Connection -> Int -> IO ()
+giveBack :: Connection -> Int64 -> IO ()
 giveBack conn n = when (n > 0) $ do
     mx <- updateFlowRx conn n
     case mx of
@@ -491,7 +491,7 @@ giveBack conn n = when (n > 0) $ do
 creditDeparted
     :: Connection
     -> StreamId
-    -> Either (TransportError, ReasonPhrase) (Int, Bool)
+    -> Either (TransportError, ReasonPhrase) (Int64, Bool)
     -> IO ()
 creditDeparted conn sid r =
     case r of
@@ -530,7 +530,7 @@ receiveStreamFrame conn space sid off dat fin = do
                 Just strm -> noteRxFrame strm end fin >>= take' Nothing strm
   where
     len = BS.length dat
-    end = off + len
+    end = off + fromIntegral len
     take' found strm r = do
         -- RFC 9000 Sec 4.5: where the stream ends, once said, cannot be
         -- said differently, and nothing may arrive past it.
@@ -579,7 +579,9 @@ processFrame conn lvl (Ack ackInfo@(AckInfo largestAcked _ _) ackDelay) = do
     when (largestAcked >= nextPN) $
         closeConnection conn ProtocolViolation "ACK for a packet never sent"
     e <- ackDelayExponent <$> getPeerParameters conn
-    onAckReceived (connLDCC conn) lvl ackInfo $ ackDelayMicro e ackDelay
+    -- At most 20, checked in the transport parameters.
+    onAckReceived (connLDCC conn) lvl ackInfo $
+        ackDelayMicro (fromIntegral e) ackDelay
 processFrame conn lvl (ResetStream sid aerr finlen) = do
     when (lvl == InitialLevel || lvl == HandshakeLevel) $
         closeConnection conn ProtocolViolation "RESET_STREAM"
@@ -890,7 +892,7 @@ processFrame conn lvl (Datagram hasLen dat) = do
     let lenSize = if hasLen then BS.length (encodeInt . fromIntegral $ BS.length dat) else 0
     when (limitBytes == 0) $
         closeConnection conn ProtocolViolation "DATAGRAM not supported"
-    when (1 + lenSize + BS.length dat > limitBytes) $
+    when (fromIntegral (1 + lenSize + BS.length dat) > limitBytes) $
         closeConnection conn ProtocolViolation "DATAGRAM size violation"
     writeDatagramQ (connRecvDatagramQ conn) dat
 processFrame conn _ _ = closeConnection conn ProtocolViolation "Frame is not allowed"

@@ -10,8 +10,8 @@ module Network.QUIC.Stream.Table (
     lookupCryptoStream,
 ) where
 
-import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as Map
+import Network.QUIC.Types.Int64Map (Int64Map)
+import qualified Network.QUIC.Types.Int64Map as Map
 
 import {-# SOURCE #-} Network.QUIC.Connection.Types
 import Network.QUIC.Stream.Types
@@ -19,7 +19,7 @@ import Network.QUIC.Types
 
 ----------------------------------------------------------------
 
-newtype StreamTable = StreamTable (IntMap Stream)
+newtype StreamTable = StreamTable (Int64Map Stream)
 
 emptyStreamTable :: StreamTable
 emptyStreamTable = StreamTable Map.empty

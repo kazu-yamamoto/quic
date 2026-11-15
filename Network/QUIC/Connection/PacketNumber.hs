@@ -8,7 +8,7 @@ module Network.QUIC.Connection.PacketNumber (
     receivedWindow,
 ) where
 
-import qualified Data.IntSet as IntSet
+import qualified Network.QUIC.Types.Int64Set as IntSet
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector

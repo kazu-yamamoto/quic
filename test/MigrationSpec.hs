@@ -9,6 +9,7 @@ import qualified Control.Exception as E
 import Control.Monad (forM, forM_, void)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Short as Short
+import Data.Int (Int64)
 import Network.Control (txfLimit)
 import Network.Socket (connect, getSocketName, withFdSocket)
 import qualified System.Timeout as T
@@ -55,7 +56,7 @@ spec = do
     -- #223: a NEW_CONNECTION_ID retiring every CID it does not bring
     -- left none to use, and the connection ended with INTERNAL_ERROR.
     describe "addPeerCIDAndRetire" $ do
-        let cid :: Int -> CID
+        let cid :: Int64 -> CID
             cid i = toCID $ BS.replicate 8 $ fromIntegral i
             srt i = StatelessResetToken $ Short.toShort $ BS.replicate 16 $ fromIntegral i
             info i = newCIDInfo i (cid i) (srt i)

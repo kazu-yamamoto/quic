@@ -11,28 +11,31 @@ import Network.QUIC.Types.Error
 
 ----------------------------------------------------------------
 
-type FrameType = Int
+type FrameType = Int64
 
 data Direction = Unidirectional | Bidirectional deriving (Eq, Show)
 
 type ReasonPhrase = ShortByteString
-type SeqNum = Int
+type SeqNum = Int64
+
+-- | An offset in a stream: 62 bits on the wire.
+type Offset = Int64
 
 data Frame
     = Padding Int
     | Ping
     | Ack AckInfo Delay
-    | ResetStream StreamId ApplicationProtocolError Int
+    | ResetStream StreamId ApplicationProtocolError Int64
     | StopSending StreamId ApplicationProtocolError
     | CryptoF Offset CryptoData
     | NewToken Token
     | StreamF StreamId Offset [StreamData] Fin
-    | MaxData Int
-    | MaxStreamData StreamId Int
-    | MaxStreams Direction Int
-    | DataBlocked Int
-    | StreamDataBlocked StreamId Int
-    | StreamsBlocked Direction Int
+    | MaxData Int64
+    | MaxStreamData StreamId Int64
+    | MaxStreams Direction Int64
+    | DataBlocked Int64
+    | StreamDataBlocked StreamId Int64
+    | StreamsBlocked Direction Int64
     | NewConnectionID CIDInfo SeqNum -- retire prior to
     | RetireConnectionID SeqNum
     | PathChallenge PathData
@@ -41,13 +44,11 @@ data Frame
     | ConnectionCloseApp ApplicationProtocolError ReasonPhrase
     | HandshakeDone
     | Datagram Bool ByteString
-    | UnknownFrame Int
+    | UnknownFrame Int64
     deriving (Eq, Show)
 
--- | Stream identifier.
---   This should be 62-bit interger.
---   On 32-bit machines, the total number of stream identifiers is limited.
-type StreamId = Int
+-- | Stream identifier: a 62-bit integer.
+type StreamId = Int64
 
 -- | Whether we have reset the sending part of a stream, sending RESET_STREAM
 --   (RFC 9000 Sec 3.1).  Once reset, never back.
