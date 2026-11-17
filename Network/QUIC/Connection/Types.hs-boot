@@ -4,5 +4,5 @@ import Control.Concurrent.STM (STM)
 
 data Connection
 
-connectionEndSTM :: Connection -> STM a
+waitFinishedSTM :: Connection -> STM a
 connectionEndedSTM :: Connection -> STM ()

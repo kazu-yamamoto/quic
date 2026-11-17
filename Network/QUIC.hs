@@ -75,6 +75,7 @@ module Network.QUIC (
     wait0RTTReady,
     wait1RTTReady,
     waitEstablished,
+    waitFinishedSTM,
 
     -- * Exceptions and Errors
     QUICException (..),
