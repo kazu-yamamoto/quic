@@ -23,7 +23,7 @@ import Network.Control
 
 import {-# SOURCE #-} Network.QUIC.Connection.Types (
     Connection,
-    connectionEndSTM,
+    waitFinishedSTM,
  )
 import Network.QUIC.Imports
 import Network.QUIC.Types
@@ -107,7 +107,7 @@ syncFinTx s = void $ atomically $ tryPutTMVar (streamSyncFinTx s) ()
 waitFinTx :: Stream -> IO ()
 waitFinTx s =
     atomically $
-        takeTMVar (streamSyncFinTx s) `orElse` connectionEndSTM (streamConnection s)
+        takeTMVar (streamSyncFinTx s) `orElse` waitFinishedSTM (streamConnection s)
 
 ----------------------------------------------------------------
 

@@ -362,4 +362,4 @@ recvDatagramMany = atomically . flushDatagramQSTM . connRecvDatagramQ
 
 -- | Receiving a DATAGRAM frame in STM.
 recvDatagramSTM :: Connection -> STM ByteString
-recvDatagramSTM conn = readDatagramQSTM (connRecvDatagramQ conn) `orElse` connectionEndSTM conn
+recvDatagramSTM conn = readDatagramQSTM (connRecvDatagramQ conn) `orElse` waitFinishedSTM conn

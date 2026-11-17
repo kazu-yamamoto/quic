@@ -427,6 +427,10 @@ spec = do
                 testForkedWait cc sc waitS $ \conn -> do
                     atomically $ waitAcceptableSTM conn
                     void $ acceptStream conn
+        it "wakes a thread waiting in waitFinishedSTM" $ do
+            withPipe (DropClientPacket []) $
+                testForkedWait cc sc waitS $
+                    \conn -> atomically $ waitFinishedSTM conn
         it "wakes a thread waiting for flow control in sendStream" $ do
             withPipe (DropClientPacket []) $
                 testForkedWait cc sc waitS $ \conn -> do
