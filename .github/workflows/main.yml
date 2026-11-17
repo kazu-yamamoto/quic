@@ -132,3 +132,63 @@ jobs:
       if: ${{ runner.os == 'Linux' }}
       run: |
         cabal repl --build-depends=QuickCheck --with-repl=doctest ${{ env.target-config }}
+
+  # A 32-bit Int (#63).  Debian's i386 GHC, in a container this job starts
+  # itself: the JavaScript actions cannot run inside an i386 one.  It runs
+  # natively on the x86_64 runner, with no emulation.
+  i386:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Restore Cache
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cabal-i386
+        key: cabal-i386-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        restore-keys: cabal-i386-
+
+    - name: Build and test in i386
+      run: |
+        mkdir -p ~/.cabal-i386
+        docker run --rm --platform linux/386 \
+          -v "$PWD":/src -v ~/.cabal-i386:/root/.cabal -w /src \
+          i386/debian:trixie bash -c '
+            set -e
+            apt-get update -qq
+            apt-get install -y -qq ghc cabal-install zlib1g-dev pkg-config git > /dev/null
+            ghc --version
+            echo "Int has $(ghc -e "Data.Bits.finiteBitSize (0 :: Int)") bits"
+            # cborg 0.2.10.0 does not build on 32 bits with GHC 9.4 and
+            # later (well-typed/cborg#389); tls turns 0-RTT off on 32 bits
+            # (its early data size). Take both from git.
+            [ -f cabal.project ] || echo "packages: ." > cabal.project
+            printf "%s\n" \
+              "source-repository-package" \
+              "  type: git" \
+              "  location: https://github.com/well-typed/cborg.git" \
+              "  tag: 56f37f43c7cec09c0516d6b23c8b9b869106a023" \
+              "  subdir: cborg" \
+              "" \
+              "source-repository-package" \
+              "  type: git" \
+              "  location: https://github.com/kazu-yamamoto/hs-tls.git" \
+              "  tag: 469b359a3038dd98f45a63a3ed7d1989d5a44b11" \
+              "  subdir: tls" > cabal.project.local
+            cabal update
+            cabal build --enable-tests --disable-benchmarks all
+            cabal test --enable-tests --disable-benchmarks --test-show-details=streaming all'
+
+    # Written by root in the container.
+    - name: Own the store
+      if: ${{ always() }}
+      run: sudo chown -R "$(id -u):$(id -g)" ~/.cabal-i386
+
+    - name: Save Cache
+      if: ${{ always() && steps.restore.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cabal-i386
+        key: cabal-i386-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
