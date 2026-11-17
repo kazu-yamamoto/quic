@@ -218,7 +218,7 @@ spec = do
             newRetired <- newTVarIO False
             _ <- swapSocket clientConn newSock newRetired
             atomically $ writeTVar retired True
-            returned <- timeout (Microseconds 2000000) "retired reader" $ takeMVar done
+            returned <- T.timeout 2000000 $ takeMVar done
             returned `shouldBe` Just ()
             -- Left, not closed: the sender could still be inside a send on
             -- it, and it is the sender which closes it.
@@ -256,7 +256,7 @@ spec = do
             -- As the receiver's idle timeout does.
             setConnectionEnd clientConn $ E.toException $ ConnectionIsTimeout "idle"
             returned <-
-                timeout (Microseconds 2000000) "ended reader" $ takeMVar done
+                T.timeout 2000000 $ takeMVar done
             returned `shouldBe` Just ()
             -- The sender, between two sends, does not close it under
             -- the connection.
@@ -288,7 +288,7 @@ spec = do
             void $ forkIO $ readerClient retired sock clientConn >> putMVar done ()
             threadDelay 100000
             atomically $ writeTVar retired True
-            returned <- timeout (Microseconds 2000000) "retired reader" $ takeMVar done
+            returned <- T.timeout 2000000 $ takeMVar done
             returned `shouldBe` Just ()
             -- The socket belongs to whoever retired the reader: it is still
             -- open for them to close, which getSocketName would not be on a

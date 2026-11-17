@@ -147,9 +147,10 @@ reserveConnection Dispatch{..} lim = atomically $ do
 releaseConnection :: Dispatch -> IO ()
 releaseConnection Dispatch{..} = atomically $ modifyTVar' connectionCount (subtract 1)
 
--- | Waiting until no connection is running.
-waitNoConnection :: Dispatch -> IO ()
-waitNoConnection Dispatch{..} = T.waitUntilAllGone connectionThreads
+-- | Waiting until no connection is running, for at most this many
+--   microseconds, and answering whether none is.
+waitNoConnection :: Dispatch -> Int -> IO Bool
+waitNoConnection Dispatch{..} = T.waitUntilAllGoneFor connectionThreads
 
 -- | Running a dispatcher on a thread of its own.
 spawnDispatcher :: Dispatch -> IO () -> IO ()
