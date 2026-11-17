@@ -8,7 +8,7 @@ import Data.ByteString (ByteString)
 import Data.Maybe (isJust)
 
 import {-# SOURCE #-} Network.QUIC.Connection.Types (
-    connectionEndSTM,
+    waitFinishedSTM,
     connectionEndedSTM,
  )
 import Network.QUIC.Stream.Types
@@ -19,7 +19,7 @@ putRecvStreamQ Stream{..} = atomically . writeTQueue (recvStreamQ streamRecvQ)
 takeRecvStreamQ :: Stream -> IO ByteString
 takeRecvStreamQ Stream{..} =
     atomically $
-        readTQueue (recvStreamQ streamRecvQ) `orElse` connectionEndSTM streamConnection
+        readTQueue (recvStreamQ streamRecvQ) `orElse` waitFinishedSTM streamConnection
 
 -- | Waiting until 'Network.QUIC.recvStream' would not block: something
 --   is pending from a read before, the end of the stream has been read,

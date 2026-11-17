@@ -694,10 +694,15 @@ endedNormally = E.toException $ ConnectionIsClosed "connection is closed"
 isConnectionEnded :: Connection -> IO Bool
 isConnectionEnded conn = isJust <$> readTVarIO (connEnd conn)
 
--- | Waiting for the connection to end, then throwing why it did.
---   An alternative for a wait on the connection.
-connectionEndSTM :: Connection -> STM a
-connectionEndSTM conn = readTVar (connEnd conn) >>= maybe retry throwSTM
+
+-- | Waiting until the connection has finished, however it did, and then
+--   throwing why: what 'Network.QUIC.acceptStream', 'Network.QUIC.recvStream'
+--   and the like throw once it has.  It never returns, so it can be
+--   composed with a wait of the caller's own to give up on that wait.
+--
+--   @since 0.4.0
+waitFinishedSTM :: Connection -> STM a
+waitFinishedSTM conn = readTVar (connEnd conn) >>= maybe retry throwSTM
 
 -- | Waiting for the connection to end, without throwing.
 connectionEndedSTM :: Connection -> STM ()
@@ -711,4 +716,4 @@ ackElicitingSent conn = atomically $ do
 
 -- | Throwing why the connection ended, if it has.
 checkConnectionEndSTM :: Connection -> STM ()
-checkConnectionEndSTM conn = connectionEndSTM conn `orElse` return ()
+checkConnectionEndSTM conn = waitFinishedSTM conn `orElse` return ()

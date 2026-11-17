@@ -95,7 +95,7 @@ waitEstablished conn = waitState conn Established
 -- | A closed connection reaches no state any more: 'ConnectionIsClosed'
 --   is thrown then, rather than waiting for ever.
 waitState :: Connection -> ConnectionState -> IO ()
-waitState conn@Connection{..} st = atomically $ ready `orElse` connectionEndSTM conn
+waitState conn@Connection{..} st = atomically $ ready `orElse` waitFinishedSTM conn
   where
     ready = do
         cs <- readTVar $ connectionState connState

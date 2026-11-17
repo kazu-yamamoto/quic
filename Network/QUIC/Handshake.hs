@@ -51,7 +51,7 @@ sendCryptoData = putOutput
 --   is the thread waiting here, and it ends with that.
 recvCryptoData :: Connection -> IO Crypto
 recvCryptoData conn =
-    atomically $ takeCryptoSTM conn `orElse` connectionEndSTM conn
+    atomically $ takeCryptoSTM conn `orElse` waitFinishedSTM conn
 
 recvTLS
     :: Connection
