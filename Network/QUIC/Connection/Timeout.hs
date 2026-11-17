@@ -1,5 +1,4 @@
 module Network.QUIC.Connection.Timeout (
-    timeout,
     waitWithin,
     fire,
     fire',
@@ -11,15 +10,11 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Network.QUIC.Event
-import qualified System.Timeout as ST
 
 import Network.QUIC.Connection.Types
 import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Types
-
-timeout :: Microseconds -> String -> IO a -> IO (Maybe a)
-timeout us _ action = ST.timeout (toDelay us) action
 
 -- | Waiting for an STM action, giving up after the time given.  The
 --   deadline is waited for beside it rather than thrown at it.

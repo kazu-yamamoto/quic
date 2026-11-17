@@ -12,7 +12,6 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Network.Socket as NS
-import qualified System.Timeout as T
 
 import Network.QUIC.Closer
 import Network.QUIC.Common
@@ -209,10 +208,8 @@ shutdownConnections conf dispatch = loop
     shut conn = abortConnection conn err reason
     loop = do
         liveConnections dispatch >>= mapM_ shut
-        done <- T.timeout 1000000 $ waitNoConnection dispatch
-        case done of
-            Just () -> return ()
-            Nothing -> loop
+        done <- waitNoConnection dispatch 1000000
+        unless done loop
 
 -- | Running a dispatcher on each socket.  The caller ends them all
 --   together, by telling them, so there is nothing to undo here for the

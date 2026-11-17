@@ -1,0 +1,7 @@
+packages: .
+-- time-manager with waitUntilAllGoneFor is not released yet.
+source-repository-package
+  type: git
+  location: https://github.com/kazu-yamamoto/wai.git
+  tag: 5a4ca27a57f0b9c84d9f88c754ada4e2ab532775
+  subdir: time-manager
