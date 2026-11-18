@@ -14,6 +14,7 @@ module Network.QUIC.Stream (
     Length,
     syncFinTx,
     waitFinTx,
+    waitFinTxSTM,
 
     -- * Misc
     resetTxStream,

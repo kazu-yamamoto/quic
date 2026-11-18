@@ -271,7 +271,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 s4 = labelMe "resender" >> rec (named "resender" (resender ended ldcc))
                 s5 = labelMe "ldccTimer" >> rec (named "ldccTimer" (ldccTimer ended ldcc))
                 s6 = labelMe "QUIC server" >> named "server" server
-                s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn)
+                s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn retry)
                 ended = connectionEndedSTM conn
                 protocol = runProtocolThreads [s1, s2, s3, s4, s5, s7]
                 -- Telling the peer here, and not below, because here is the

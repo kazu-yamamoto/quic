@@ -28,6 +28,17 @@ unidirectionalStream conn = do
     sid <- waitMyNewUniStreamId conn
     addStream conn sid
 
+-- | 'stream' which gives up waiting for the peer's limit on streams once
+--   the 'STM' action succeeds.
+streamWith :: Connection -> STM a -> IO (Either a Stream)
+streamWith conn giveUp =
+    waitMyNewStreamIdWith conn giveUp >>= traverse (addStream conn)
+
+-- | 'unidirectionalStream' which gives up as 'streamWith' does.
+unidirectionalStreamWith :: Connection -> STM a -> IO (Either a Stream)
+unidirectionalStreamWith conn giveUp =
+    waitMyNewUniStreamIdWith conn giveUp >>= traverse (addStream conn)
+
 -- | Sending data in the stream.
 sendStream :: Stream -> ByteString -> IO ()
 sendStream s dat = sendStreamMany s [dat]
@@ -56,8 +67,18 @@ queueFin s = atomically $ do
 
 -- | Sending a list of data in the stream.
 sendStreamMany :: Stream -> [ByteString] -> IO ()
-sendStreamMany _ [] = return ()
-sendStreamMany s dats0 = do
+sendStreamMany s dats = either id return =<< sendStreamManyWith s dats retry
+
+-- | 'sendStream' which gives up as 'sendStreamManyWith' does.
+sendStreamWith :: Stream -> ByteString -> STM a -> IO (Either a ())
+sendStreamWith s dat = sendStreamManyWith s [dat]
+
+-- | 'sendStreamMany' which gives up waiting for the flow control window
+--   once the 'STM' action succeeds.  Part of the data may have been sent
+--   by then, so the stream is to be reset.
+sendStreamManyWith :: Stream -> [ByteString] -> STM a -> IO (Either a ())
+sendStreamManyWith _ [] _ = return $ Right ()
+sendStreamManyWith s dats0 giveUp = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     flowControl dats0 (totalLen dats0) False
@@ -77,7 +98,24 @@ sendStreamMany s dats0 = do
         -- The window is taken in the transaction that finds it.  Two
         -- streams sending at once used to see the same window and send it
         -- twice over.
-        eblocked <- atomically $ do
+        eblocked <- atomically $ (Right <$> queueing) `orElse` (Left <$> giveUp)
+        case eblocked of
+            Left a -> return $ Left a
+            Right (Right (n, dats2))
+                | n < len -> flowControl dats2 (len - n) False
+                | otherwise -> return $ Right ()
+            Right (Left blocked) -> do
+                -- Read each time round rather than once: the handshake may
+                -- finish while we are waiting for the window, and a BLOCKED
+                -- frame at a level we have no keys for goes nowhere.
+                ready <- isConnection1RTTReady conn
+                let lvl
+                        | ready = RTT1Level
+                        | otherwise = RTT0Level
+                sendBlocked conn lvl blocked
+                flowControl dats len True
+      where
+        queueing = do
             -- Reset meanwhile: counted now, it would be in no final size
             -- and the connection window would lose it for good.
             reset <- isTxStreamResetSTM s
@@ -91,19 +129,6 @@ sendStreamMany s dats0 = do
                     queueTx conn s dats1 n
                     return $ Right (n, dats2)
                 Left blocked -> return $ Left blocked
-        case eblocked of
-            Right (n, dats2) ->
-                when (n < len) $ flowControl dats2 (len - n) False
-            Left blocked -> do
-                -- Read each time round rather than once: the handshake may
-                -- finish while we are waiting for the window, and a BLOCKED
-                -- frame at a level we have no keys for goes nowhere.
-                ready <- isConnection1RTTReady conn
-                let lvl
-                        | ready = RTT1Level
-                        | otherwise = RTT0Level
-                sendBlocked conn lvl blocked
-                flowControl dats len True
 
 sendBlocked :: Connection -> EncryptionLevel -> Blocked -> IO ()
 sendBlocked conn lvl blocked = sendFrames conn lvl frames
@@ -155,12 +180,17 @@ checkBlocked s len wait = do
 -- | Sending FIN in a stream.
 --   'closeStream' should be called later.
 shutdownStream :: Stream -> IO ()
-shutdownStream s = do
+shutdownStream s = either return return =<< shutdownStreamWith s retry
+
+-- | 'shutdownStream' which gives up waiting for the FIN to go out once the
+--   'STM' action succeeds.  The FIN is queued all the same.
+shutdownStreamWith :: Stream -> STM a -> IO (Either a ())
+shutdownStreamWith s giveUp = do
     sclosed <- isTxStreamClosed s
     when sclosed $ E.throwIO StreamIsClosed
     setTxStreamClosed s
     queueFin s
-    waitFinTx s
+    atomically $ (Right <$> waitFinTxSTM s) `orElse` (Left <$> giveUp)
 
 -- | Closing a stream without an error.
 --   This sends FIN if necessary.

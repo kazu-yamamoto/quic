@@ -9,6 +9,7 @@ module Network.QUIC.Client (
     ccServerName,
     ccServerNameOverride,
     ccUseServerNameIndication,
+    ccGiveUp,
     ccPortName,
     ccALPN,
     ccUse0RTT,
