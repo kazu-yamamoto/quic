@@ -55,7 +55,7 @@ jobs:
         cabal-version: latest
 
     - name: Install gold, which GHC 9.2 and 9.4 link with
-      if: ${{ runner.os == Linux }}
+      if: ${{ runner.os == 'Linux' }}
       run: command -v ld.gold || (sudo apt-get update && sudo apt-get install -y binutils-gold)
 
     # The macOS image selects Xcode 26.6, whose ld cannot read the SDK 27
