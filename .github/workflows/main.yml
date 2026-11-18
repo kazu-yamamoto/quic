@@ -157,7 +157,7 @@ jobs:
     - name: Build and test in i386
       run: |
         mkdir -p ~/.cabal-i386
-        docker run --rm --platform linux/386 \
+        docker run --rm --platform linux/386 --network host \
           -v "$PWD":/src -v ~/.cabal-i386:/root/.cabal -w /src \
           i386/debian:trixie bash -c '
             set -e
