@@ -14,6 +14,7 @@ module Network.QUIC.Stream.Types (
     Length,
     syncFinTx,
     waitFinTx,
+    waitFinTxSTM,
 ) where
 
 import Control.Concurrent.STM
@@ -105,9 +106,11 @@ syncFinTx :: Stream -> IO ()
 syncFinTx s = void $ atomically $ tryPutTMVar (streamSyncFinTx s) ()
 
 waitFinTx :: Stream -> IO ()
-waitFinTx s =
-    atomically $
-        takeTMVar (streamSyncFinTx s) `orElse` waitFinishedSTM (streamConnection s)
+waitFinTx = atomically . waitFinTxSTM
+
+waitFinTxSTM :: Stream -> STM ()
+waitFinTxSTM s =
+    takeTMVar (streamSyncFinTx s) `orElse` waitFinishedSTM (streamConnection s)
 
 ----------------------------------------------------------------
 

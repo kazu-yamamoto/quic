@@ -6,6 +6,8 @@ module Network.QUIC.Connection.Stream (
     possibleMyStreams,
     waitMyNewStreamId,
     waitMyNewUniStreamId,
+    waitMyNewStreamIdWith,
+    waitMyNewUniStreamIdWith,
     setTxMaxStreams,
     setTxUniMaxStreams,
     resetTxMaxStreams,
@@ -44,13 +46,23 @@ possibleMyStreams Connection{..} = do
     return (base - (currentStream !>>. 2))
 
 waitMyNewStreamId :: Connection -> IO StreamId
-waitMyNewStreamId conn@Connection{..} = get conn myStreamId
+waitMyNewStreamId conn@Connection{..} = atomically $ get conn myStreamId
 
 waitMyNewUniStreamId :: Connection -> IO StreamId
-waitMyNewUniStreamId conn@Connection{..} = get conn myUniStreamId
+waitMyNewUniStreamId conn@Connection{..} = atomically $ get conn myUniStreamId
 
-get :: Connection -> TVar Concurrency -> IO Int64
-get conn tvar = atomically $ do
+-- | 'waitMyNewStreamId' which gives up once the 'STM' action succeeds.
+waitMyNewStreamIdWith :: Connection -> STM a -> IO (Either a StreamId)
+waitMyNewStreamIdWith conn@Connection{..} giveUp =
+    atomically $ (Right <$> get conn myStreamId) `orElse` (Left <$> giveUp)
+
+-- | 'waitMyNewUniStreamId' which gives up once the 'STM' action succeeds.
+waitMyNewUniStreamIdWith :: Connection -> STM a -> IO (Either a StreamId)
+waitMyNewUniStreamIdWith conn@Connection{..} giveUp =
+    atomically $ (Right <$> get conn myUniStreamId) `orElse` (Left <$> giveUp)
+
+get :: Connection -> TVar Concurrency -> STM Int64
+get conn tvar = do
     checkConnectionEndSTM conn
     conc@Concurrency{..} <- readTVar tvar
     let streamType = currentStream .&. 0b11

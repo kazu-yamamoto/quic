@@ -13,6 +13,7 @@ import Control.Concurrent.STM (
     check,
     newTVarIO,
     orElse,
+    registerDelay,
     readTVar,
     readTVarIO,
     writeTVar,
@@ -206,6 +207,41 @@ spec = do
             sent <- txfSent <$> atomically (readConnectionFlowTx clientConn)
             sent - base `shouldBe` 0
             either show (const "sent") res `shouldBe` show StreamIsClosed
+    describe "giving up" $ do
+        it "gives up sending when the window stays closed" $ do
+            scg <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scg Version1
+            s <- addStream clientConn 0
+            setTxMaxStreamData s 100
+            base <- txfSent <$> atomically (readConnectionFlowTx clientConn)
+            setTxMaxData clientConn base
+            late <- registerDelay 100000
+            sendStreamWith s (BS.replicate 100 0) (readTVar late >>= check)
+                `shouldReturn` Left ()
+        it "gives up opening a stream when the peer allows no more" $ do
+            scg <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scg Version1
+            let open n
+                    | n > (1000 :: Int) = return False
+                    | otherwise =
+                        streamWith clientConn (return ())
+                            >>= either (const $ return True) (const $ open (n + 1))
+            open 0 `shouldReturn` True
+        it "gives up the handshake with ccGiveUp" $
+            E.bracket (NS.socket NS.AF_INET NS.Datagram NS.defaultProtocol) NS.close $ \s -> do
+                NS.bind s $ NS.SockAddrInet 0 $ NS.tupleToHostAddress (127, 0, 0, 1)
+                port <- NS.socketPort s
+                late <- registerDelay 300000
+                let ccg =
+                        cc
+                            { ccServerName = "127.0.0.1"
+                            , ccPortName = show port
+                            , ccGiveUp = readTVar late >>= check
+                            }
+                r <- Timeout.timeout 5000000 $ E.try $ C.run ccg $ \_ -> return ()
+                case r of
+                    Just (Left (TransportErrorIsSent NoError _)) -> return ()
+                    _ -> expectationFailure $ "not given up: " ++ show (fmap (fmap (const ())) r)
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS

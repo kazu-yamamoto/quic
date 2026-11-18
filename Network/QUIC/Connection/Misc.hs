@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -366,13 +367,17 @@ abortRequested _ ex = return ex
 -- | Waiting for 'requestEnd' and raising what it was asked with:
 --   one of a connection's protocol threads, so that it ends the connection
 --   as any of them failing does.  Returning once it has ended otherwise.
-watchAbortRequest :: Connection -> IO ()
-watchAbortRequest conn@Connection{..} = do
+--   The 'STM' action given up on ends it with NO_ERROR.
+watchAbortRequest :: Connection -> STM.STM () -> IO ()
+watchAbortRequest conn@Connection{..} giveUp = do
     me <-
         atomically $
             (Just <$> (readTVar connAbortRequest >>= maybe retry return))
+                `orElse` (Just givenUp <$ giveUp)
                 `orElse` (Nothing <$ connectionEndedSTM conn)
     mapM_ E.throwIO me
+  where
+    givenUp = E.toException $ TransportErrorIsSent NoError "given up"
 
 ----------------------------------------------------------------
 
