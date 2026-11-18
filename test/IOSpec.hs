@@ -227,7 +227,7 @@ spec = do
                         streamWith clientConn (return ())
                             >>= either (const $ return True) (const $ open (n + 1))
             open 0 `shouldReturn` True
-        it "gives up the handshake with ccGiveUp" $
+        it "gives up the handshake with runGivingUp" $
             E.bracket (NS.socket NS.AF_INET NS.Datagram NS.defaultProtocol) NS.close $ \s -> do
                 NS.bind s $ NS.SockAddrInet 0 $ NS.tupleToHostAddress (127, 0, 0, 1)
                 port <- NS.socketPort s
@@ -236,12 +236,28 @@ spec = do
                         cc
                             { ccServerName = "127.0.0.1"
                             , ccPortName = show port
-                            , ccGiveUp = readTVar late >>= check
                             }
-                r <- Timeout.timeout 5000000 $ E.try $ C.run ccg $ \_ -> return ()
-                case r of
-                    Just (Left (TransportErrorIsSent NoError _)) -> return ()
-                    _ -> expectationFailure $ "not given up: " ++ show (fmap (fmap (const ())) r)
+                r <- Timeout.timeout 5000000 $
+                    C.runGivingUp ccg (\_ -> return ()) (readTVar late >>= check >> return "late")
+                r `shouldBe` Just (Left "late" :: Either String ())
+        it "gives up an established connection with runGivingUp" $
+            withSilentServer $ do
+                late <- registerDelay 500000
+                r <- Timeout.timeout 5000000 $
+                    C.runGivingUp
+                        testClientConfig
+                        (\conn -> waitEstablished conn >> threadDelay 3000000 >> return "done")
+                        (readTVar late >>= check >> return "late")
+                r `shouldBe` Just (Left ("late" :: String) :: Either String String)
+        it "returns what is done before it gives up with runGivingUp" $
+            withSilentServer $ do
+                late <- registerDelay 3000000
+                r <- Timeout.timeout 5000000 $
+                    C.runGivingUp
+                        testClientConfig
+                        (\conn -> waitEstablished conn >> return "done")
+                        (readTVar late >>= check >> return "late")
+                r `shouldBe` Just (Right "done" :: Either String String)
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS
@@ -2150,3 +2166,11 @@ testSpuriousMigration cc sc waitS within = do
                 _ <- takeMVar paths
                 echo strm "ping3" `shouldReturn` Just "ping3"
                 takeMVar paths `shouldReturn` original
+
+-- | Running a server which answers nothing, for a while.
+withSilentServer :: IO a -> IO a
+withSilentServer body = do
+    scs <- makeTestServerConfig
+    let server = E.handle (\(E.SomeException _) -> return ()) $
+            run scs $ \conn -> waitEstablished conn >> threadDelay 3000000
+    E.bracket (forkIO server) killThread $ \_ -> threadDelay 300000 >> body

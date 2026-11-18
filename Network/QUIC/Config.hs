@@ -4,8 +4,6 @@
 
 module Network.QUIC.Config where
 
-import Control.Concurrent.STM (STM)
-import qualified Control.Concurrent.STM as STM
 import Data.IP
 import Data.X509.CertificateStore (CertificateStore)
 import Data.X509.Validation (validateDefault)
@@ -127,12 +125,6 @@ data ClientConfig = ClientConfig
     -- ^ If 'True', SNI is used. Otherwise, the SNI extension is not sent.
     --
     -- Default: 'True'
-    , ccGiveUp :: STM ()
-    -- ^ Once this succeeds, the connection is closed with NO_ERROR and
-    --   'TransportErrorIsSent' is thrown, whether it is still in its
-    --   handshake or not.
-    --
-    -- Default: 'STM.retry'
     --
     -- @since 0.4.0
     }
@@ -171,7 +163,6 @@ defaultClientConfig =
         , ccWatchDog = False
         , ccServerNameOverride = Nothing
         , ccUseServerNameIndication = True
-        , ccGiveUp = STM.retry
         }
 
 ----------------------------------------------------------------
