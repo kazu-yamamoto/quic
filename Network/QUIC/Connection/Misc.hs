@@ -37,6 +37,9 @@ module Network.QUIC.Connection.Misc (
     freeResources,
     getIdleTimeout,
     setMinIdleTimeout,
+    withIdle,
+    keepAlive,
+    workInProgress,
     sendFrames,
     closeConnection,
     abortConnection,
@@ -64,6 +67,7 @@ import qualified Control.Exception as E
 import qualified Control.Monad.STM as STM
 import Network.Socket (SockAddr, Socket, unsafeClose)
 import qualified System.ThreadManager as T
+import qualified System.Watchdog as W
 
 import Network.QUIC.Connection.Queue
 import Network.QUIC.Connection.Timeout
@@ -72,6 +76,7 @@ import Network.QUIC.Connector
 import Network.QUIC.Imports
 import Network.QUIC.Parameters
 import Network.QUIC.Recovery (getPTO)
+import Network.QUIC.Stream (streamId, tableStreams)
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -311,6 +316,51 @@ getIdleTimeout Connection{..} = do
         else do
             pto <- getPTO connLDCC
             return $ Just $ max ito (3 * pto)
+
+-- | Running the protocol threads under the idle timer.  The receiver
+--   ends the connection by itself when it times out; should it not, the
+--   others are asked to, rather than thrown at.
+withIdle :: Connection -> IO a -> IO a
+withIdle conn body = do
+    setupIdle conn
+    W.withWatchdog (connIdle conn) lastResort body
+  where
+    lastResort = requestEnd conn $ ConnectionIsTimeout "idle timeout"
+
+-- | Telling the idle timer how long the connection may stay idle, whether
+--   to keep it alive, and how.
+setupIdle :: Connection -> IO ()
+setupIdle conn =
+    W.update (const $ Idle (getIdleTimeout conn) busy ping) $ connIdle conn
+  where
+    busy = (> 0) <$> readTVarIO (connBusy conn)
+    -- The watchdog's probe: it must return at once, and enqueueing does.
+    ping = do
+        established <- isConnectionEstablished conn
+        when established $ sendFrames conn RTT1Level [Ping]
+
+-- | Keeping the connection from idling out while the action runs: when
+--   the peer has been quiet for half the idle timeout, a PING goes out,
+--   whose acknowledgment restarts the timer.  A peer which is gone still
+--   times out (RFC 9000 10.1.2).
+--
+-- @since 0.4.0
+keepAlive :: Connection -> IO a -> IO a
+keepAlive conn = E.bracket_ (change 1) (change (-1))
+  where
+    -- Changed, so that the watchdog decides again.
+    change n = atomically $ do
+        modifyTVar' (connBusy conn) (+ n)
+        touchIdle conn
+
+-- | Whether something waits on the peer: a 'keepAlive' running, or a
+--   bidirectional stream open.  An idle timeout then is the peer failing
+--   it; otherwise the connection was merely unused.
+workInProgress :: Connection -> IO Bool
+workInProgress conn = do
+    busy <- readTVarIO $ connBusy conn
+    strms <- tableStreams <$> readTVarIO (streamTable conn)
+    return $ busy > 0 || any (isBidirectional . streamId) strms
 
 setMinIdleTimeout :: Connection -> Microseconds -> IO ()
 setMinIdleTimeout Connection{..} us

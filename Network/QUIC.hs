@@ -12,6 +12,7 @@ module Network.QUIC (
     -- * Connection
     Connection,
     abortConnection,
+    keepAlive,
 
     -- * Stream
     Stream,

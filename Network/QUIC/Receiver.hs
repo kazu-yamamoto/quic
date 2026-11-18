@@ -11,18 +11,14 @@ module Network.QUIC.Receiver (
 import Control.Concurrent.STM (
     atomically,
     orElse,
-    readTVar,
-    readTVarIO,
-    registerDelay,
-    retry,
     writeTVar,
  )
 import qualified Control.Exception as E
-import qualified Control.Monad.STM as STM
 import qualified Data.ByteString as BS
 import Network.Socket (SockAddr, Socket)
 import Network.TLS (AlertDescription (..))
 import System.Log.FastLogger
+import System.Watchdog (timedOutSTM)
 
 import Network.QUIC.Config
 import Network.QUIC.Connection
@@ -45,43 +41,33 @@ receiver conn = handleLogT logAction body
     body = loopHandshake
     -- 'Nothing' once another thread has ended the connection.
     recvTimeout = do
-        -- The spec says that CC is not sent when timeout.
-        -- But we intentionally sends CC when timeout.
-        -- Waited for beside the packet rather than thrown at the wait.
-        mito <- getIdleTimeout conn
-        got <- waitIdle mito
+        -- The idle timer is the connection's watchdog, waited for beside
+        -- the packet.  RFC 9000 Sec 10.1: it restarts on receiving a
+        -- packet and on the first ack-eliciting packet sent after that.
+        got <-
+            atomically $
+                (Ended <$ connectionEndedSTM conn)
+                    `orElse` (Got <$> connRecv conn <* received)
+                    `orElse` (Expired <$ timedOutSTM (connIdle conn))
         case got of
             Expired -> do
-                st <- getConnectionState conn
-                let msg0
-                        | isClient conn = "Client"
-                        | otherwise = "Server"
-                    msg = msg0 ++ " " ++ show st
                 qlogDebug conn $ Debug "recv timeout"
-                E.throwIO $ ConnectionIsTimeout msg
-            Got x -> do
-                atomically $ writeTVar (connAckElicitingSent conn) False
-                return $ Just x
+                -- Nothing waited on the peer: the connection was merely
+                -- unused, and it ends as one closed with no error does.
+                inProgress <- workInProgress conn
+                if inProgress
+                    then do
+                        st <- getConnectionState conn
+                        let msg0
+                                | isClient conn = "Client"
+                                | otherwise = "Server"
+                        E.throwIO $ ConnectionIsTimeout $ msg0 ++ " " ++ show st
+                    else E.throwIO $ ConnectionIsClosed "idle timeout"
+            Got x -> return $ Just x
             _ -> return Nothing
-    ended = Ended <$ connectionEndedSTM conn
-    -- RFC 9000 Sec 10.1: the timer restarts on receiving a packet and on
-    -- the first ack-eliciting packet sent after that.
-    waitIdle Nothing = atomically $ ended `orElse` (Got <$> connRecv conn)
-    waitIdle mito@(Just (Microseconds us)) = do
-        sent0 <- readTVarIO $ connAckElicitingSent conn
-        expired <- registerDelay $ toDelay (Microseconds us)
-        let restarted
-                | sent0 = retry
-                | otherwise = readTVar (connAckElicitingSent conn) >>= STM.check
-        r <-
-            atomically $
-                ended
-                    `orElse` (Got <$> connRecv conn)
-                    `orElse` (Restarted <$ restarted)
-                    `orElse` (Expired <$ (readTVar expired >>= STM.check))
-        case r of
-            Restarted -> waitIdle mito
-            _ -> return r
+    received = do
+        writeTVar (connAckElicitingSent conn) False
+        touchIdle conn
     loopHandshake = do
         mrpkt <- recvTimeout
         -- Not 'forM_', which would leave each loop a frame to return to.
@@ -132,7 +118,7 @@ receiver conn = handleLogT logAction body
                 loopEstablished
     logAction msg = connDebugLog conn ("debug: receiver: " <> msg)
 
-data Got = Got ReceivedPacket | Restarted | Expired | Ended
+data Got = Got ReceivedPacket | Expired | Ended
 
 processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
 processReceivedPacketHandshake conn rpkt = do

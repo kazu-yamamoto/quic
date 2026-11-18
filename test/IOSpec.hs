@@ -13,9 +13,9 @@ import Control.Concurrent.STM (
     check,
     newTVarIO,
     orElse,
-    registerDelay,
     readTVar,
     readTVarIO,
+    registerDelay,
     writeTVar,
  )
 import qualified Control.Exception as E
@@ -237,26 +237,29 @@ spec = do
                             { ccServerName = "127.0.0.1"
                             , ccPortName = show port
                             }
-                r <- Timeout.timeout 5000000 $
-                    C.runGivingUp ccg (\_ -> return ()) (readTVar late >>= check >> return "late")
+                r <-
+                    Timeout.timeout 5000000 $
+                        C.runGivingUp ccg (\_ -> return ()) (readTVar late >>= check >> return "late")
                 r `shouldBe` Just (Left "late" :: Either String ())
         it "gives up an established connection with runGivingUp" $
             withSilentServer $ do
                 late <- registerDelay 500000
-                r <- Timeout.timeout 5000000 $
-                    C.runGivingUp
-                        testClientConfig
-                        (\conn -> waitEstablished conn >> threadDelay 3000000 >> return "done")
-                        (readTVar late >>= check >> return "late")
+                r <-
+                    Timeout.timeout 5000000 $
+                        C.runGivingUp
+                            testClientConfig
+                            (\conn -> waitEstablished conn >> threadDelay 3000000 >> return "done")
+                            (readTVar late >>= check >> return "late")
                 r `shouldBe` Just (Left ("late" :: String) :: Either String String)
         it "returns what is done before it gives up with runGivingUp" $
             withSilentServer $ do
                 late <- registerDelay 3000000
-                r <- Timeout.timeout 5000000 $
-                    C.runGivingUp
-                        testClientConfig
-                        (\conn -> waitEstablished conn >> return "done")
-                        (readTVar late >>= check >> return "late")
+                r <-
+                    Timeout.timeout 5000000 $
+                        C.runGivingUp
+                            testClientConfig
+                            (\conn -> waitEstablished conn >> return "done")
+                            (readTVar late >>= check >> return "late")
                 r `shouldBe` Just (Right "done" :: Either String String)
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
@@ -515,8 +518,16 @@ spec = do
             either (const True) (const False) r `shouldBe` True
             tryTakeMVar cancelled `shouldReturn` Just ()
     describe "the idle timeout" $ do
-        it "ends a connection with nothing to say" $ do
+        it "ends an unused connection as one closed with no error" $ do
             withPipe (DropClientPacket []) $ testIdleTimeout cc sc waitS
+        it "times out a connection with a stream waiting on the peer" $ do
+            withPipe (DropClientPacket []) $ testIdleStream cc sc waitS
+        it "is kept from ending by keepAlive" $ do
+            withPipe (DropClientPacket []) $ testKeepAlive cc sc waitS
+        it "times out a peer gone during keepAlive" $ do
+            silence <- newEmptyMVar
+            withPipe (SilenceServer silence) $
+                testKeepAliveGone cc sc waitS silence
         it "restarts on the first ack-eliciting packet sent" $ do
             silence <- newEmptyMVar
             withPipe (SilenceServer silence) $
@@ -1862,22 +1873,68 @@ testAppCancelled cc sc waitS =
 
 -- | A connection nobody uses times out on the receiver's deadline, which
 --   is waited for beside the packets rather than thrown at the wait.
+-- | Nothing waits on the server: what waits for it to open a stream is
+--   told the connection closed.
 testIdleTimeout :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
 testIdleTimeout cc0 sc waitS =
     withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
         waitS
-        r <- Timeout.timeout 5000000 $ E.try $ C.run cc $ \conn -> do
+        r <- Timeout.timeout 5000000 $ E.try @QUICException $ C.run (shortIdle cc0) $ \conn -> do
             waitEstablished conn
-            threadDelay 10000000
+            E.try @QUICException $ acceptStream conn
+        case r of
+            Just (Right (Left (ConnectionIsClosed _))) -> return ()
+            _ -> expectationFailure $ show $ fmap (fmap (fmap (const ()))) r
+
+-- | A stream waits for the server, which says nothing.
+testIdleStream :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testIdleStream cc0 sc waitS =
+    withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
+        waitS
+        r <- Timeout.timeout 5000000 $ E.try @QUICException $ C.run (shortIdle cc0) $ \conn -> do
+            waitEstablished conn
+            strm <- stream conn
+            sendStream strm "hello"
+            recvStream strm 1024
         case r of
             Just (Left (ConnectionIsTimeout _)) -> return ()
             _ -> expectationFailure $ show r
-  where
-    cc =
-        cc0
-            { ccParameters =
-                (ccParameters cc0){maxIdleTimeout = Milliseconds 500}
-            }
+
+-- | Four idle timeouts pass in 'keepAlive', and the connection is there.
+testKeepAlive :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testKeepAlive cc0 sc waitS =
+    withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
+        waitS
+        r <- Timeout.timeout 5000000 $ E.try @QUICException $ C.run (shortIdle cc0) $ \conn -> do
+            waitEstablished conn
+            keepAlive conn $ threadDelay 2000000
+            strm <- stream conn
+            sendStream strm "hello"
+            return ("alive" :: String)
+        case r of
+            Just (Right "alive") -> return ()
+            _ -> expectationFailure $ show r
+
+-- | The server falls silent in 'keepAlive': its PINGs go unanswered.
+testKeepAliveGone
+    :: C.ClientConfig -> ServerConfig -> IO () -> MVar () -> IO ()
+testKeepAliveGone cc0 sc waitS silence =
+    withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
+        waitS
+        r <- Timeout.timeout 5000000 $ E.try @QUICException $ C.run (shortIdle cc0) $ \conn -> do
+            waitEstablished conn
+            putMVar silence ()
+            keepAlive conn $ threadDelay 10000000
+        case r of
+            Just (Left (ConnectionIsTimeout _)) -> return ()
+            _ -> expectationFailure $ show r
+
+shortIdle :: C.ClientConfig -> C.ClientConfig
+shortIdle cc0 =
+    cc0
+        { ccParameters =
+            (ccParameters cc0){maxIdleTimeout = Milliseconds 500}
+        }
 
 -- | With the server silenced, the client sends after a second, which
 --   restarts its 2 sec idle timer: the timeout comes after 3 sec, not 2.
@@ -2172,5 +2229,6 @@ withSilentServer :: IO a -> IO a
 withSilentServer body = do
     scs <- makeTestServerConfig
     let server = E.handle (\(E.SomeException _) -> return ()) $
-            run scs $ \conn -> waitEstablished conn >> threadDelay 3000000
+            run scs $
+                \conn -> waitEstablished conn >> threadDelay 3000000
     E.bracket (forkIO server) killThread $ \_ -> threadDelay 300000 >> body
