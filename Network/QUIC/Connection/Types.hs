@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Network.QUIC.Connection.Types where
 
@@ -27,11 +28,9 @@ import Network.Control (
 import Network.Socket (SockAddr, Socket)
 import Network.TLS.QUIC
 import qualified System.ThreadManager as T
+import System.Watchdog (Watchdog, WatchdogFor (..))
+import qualified System.Watchdog as W
 
-import Network.QUIC.Types.Int64Map (Int64Map)
-import qualified Network.QUIC.Types.Int64Map as IntMap
-import Network.QUIC.Types.Int64Set (Int64Set)
-import qualified Network.QUIC.Types.Int64Set as IntSet
 import Network.QUIC.Config
 import Network.QUIC.Connector
 import Network.QUIC.Crypto
@@ -42,6 +41,10 @@ import Network.QUIC.Qlog
 import Network.QUIC.Recovery
 import Network.QUIC.Stream
 import Network.QUIC.Types
+import Network.QUIC.Types.Int64Map (Int64Map)
+import qualified Network.QUIC.Types.Int64Map as IntMap
+import Network.QUIC.Types.Int64Set (Int64Set)
+import qualified Network.QUIC.Types.Int64Set as IntSet
 
 ----------------------------------------------------------------
 
@@ -354,6 +357,10 @@ data Connection = Connection
     -- ^ Why the connection ended, however it did: what a wait on the
     --   connection throws.  The first reason recorded stays.
     , connAckElicitingSent :: TVar Bool
+    , connIdle :: Watchdog Idle
+    -- ^ The idle timer (RFC 9000 10.1): one watchdog for the connection.
+    , connBusy :: TVar Int
+    -- ^ How many 'Network.QUIC.Connection.Misc.keepAlive's are running.
     -- ^ Whether an ack-eliciting packet went out since a packet was last
     --   received: the first one restarts the idle timer (RFC 9000 10.1).
     , -- TLS
@@ -474,6 +481,9 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connAbortRequest  <- newTVarIO Nothing
     connEnd           <- newTVarIO Nothing
     connAckElicitingSent <- newTVarIO False
+    -- Filled in by 'Network.QUIC.Connection.Misc.setupIdle'.
+    connIdle <- W.newWatchdog $ Idle (return Nothing) (return False) (return ())
+    connBusy <- newTVarIO 0
     connRetiredSocks  <- newIORef []
     -- TLS
     pendingQ          <- makePendingQ
@@ -660,7 +670,8 @@ isPeerClosed conn = isJust <$> readTVarIO (sharedCloseReceived $ shared conn)
 setConnectionEnd :: Connection -> E.SomeException -> IO ()
 setConnectionEnd conn se
     -- 'Abort' is asynchronous only in its type: the abort watcher throws it.
-    | isAsyncException se && isNothing (E.fromException se :: Maybe Abort) = return ()
+    | isAsyncException se && isNothing (E.fromException se :: Maybe Abort) =
+        return ()
     | otherwise = atomically $ modifyTVar' (connEnd conn) (<|> Just (endReason se))
 
 -- | What a wait on the connection is told: what the application knows.
@@ -694,7 +705,6 @@ endedNormally = E.toException $ ConnectionIsClosed "connection is closed"
 isConnectionEnded :: Connection -> IO Bool
 isConnectionEnded conn = isJust <$> readTVarIO (connEnd conn)
 
-
 -- | Waiting until the connection has finished, however it did, and then
 --   throwing why: what 'Network.QUIC.acceptStream', 'Network.QUIC.recvStream'
 --   and the like throw once it has.  It never returns, so it can be
@@ -712,7 +722,30 @@ connectionEndedSTM conn = readTVar (connEnd conn) >>= check . isJust
 ackElicitingSent :: Connection -> IO ()
 ackElicitingSent conn = atomically $ do
     sent <- readTVar $ connAckElicitingSent conn
-    unless sent $ writeTVar (connAckElicitingSent conn) True
+    unless sent $ do
+        writeTVar (connAckElicitingSent conn) True
+        touchIdle conn
+
+-- | Restarting the idle timer: a packet was received, or the first
+--   ack-eliciting one since was sent.
+touchIdle :: Connection -> STM ()
+touchIdle conn = W.updateSTM id $ connIdle conn
+
+-- | A connection, as its idle timer sees it.
+data Idle
+
+instance WatchdogFor Idle where
+    -- The idle timeout in effect, whether to keep the connection alive,
+    -- and how: read when the watchdog looks.
+    data ContextFor Idle = Idle (IO (Maybe Microseconds)) (IO Bool) (IO ())
+    decide _ (Idle getTimeout getBusy ping) = do
+        mto <- getTimeout
+        busy <- getBusy
+        return $ case mto of
+            Nothing -> W.unlimited
+            Just (Microseconds us)
+                | busy -> W.setTimeoutProbing (fromIntegral us) ping
+                | otherwise -> W.setTimeout (fromIntegral us)
 
 -- | Throwing why the connection ended, if it has.
 checkConnectionEndSTM :: Connection -> STM ()

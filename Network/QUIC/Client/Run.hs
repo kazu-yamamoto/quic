@@ -131,7 +131,7 @@ runClient conf client0 giveUp isICVN verInfo = do
             s6 = labelMe "QUIC client" >> client
             s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn giveUp)
             ended = connectionEndedSTM conn
-            protocol = runProtocolThreads [s1, s2, s3, s4, s5, s7]
+            protocol = withIdle conn $ runProtocolThreads [s1, s2, s3, s4, s5, s7]
             c5 =
                 labelMe "concurrently5"
                     >> concurrentlyApp (protocol `E.catches` handlers) s6
