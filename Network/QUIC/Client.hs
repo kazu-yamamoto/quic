@@ -2,6 +2,7 @@
 module Network.QUIC.Client (
     -- * Running a QUIC client
     run,
+    runGivingUp,
 
     -- * Configration
     ClientConfig,
@@ -9,7 +10,6 @@ module Network.QUIC.Client (
     ccServerName,
     ccServerNameOverride,
     ccUseServerNameIndication,
-    ccGiveUp,
     ccPortName,
     ccALPN,
     ccUse0RTT,

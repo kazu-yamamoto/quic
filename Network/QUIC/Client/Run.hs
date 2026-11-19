@@ -4,6 +4,7 @@
 
 module Network.QUIC.Client.Run (
     run,
+    runGivingUp,
     migrate,
 ) where
 
@@ -37,8 +38,29 @@ import Network.QUIC.Types
 --   on the server throws 'ConnectionIsClosed'.  Otherwise the action runs to
 --   its end, and its result is returned.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
+run conf client = runWith conf client retry
+
+-- | 'run', giving up once the 'STM' action succeeds, whether the
+--   connection is still in its handshake or not: it is closed with
+--   NO_ERROR, and what the action gave is returned as 'Left'.  An action
+--   already done by then is not given up on.  The action is run once more
+--   for what it gave: it should go on succeeding once it has, as a
+--   deadline does.
+--
+-- @since 0.4.0
+runGivingUp :: ClientConfig -> (Connection -> IO a) -> STM g -> IO (Either g a)
+runGivingUp conf client giveUp = do
+    r <- E.try $ runWith conf client $ void giveUp
+    case r of
+        Right x -> return $ Right x
+        -- Whatever the connection ended with, it was given up on.
+        Left (e :: E.SomeException) -> do
+            mg <- atomically $ (Just <$> giveUp) `orElse` return Nothing
+            maybe (E.throwIO e) (return . Left) mg
+
+runWith :: ClientConfig -> (Connection -> IO a) -> STM () -> IO a
 -- Don't use handleLogUnit here because of a return value.
-run conf client = do
+runWith conf client giveUp = do
     let resInfo = ccResumption conf
         verInfo = case resumptionSession resInfo of
             []
@@ -48,16 +70,17 @@ run conf client = do
                      in VersionInfo ver vers
             _ -> let ver = resumptionVersion resInfo in VersionInfo ver [ver]
     -- Exceptions except NextVersion are passed through.
-    ex <- E.try $ runClient conf client False verInfo
+    ex <- E.try $ runClient conf client giveUp False verInfo
     case ex of
         Right v -> return v
         -- Other exceptions go though.
         Left (NextVersion nextVerInfo)
             | nextVerInfo == brokenVersionInfo -> E.throwIO VersionNegotiationFailed
-            | otherwise -> runClient conf client True nextVerInfo
+            | otherwise -> runClient conf client giveUp True nextVerInfo
 
-runClient :: ClientConfig -> (Connection -> IO a) -> Bool -> VersionInfo -> IO a
-runClient conf client0 isICVN verInfo = do
+runClient
+    :: ClientConfig -> (Connection -> IO a) -> STM () -> Bool -> VersionInfo -> IO a
+runClient conf client0 giveUp isICVN verInfo = do
     E.bracket open clse $ \(ConnRes conn myAuthCIDs reader) -> do
         forkManaged conn "QUIC reader" reader
         let conf' =
@@ -106,7 +129,7 @@ runClient conf client0 isICVN verInfo = do
             s4 = labelMe "resender" >> rec (resender ended ldcc)
             s5 = labelMe "ldccTimer" >> rec (ldccTimer ended ldcc)
             s6 = labelMe "QUIC client" >> client
-            s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn $ ccGiveUp conf)
+            s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn giveUp)
             ended = connectionEndedSTM conn
             protocol = runProtocolThreads [s1, s2, s3, s4, s5, s7]
             c5 =
