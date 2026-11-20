@@ -148,7 +148,7 @@ main = do
                 }
     run sc $ \conn -> do
         case optTimeout of
-            Just t -> setMinIdleTimeout conn $ Microseconds $ t * 1000000
+            Just t -> setMinIdleTimeout conn $ Microseconds $ fromIntegral t * 1000000
             Nothing -> return ()
         info <- getConnectionInfo conn
         let server = case alpn info of
