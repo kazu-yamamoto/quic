@@ -189,7 +189,7 @@ executable quic-server
     else
         buildable: False
 
-    if os(windows)
+    if os(windows) && (impl(ghc >= 9.12.5 && < 9.14) || impl(ghc >= 9.14.2))
         ghc-options: -with-rtsopts=--io-manager=native
 
 executable quic-client
@@ -220,7 +220,7 @@ executable quic-client
     else
         buildable: False
 
-    if os(windows)
+    if os(windows) && (impl(ghc >= 9.12.5 && < 9.14) || impl(ghc >= 9.14.2))
         ghc-options: -with-rtsopts=--io-manager=native
 
 test-suite spec
@@ -279,5 +279,5 @@ test-suite spec
         tls,
         unix-time
 
-    if os(windows)
+    if os(windows) && (impl(ghc >= 9.12.5 && < 9.14) || impl(ghc >= 9.14.2))
         ghc-options: -with-rtsopts=--io-manager=native
