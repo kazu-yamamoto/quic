@@ -111,7 +111,7 @@ runClient conf client0 isICVN verInfo = do
             protocol = runProtocolThreads [s1, s2, s3, s4, s5, s7]
             c5 =
                 labelMe "concurrently5"
-                    >> concurrentlyApp (protocol `E.catches` handlers) s6
+                    >> concurrentlyApp conn (protocol `E.catches` handlers) s6
             -- A peer closing with NO_ERROR leaves the application to finish:
             -- what waits on the peer gives up with 'ConnectionIsClosed'.
             handlers =

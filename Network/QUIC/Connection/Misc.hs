@@ -382,8 +382,12 @@ watchAbortRequest conn@Connection{..} = do
 --   the connection ended, and it has 'appGracePeriod' to finish by itself.
 --   Only then is it cancelled.  The protocol threads' exception is thrown
 --   either way, as it was.
-concurrentlyApp :: IO a -> IO b -> IO (a, b)
-concurrentlyApp protocol app =
+--
+--   When the application fails, the protocol threads are asked to end the
+--   connection with its exception ('requestEnd') and given the same grace.
+--   They used to be cancelled at once, in the middle of a send at worst.
+concurrentlyApp :: Connection -> IO a -> IO b -> IO (a, b)
+concurrentlyApp conn protocol app =
     withAsync protocol $ \ap' -> withAsync app $ \aa -> do
         r <-
             atomically $ (Left <$> waitCatchSTM ap') `orElse` (Right <$> waitCatchSTM aa)
@@ -395,7 +399,12 @@ concurrentlyApp protocol app =
                     void (waitCatchSTM aa) `orElse` (readTVar expired >>= STM.check)
                 E.throwIO e
             Right (Right y) -> (,y) <$> wait ap'
-            Right (Left e) -> E.throwIO e
+            Right (Left e) -> do
+                requestEnd conn e
+                expired <- registerDelay appGracePeriod
+                atomically $
+                    void (waitCatchSTM ap') `orElse` (readTVar expired >>= STM.check)
+                E.throwIO e
 
 -- | Running the protocol threads until each has returned.  When one
 --   fails, the connection has ended and the others see it and return by
