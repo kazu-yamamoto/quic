@@ -51,7 +51,6 @@ module Network.QUIC.Connection.Misc (
     appGracePeriod,
 ) where
 
-import Control.Concurrent.Async (pollSTM, wait, waitCatchSTM, withAsync)
 import Control.Concurrent.STM (
     TVar,
     atomically,
@@ -432,8 +431,8 @@ watchAbortRequest conn@Connection{..} giveUp = do
 
 ----------------------------------------------------------------
 
--- | 'Control.Concurrent.Async.concurrently' for the protocol threads and
---   the application.  When the protocol threads fail, the application is
+-- | Running the protocol threads and the application side by side, each a
+--   thread of a manager of their own.  When the protocol threads fail, the application is
 --   not cancelled at once: what it waits on in the connection throws why
 --   the connection ended, and it has 'appGracePeriod' to finish by itself.
 --   Only then is it cancelled.  The protocol threads' exception is thrown
@@ -444,22 +443,26 @@ watchAbortRequest conn@Connection{..} giveUp = do
 --   They used to be cancelled at once, in the middle of a send at worst.
 concurrentlyApp :: Connection -> IO a -> IO b -> IO (a, b)
 concurrentlyApp conn protocol app =
-    withAsync protocol $ \ap' -> withAsync app $ \aa -> do
+    -- Whatever is left after the graces below is killed, as the last
+    -- resort, and given 'killedTimeout' to unwind.
+    T.withThreadManager killedTimeout $ \mgr -> do
+        ap' <- T.forkManagedWithResult mgr "QUIC protocol" protocol
+        aa <- T.forkManagedWithResult mgr "QUIC application" app
         r <-
-            atomically $ (Left <$> waitCatchSTM ap') `orElse` (Right <$> waitCatchSTM aa)
+            atomically $ (Left <$> T.waitManagedSTM ap') `orElse` (Right <$> T.waitManagedSTM aa)
         case r of
-            Left (Right x) -> (,) x <$> wait aa
+            Left (Right x) -> (,) x <$> T.waitManaged aa
             Left (Left e) -> do
                 expired <- registerDelay appGracePeriod
                 atomically $
-                    void (waitCatchSTM aa) `orElse` (readTVar expired >>= STM.check)
+                    void (T.waitManagedSTM aa) `orElse` (readTVar expired >>= STM.check)
                 E.throwIO e
-            Right (Right y) -> (,y) <$> wait ap'
+            Right (Right y) -> (,y) <$> T.waitManaged ap'
             Right (Left e) -> do
                 requestEnd conn e
                 expired <- registerDelay appGracePeriod
                 atomically $
-                    void (waitCatchSTM ap') `orElse` (readTVar expired >>= STM.check)
+                    void (T.waitManagedSTM ap') `orElse` (readTVar expired >>= STM.check)
                 E.throwIO e
 
 -- | Running the protocol threads until each has returned.  When one
@@ -467,24 +470,29 @@ concurrentlyApp conn protocol app =
 --   themselves; those still running after 'appGracePeriod' are cancelled
 --   as a last resort.  The first failure is rethrown.
 runProtocolThreads :: [IO ()] -> IO ()
-runProtocolThreads = go []
-  where
-    go as (act : acts) = withAsync act $ \a -> go (a : as) acts
-    go as [] = do
-        mfailed <- atomically $ do
-            rs <- mapM pollSTM as
-            case [e | Just (Left e) <- rs] of
-                e : _ -> return $ Just e
-                []
-                    | all isJust rs -> return Nothing
-                    | otherwise -> retry
-        forM_ mfailed $ \e -> do
-            expired <- registerDelay appGracePeriod
-            atomically $
-                mapM_ waitCatchSTM as `orElse` (readTVar expired >>= STM.check)
-            E.throwIO e
+runProtocolThreads acts = T.withThreadManager killedTimeout $ \mgr -> do
+    as <- mapM (T.forkManagedWithResult mgr "QUIC protocol thread") acts
+    mfailed <- atomically $ do
+        -- The last one first, as when each was in the scope of the one
+        -- before: the handshaker, first, fails of what ended the others.
+        rs <- mapM T.pollManagedSTM $ reverse as
+        case [e | Just (Left e) <- rs] of
+            e : _ -> return $ Just e
+            []
+                | all isJust rs -> return Nothing
+                | otherwise -> retry
+    forM_ mfailed $ \e -> do
+        expired <- registerDelay appGracePeriod
+        atomically $
+            mapM_ T.waitManagedSTM as `orElse` (readTVar expired >>= STM.check)
+        E.throwIO e
 
 -- | How long the application, and then each protocol thread, has to
 --   finish by itself once the protocol threads have failed (microseconds).
 appGracePeriod :: Int
 appGracePeriod = 1000000
+
+-- | How long a thread killed as the last resort is given to unwind before
+--   it is left (microseconds), as http2 and http3 give theirs.
+killedTimeout :: Int
+killedTimeout = 5000000
