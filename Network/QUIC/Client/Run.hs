@@ -54,10 +54,13 @@ runGivingUp conf client giveUp = do
     r <- E.try $ runWith conf client $ void giveUp
     case r of
         Right x -> return $ Right x
-        -- Whatever the connection ended with, it was given up on.
-        Left (e :: E.SomeException) -> do
-            mg <- atomically $ (Just <$> giveUp) `orElse` return Nothing
-            maybe (E.throwIO e) (return . Left) mg
+        -- Whatever the connection ended with, it was given up on.  Not
+        -- the caller being killed, though: that goes on.
+        Left (e :: E.SomeException)
+            | isAsyncException e -> E.throwIO e
+            | otherwise -> do
+                mg <- atomically $ (Just <$> giveUp) `orElse` return Nothing
+                maybe (E.throwIO e) (return . Left) mg
 
 runWith :: ClientConfig -> (Connection -> IO a) -> STM () -> IO a
 -- Don't use handleLogUnit here because of a return value.
