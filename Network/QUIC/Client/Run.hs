@@ -19,6 +19,7 @@ import Network.QUIC.Common
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Crypto
+import Network.QUIC.Exception (handleLogUnit)
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
 import Network.QUIC.Logger
@@ -144,7 +145,12 @@ runClient conf client0 giveUp isICVN verInfo = do
                     _ -> E.throwIO e
                 ]
             runThreads = snd <$> c5
-        when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog (void $ migrate conn)
+        -- A migration failing, with the network down, or the connection
+        -- ended, is said in the log: it used to kill the thread, printed.
+        when (ccWatchDog conf) $
+            forkManaged conn "QUIC watchDog" $
+                watchDog $
+                    handleLogUnit (connDebugLog conn) (void $ migrate conn)
         ex <- E.try runThreads >>= abortRequested conn
         setConnectionEnd conn $ either id (const endedNormally) ex
         sendFinal conn
