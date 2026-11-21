@@ -17,7 +17,7 @@ import qualified Control.Monad.STM as STM
 import qualified Data.ByteString as BS
 import Data.Functor (($>))
 import Data.List (intersect)
-import Network.Socket (Socket, getSocketName)
+import Network.Socket (Socket, getSocketName, isClosedSocketError)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Common
@@ -26,6 +26,7 @@ import Network.QUIC.Connector
 import Network.QUIC.Crypto
 import Network.QUIC.Exception
 import Network.QUIC.Imports
+import Network.QUIC.Logger (bhow)
 import Network.QUIC.Packet
 import Network.QUIC.Parameters
 import Network.QUIC.Qlog
@@ -81,9 +82,10 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
             wait
     loop recv = do
         ebs <-
-            recv $
-                ((readTVar retired >>= STM.check) $> Retired)
-                    `orElse` (connectionEndedSTM conn $> Ended)
+            recvAgain $
+                recv $
+                    ((readTVar retired >>= STM.check) $> Retired)
+                        `orElse` (connectionEndedSTM conn $> Ended)
         case ebs of
             -- 'leave' has it.
             Left Retired -> return ()
@@ -100,6 +102,13 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
                 pkts <- decodePackets bs (not quicBit)
                 mapM_ (putQ now) pkts
                 loop recv
+    -- An error such as ECONNREFUSED, from an ICMP message on a connected
+    -- socket, used to end the reader and leave the connection deaf until
+    -- its idle timeout.  A socket closed under the receive is not retried.
+    recvAgain rcv = rcv `E.catch` \e ->
+        if isClosedSocketError e
+            then E.throwIO e
+            else logAction ("recv again: " <> bhow e) >> recvAgain rcv
     logAction msg = connDebugLog conn ("debug: readerClient: " <> msg)
     putQ _ (PacketIB BrokenPacket _) = return ()
     putQ t (PacketIV pkt@(VersionNegotiationPacket dCID sCID peerVers)) = do
