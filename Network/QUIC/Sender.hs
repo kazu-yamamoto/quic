@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.QUIC.Sender (
+    sendOrLose,
     sender,
     mkHeader,
     sendFinal,
@@ -21,6 +23,7 @@ import Network.QUIC.Connector
 import Network.QUIC.Crypto (confidentialityLimit)
 import Network.QUIC.Exception
 import Network.QUIC.Imports
+import Network.QUIC.Logger (bhow)
 import Network.QUIC.Packet
 import Network.QUIC.Qlog
 import Network.QUIC.Recovery
@@ -49,7 +52,7 @@ sendPacketTo :: Connection -> Maybe PathInfo -> [SentPacket] -> IO ()
 sendPacketTo _ _ [] = return ()
 sendPacketTo conn mdst spkts0 = getMaxPacketSize conn >>= go
   where
-    send pathInfo buf bytes = case mdst of
+    send pathInfo buf bytes = sendOrLose conn $ case mdst of
         Nothing -> connSend conn buf bytes
         Just _ -> do
             s <- maybe (getSocket conn) return $ pathSocket pathInfo
@@ -244,7 +247,7 @@ sendPingPacket conn lvl = do
                 (bytes, padlen) <- encodePlainPacket conn sizbuf ping (Just maxSiz)
                 when (bytes > 0) $ do
                     now <- getTimeMicrosecond
-                    connSend conn buf bytes
+                    sendOrLose conn $ connSend conn buf bytes
                     addTxBytes conn bytes
                     addPathTxBytes pathInfo bytes
                     let sentPacket0 = fixSentPacket spkt bytes padlen
@@ -736,3 +739,12 @@ splitChunks bs0 = loop bs0 0 id
       where
         len = BS.length b
         siz = siz0 + len
+
+----------------------------------------------------------------
+
+-- | A datagram the socket would not take is lost like any other, and
+--   recovery sends what it carried again.  ENETUNREACH while the network
+--   changes used to end the connection that migration is there to save.
+sendOrLose :: Connection -> IO () -> IO ()
+sendOrLose conn io = io `E.catch` \(e :: E.IOException) ->
+    connDebugLog conn $ "send: " <> bhow e

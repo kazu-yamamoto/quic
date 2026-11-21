@@ -19,6 +19,7 @@ import Network.QUIC.Common
 import Network.QUIC.Config
 import Network.QUIC.Connection
 import Network.QUIC.Crypto
+import Network.QUIC.Exception (handleLogUnit)
 import Network.QUIC.Handshake
 import Network.QUIC.Imports
 import Network.QUIC.Logger
@@ -53,10 +54,13 @@ runGivingUp conf client giveUp = do
     r <- E.try $ runWith conf client $ void giveUp
     case r of
         Right x -> return $ Right x
-        -- Whatever the connection ended with, it was given up on.
-        Left (e :: E.SomeException) -> do
-            mg <- atomically $ (Just <$> giveUp) `orElse` return Nothing
-            maybe (E.throwIO e) (return . Left) mg
+        -- Whatever the connection ended with, it was given up on.  Not
+        -- the caller being killed, though: that goes on.
+        Left (e :: E.SomeException)
+            | isAsyncException e -> E.throwIO e
+            | otherwise -> do
+                mg <- atomically $ (Just <$> giveUp) `orElse` return Nothing
+                maybe (E.throwIO e) (return . Left) mg
 
 runWith :: ClientConfig -> (Connection -> IO a) -> STM () -> IO a
 -- Don't use handleLogUnit here because of a return value.
@@ -144,7 +148,12 @@ runClient conf client0 giveUp isICVN verInfo = do
                     _ -> E.throwIO e
                 ]
             runThreads = snd <$> c5
-        when (ccWatchDog conf) $ forkManaged conn "QUIC watchDog" $ watchDog (void $ migrate conn)
+        -- A migration failing, with the network down, or the connection
+        -- ended, is said in the log: it used to kill the thread, printed.
+        when (ccWatchDog conf) $
+            forkManaged conn "QUIC watchDog" $
+                watchDog $
+                    handleLogUnit (connDebugLog conn) (void $ migrate conn)
         ex <- E.try runThreads >>= abortRequested conn
         setConnectionEnd conn $ either id (const endedNormally) ex
         sendFinal conn

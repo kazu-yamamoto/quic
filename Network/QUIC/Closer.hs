@@ -150,8 +150,9 @@ closure'' conn ldcc frame = do
         -- stopping lets go of its sockets as soon as its connections have
         -- ended, and a CONNECTION_CLOSE still waiting its turn on a thread
         -- of its own misses them.  The closer repeats it for a peer that
-        -- did not hear it, which is what it is for.
-        send
+        -- did not hear it, which is what it is for.  It failing would
+        -- replace why the connection ended, and leak what is freed below.
+        sendOrLose conn send
         writeIORef (connCloserOwnsSocket conn) True
         void $ forkFinally (closer conn pto send recvWithin hook) $ \e -> do
             case e of
