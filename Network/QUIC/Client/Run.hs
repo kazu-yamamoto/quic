@@ -46,7 +46,8 @@ run conf client = runWith conf client retry
 --   NO_ERROR, and what the action gave is returned as 'Left'.  An action
 --   already done by then is not given up on.  The action is run once more
 --   for what it gave: it should go on succeeding once it has, as a
---   deadline does.
+--   deadline does.  Resolving 'ccServerName' is not given up on: it is
+--   done before, and takes as long as the resolver does.
 --
 -- @since 0.4.0
 runGivingUp :: ClientConfig -> (Connection -> IO a) -> STM g -> IO (Either g a)

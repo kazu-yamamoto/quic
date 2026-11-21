@@ -417,13 +417,14 @@ abortRequested _ ex = return ex
 -- | Waiting for 'requestEnd' and raising what it was asked with:
 --   one of a connection's protocol threads, so that it ends the connection
 --   as any of them failing does.  Returning once it has ended otherwise.
---   The 'STM' action given up on ends it with NO_ERROR.
+--   The 'STM' action given up on ends it with NO_ERROR, unless the
+--   application is done by then: what it returned is not given up on.
 watchAbortRequest :: Connection -> STM.STM () -> IO ()
 watchAbortRequest conn@Connection{..} giveUp = do
     me <-
         atomically $
             (Just <$> (readTVar connAbortRequest >>= maybe retry return))
-                `orElse` (Just givenUp <$ giveUp)
+                `orElse` (Just givenUp <$ (readTVar connDone >>= STM.check . not >> giveUp))
                 `orElse` (Nothing <$ connectionEndedSTM conn)
     mapM_ E.throwIO me
   where

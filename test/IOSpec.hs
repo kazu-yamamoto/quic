@@ -261,6 +261,22 @@ spec = do
                             (\conn -> waitEstablished conn >> return "done")
                             (readTVar late >>= check >> return "late")
                 r `shouldBe` Just (Right "done" :: Either String String)
+        it "does not give up on a client done when the give-up comes" $
+            -- The protocol threads were still finishing when the give-up
+            -- came, and it won over what the client had returned.
+            withSilentServer $ do
+                fired <- newTVarIO False
+                r <-
+                    Timeout.timeout 5000000 $
+                        C.runGivingUp
+                            testClientConfig
+                            ( \conn -> do
+                                waitEstablished conn
+                                atomically $ writeTVar fired True
+                                return "done"
+                            )
+                            (readTVar fired >>= check >> return "late")
+                r `shouldBe` Just (Right "done" :: Either String String)
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS
