@@ -302,6 +302,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                     labelMe "concurrently5"
                         >> void
                             ( concurrentlyApp
+                                conn
                                 (tellThenRaise (protocol `E.catch` exitedNormally))
                                 s6
                             )
