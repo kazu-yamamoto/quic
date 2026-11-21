@@ -8,9 +8,9 @@ module Network.QUIC.Server.Run (
     stop,
 ) where
 
-import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
+import qualified System.ThreadManager as T
 import qualified Network.Socket as NS
 
 import Network.QUIC.Closer
@@ -261,7 +261,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
             let named nm act =
                     act `E.catch` \e -> do
                         case E.fromException e of
-                            Just AsyncCancelled -> return ()
+                            Just (T.KilledByThreadManager _) -> return ()
                             Nothing -> connDebugLog conn $ "debug: " <> nm <> ": " <> bhow e
                         E.throwIO e
             let rec = recordingEnd conn
