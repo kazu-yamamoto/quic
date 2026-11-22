@@ -95,7 +95,10 @@ closure'' conn ldcc frame = do
             case mrecvbuf of
                 Nothing -> return ()
                 Just recvbuf -> free recvbuf
-    flip E.onException freeBufs $ do
+    -- Masked from the preparation's end to the fork, so that the buffers
+    -- are freed by this thread or by the closer, never by both.
+    E.mask $ \restore -> do
+      (pto, send, recvWithin, hook, clos) <- (`E.onException` freeBufs) $ restore $ do
         -- This must be called before freeResourcesin runClient.
         siz <- encodeCC conn sendbuf bufsiz frame
         let send
@@ -153,13 +156,18 @@ closure'' conn ldcc frame = do
         -- did not hear it, which is what it is for.  It failing would
         -- replace why the connection ended, and leak what is freed below.
         sendOrLose conn send
-        writeIORef (connCloserOwnsSocket conn) True
-        void $ forkFinally (closer conn pto send recvWithin hook) $ \e -> do
-            case e of
-                Left e' -> connDebugLog conn $ "closure' " <> bhow e'
-                Right _ -> return ()
-            freeBufs
-            clos
+        return (pto, send, recvWithin, hook, clos)
+      -- The socket is not left owned by a closer which was never forked.
+      -- It outlives the connection, for 3 PTO at most.
+      writeIORef (connCloserOwnsSocket conn) True
+      void $ forkIO $ do
+          labelMe "QUIC closer"
+          e <- E.try $ restore $ closer conn pto send recvWithin hook
+          case e of
+              Left e' -> connDebugLog conn $ "closure' " <> bhow (e' :: E.SomeException)
+              Right _ -> return ()
+          freeBufs
+          clos
 
 encodeCC :: Connection -> Buffer -> BufferSize -> Frame -> IO Int
 encodeCC conn sendbuf0 bufsiz0 frame = do

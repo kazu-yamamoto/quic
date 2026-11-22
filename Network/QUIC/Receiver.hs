@@ -52,6 +52,9 @@ receiver conn = handleLogT logAction body
         case got of
             Expired -> do
                 qlogDebug conn $ Debug "recv timeout"
+                -- RFC 9000 Sec 10.1: closed silently, with no
+                -- CONNECTION_CLOSE.
+                writeIORef (connCloseSent conn) True
                 -- Nothing waited on the peer: the connection was merely
                 -- unused, and it ends as one closed with no error does.
                 inProgress <- workInProgress conn

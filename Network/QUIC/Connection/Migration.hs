@@ -507,7 +507,9 @@ waitResponse conn@Connection{..} pathInfo = do
                 state <- readTVar migrationState
                 timedOut <- readTVar expired
                 resend <- readTVar again
-                if state == RecvResponse || state == MigrationAbandoned || timedOut
+                -- The connection ended: no response is waited for.
+                ended <- isJust <$> readTVar connEnd
+                if state == RecvResponse || state == MigrationAbandoned || timedOut || ended
                     then do
                         writeTVar migrationState NonMigration
                         return $ Just (state == RecvResponse)

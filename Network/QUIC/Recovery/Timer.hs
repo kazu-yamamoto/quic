@@ -11,6 +11,7 @@ module Network.QUIC.Recovery.Timer (
 ) where
 
 import Control.Concurrent.STM
+import qualified Control.Exception as E
 import qualified Data.Sequence as Seq
 import Network.QUIC.Event
 
@@ -160,7 +161,10 @@ updateLossDetectionTimer' ldcc@LDCC{..} tmi = do
     update us = do
         mgr <- getSystemTimerManager
         key <-
-            registerTimeout mgr (toDelay (Microseconds us)) (onLossDetectionTimeout ldcc)
+            -- Run on the system timer manager's thread: nothing may
+            -- escape it, as with the connection's other timers.
+            registerTimeout mgr (toDelay (Microseconds us)) $
+                onLossDetectionTimeout ldcc `E.catch` ignore
         mk <- atomicModifyIORef' timerKey (Just key,)
         case mk of
             Nothing -> return ()

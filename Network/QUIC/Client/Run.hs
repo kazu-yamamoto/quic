@@ -52,7 +52,10 @@ run conf client = runWith conf client retry
 -- @since 0.4.0
 runGivingUp :: ClientConfig -> (Connection -> IO a) -> STM g -> IO (Either g a)
 runGivingUp conf client giveUp = do
-    r <- E.try $ runWith conf client $ void giveUp
+    -- Set only by a give-up which took effect, so that a failure of its
+    -- own is not taken for one because the deadline passed meanwhile.
+    fired <- newTVarIO False
+    r <- E.try $ runWith conf client $ void giveUp >> writeTVar fired True
     case r of
         Right x -> return $ Right x
         -- Whatever the connection ended with, it was given up on.  Not
@@ -60,7 +63,9 @@ runGivingUp conf client giveUp = do
         Left (e :: E.SomeException)
             | isAsyncException e -> E.throwIO e
             | otherwise -> do
-                mg <- atomically $ (Just <$> giveUp) `orElse` return Nothing
+                mg <- atomically $ do
+                    f <- readTVar fired
+                    if f then (Just <$> giveUp) `orElse` return Nothing else return Nothing
                 maybe (E.throwIO e) (return . Left) mg
 
 runWith :: ClientConfig -> (Connection -> IO a) -> STM () -> IO a
@@ -136,7 +141,7 @@ runClient conf client0 giveUp isICVN verInfo = do
             s6 = labelMe "QUIC client" >> client
             s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn giveUp)
             ended = connectionEndedSTM conn
-            protocol = withIdle conn $ runProtocolThreads [s1, s2, s3, s4, s5, s7]
+            protocol = withIdle conn $ runProtocolThreads conn [s1, s2, s3, s4, s5, s7]
             c5 =
                 labelMe "concurrently5"
                     >> concurrentlyApp conn (protocol `E.catches` handlers) s6

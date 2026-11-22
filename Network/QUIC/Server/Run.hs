@@ -8,9 +8,9 @@ module Network.QUIC.Server.Run (
     stop,
 ) where
 
-import Control.Concurrent.Async
 import Control.Concurrent.STM
 import qualified Control.Exception as E
+import qualified System.ThreadManager as T
 import qualified Network.Socket as NS
 
 import Network.QUIC.Closer
@@ -261,7 +261,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
             let named nm act =
                     act `E.catch` \e -> do
                         case E.fromException e of
-                            Just AsyncCancelled -> return ()
+                            Just (T.KilledByThreadManager _) -> return ()
                             Nothing -> connDebugLog conn $ "debug: " <> nm <> ": " <> bhow e
                         E.throwIO e
             let rec = recordingEnd conn
@@ -273,7 +273,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 s6 = labelMe "QUIC server" >> named "server" server
                 s7 = labelMe "abort watcher" >> rec (watchAbortRequest conn retry)
                 ended = connectionEndedSTM conn
-                protocol = withIdle conn $ runProtocolThreads [s1, s2, s3, s4, s5, s7]
+                protocol = withIdle conn $ runProtocolThreads conn [s1, s2, s3, s4, s5, s7]
                 -- Telling the peer here, and not below, because here is the
                 -- one place where it can be done at all:
                 -- 'runProtocolThreads' has waited for every protocol
@@ -283,8 +283,8 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 --
                 -- Below, after 'runThreads', is too late.  The
                 -- 'concurrentlyApp' on this line cancels the application when
-                -- the protocol threads fail and then waits for it, under
-                -- 'uninterruptibleMask_', for as long as it takes to unwind.
+                -- the protocol threads fail and then waits for it to unwind,
+                -- for up to 'killedTimeout'.
                 -- The CONNECTION_CLOSE waited with it, and a peer told
                 -- nothing waits out its own idle timeout: seen against an
                 -- HTTP/3 server whose application was slow to die just as the
@@ -293,8 +293,13 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 --
                 -- 'closure' is said once; it rethrows, and the call below
                 -- finds the peer already told.
+                -- Not when killed: the thread is being taken down, and
+                -- the end below tells the peer.
                 tellThenRaise act =
                     act `E.catch` \(e :: E.SomeException) -> do
+                        -- 'Abort' is asynchronous only in its type.
+                        when (isAsyncException e && isNothing (E.fromException e :: Maybe Abort)) $
+                            E.throwIO e
                         sendFinal conn
                         setConnectionClosed conn
                         closure conn ldcc (Left e)
