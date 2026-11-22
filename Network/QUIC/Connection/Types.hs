@@ -356,6 +356,8 @@ data Connection = Connection
     , connEnd           :: TVar (Maybe E.SomeException)
     -- ^ Why the connection ended, however it did: what a wait on the
     --   connection throws.  The first reason recorded stays.
+    , connEndCause      :: TVar (Maybe E.SomeException)
+    -- ^ What 'connEnd' was made of, as thrown.
     , connAckElicitingSent :: TVar Bool
     , connIdle :: Watchdog Idle
     -- ^ The idle timer (RFC 9000 10.1): one watchdog for the connection.
@@ -480,6 +482,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     peerLimitsReset   <- newTVarIO 0
     connAbortRequest  <- newTVarIO Nothing
     connEnd           <- newTVarIO Nothing
+    connEndCause      <- newTVarIO Nothing
     connAckElicitingSent <- newTVarIO False
     -- Filled in by 'Network.QUIC.Connection.Misc.setupIdle'.
     connIdle <- W.newWatchdog $ Idle (return Nothing) (return False) (return ())
@@ -668,11 +671,23 @@ isPeerClosed conn = isJust <$> readTVarIO (sharedCloseReceived $ shared conn)
 --   already.  Asynchronous exceptions say nothing of why: they are the
 --   connection being taken down after it ended.
 setConnectionEnd :: Connection -> E.SomeException -> IO ()
-setConnectionEnd conn se
+setConnectionEnd conn se = atomically $ do
+    old <- readTVar $ connEnd conn
+    when (isNothing old) $ do
+        writeTVar (connEnd conn) $ Just reason
+        writeTVar (connEndCause conn) $ Just se
+  where
     -- 'Abort' is asynchronous only in its type: the abort watcher throws it.
-    | isAsyncException se && isNothing (E.fromException se :: Maybe Abort) =
-        return ()
-    | otherwise = atomically $ modifyTVar' (connEnd conn) (<|> Just (endReason se))
+    -- Any other is the connection taken down from outside: recorded too, or
+    -- whatever waits on it was never woken, and told as a failure.
+    reason
+        | isAsyncException se && isNothing (E.fromException se :: Maybe Abort) =
+            E.toException $ BadThingHappen se
+        | otherwise = endReason se
+
+-- | What the connection's end was made of, as thrown, if it has ended.
+connectionEndCause :: Connection -> IO (Maybe E.SomeException)
+connectionEndCause conn = readTVarIO $ connEndCause conn
 
 -- | What a wait on the connection is told: what the application knows.
 endReason :: E.SomeException -> E.SomeException
@@ -682,7 +697,10 @@ endReason se
     | Just ExitConnection <- E.fromException se = endedNormally
     | Just (_ :: InternalControl) <- E.fromException se =
         E.toException $ BadThingHappen se
-    | otherwise = se
+    | Just (_ :: QUICException) <- E.fromException se = se
+    -- Not ours, an internal failure or the application's: told as ours,
+    -- so that a waiter is given a 'QUICException' as documented.
+    | otherwise = E.toException $ BadThingHappen se
 
 -- | Recording a synchronous exception as why the connection ended, and
 --   throwing it on.  For each protocol thread: which of them ends the

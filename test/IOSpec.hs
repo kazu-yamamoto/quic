@@ -519,7 +519,7 @@ spec = do
             r <-
                 Timeout.timeout 500000 $
                     E.try @E.IOException $
-                        runProtocolThreads [waiting, failing, waiting]
+                        runProtocolThreadsWith (return Nothing) [waiting, failing, waiting]
             case r of
                 Just (Left _) -> return ()
                 _ -> expectationFailure $ show r
@@ -530,7 +530,7 @@ spec = do
                         `E.catch` \(e :: E.SomeAsyncException) ->
                             putMVar cancelled () >> E.throwIO e
                 failing = E.throwIO $ userError "failed"
-            r <- E.try @E.IOException $ runProtocolThreads [stuck, failing]
+            r <- E.try @E.IOException $ runProtocolThreadsWith (return Nothing) [stuck, failing]
             either (const True) (const False) r `shouldBe` True
             tryTakeMVar cancelled `shouldReturn` Just ()
     describe "the idle timeout" $ do
@@ -619,6 +619,10 @@ spec = do
     describe "closing" $ do
         it "tells the peer when the application gives up" $ do
             withPipe (DropClientPacket []) $ testServerThrows cc sc waitS
+        it "says why the peer ended the connection, not what the application made of it" $ do
+            withPipe (DropClientPacket []) $ testPeerReasonWins cc sc waitS
+        it "wakes a thread waiting on a connection taken down from outside" $ do
+            withPipe (DropClientPacket []) $ testTakenDown cc sc waitS
         it "tells the peer before waiting for the application" $ do
             withPipe (DropClientPacket []) $ testSlowApp cc sc waitS
         it "leaves nothing uncaught when stopped as a connection ends" $ do
@@ -1635,6 +1639,60 @@ testServerThrows cc sc waitS =
             strm <- stream conn
             sendStream strm "ping"
             void $ recvStream strm 1024
+
+-- | The server ends the connection with an application error, and the
+--   client's application fails of it in its own way: the client's run used
+--   to throw that, and to send INTERNAL_ERROR to a peer that had closed.
+testPeerReasonWins :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testPeerReasonWins cc sc waitS =
+    withAsync server $ \_ -> do
+        waitS
+        r <- E.try $ C.run cc $ \conn -> do
+            strm <- stream conn
+            sendStream strm "ping"
+            void (recvStream strm 1024) `E.catch` \(_ :: QUICException) ->
+                E.throwIO $ userError "the application's own"
+        case r of
+            Left e
+                | Just (ApplicationProtocolErrorIsReceived (ApplicationProtocolError 1) _) <-
+                    E.fromException e ->
+                    return ()
+            _ -> expectationFailure $ show (r :: Either E.SomeException ())
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        abortConnection conn (ApplicationProtocolError 1) "bye"
+        threadDelay 1000000
+
+-- | A thread of the application's own, outside the managers, waiting on
+--   a stream: the client's run is killed, and nothing ever woke it.
+testTakenDown :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testTakenDown cc sc waitS =
+    withAsync server $ \_ -> do
+        waitS
+        woken <- newEmptyMVar
+        ready <- newEmptyMVar
+        withAsync
+            ( C.run cc $ \conn -> do
+                strm <- stream conn
+                sendStream strm "ping"
+                _ <- forkIO $ do
+                    r <- E.try $ recvStream strm 1024
+                    putMVar woken $ either (\(_ :: QUICException) -> True) (const False) r
+                putMVar ready ()
+                threadDelay 10000000
+            )
+            $ \client -> do
+                takeMVar ready
+                threadDelay 100000
+                cancel client
+                Timeout.timeout 3000000 (takeMVar woken) `shouldReturn` Just True
+  where
+    server = run sc $ \conn -> do
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        threadDelay 10000000
 
 internalError :: QUICException -> Bool
 internalError (TransportErrorIsReceived InternalError _) = True
