@@ -621,6 +621,9 @@ spec = do
             withPipe (DropClientPacket []) $ testServerThrows cc sc waitS
         it "says why the peer ended the connection, not what the application made of it" $ do
             withPipe (DropClientPacket []) $ testPeerReasonWins cc sc waitS
+        it "closes a normal end with the application's code, a normal end to a peer told of it" $ do
+            withPipe (DropClientPacket []) $ testNormalClose cc sc waitS True
+            withPipe (DropClientPacket []) $ testNormalClose cc sc waitS False
         it "wakes a thread waiting on a connection taken down from outside" $ do
             withPipe (DropClientPacket []) $ testTakenDown cc sc waitS
         it "tells the peer before waiting for the application" $ do
@@ -1664,6 +1667,37 @@ testPeerReasonWins cc sc waitS =
         _ <- recvStream strm 1024
         abortConnection conn (ApplicationProtocolError 1) "bye"
         threadDelay 1000000
+
+-- | The client ends normally, having said its normal end is closed with
+--   0x100.  A server told the same sees a normal end; one not told sees
+--   the application's code.
+testNormalClose :: C.ClientConfig -> ServerConfig -> IO () -> Bool -> IO ()
+testNormalClose cc sc waitS told = do
+    seen <- newEmptyMVar
+    withAsync (server seen) $ \_ -> do
+        waitS
+        C.run cc $ \conn -> do
+            setNormalClose conn code
+            strm <- stream conn
+            sendStream strm "ping"
+            threadDelay 100000
+        r <- Timeout.timeout 3000000 $ takeMVar seen
+        case r of
+            Just (Just e)
+                | told, Just (ConnectionIsClosed _) <- E.fromException e -> return ()
+                | not told
+                , Just (ApplicationProtocolErrorIsReceived c _) <- E.fromException e
+                , c == code ->
+                    return ()
+            _ -> expectationFailure $ show r
+  where
+    code = ApplicationProtocolError 0x100
+    server seen = run sc $ \conn -> do
+        when told $ setNormalClose conn code
+        strm <- acceptStream conn
+        _ <- recvStream strm 1024
+        r <- E.try $ atomically $ waitFinishedSTM conn
+        putMVar seen $ either Just (const Nothing) (r :: Either E.SomeException ())
 
 -- | A thread of the application's own, outside the managers, waiting on
 --   a stream: the client's run is killed, and nothing ever woke it.

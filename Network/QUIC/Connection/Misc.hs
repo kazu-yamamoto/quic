@@ -43,6 +43,7 @@ module Network.QUIC.Connection.Misc (
     sendFrames,
     closeConnection,
     abortConnection,
+    setNormalClose,
     requestEnd,
     watchAbortRequest,
     abortRequested,
@@ -396,6 +397,17 @@ abortConnection
     :: Connection -> ApplicationProtocolError -> ReasonPhrase -> IO ()
 abortConnection conn err desc = requestEnd conn $ Abort err desc
 
+-- | Closing a connection which ends normally with this application
+--   protocol error code, rather than with the transport's NO_ERROR: an
+--   application protocol such as HTTP/3 (H3_NO_ERROR, RFC 9114 Sec 5.2)
+--   asks for that.  Read when the connection closes; an abnormal end
+--   closes as it would anyway.  The peer closing with this code is a
+--   normal end too, as one with NO_ERROR is.
+--
+-- @since 0.4.0
+setNormalClose :: Connection -> ApplicationProtocolError -> IO ()
+setNormalClose Connection{..} err = writeIORef connNormalClose $ Just err
+
 -- | Asking the connection's protocol threads to end it with this
 --   exception, as 'abortConnection' does.  For threads outside them, such
 --   as a reader, which used to throw to the connection's main thread.
@@ -423,18 +435,23 @@ watchAbortRequest :: Connection -> STM.STM () -> IO ()
 watchAbortRequest conn@Connection{..} giveUp = do
     me <-
         atomically $
-            (Just <$> (readTVar connAbortRequest >>= maybe retry return))
+            (Just . Right <$> (readTVar connAbortRequest >>= maybe retry return))
                 -- Not once the connection has ended otherwise: that is why.
-                `orElse` ( Just givenUp
+                `orElse` ( Just (Left ())
                             <$ ( readTVar connDone >>= STM.check . not
                                     >> readTVar connEnd >>= STM.check . isNothing
                                     >> giveUp
                                )
                          )
                 `orElse` (Nothing <$ connectionEndedSTM conn)
-    mapM_ E.throwIO me
-  where
-    givenUp = E.toException $ TransportErrorIsSent NoError "given up"
+    forM_ me $ \e -> case e of
+        Right se -> E.throwIO se
+        -- A give-up is a normal end: closed as one ('setNormalClose').
+        Left () ->
+            readIORef connNormalClose
+                >>= maybe
+                    (E.throwIO $ TransportErrorIsSent NoError "given up")
+                    (\err -> E.throwIO $ Abort err "given up")
 
 ----------------------------------------------------------------
 

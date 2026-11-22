@@ -385,6 +385,8 @@ data Connection = Connection
     , connResources     :: IORef (IO ())
     , connCloseSent     :: IORef Bool
     -- ^ Whether the peer has been told the connection is over
+    , connNormalClose   :: IORef (Maybe ApplicationProtocolError)
+    -- ^ The application's code to close with on a normal end, if any
     , connCloserOwnsSocket :: IORef Bool
     -- ^ Whether the closer has taken the client's socket to close
     , connAuthFailures  :: IORef Int64
@@ -506,6 +508,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     decryptBuf        <- mallocBytes bufsiz -- used receiver
     connResources     <- newIORef (free encodeBuf >> free encryptBuf >> free decryptBuf)
     connCloseSent     <- newIORef False
+    connNormalClose   <- newIORef Nothing
     connCloserOwnsSocket <- newIORef False
     connAuthFailures  <- newIORef 0
     connKeyPackets    <- newIORef 0

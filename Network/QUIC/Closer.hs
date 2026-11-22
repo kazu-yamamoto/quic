@@ -23,7 +23,10 @@ import Network.QUIC.Types
 
 closure :: Connection -> LDCC -> Either E.SomeException a -> IO a
 closure conn ldcc (Right x) = do
-    closure' conn ldcc $ ConnectionClose NoError 0 ""
+    mcode <- readIORef $ connNormalClose conn
+    closure' conn ldcc $ case mcode of
+        Nothing -> ConnectionClose NoError 0 ""
+        Just err -> ConnectionCloseApp err ""
     return x
 closure conn ldcc (Left se)
     | Just e@(TransportErrorIsSent err desc) <- E.fromException se = do
