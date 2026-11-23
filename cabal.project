@@ -3,5 +3,5 @@ packages: .
 source-repository-package
   type: git
   location: https://github.com/kazu-yamamoto/wai.git
-  tag: 91614f201b8fc3a66a59ab31eedf1c3e4a408c78
+  tag: 80d43828641b70614f125d93b765690fba97eb1f
   subdir: time-manager

@@ -48,6 +48,4 @@ data Abort
     | VerNego VersionInfo
     deriving (Show)
 
-instance E.Exception Abort where
-    fromException = E.asyncExceptionFromException
-    toException = E.asyncExceptionToException
+instance E.Exception Abort

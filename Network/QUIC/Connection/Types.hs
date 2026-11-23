@@ -678,17 +678,20 @@ setConnectionEnd conn se = atomically $ do
     old <- readTVar $ connEnd conn
     when (isNothing old) $ do
         writeTVar (connEnd conn) $ Just reason
-        writeTVar (connEndCause conn) $ Just se
+        writeTVar (connEndCause conn) $ Just cause
   where
-    -- 'Abort' is asynchronous only in its type: the abort watcher throws it.
-    -- Any other is the connection taken down from outside: recorded too, or
-    -- whatever waits on it was never woken, and told as a failure.
+    -- The connection taken down from outside: recorded too, or whatever
+    -- waits on it was never woken, and told as a failure.  Rethrown by
+    -- other threads, so not as the asynchronous exception it was.
+    cause
+        | isAsyncException se = E.toException $ BadThingHappen se
+        | otherwise = se
     reason
-        | isAsyncException se && isNothing (E.fromException se :: Maybe Abort) =
-            E.toException $ BadThingHappen se
+        | isAsyncException se = cause
         | otherwise = endReason se
 
--- | What the connection's end was made of, as thrown, if it has ended.
+-- | What the connection's end was made of, as thrown, if it has ended; an
+--   asynchronous exception wrapped in 'BadThingHappen'.
 connectionEndCause :: Connection -> IO (Maybe E.SomeException)
 connectionEndCause conn = readTVarIO $ connEndCause conn
 
