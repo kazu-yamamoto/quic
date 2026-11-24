@@ -1,5 +1,40 @@
 # ChangeLog
 
+## 0.3.25
+
+From the v0.3 branch: main goes on to 0.4, whose types change.  Fixes
+#269, a client decrypting forged 0-RTT packets.  Adds
+`waitAcceptableSTM`, `waitReadableSTM` and `waitFinishedSTM`.
+
+* Give up waiting for a state once the connection is closed
+  [#243](https://github.com/kazu-yamamoto/quic/pull/243)
+* Wake what waits on the connection however it ends
+  [#244](https://github.com/kazu-yamamoto/quic/pull/244)
+* Leave the socket to the connection when the client reader goes idle
+  [#245](https://github.com/kazu-yamamoto/quic/pull/245)
+* Add waitAcceptableSTM and waitReadableSTM
+  [#246](https://github.com/kazu-yamamoto/quic/pull/246)
+* Give the application time to finish once the protocol threads fail
+  [#247](https://github.com/kazu-yamamoto/quic/pull/247)
+* Wait for deadlines in STM instead of System.Timeout
+  [#248](https://github.com/kazu-yamamoto/quic/pull/248)
+* Restart the idle timer on the first ack-eliciting packet sent
+  [#249](https://github.com/kazu-yamamoto/quic/pull/249)
+* Let the protocol threads return when the connection ends
+  [#250](https://github.com/kazu-yamamoto/quic/pull/250)
+* Keep transport parameter keys as the 62-bit integers they are
+  [#251](https://github.com/kazu-yamamoto/quic/pull/251)
+* Export waitFinishedSTM
+  [#256](https://github.com/kazu-yamamoto/quic/pull/256)
+* Take a refused send for loss (part of)
+  [#263](https://github.com/kazu-yamamoto/quic/pull/263)
+* Keep the client reader on receive errors (part of)
+  [#265](https://github.com/kazu-yamamoto/quic/pull/265)
+* Ask the protocol threads to end on the application's failure, rather than cancel them
+  [#266](https://github.com/kazu-yamamoto/quic/pull/266)
+* Drop a 0-RTT packet the client receives without decrypting it
+  [#269](https://github.com/kazu-yamamoto/quic/issues/269)
+
 ## 0.3.24
 
 `sendDatagram` throws `ConnectionIsClosed` for a DATAGRAM too large for a
