@@ -872,9 +872,15 @@ processFrame conn _lvl (ConnectionClose NoError _ftyp reason) = do
 processFrame _conn _lvl (ConnectionClose err _ftyp reason) = do
     let quicexc = TransportErrorIsReceived err reason
     E.throwIO quicexc
-processFrame _conn _lvl (ConnectionCloseApp err reason) = do
-    let quicexc = ApplicationProtocolErrorIsReceived err reason
-    E.throwIO quicexc
+processFrame conn _lvl (ConnectionCloseApp err reason) = do
+    -- The application's normal end ('setNormalClose') is one closed with
+    -- no error.
+    normal <- (== Just err) <$> readIORef (connNormalClose conn)
+    if normal
+        then do
+            setPeerClosed conn reason
+            E.throwIO $ ConnectionIsClosed reason
+        else E.throwIO $ ApplicationProtocolErrorIsReceived err reason
 processFrame conn lvl HandshakeDone = do
     when (isServer conn || lvl /= RTT1Level) $
         closeConnection conn ProtocolViolation "HANDSHAKE_DONE for server"

@@ -297,9 +297,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 -- the end below tells the peer.
                 tellThenRaise act =
                     act `E.catch` \(e :: E.SomeException) -> do
-                        -- 'Abort' is asynchronous only in its type.
-                        when (isAsyncException e && isNothing (E.fromException e :: Maybe Abort)) $
-                            E.throwIO e
+                        when (isAsyncException e) $ E.throwIO e
                         sendFinal conn
                         setConnectionClosed conn
                         closure conn ldcc (Left e)
