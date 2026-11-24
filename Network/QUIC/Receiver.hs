@@ -135,7 +135,12 @@ receiver conn = handleLogT logAction body
 data Got = Got ReceivedPacket | Restarted | Expired | Ended
 
 processReceivedPacketHandshake :: Connection -> ReceivedPacket -> IO ()
-processReceivedPacketHandshake conn rpkt = do
+processReceivedPacketHandshake conn rpkt
+    | serverZeroRTT conn rpkt = dropServerZeroRTT conn rpkt
+    | otherwise = processReceivedPacketHandshake' conn rpkt
+
+processReceivedPacketHandshake' :: Connection -> ReceivedPacket -> IO ()
+processReceivedPacketHandshake' conn rpkt = do
     let CryptPacket hdr crypt = rpCryptPacket rpkt
         lvl = rpEncryptionLevel rpkt
     mx <- waitWithin (Microseconds 10000) $ waitEncryptionLevelSTM conn lvl
@@ -215,12 +220,25 @@ processReceivedPacket conn = processReceivedPacket' conn Nothing
 -- | With whether the packet came on a CID other than the one in use, once
 --   the handshake is over: only then may the peer migrate.
 processReceivedPacket' :: Connection -> Maybe Bool -> ReceivedPacket -> IO ()
-processReceivedPacket' conn mcidChanged rpkt = do
-    let CryptPacket _ crypt = rpCryptPacket rpkt
-    mplain <- decryptReceived conn rpkt $ decryptCrypt conn crypt lvl
-    processDecrypted conn mcidChanged rpkt mplain
+processReceivedPacket' conn mcidChanged rpkt
+    | serverZeroRTT conn rpkt = dropServerZeroRTT conn rpkt
+    | otherwise = do
+        let CryptPacket _ crypt = rpCryptPacket rpkt
+        mplain <- decryptReceived conn rpkt $ decryptCrypt conn crypt lvl
+        processDecrypted conn mcidChanged rpkt mplain
   where
     lvl = rpEncryptionLevel rpkt
+
+-- | RFC 9001 Sec 5.6: a server sends no 0-RTT packet, and the client's key
+--   for receiving one comes of an empty secret that anyone can derive.
+--   Decrypted, a forged one could close the connection or answer a request.
+serverZeroRTT :: Connection -> ReceivedPacket -> Bool
+serverZeroRTT conn rpkt = isClient conn && rpEncryptionLevel rpkt == RTT0Level
+
+dropServerZeroRTT :: Connection -> ReceivedPacket -> IO ()
+dropServerZeroRTT conn rpkt = do
+    let CryptPacket hdr _ = rpCryptPacket rpkt
+    qlogDropped conn (hdr, "0-RTT from the server" :: String)
 
 -- | Counting the packet for the path, then decrypting it as given.
 decryptReceived
