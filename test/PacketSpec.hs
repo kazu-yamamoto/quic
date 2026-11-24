@@ -128,6 +128,27 @@ spec = do
             clientInitial True `shouldReturn` False
             clientInitial False `shouldReturn` True
 
+    -- #269: the client's 0-RTT receive key comes of an empty secret, so
+    -- anyone can forge a 0-RTT packet it would decrypt.
+    describe "a 0-RTT packet to the client" $
+        it "is dropped undecrypted" $ do
+            (clientConn, serverConn) <- makeConnections serverConf Version1
+            cipher <- getCipher clientConn InitialLevel
+            let early conn sec = do
+                    setCipher conn RTT0Level cipher
+                    initializeCoder conn RTT0Level (sec, ServerTrafficSecret "")
+            early clientConn $ ClientTrafficSecret "client"
+            -- Anyone's: the server side encrypts with the empty secret.
+            early serverConn $ ClientTrafficSecret "forger"
+            setConnection0RTTReady clientConn
+            -- As soon as the server's Initial is in; below it, the packet is
+            -- put off, and decrypted once the level is reached.
+            setEncryptionLevel clientConn HandshakeLevel
+            let hdr = RTT0 Version1 (toCID "") clientChosenCID
+                close = ConnectionCloseApp (ApplicationProtocolError 0) "forged"
+            bin <- packetWith serverConn hdr [close]
+            processHandshake clientConn bin
+
     describe "encodePlainPacket" $ do
         it "leaves the peer a whole header protection sample" $ do
             (senderConn, _) <- makeConnections serverConf Version1
@@ -173,13 +194,17 @@ spec = do
 packetFrom
     :: Connection -> Header -> Bool -> IO ByteString
 packetFrom sender hdr corrupt = do
-    let ppkt = PlainPacket hdr $ Plain (Flags 0) 0 [Ping] 0
-    bin <- BS.createAndTrim 4096 $ \buf ->
-        fst <$> encodePlainPacket sender (SizedBuffer buf 2048) ppkt Nothing
+    bin <- packetWith sender hdr [Ping]
     return $
         if corrupt
             then BS.snoc (BS.init bin) (BS.last bin `xor` 0xff)
             else bin
+
+packetWith :: Connection -> Header -> [Frame] -> IO ByteString
+packetWith sender hdr frames = do
+    let ppkt = PlainPacket hdr $ Plain (Flags 0) 0 frames 0
+    BS.createAndTrim 4096 $ \buf ->
+        fst <$> encodePlainPacket sender (SizedBuffer buf 2048) ppkt Nothing
 
 processHandshake :: Connection -> ByteString -> IO ()
 processHandshake conn bin = do
