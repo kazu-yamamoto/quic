@@ -11,7 +11,10 @@ import Network.QUIC.Types
 ----------------------------------------------------------------
 
 takeInput :: Connection -> IO Input
-takeInput conn = atomically $ readTQueue (inputQ conn) `orElse` waitFinishedSTM conn
+takeInput = atomically . takeInputSTM
+
+takeInputSTM :: Connection -> STM Input
+takeInputSTM conn = readTQueue (inputQ conn) `orElse` waitFinishedSTM conn
 
 -- | Waiting until 'Network.QUIC.acceptStream' would not block: a stream
 --   the peer opened is waiting, or the connection has ended.

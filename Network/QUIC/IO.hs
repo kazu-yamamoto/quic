@@ -292,6 +292,17 @@ acceptStream conn = do
     InpStream s <- takeInput conn
     return s
 
+-- | 'acceptStream' which gives up once the 'STM' action succeeds.  An
+--   ended connection is told as by 'acceptStream'.
+--
+--   @since 0.4.0
+acceptStreamWith :: Connection -> STM a -> IO (Either a Stream)
+acceptStreamWith conn giveUp =
+    atomically $
+        (Right . fromInput <$> takeInputSTM conn) `orElse` (Left <$> giveUp)
+  where
+    fromInput (InpStream s) = s
+
 -- | Receiving data in the stream. In the case where a FIN is received
 --   an empty bytestring is returned.
 recvStream
@@ -322,6 +333,19 @@ recvStream s n = do
             fire conn (Microseconds 50000) $
                 sendFrames conn RTT1Level [MaxData newMax]
     return bs
+
+-- | 'recvStream' which gives up once the 'STM' action succeeds, having
+--   taken nothing from the stream, which can be read on.  An ended
+--   connection, a FIN or a reset are told as by 'recvStream'.  One thread
+--   at a time reads a stream.
+--
+--   @since 0.4.0
+recvStreamWith :: Stream -> Int -> STM a -> IO (Either a ByteString)
+recvStreamWith s n giveUp = do
+    r <- atomically $ (Right <$> waitReadableSTM s) `orElse` (Left <$> giveUp)
+    case r of
+        Left x -> return $ Left x
+        Right () -> Right <$> recvStream s n
 
 -- | Closing a stream with an error code.
 --   This sends RESET_STREAM to the peer.

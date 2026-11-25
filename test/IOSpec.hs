@@ -152,6 +152,26 @@ spec = do
             fin <$> takeSendStreamQ clientConn `shouldReturn` True
             isTxStreamClosed s `shouldReturn` True
             isRxStreamClosed s `shouldReturn` True
+    -- What a stream or the connection has ready comes first, and giving up
+    -- takes nothing: the stream is read on, the stream accepted later.
+    describe "recvStreamWith and acceptStreamWith" $ do
+        it "give up with nothing taken, and leave the stream to read on" $ do
+            scr <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scr Version1
+            s <- addStream clientConn 0
+            recvStreamWith s 10 (return ("given up" :: String))
+                `shouldReturn` Left "given up"
+            putRecvStreamQ s "data"
+            recvStreamWith s 10 (return ("given up" :: String)) `shouldReturn` Right "data"
+        it "accept a stream waiting rather than give up" $ do
+            scr <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scr Version1
+            fmap streamId <$> acceptStreamWith clientConn (return ("given up" :: String))
+                `shouldReturn` Left "given up"
+            s <- addStream clientConn 1
+            putInput clientConn $ InpStream s
+            fmap streamId <$> acceptStreamWith clientConn (return ("given up" :: String))
+                `shouldReturn` Right 1
     -- RFC 9000 Sec 13.3: stream data is resent unless the stream is reset.
     describe "a lost STREAM frame" $
         it "is not resent once its stream is reset" $ do
