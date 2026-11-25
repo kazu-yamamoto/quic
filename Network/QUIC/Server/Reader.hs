@@ -11,6 +11,8 @@ module Network.QUIC.Server.Reader (
     waitNoConnection,
     releaseConnection,
     spawnDispatcher,
+    forkCloserOn,
+    waitClosers,
     waitNoDispatcher,
     tokenMgr,
     genStatelessReset,
@@ -76,6 +78,9 @@ data Dispatch = Dispatch
     -- what a connection's 'stop' reaches it by.
     , connectionCount :: TVar Int
     -- ^ Connections forked and not yet ended, for 'scMaxConnections'.
+    , closerThreads :: T.ThreadManager
+    -- ^ The closers, which send on the listening sockets for 3 PTO after
+    -- their connections have ended.
     }
 
 newDispatch :: ServerConfig -> IO () -> IO Dispatch
@@ -90,6 +95,7 @@ newDispatch ServerConfig{..} stopNow =
         <*> T.newThreadManager
         <*> pure stopNow
         <*> newTVarIO 0
+        <*> T.newThreadManager
   where
     conf =
         CT.defaultConfig
@@ -153,6 +159,27 @@ waitNoConnection :: Dispatch -> Int -> IO Bool
 waitNoConnection Dispatch{..} = T.waitUntilAllGoneFor connectionThreads
 
 -- | Running a dispatcher on a thread of its own.
+-- | Forking a closer as a thread of the server's, so that the server can
+--   wait for it before the caller closes the sockets.  The final action
+--   is run however the closer ends.
+forkCloserOn :: Dispatch -> IO () -> IO () -> IO ()
+forkCloserOn Dispatch{..} body final =
+    void $ T.forkManagedFinally closerThreads "QUIC closer" body final
+
+-- | Waiting for the closers, which end within 3 PTO, for at most
+--   'closerWait'.  Those left then are stopped, and their final actions
+--   waited for.
+waitClosers :: Dispatch -> IO ()
+waitClosers Dispatch{..} = do
+    done <- T.waitUntilAllGoneFor closerThreads closerWait
+    unless done $ do
+        T.stopAfter closerThreads (return ()) $ \_ -> return ()
+        T.waitUntilAllGone closerThreads
+
+-- | How long the server waits for its closers (microseconds).
+closerWait :: Int
+closerWait = 3000000
+
 spawnDispatcher :: Dispatch -> IO () -> IO ()
 spawnDispatcher Dispatch{..} = T.forkManaged dispatcherThreads "QUIC dispatcher"
 
