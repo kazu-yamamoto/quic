@@ -310,6 +310,18 @@ spec = do
                             )
                             (readTVar fired >>= check >> return "late")
                 r `shouldBe` Just (Right "done" :: Either String String)
+        -- The server closing with NO_ERROR ended the watcher of the give-up,
+        -- and an action at work on something else was waited for anyway.
+        it "gives up an action at work after the server closed with runGivingUp" $
+            withServerDoing (return ()) $ do
+                late <- registerDelay 500000
+                r <-
+                    Timeout.timeout 5000000 $
+                        C.runGivingUp
+                            testClientConfig
+                            (\conn -> waitEstablished conn >> threadDelay 10000000 >> return "done")
+                            (readTVar late >>= check >> return "late")
+                r `shouldBe` Just (Left ("late" :: String) :: Either String String)
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS
@@ -2367,9 +2379,14 @@ testSpuriousMigration cc sc waitS within = do
 
 -- | Running a server which answers nothing, for a while.
 withSilentServer :: IO a -> IO a
-withSilentServer body = do
+withSilentServer = withServerDoing $ threadDelay 3000000
+
+-- | A server which does the action once a connection is established, and
+--   then closes it with NO_ERROR.
+withServerDoing :: IO () -> IO a -> IO a
+withServerDoing act body = do
     scs <- makeTestServerConfig
     let server = E.handle (\(E.SomeException _) -> return ()) $
             run scs $
-                \conn -> waitEstablished conn >> threadDelay 3000000
+                \conn -> waitEstablished conn >> act
     E.bracket (forkIO server) killThread $ \_ -> threadDelay 300000 >> body

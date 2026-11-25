@@ -465,8 +465,12 @@ watchAbortRequest conn@Connection{..} giveUp = do
 --   When the application fails, the protocol threads are asked to end the
 --   connection with its exception ('requestEnd') and given the same grace.
 --   They used to be cancelled at once, in the middle of a send at worst.
-concurrentlyApp :: Connection -> IO a -> IO b -> IO (a, b)
-concurrentlyApp conn protocol app =
+--
+--   When the protocol threads end normally, the application runs to its
+--   end, unless the 'STM' action succeeds first: it is then given the same
+--   grace, and 'ConnectionIsClosed' is thrown.
+concurrentlyApp :: Connection -> STM.STM () -> IO a -> IO b -> IO (a, b)
+concurrentlyApp conn giveUp protocol app =
     -- Whatever is left after the graces below is killed, as the last
     -- resort, and given 'killedTimeout' to unwind.
     T.withThreadManager killedTimeout $ \mgr -> do
@@ -475,7 +479,19 @@ concurrentlyApp conn protocol app =
         r <-
             atomically $ (Left <$> T.waitManagedSTM ap') `orElse` (Right <$> T.waitManagedSTM aa)
         case r of
-            Left (Right x) -> (,) x <$> T.waitManaged aa
+            -- The watcher of the give-up has returned with the protocol
+            -- threads, and a client could no longer give up on its action.
+            Left (Right x) -> do
+                done <-
+                    atomically $
+                        (True <$ T.waitManagedSTM aa) `orElse` (False <$ giveUp)
+                if done
+                    then (,) x <$> T.waitManaged aa
+                    else do
+                        expired <- registerDelay appGracePeriod
+                        atomically $
+                            void (T.waitManagedSTM aa) `orElse` (readTVar expired >>= STM.check)
+                        E.throwIO $ ConnectionIsClosed "given up"
             Left (Left e) -> do
                 expired <- registerDelay appGracePeriod
                 atomically $

@@ -306,6 +306,7 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                         >> void
                             ( concurrentlyApp
                                 conn
+                                retry
                                 (tellThenRaise (protocol `E.catch` exitedNormally))
                                 s6
                             )
