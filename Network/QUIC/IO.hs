@@ -197,13 +197,19 @@ shutdownStreamWith s giveUp = do
 --   If the peer has not finished sending on it, this also sends
 --   STOP_SENDING with error code 0; see 'closeStreamWith'.
 closeStream :: Stream -> IO ()
-closeStream s = closeStreamWith s $ ApplicationProtocolError 0
+closeStream s =
+    either return return =<< closeStreamWith s (ApplicationProtocolError 0) retry
 
--- | 'closeStream' with the error code of the STOP_SENDING sent if the
---   peer has not finished sending on the stream.  HTTP\/3, for one, wants
---   H3_NO_ERROR there (RFC 9114, section 4.1).
-closeStreamWith :: Stream -> ApplicationProtocolError -> IO ()
-closeStreamWith s aerr = do
+-- | 'closeStream' which gives up waiting for the FIN to go out once the
+--   'STM' action succeeds, as 'shutdownStreamWith' does, and sends
+--   STOP_SENDING with the error code given.  HTTP\/3, for one, wants
+--   H3_NO_ERROR there (RFC 9114, section 4.1).  The stream is closed and
+--   released either way.
+--
+--   @since 0.4.0
+closeStreamWith
+    :: Stream -> ApplicationProtocolError -> STM a -> IO (Either a ())
+closeStreamWith s aerr giveUp = do
     let conn = streamConnection s
         sid = streamId s
         -- A unidirectional stream of the peer's has no sending side here.
@@ -214,15 +220,19 @@ closeStreamWith s aerr = do
                 || (isServer conn && isClientInitiatedUnidirectional sid)
     closed <- (||) <$> isConnectionClosed conn <*> isConnectionEnded conn
     sclosed <- isTxStreamClosed s
-    unless (receiveOnly || closed || sclosed) $ do
-        setTxStreamClosed s
-        queueFin s
-        waitFinTx s
+    r <-
+        if receiveOnly || closed || sclosed
+            then return $ Right ()
+            else do
+                setTxStreamClosed s
+                queueFin s
+                atomically $ (Right <$> waitFinTxSTM s) `orElse` (Left <$> giveUp)
     stopUnfinished s aerr
     -- Outside the guard above: whether or not the FIN goes out, we are done
     -- with the stream, and 'recvStream' has to say so rather than block.
     setRxStreamClosed s
     releaseStream s
+    return r
 
 -- | Asking the peer to stop sending on a stream we are done with, if it has
 --   not said where the stream ends.  It then resets the stream, and what we

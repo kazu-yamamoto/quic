@@ -139,6 +139,19 @@ spec = do
             writeIORef (minIdleTimeout conn) 1000
             pto <- getPTO $ connLDCC conn
             getIdleTimeout conn `shouldReturn` Just (3 * pto)
+    -- Waiting for the FIN to go out could only end with the connection.
+    describe "closeStreamWith" $
+        it "gives up waiting for the FIN, with it queued and the stream closed" $ do
+            scg <- makeTestServerConfig
+            (clientConn, _) <- makeConnections scg Version1
+            s <- addStream clientConn 0
+            -- No sender runs here: the FIN is never sent.
+            closeStreamWith s (ApplicationProtocolError 0) (return "given up")
+                `shouldReturn` Left ("given up" :: String)
+            let fin (TxStreamData _ _ _ _ f) = f
+            fin <$> takeSendStreamQ clientConn `shouldReturn` True
+            isTxStreamClosed s `shouldReturn` True
+            isRxStreamClosed s `shouldReturn` True
     -- RFC 9000 Sec 13.3: stream data is resent unless the stream is reset.
     describe "a lost STREAM frame" $
         it "is not resent once its stream is reset" $ do
