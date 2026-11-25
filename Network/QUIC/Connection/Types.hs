@@ -389,6 +389,8 @@ data Connection = Connection
     -- ^ The application's code to close with on a normal end, if any
     , connCloserOwnsSocket :: IORef Bool
     -- ^ Whether the closer has taken the client's socket to close
+    , connForkCloser :: IORef (IO () -> IO () -> IO ())
+    -- ^ Forking the closer: its body, and what follows it however it ends
     , connAuthFailures  :: IORef Int64
     -- ^ Packets that have failed authentication, over the whole connection
     , connKeyPackets    :: IORef Int64
@@ -510,6 +512,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connCloseSent     <- newIORef False
     connNormalClose   <- newIORef Nothing
     connCloserOwnsSocket <- newIORef False
+    connForkCloser    <- newIORef $ \body final -> void $ forkIO $ body >> final
     connAuthFailures  <- newIORef 0
     connKeyPackets    <- newIORef 0
     -- Recovery

@@ -322,6 +322,34 @@ spec = do
                             (\conn -> waitEstablished conn >> threadDelay 10000000 >> return "done")
                             (readTVar late >>= check >> return "late")
                 r `shouldBe` Just (Left ("late" :: String) :: Either String String)
+    -- The closers went on sending on the listening sockets for 3 PTO after
+    -- 'run' had returned and the caller was free to close them.
+    describe "a server stopped with a connection" $
+        it "returns once the connection's closer is done" $ do
+            scs <- makeTestServerConfig
+            closed <- newIORef False
+            ready <- newEmptyMVar
+            let scs' =
+                    scs
+                        { scHooks =
+                            (scHooks scs)
+                                { onServerReady = putMVar ready ()
+                                -- Slow, for a closer still at it when the
+                                -- connection's own thread has ended.
+                                , onCloseCompleted = threadDelay 2000000 >> writeIORef closed True
+                                }
+                        }
+                server conn = waitEstablished conn >> stop conn >> threadDelay 3000000
+                client = do
+                    takeMVar ready
+                    void $ E.try @E.SomeException $
+                        C.run testClientConfig $ \conn ->
+                            waitEstablished conn >> threadDelay 3000000
+            -- Read as soon as 'run' returns: the client's own ending, when
+            -- it is killed, takes long enough to hide a closer still at it.
+            r <- E.bracket (forkIO client) killThread $ \_ ->
+                Timeout.timeout 10000000 (run scs' server >> readIORef closed)
+            r `shouldBe` Just True
     describe "a stateless reset to the client" $
         it "ends the connection with ConnectionIsReset" $
             testStatelessResetReceived cc sc waitS

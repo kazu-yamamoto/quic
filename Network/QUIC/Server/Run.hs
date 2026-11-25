@@ -94,6 +94,8 @@ run conf server = do
         clearDispatch dispatch
         waitNoDispatcher dispatch
         shutdownConnections conf dispatch
+        -- The closers send on the sockets the caller is about to close.
+        waitClosers dispatch
         mapM_ NS.unsafeClose ssas
     openAll [] = return []
     openAll (a : as) =
@@ -136,6 +138,8 @@ runWithSockets ssas conf server = do
         clearDispatch dispatch
         waitNoDispatcher dispatch
         shutdownConnections conf dispatch
+        -- The closers send on the sockets the caller is about to close.
+        waitClosers dispatch
 
 -- | Handing the caller the action that stops this server.
 --
@@ -418,6 +422,7 @@ createServerConnection conf@ServerConfig{..} dispatch Accept{..} = do
             setTokenManager conn mgr
             --
             setStopServer conn $ stopServerNow dispatch
+            writeIORef (connForkCloser conn) $ forkCloserOn dispatch
             --
             setRegister conn accRegister accUnregister
             accRegister myCID conn

@@ -2,7 +2,6 @@
 
 module Network.QUIC.Closer (closure) where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import Data.Either (isRight)
@@ -163,14 +162,16 @@ closure'' conn ldcc frame = do
       -- The socket is not left owned by a closer which was never forked.
       -- It outlives the connection, for 3 PTO at most.
       writeIORef (connCloserOwnsSocket conn) True
-      void $ forkIO $ do
-          labelMe "QUIC closer"
-          e <- E.try $ restore $ closer conn pto send recvWithin hook
-          case e of
-              Left e' -> connDebugLog conn $ "closure' " <> bhow (e' :: E.SomeException)
-              Right _ -> return ()
-          freeBufs
-          clos
+      forkCloser <- readIORef $ connForkCloser conn
+      forkCloser
+          ( do
+              labelMe "QUIC closer"
+              e <- E.try $ restore $ closer conn pto send recvWithin hook
+              case e of
+                  Left e' -> connDebugLog conn $ "closure' " <> bhow (e' :: E.SomeException)
+                  Right _ -> return ()
+          )
+          (freeBufs >> clos)
 
 encodeCC :: Connection -> Buffer -> BufferSize -> Frame -> IO Int
 encodeCC conn sendbuf0 bufsiz0 frame = do
