@@ -46,6 +46,9 @@ watchSocket = c_watch_socket
 foreign import ccall unsafe "open_socket"
     c_open_socket :: IO CInt
 
+-- The one thread of a connection that only a kill stops ('killReaders'):
+-- the call is interrupted with EINTR, and there is nothing to wait on beside
+-- it.  On Windows it returns at once and the watchdog does not run.
 foreign import ccall interruptible "watch_socket"
     c_watch_socket :: CInt -> IO CInt
 

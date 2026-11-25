@@ -302,9 +302,13 @@ rebind :: Connection -> IO ()
 rebind conn = do
     peersa <- peerSockAddr <$> getPathInfo conn
     connected <- getSockConnected conn
-    newSock <- natRebinding connected peersa
     newRetired <- newTVarIO False
-    (_, oldRetired) <- swapSocket conn newSock newRetired
+    -- Masked: 'killReaders' killing this thread between the two left the
+    -- new socket to nobody.  Once swapped in, the connection closes it.
+    (newSock, oldRetired) <- E.mask_ $ do
+        newSock <- natRebinding connected peersa
+        (_, oldRetired) <- swapSocket conn newSock newRetired
+        return (newSock, oldRetired)
     (forkManaged conn "QUIC reader" $ readerClient newRetired newSock conn)
         `E.finally` do
             -- Telling the old reader to go rather than closing the socket
