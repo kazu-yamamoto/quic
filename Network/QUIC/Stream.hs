@@ -49,6 +49,7 @@ module Network.QUIC.Stream (
     -- * Reass
     takeRecvStreamQwithSize,
     waitReadableSTM,
+    putRecvStreamQ, -- testing
     putRxStreamData,
     putRxCryptoData,
     FlowCntl (..),
@@ -67,7 +68,7 @@ module Network.QUIC.Stream (
 ) where
 
 import Network.QUIC.Stream.Misc
-import Network.QUIC.Stream.Queue (waitReadableSTM)
+import Network.QUIC.Stream.Queue (putRecvStreamQ, waitReadableSTM)
 import Network.QUIC.Stream.Reass
 import Network.QUIC.Stream.Table
 import Network.QUIC.Stream.Types
