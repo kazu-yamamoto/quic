@@ -27,6 +27,9 @@ sockAddrFamily SockAddrInet{} = AF_INET
 sockAddrFamily SockAddrInet6{} = AF_INET6
 sockAddrFamily _ = error "sockAddrFamily"
 
+-- | Resolving the server and opening a socket for it.  'getAddrInfo' is a
+--   safe foreign call: it takes as long as the resolver does, and nothing
+--   can give up on it.
 clientSocket :: HostName -> ServiceName -> IO (Socket, SockAddr)
 clientSocket host port = do
     addr <- NE.head <$> getAddrInfo (Just hints) (Just host) (Just port)
