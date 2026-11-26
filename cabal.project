@@ -9,5 +9,5 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/haskell-tls/hs-tls.git
-  tag: f7801eb9a1ef8af26e08773279e1fde2e7497938
+  tag: 0539aab7167af11aa8dbc47976659f7385cdf929
   subdir: tls tls-session-manager
