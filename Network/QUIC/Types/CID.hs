@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.QUIC.Types.CID (
@@ -24,12 +23,10 @@ module Network.QUIC.Types.CID (
     cidInfoSRT,
 ) where
 
-import Codec.Serialise
 import Crypto.Hash
 import Crypto.KDF.HKDF
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as Short
-import GHC.Generics
 import Network.Socket (SockAddr)
 #if MIN_VERSION_random(1,3,0)
 import System.Random (getStdRandom, uniformByteString)
@@ -51,9 +48,7 @@ maxCIDLength :: Int
 maxCIDLength = 20
 
 -- | A type for conneciton ID.
-newtype CID = CID Bytes deriving (Eq, Ord, Generic)
-
-instance Serialise CID
+newtype CID = CID Bytes deriving (Eq, Ord)
 
 instance Show CID where
     show (CID cid) = shortToString (enc16s cid)

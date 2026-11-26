@@ -102,6 +102,17 @@ spec = do
             let cc = testClientConfig
                 sc = sc0{scUse0RTT = True}
             testHandshake2 cc sc waitS (FullHandshake, RTT0) True
+        it "can do 0-RTT with ResumptionInfo encoded and decoded" $ do
+            let cc = testClientConfig
+                sc = sc0{scUse0RTT = True}
+                through res = do
+                    let bs = encodeResumptionInfo res
+                    decodeResumptionInfo (BS.init bs) `shouldBe` Nothing
+                    decodeResumptionInfo (bs <> "x") `shouldBe` Nothing
+                    let mres = decodeResumptionInfo bs
+                    mres `shouldBe` Just res
+                    maybe (E.throwIO $ userError "not decoded") return mres
+            testHandshake2With through cc sc waitS (FullHandshake, RTT0) True
         it "keeps 0-RTT within the limits the previous connection gave" $ do
             let cc = testClientConfig
                 sc =
@@ -385,7 +396,19 @@ testHandshake2
     -> (HandshakeMode13, HandshakeMode13)
     -> Bool
     -> IO ()
-testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
+testHandshake2 = testHandshake2With return
+
+-- | 'testHandshake2', with what the first connection gave for resumption
+--   passed through the action before the second connection uses it.
+testHandshake2With
+    :: (ResumptionInfo -> IO ResumptionInfo)
+    -> ClientConfig
+    -> ServerConfig
+    -> IO ()
+    -> (HandshakeMode13, HandshakeMode13)
+    -> Bool
+    -> IO ()
+testHandshake2With through cc1 sc waitS (mode1, mode2) use0RTT = do
     mvar <- newEmptyMVar
     E.bracket (forkIO $ server mvar) killThread $ \_ -> client mvar
   where
@@ -396,7 +419,7 @@ testHandshake2 cc1 sc waitS (mode1, mode2) use0RTT = do
         getResumptionInfo conn
     client mvar = do
         waitS
-        res <- runClient cc1 mode1 $ query "first"
+        res <- runClient cc1 mode1 (query "first") >>= through
         threadDelay 50000
         let cc2 =
                 cc1
