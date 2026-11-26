@@ -28,6 +28,8 @@ module Network.QUIC.Client (
     getResumptionInfo,
     isResumptionPossible,
     is0RTTPossible,
+    encodeResumptionInfo,
+    decodeResumptionInfo,
 
     -- * Migration
 

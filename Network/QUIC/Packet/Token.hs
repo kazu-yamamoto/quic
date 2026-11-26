@@ -1,5 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Network.QUIC.Packet.Token (
     CryptoToken (..),
@@ -11,19 +10,19 @@ module Network.QUIC.Packet.Token (
     decryptToken,
 ) where
 
-import Codec.Serialise
 import qualified Crypto.Token as CT
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Short as Short
 import Data.UnixTime
-import GHC.Generics
+import Foreign.C.Types (CTime (..))
 import Network.Socket (
     SockAddr (..),
     hostAddress6ToTuple,
     hostAddressToTuple,
  )
 
-import Network.QUIC.Imports
+import Network.QUIC.Codec
+import Network.QUIC.Imports hiding (word8)
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -36,10 +35,6 @@ data CryptoToken = CryptoToken
     , tokenAddress :: ByteString
     -- ^ The address the token was issued to, as 'addressForToken' writes it
     }
-    deriving (Generic)
-
-instance Serialise UnixTime
-instance Serialise CryptoToken
 
 isRetryToken :: CryptoToken -> Bool
 isRetryToken token = isJust $ tokenCIDs token
@@ -99,10 +94,42 @@ decryptToken mgr token =
 
 ----------------------------------------------------------------
 
+-- Read back only by the server that wrote it, after decryption: a token
+-- of another release fails to decode and is taken for none.
 encodeCryptoToken :: CryptoToken -> Token
-encodeCryptoToken = BL.toStrict . serialise
+encodeCryptoToken CryptoToken{..} =
+    runBuilder $
+        word8 tokenFormat
+            <> word32BE ver
+            <> word32BE tokenLifeTime
+            <> int64BE (fromIntegral secs)
+            <> word32BE (fromIntegral $ utMicroSeconds tokenCreatedTime)
+            <> maybe (word8 0) cids tokenCIDs
+            <> opaque8 tokenAddress
+  where
+    Version ver = tokenQUICVersion
+    CTime secs = utSeconds tokenCreatedTime
+    cids (l, r, o) = word8 1 <> cid l <> cid r <> cid o
+    cid (CID c) = opaque8 $ Short.fromShort c
 
 decodeCryptoToken :: Token -> Maybe CryptoToken
-decodeCryptoToken token = case deserialiseOrFail (BL.fromStrict token) of
-    Left DeserialiseFailure{} -> Nothing
-    Right x -> Just x
+decodeCryptoToken = runParser $ do
+    fmt <- getWord8
+    when (fmt /= tokenFormat) $ fail "unknown format"
+    ver <- Version <$> getWord32
+    life <- getWord32
+    secs <- getInt64
+    usecs <- getWord32
+    mcids <-
+        getWord8 >>= \b -> case b of
+            0 -> return Nothing
+            1 -> (\l r o -> Just (l, r, o)) <$> cid <*> cid <*> cid
+            _ -> fail "bad CIDs"
+    addr <- getOpaque8
+    let created = UnixTime (CTime $ fromIntegral secs) (fromIntegral usecs)
+    return $ CryptoToken ver life created mcids addr
+  where
+    cid = CID . Short.toShort <$> getOpaque8
+
+tokenFormat :: Word8
+tokenFormat = 1
