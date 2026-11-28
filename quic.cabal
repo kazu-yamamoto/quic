@@ -180,8 +180,12 @@ executable quic-server
         http2,
         network-byte-order,
         quic,
+        time-manager,
         tls,
         tls-session-manager >=0.0.5
+
+    if !os(windows)
+        build-depends: unix
 
     if flag(devel)
 
@@ -211,8 +215,12 @@ executable quic-client
         http2,
         network-byte-order,
         quic,
+        stm,
         tls,
         unix-time
+
+    if !os(windows)
+        build-depends: unix
 
     if flag(devel)
 

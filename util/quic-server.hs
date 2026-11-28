@@ -1,10 +1,12 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
 
 module Main where
 
+import qualified Control.Exception as E
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -15,6 +17,10 @@ import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit
 import System.IO
+#ifndef mingw32_HOST_OS
+import System.Posix.Signals (Handler (..), installHandler, sigINT, sigTERM)
+#endif
+import Text.Read (readMaybe)
 
 import Common
 import Network.QUIC
@@ -127,11 +133,15 @@ main = do
     args <- getArgs
     (Options{..}, ips) <- serverOpts args
     when (length ips < 2) $ showUsageAndExit "cannot recognize <addr> and <port>\n"
-    let port = read (last ips)
-        addrs = read <$> init ips
-        aps = (,port) <$> addrs
+    aps <- case (,) <$> mapM readMaybe (init ips) <*> readMaybe (last ips) of
+        Nothing -> showUsageAndExit "cannot parse <addr> or <port>\n"
+        Just (addrs, port) -> return $ (,port) <$> addrs
     smgr <- SM.newSessionManager SM.defaultConfig
-    Right cred@(!_cc, !_priv) <- credentialLoadX509 optCertFile optKeyFile
+    let loadCred =
+            credentialLoadX509 optCertFile optKeyFile
+                `E.catch` \e -> return $ Left $ show (e :: E.IOException)
+    cred@(!_cc, !_priv) <-
+        loadCred >>= either (showUsageAndExit . ("cannot load credentials: " ++)) return
     let sc0 = defaultServerConfig
         sc =
             sc0
@@ -145,6 +155,7 @@ main = do
                 , scGroups = getGroups (scGroups sc0) optGroups
                 , scQLog = optQLogDir
                 , scCredentials = Credentials [cred]
+                , scInstallShutdownHandler = onSignals
                 }
     run sc $ \conn -> do
         case optTimeout of
@@ -157,3 +168,13 @@ main = do
                     | "hq" `BS.isPrefixOf` proto -> serverHQ
                 _ -> serverH3
         server conn
+
+-- | Stopping the server on SIGINT or SIGTERM, which closes its connections
+--   and lets 'run' return.  On Windows, Ctrl-C interrupts 'run' instead.
+onSignals :: IO () -> IO ()
+#ifndef mingw32_HOST_OS
+onSignals stopIt =
+    forM_ [sigINT, sigTERM] $ \sig -> installHandler sig (CatchOnce stopIt) Nothing
+#else
+onSignals _ = return ()
+#endif

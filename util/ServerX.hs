@@ -2,12 +2,12 @@
 
 module ServerX where
 
-import Control.Concurrent
 import qualified Control.Exception as E
 import Control.Monad
 import qualified Data.ByteString as BS
 import Data.ByteString.Builder
 import Network.ByteOrder
+import qualified System.ThreadManager as T
 
 import H3
 import Network.QUIC
@@ -39,17 +39,18 @@ serverH3 conn =
         hdrblock <- taglen 1 <$> qpackServer
         let bdyblock = taglen 0 html
             hdrbdy = [hdrblock, bdyblock]
-        loop hdrbdy
+        -- The streams' threads end with the connection.
+        T.withThreadManager 1000000 $ \mgr -> loop mgr hdrbdy
   where
-    loop hdrbdy = do
+    loop mgr hdrbdy = do
         s <- acceptStream conn
-        void . forkIO $ do
+        T.forkManaged mgr "stream" $ quietOnClose $ do
             consume conn s
             let sid = streamId s
             when (isClientInitiatedBidirectional sid) $ do
                 sendStreamMany s hdrbdy
                 closeStream s
-        loop hdrbdy
+        loop mgr hdrbdy
 
 serverPF :: Connection -> IO ()
 serverPF conn =
@@ -80,6 +81,12 @@ consume conn s = loop
             else do
                 connDebugLog conn $ byteString bs
                 loop
+
+-- | A stream's thread ends quietly when the peer closes the connection.
+quietOnClose :: IO () -> IO ()
+quietOnClose = E.handle $ \e -> case e of
+    ConnectionIsClosed _ -> return ()
+    _ -> E.throwIO e
 
 onE :: IO b -> IO a -> IO a
 h `onE` b = b `E.onException` h

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -5,6 +6,8 @@
 module Main where
 
 import Control.Concurrent
+import Control.Concurrent.STM hiding (retry)
+import qualified Control.Concurrent.STM as STM
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -17,7 +20,9 @@ import Network.TLS.QUIC
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
-import qualified System.Timeout as T
+#ifndef mingw32_HOST_OS
+import System.Posix.Signals (Handler (..), installHandler, sigINT)
+#endif
 import Text.Printf
 
 import ClientX
@@ -45,6 +50,7 @@ data Options = Options
     , optPerformance :: Word64
     , optNumOfReqs :: Int
     , optSockConnected :: Bool
+    , optWait :: Int
     }
     deriving (Show)
 
@@ -69,6 +75,7 @@ defaultOptions =
         , optPerformance = 0
         , optNumOfReqs = 1
         , optSockConnected = False
+        , optWait = 30
         }
 
 usage :: String
@@ -181,6 +188,11 @@ options =
         ["use-connected-socket"]
         (NoArg (\o -> o{optSockConnected = True}))
         "use connected sockets instead of unconnected sockets"
+    , Option
+        ['w']
+        ["wait"]
+        (ReqArg (\n o -> o{optWait = read n}) "<secs>")
+        "give up a connection after this (0: never, default: 30)"
     ]
 
 showUsageAndExit :: String -> IO a
@@ -204,7 +216,9 @@ main = do
         _ : [] -> showUsageAndExit usage
         h : p : [] -> return (h, p, ["/"])
         h : p : ps -> return (h, p, C8.pack <$> ps)
-    cmvar <- newEmptyMVar
+    -- Filled by each connection's closer, never blocking it: with -R or
+    -- -Z a second connection closes before the first fill is taken.
+    closed <- newEmptyTMVarIO
     let ccalpn ver
             | optPerformance /= 0 = return $ Just ["perf"]
             | otherwise =
@@ -237,7 +251,7 @@ main = do
                 , ccQLog = optQLogDir
                 , ccHooks =
                     defaultHooks
-                        { onCloseCompleted = putMVar cmvar ()
+                        { onCloseCompleted = atomically $ void $ tryPutTMVar closed ()
                         }
                 , ccSockConnected = optSockConnected
                 , ccWatchDog = optSockConnected
@@ -255,19 +269,22 @@ main = do
                 , miscDebug = debug
                 , miscShow = showContent
                 , miscCheckClose = do
-                    mx <- T.timeout 1000000 $ takeMVar cmvar
-                    case mx of
-                        Nothing -> return False
-                        _ -> return True
+                    expired <- registerDelay 1000000
+                    atomically $
+                        (True <$ takeTMVar closed)
+                            `orElse` (False <$ (readTVar expired >>= check))
                 , miscH3NegoDone = h3NegoDone
                 , miscInteractive = optInteractive
                 }
-    runClient cc opts misc paths
+    interrupted <- newTVarIO False
+    onInterrupt $ atomically $ writeTVar interrupted True
+    runClient (givingUp opts interrupted) cc opts misc paths
 
-runClient :: ClientConfig -> Options -> Misc -> [ByteString] -> IO ()
-runClient cc opts@Options{..} misc@Misc{..} paths = do
+runClient
+    :: IO (STM String) -> ClientConfig -> Options -> Misc -> [ByteString] -> IO ()
+runClient giveUp cc opts@Options{..} misc@Misc{..} paths = do
     miscDebug "------------------------"
-    (info1, info2, res, mig, client') <- run cc $ \conn -> do
+    (info1, info2, res, mig, client') <- runOrGiveUp giveUp cc $ \conn -> do
         i1 <- getConnectionInfo conn
         let client = case alpn i1 of
                 Just proto
@@ -299,7 +316,7 @@ runClient cc opts@Options{..} misc@Misc{..} paths = do
         | optResumption -> do
             if isResumptionPossible res
                 then do
-                    info3 <- runClient2 cc opts misc paths res client'
+                    info3 <- runClient2 giveUp cc opts misc paths res client'
                     if handshakeMode info3 == PreSharedKey
                         then do
                             putStrLn "Result: (R) TLS resumption ... OK"
@@ -313,7 +330,7 @@ runClient cc opts@Options{..} misc@Misc{..} paths = do
         | opt0RTT -> do
             if is0RTTPossible res
                 then do
-                    info3 <- runClient2 cc opts misc paths res client'
+                    info3 <- runClient2 giveUp cc opts misc paths res client'
                     if handshakeMode info3 == RTT0
                         then do
                             putStrLn "Result: (Z) 0-RTT ... OK"
@@ -376,18 +393,19 @@ runClient cc opts@Options{..} misc@Misc{..} paths = do
                 exitSuccess
 
 runClient2
-    :: ClientConfig
+    :: IO (STM String)
+    -> ClientConfig
     -> Options
     -> Misc
     -> [ByteString]
     -> ResumptionInfo
     -> Cli
     -> IO ConnectionInfo
-runClient2 cc Options{..} misc@Misc{..} paths res client = do
+runClient2 giveUp cc Options{..} misc@Misc{..} paths res client = do
     threadDelay 100000
     miscDebug "<<<< next connection >>>>"
     miscDebug "------------------------"
-    run cc' $ \conn -> do
+    runOrGiveUp giveUp cc' $ \conn -> do
         void $ client misc paths conn
         getConnectionInfo conn
   where
@@ -396,6 +414,38 @@ runClient2 cc Options{..} misc@Misc{..} paths res client = do
             { ccResumption = res
             , ccUse0RTT = opt0RTT && is0RTTPossible res
             }
+
+-- | What a connection gives up on: its deadline, made as it starts, unless
+--   it is interactive or has none, and an interrupt.
+givingUp :: Options -> TVar Bool -> IO (STM String)
+givingUp Options{..} interrupted = do
+    deadline <-
+        if optInteractive || optWait <= 0
+            then return STM.retry
+            else do
+                expired <- registerDelay $ optWait * 1000000
+                return $ "deadline" <$ (readTVar expired >>= check)
+    return $ deadline `orElse` ("interrupted" <$ (readTVar interrupted >>= check))
+
+-- | 'runGivingUp', failing with why it gave up.
+runOrGiveUp :: IO (STM String) -> ClientConfig -> (Connection -> IO a) -> IO a
+runOrGiveUp giveUp cc client = do
+    g <- giveUp
+    r <- runGivingUp cc client g
+    case r of
+        Right x -> return x
+        Left why -> do
+            putStrLn $ "Given up: " ++ why
+            exitFailure
+
+-- | Telling of SIGINT rather than being killed by it.  On Windows, Ctrl-C
+--   interrupts the client instead.
+onInterrupt :: IO () -> IO ()
+#ifndef mingw32_HOST_OS
+onInterrupt act = void $ installHandler sigINT (Catch act) Nothing
+#else
+onInterrupt _ = return ()
+#endif
 
 printThroughput :: UnixTime -> UnixTime -> ConnectionStats -> IO ()
 printThroughput t1 t2 stats =
