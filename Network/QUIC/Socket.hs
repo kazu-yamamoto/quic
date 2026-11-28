@@ -4,10 +4,10 @@ module Network.QUIC.Socket (
     serverSocket,
     clientSocket,
     natRebinding,
+    connectOrBind,
 ) where
 
 import qualified Control.Exception as E
-import Control.Monad (when)
 import Data.IP (IP, toSockAddr)
 import qualified Data.List.NonEmpty as NE
 import Network.Socket
@@ -16,11 +16,20 @@ import Network.Socket
 --   here if the connect fails, since nothing else holds it yet.
 natRebinding :: Bool -> SockAddr -> IO Socket
 natRebinding connected sa = E.bracketOnError open unsafeClose $ \s -> do
-    when connected $ connect s sa
+    connectOrBind connected s sa
     return s
   where
     family = sockAddrFamily sa
     open = socket family Datagram defaultProtocol
+
+-- | Connecting a client's socket to the peer, or else binding it to the
+--   wildcard address, as the first send would.  Either way it is bound
+--   before the reader receives on it.
+connectOrBind :: Bool -> Socket -> SockAddr -> IO ()
+connectOrBind True s sa = connect s sa
+connectOrBind False s sa = bind s $ case sa of
+    SockAddrInet6{} -> SockAddrInet6 0 0 (0, 0, 0, 0) 0
+    _ -> SockAddrInet 0 0
 
 sockAddrFamily :: SockAddr -> Family
 sockAddrFamily SockAddrInet{} = AF_INET
