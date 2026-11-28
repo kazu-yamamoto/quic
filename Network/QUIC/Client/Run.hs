@@ -28,6 +28,7 @@ import Network.QUIC.QLogger
 import Network.QUIC.Receiver
 import Network.QUIC.Recovery
 import Network.QUIC.Sender
+import Network.QUIC.Socket (connectOrBind)
 import Network.QUIC.Types
 
 ----------------------------------------------------------------
@@ -197,7 +198,7 @@ createClientConnection conf@ClientConfig{..} verInfo = do
     -- Nothing below forks, and the reader is only built here, so this
     -- thread is the only one the socket has ever had.
     flip E.onException (NS.unsafeClose sock) $ do
-        when ccSockConnected $ NS.connect sock peersa
+        connectOrBind ccSockConnected sock peersa
         q <- newRecvQ =<< newRecvBudget maxBound
         retire0 <- newTVarIO False
         sref <- newIORef (sock, retire0)

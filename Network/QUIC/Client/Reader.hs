@@ -10,14 +10,13 @@ module Network.QUIC.Client.Reader (
     clientSocket,
 ) where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Control.Exception as E
 import qualified Control.Monad.STM as STM
 import qualified Data.ByteString as BS
 import Data.Functor (($>))
 import Data.List (intersect)
-import Network.Socket (Socket, getSocketName, isClosedSocketError)
+import Network.Socket (Socket, isClosedSocketError)
 import qualified Network.Socket.ByteString as NSB
 
 import Network.QUIC.Common
@@ -49,20 +48,19 @@ data ReaderEnd = Retired | Ended
 readerClient :: TVar Bool -> Socket -> Connection -> IO ()
 readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ do
     labelMe "readerClient"
-    go <- wait
-    when go $ do
-        connected <- getSockConnected conn
-        peersa0 <- peerSockAddr <$> getPathInfo conn
-        let recv giveUp
-                | connected = NSB.recvWith s0 2048 giveUp
-                | otherwise = do
-                    r <- NSB.recvFromWith s0 2048 giveUp
-                    case r of
-                        Left a -> return $ Left a
-                        Right (bs, peersa)
-                            | peersa /= peersa0 -> recv giveUp
-                            | otherwise -> return $ Right bs
-        loop recv
+    -- The socket is bound when it is made ('connectOrBind').
+    connected <- getSockConnected conn
+    peersa0 <- peerSockAddr <$> getPathInfo conn
+    let recv giveUp
+            | connected = NSB.recvWith s0 2048 giveUp
+            | otherwise = do
+                r <- NSB.recvFromWith s0 2048 giveUp
+                case r of
+                    Left a -> return $ Left a
+                    Right (bs, peersa)
+                        | peersa /= peersa0 -> recv giveUp
+                        | otherwise -> return $ Right bs
+    loop recv
   where
     -- A socket 'rebind' swapped out is nobody's but the retired list's,
     -- so it is left there however this thread ends -- told, thrown at or
@@ -74,17 +72,6 @@ readerClient retired s0 conn = handleLogUnit logAction $ (`E.finally` leave) $ d
     leave = do
         current <- getSocketRetire conn
         when (current /= retired) $ retireSocket conn s0
-    -- Bound by the first send.  Not spun on, and given up once the socket
-    -- is retired or the connection has ended: nothing to read then.
-    wait = do
-        bound <- E.handle (throughAsync (return False)) $ do
-            _ <- getSocketName s0
-            return True
-        if bound
-            then return True
-            else do
-                over <- (||) <$> readTVarIO retired <*> isConnectionEnded conn
-                if over then return False else threadDelay 1000 >> wait
     loop recv = do
         ebs <-
             recvAgain $
