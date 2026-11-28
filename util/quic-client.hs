@@ -5,6 +5,7 @@
 module Main where
 
 import Control.Concurrent
+import Control.Concurrent.STM hiding (retry)
 import Control.Monad
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -17,7 +18,6 @@ import Network.TLS.QUIC
 import System.Console.GetOpt
 import System.Environment
 import System.Exit
-import qualified System.Timeout as T
 import Text.Printf
 
 import ClientX
@@ -204,7 +204,9 @@ main = do
         _ : [] -> showUsageAndExit usage
         h : p : [] -> return (h, p, ["/"])
         h : p : ps -> return (h, p, C8.pack <$> ps)
-    cmvar <- newEmptyMVar
+    -- Filled by each connection's closer, never blocking it: with -R or
+    -- -Z a second connection closes before the first fill is taken.
+    closed <- newEmptyTMVarIO
     let ccalpn ver
             | optPerformance /= 0 = return $ Just ["perf"]
             | otherwise =
@@ -237,7 +239,7 @@ main = do
                 , ccQLog = optQLogDir
                 , ccHooks =
                     defaultHooks
-                        { onCloseCompleted = putMVar cmvar ()
+                        { onCloseCompleted = atomically $ void $ tryPutTMVar closed ()
                         }
                 , ccSockConnected = optSockConnected
                 , ccWatchDog = optSockConnected
@@ -255,10 +257,10 @@ main = do
                 , miscDebug = debug
                 , miscShow = showContent
                 , miscCheckClose = do
-                    mx <- T.timeout 1000000 $ takeMVar cmvar
-                    case mx of
-                        Nothing -> return False
-                        _ -> return True
+                    expired <- registerDelay 1000000
+                    atomically $
+                        (True <$ takeTMVar closed)
+                            `orElse` (False <$ (readTVar expired >>= check))
                 , miscH3NegoDone = h3NegoDone
                 , miscInteractive = optInteractive
                 }

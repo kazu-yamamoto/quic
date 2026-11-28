@@ -18,6 +18,7 @@ import qualified Data.ByteString.Char8 as C8
 import Data.IORef
 import Network.ByteOrder
 import System.IO
+import System.IO.Error (isEOFError)
 
 import H3
 import Network.QUIC
@@ -135,37 +136,42 @@ console paths client conn = do
     putStrLn "N -- change client CID"
     putStrLn "B -- NAT rebinding"
     putStrLn "A -- address mobility"
-    mvar <- newEmptyMVar
-    loop mvar `E.catch` \(E.SomeException _) -> return ()
+    loop
   where
-    loop mvar = do
+    -- The end of the input ends the console; anything else is thrown.
+    loop = do
         hSetBuffering stdout NoBuffering
         putStr "> "
         hSetBuffering stdout LineBuffering
-        l <- getLine
+        ml <-
+            (Just <$> getLine) `E.catch` \e ->
+                if isEOFError e then return Nothing else E.throwIO e
+        case ml of
+            Nothing -> return ()
+            Just l -> command l
+    command l =
         case l of
             "q" -> putStrLn "bye"
             "g" -> do
                 mapM_ (\p -> putStrLn $ "GET " ++ C8.unpack p) paths
-                _ <- client >> putMVar mvar ()
-                takeMVar mvar
-                loop mvar
+                client
+                loop
             "p" -> do
                 putStrLn "Ping"
                 QUIC.sendFrames conn QUIC.RTT1Level [QUIC.Ping]
-                loop mvar
+                loop
             "M" -> do
                 QUIC.controlConnection conn QUIC.ChangeServerCID >>= print
-                loop mvar
+                loop
             "N" -> do
                 QUIC.controlConnection conn QUIC.ChangeClientCID >>= print
-                loop mvar
+                loop
             "B" -> do
                 QUIC.controlConnection conn QUIC.NATRebinding >>= print
-                loop mvar
+                loop
             "A" -> do
                 QUIC.controlConnection conn QUIC.ActiveMigration >>= print
-                loop mvar
+                loop
             _ -> do
                 putStrLn "No such command"
-                loop mvar
+                loop
