@@ -168,7 +168,10 @@ closure'' conn ldcc frame = do
               labelMe "QUIC closer"
               e <- E.try $ restore $ closer conn pto send recvWithin hook
               case e of
-                  Left e' -> connDebugLog conn $ "closure' " <> bhow (e' :: E.SomeException)
+                  -- Whoever stops the closer, as 'waitClosers' does, is told.
+                  Left e'
+                      | isAsyncException e' -> E.throwIO e'
+                      | otherwise -> connDebugLog conn $ "closure' " <> bhow (e' :: E.SomeException)
                   Right _ -> return ()
           )
           (freeBufs >> clos)

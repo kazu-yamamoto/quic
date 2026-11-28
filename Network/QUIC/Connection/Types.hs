@@ -512,7 +512,7 @@ newConnection rl myParameters origVersionInfo myAuthCIDs peerAuthCIDs connDebugL
     connCloseSent     <- newIORef False
     connNormalClose   <- newIORef Nothing
     connCloserOwnsSocket <- newIORef False
-    connForkCloser    <- newIORef $ \body final -> void $ forkIO $ body >> final
+    connForkCloser    <- newIORef $ \body final -> void $ forkIO $ body `E.finally` final
     connAuthFailures  <- newIORef 0
     connKeyPackets    <- newIORef 0
     -- Recovery
