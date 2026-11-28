@@ -624,6 +624,11 @@ spec = do
     describe "a client cancelled from outside" $
         it "tells the server it is closing" $
             withPipe (DropClientPacket []) $ testCancelledClient cc sc waitS
+    describe "waitClosers" $ do
+        it "waits for a closer until its PTO-based deadline" $
+            testWaitClosers (Microseconds 4000000) 3500000 (Just True)
+        it "stops a closer past its deadline" $
+            testWaitClosers (Microseconds 3500000) 10000000 (Just False)
     describe "a client's own protocol error" $
         it "is told to the server before the application unwinds" $
             withPipe (DropClientPacket []) $ testClientErrorAtOnce cc sc waitS
@@ -2137,6 +2142,19 @@ testCancelledClient cc sc waitS = do
         case r of
             Just (Just (ConnectionIsClosed _)) -> return ()
             _ -> expectationFailure $ show r
+
+-- | A closer allowed the first time, which takes the second.  Whether it
+--   ran to its end, once 'waitClosers' has returned within 5 sec.  A
+--   fixed 3 sec used to stop one allowed longer.
+testWaitClosers :: Microseconds -> Int -> Maybe Bool -> IO ()
+testWaitClosers allowed takes want = do
+    sc <- makeTestServerConfig
+    E.bracket (newDispatch sc (return ())) clearDispatch $ \d -> do
+        ended <- newIORef False
+        forkCloserOn d allowed (threadDelay takes >> writeIORef ended True) (return ())
+        r <- Timeout.timeout 5000000 $ waitClosers d
+        got <- traverse (const $ readIORef ended) r
+        got `shouldBe` want
 
 -- | The server sends on a stream only the client may open, and the client
 --   fails of it.  Its application takes 1.5 sec to unwind; the server is
