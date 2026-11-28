@@ -429,25 +429,31 @@ abortRequested _ ex = return ex
 -- | Waiting for 'requestEnd' and raising what it was asked with:
 --   one of a connection's protocol threads, so that it ends the connection
 --   as any of them failing does.  Returning once it has ended otherwise.
---   The 'STM' action given up on ends it with NO_ERROR, unless the
---   application is done by then: what it returned is not given up on.
+--   The 'STM' action given up on ends it with NO_ERROR.  When the
+--   application is done by then, what it returned is not given up on, but
+--   what is left to send is: it ends as the application's end does.
 watchAbortRequest :: Connection -> STM.STM () -> IO ()
 watchAbortRequest conn@Connection{..} giveUp = do
     me <-
         atomically $
             (Just . Right <$> (readTVar connAbortRequest >>= maybe retry return))
                 -- Not once the connection has ended otherwise: that is why.
-                `orElse` ( Just (Left ())
-                            <$ ( readTVar connDone >>= STM.check . not
-                                    >> readTVar connEnd >>= STM.check . isNothing
+                `orElse` ( Just . Left
+                            <$> ( readTVar connEnd
+                                    >>= STM.check . isNothing
                                     >> giveUp
-                               )
+                                    >> readTVar connDone
+                                )
                          )
                 `orElse` (Nothing <$ connectionEndedSTM conn)
-    forM_ me $ \e -> case e of
-        Right se -> E.throwIO se
+    case me of
+        Nothing -> return ()
+        Just (Right se) -> E.throwIO se
+        -- The flush after the application waited for a peer gone silent
+        -- until the idle timeout, or for ever without one.
+        Just (Left True) -> E.throwIO ExitConnection
         -- A give-up is a normal end: closed as one ('setNormalClose').
-        Left () ->
+        Just (Left False) ->
             readIORef connNormalClose
                 >>= maybe
                     (E.throwIO $ TransportErrorIsSent NoError "given up")

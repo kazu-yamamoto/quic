@@ -621,6 +621,11 @@ spec = do
             silence <- newEmptyMVar
             withPipe (SilenceServer silence) $
                 testIdleRestart cc sc waitS silence
+    describe "runGivingUp after the client is done" $
+        it "gives up sending what is left to a silent peer" $ do
+            silence <- newEmptyMVar
+            withPipe (SilenceServer silence) $
+                testGiveUpFlush cc sc waitS silence
     describe "waiting in STM" $ do
         it "waits for data, and then for what a read leaves" $ do
             withPipe (DropClientPacket []) $ testWaitReadable cc sc waitS
@@ -2109,6 +2114,29 @@ testKeepAliveGone cc0 sc waitS silence =
         case r of
             Just (Left (ConnectionIsTimeout _)) -> return ()
             _ -> expectationFailure $ show r
+
+-- | The client returns with data still queued for a server gone silent.
+--   The give-up ends the flush, and what the client returned is returned.
+--   It used to be waited for until the idle timeout, 30 sec.
+testGiveUpFlush
+    :: C.ClientConfig -> ServerConfig -> IO () -> MVar () -> IO ()
+testGiveUpFlush cc sc waitS silence =
+    withAsync (run sc $ \_ -> threadDelay 10000000) $ \_ -> do
+        waitS
+        late <- registerDelay 1000000
+        r <-
+            Timeout.timeout 5000000 $
+                C.runGivingUp
+                    cc
+                    ( \conn -> do
+                        waitEstablished conn
+                        putMVar silence ()
+                        strm <- stream conn
+                        sendStream strm $ BS.replicate 100000 0
+                        return "done"
+                    )
+                    (readTVar late >>= check >> return "late")
+        r `shouldBe` Just (Right "done" :: Either String String)
 
 shortIdle :: C.ClientConfig -> C.ClientConfig
 shortIdle cc0 =
