@@ -27,6 +27,12 @@ import Network.QUIC.Types.Info
 ----------------------------------------------------------------
 
 -- | Hooks.
+--
+--   The 'IO' hooks run in this library's own threads and must not catch
+--   asynchronous exceptions nor block for long.  A hook that keeps its
+--   thread alive past the kill at the end of a connection
+--   ('onResetStreamReceived' and 'onResetStreamReceived2' run in the
+--   receiver) leaves it using buffers that have been freed.
 data Hooks = Hooks
     { onCloseCompleted :: IO ()
     , onPlainCreated :: EncryptionLevel -> Plain -> Plain
