@@ -297,21 +297,13 @@ runServer conf server0 dispatch acc = (`E.finally` done) $ do
                 --
                 -- 'closure' is said once; it rethrows, and the call below
                 -- finds the peer already told.
-                -- Not when killed: the thread is being taken down, and
-                -- the end below tells the peer.
-                tellThenRaise act =
-                    act `E.catch` \(e :: E.SomeException) -> do
-                        when (isAsyncException e) $ E.throwIO e
-                        sendFinal conn
-                        setConnectionClosed conn
-                        closure conn ldcc (Left e)
                 c5 =
                     labelMe "concurrently5"
                         >> void
                             ( concurrentlyApp
                                 conn
                                 retry
-                                (tellThenRaise (protocol `E.catch` exitedNormally))
+                                (tellThenRaise conn ldcc (protocol `E.catch` exitedNormally))
                                 s6
                             )
                 runThreads = c5

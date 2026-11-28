@@ -624,6 +624,9 @@ spec = do
     describe "a client cancelled from outside" $
         it "tells the server it is closing" $
             withPipe (DropClientPacket []) $ testCancelledClient cc sc waitS
+    describe "a client's own protocol error" $
+        it "is told to the server before the application unwinds" $
+            withPipe (DropClientPacket []) $ testClientErrorAtOnce cc sc waitS
     describe "runGivingUp after the client is done" $
         it "gives up sending what is left to a silent peer" $ do
             silence <- newEmptyMVar
@@ -2134,6 +2137,34 @@ testCancelledClient cc sc waitS = do
         case r of
             Just (Just (ConnectionIsClosed _)) -> return ()
             _ -> expectationFailure $ show r
+
+-- | The server sends on a stream only the client may open, and the client
+--   fails of it.  Its application takes 1.5 sec to unwind; the server is
+--   told at once, where it used to wait for the application.
+testClientErrorAtOnce :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testClientErrorAtOnce cc sc0 waitS = do
+    failed <- newEmptyMVar
+    told <- newEmptyMVar
+    let server conn = do
+            _ <- E.try @QUICException $ acceptStream conn
+            getTimeMicrosecond >>= putMVar told
+    withAsync (run sc server) $ \_ -> do
+        waitS
+        _ <- E.try @E.SomeException $ C.run cc $ \conn ->
+            (waitEstablished conn >> void (acceptStream conn))
+                `E.catch` \(_ :: QUICException) -> do
+                    getTimeMicrosecond >>= putMVar failed
+                    threadDelay 1500000
+        t0 <- takeMVar failed
+        r <- Timeout.timeout 3000000 $ takeMVar told
+        case r of
+            Just t1 -> (t1 `elapsedTimeMicrosecond` t0) `shouldSatisfy` (< Microseconds 500000)
+            Nothing -> expectationFailure "the server was not told"
+  where
+    sc = sc0{scHooks = (scHooks sc0){onPlainCreated = inject}}
+    inject RTT1Level plain =
+        plain{plainFrames = plainFrames plain ++ [StreamF 2 0 ["x"] False]}
+    inject _ plain = plain
 
 -- | The client returns with data still queued for a server gone silent.
 --   The give-up ends the flush, and what the client returned is returned.

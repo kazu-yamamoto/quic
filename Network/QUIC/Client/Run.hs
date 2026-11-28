@@ -145,7 +145,14 @@ runClient conf client0 giveUp isICVN verInfo = do
             protocol = withIdle conn $ runProtocolThreads conn [s1, s2, s3, s4, s5, s7]
             c5 =
                 labelMe "concurrently5"
-                    >> concurrentlyApp conn giveUp (protocol `E.catches` handlers) s6
+                    >> concurrentlyApp
+                        conn
+                        giveUp
+                        (tellThenRaise conn ldcc (protocol `E.catches` handlers))
+                        s6
+            -- The peer is told at once, as by a server, not once the
+            -- application has unwound (up to 'killedTimeout').
+            --
             -- A peer closing with NO_ERROR leaves the application to finish:
             -- what waits on the peer gives up with 'ConnectionIsClosed'.
             handlers =
