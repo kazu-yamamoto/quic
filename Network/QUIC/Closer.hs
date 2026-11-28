@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.QUIC.Closer (closure) where
+module Network.QUIC.Closer (closure, tellThenRaise) where
 
 import Control.Concurrent.STM
 import qualified Control.Exception as E
@@ -73,6 +73,17 @@ closure conn ldcc (Left se)
         Just (TransportErrorIsReceived _ _) -> True
         Just (ApplicationProtocolErrorIsReceived _ _) -> True
         _ -> False
+
+-- | Telling the peer as soon as the protocol threads fail, while the
+--   application may still be unwinding, and rethrowing.  Not when killed:
+--   the thread is being taken down, and the end of 'run' tells the peer.
+tellThenRaise :: Connection -> LDCC -> IO a -> IO a
+tellThenRaise conn ldcc act =
+    act `E.catch` \e -> do
+        when (isAsyncException e) $ E.throwIO e
+        sendFinal conn
+        setConnectionClosed conn
+        closure conn ldcc (Left e)
 
 -- | Telling the peer the connection is over, once.
 --
