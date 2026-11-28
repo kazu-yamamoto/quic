@@ -39,6 +39,11 @@ import Network.QUIC.Types
 --   If the server closes the connection with NO_ERROR, an operation waiting
 --   on the server throws 'ConnectionIsClosed'.  Otherwise the action runs to
 --   its end, and its result is returned.
+--
+--   The connection is closed in the background: 'run' returns once the
+--   first CONNECTION_CLOSE is sent, and a thread of its own repeats it
+--   for a peer that missed it, for a few PTO.  Until then the socket stays
+--   open, and 'onCloseCompleted', if called, is called from that thread.
 run :: ClientConfig -> (Connection -> IO a) -> IO a
 run conf client = runWith conf client retry
 
