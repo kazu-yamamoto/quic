@@ -43,9 +43,17 @@ closure conn ldcc (Left se)
     -- least as well as we do.  An idle timeout is closed in silence (RFC 9000
     -- Sec 10.1); the rest are the peer having closed, or told us to stop.
     | isOver se = E.throwIO se
-    -- Asynchronous, so we are the ones being taken down, and whoever is doing
-    -- it says what happens next.  'run' has 'sendFinal' for its own ending.
-    | isAsyncException se = E.throwIO se
+    -- Asynchronous, so we are the ones being taken down, as a 'run' cancelled
+    -- from outside is.  The peer is told, as for a give-up, unless it ended
+    -- the connection first: it was left waiting until its idle timeout.
+    | isAsyncException se = do
+        cause <- connectionEndCause conn
+        unless (maybe False isOver cause) $ do
+            mcode <- readIORef $ connNormalClose conn
+            closure' conn ldcc $ case mcode of
+                Nothing -> ConnectionClose NoError 0 "cancelled"
+                Just err -> ConnectionCloseApp err "cancelled"
+        E.throwIO se
     -- Anything else went wrong in here.  RFC 9000 Sec 10.2: an endpoint that
     -- ends a connection sends CONNECTION_CLOSE.  Without one the peer is left
     -- talking to a connection that is gone until its own idle timeout, or
@@ -168,7 +176,10 @@ closure'' conn ldcc frame = do
               labelMe "QUIC closer"
               e <- E.try $ restore $ closer conn pto send recvWithin hook
               case e of
-                  Left e' -> connDebugLog conn $ "closure' " <> bhow (e' :: E.SomeException)
+                  -- Whoever stops the closer, as 'waitClosers' does, is told.
+                  Left e'
+                      | isAsyncException e' -> E.throwIO e'
+                      | otherwise -> connDebugLog conn $ "closure' " <> bhow (e' :: E.SomeException)
                   Right _ -> return ()
           )
           (freeBufs >> clos)
