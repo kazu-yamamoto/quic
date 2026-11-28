@@ -621,6 +621,9 @@ spec = do
             silence <- newEmptyMVar
             withPipe (SilenceServer silence) $
                 testIdleRestart cc sc waitS silence
+    describe "a client cancelled from outside" $
+        it "tells the server it is closing" $
+            withPipe (DropClientPacket []) $ testCancelledClient cc sc waitS
     describe "runGivingUp after the client is done" $
         it "gives up sending what is left to a silent peer" $ do
             silence <- newEmptyMVar
@@ -2113,6 +2116,23 @@ testKeepAliveGone cc0 sc waitS silence =
             keepAlive conn $ threadDelay 10000000
         case r of
             Just (Left (ConnectionIsTimeout _)) -> return ()
+            _ -> expectationFailure $ show r
+
+-- | 'C.run' cancelled by 'Timeout.timeout' sends CONNECTION_CLOSE.  The
+--   server used to hear nothing and wait until its idle timeout, 30 sec.
+testCancelledClient :: C.ClientConfig -> ServerConfig -> IO () -> IO ()
+testCancelledClient cc sc waitS = do
+    ended <- newEmptyMVar
+    let server conn = do
+            r <- E.try @QUICException $ acceptStream conn
+            putMVar ended $ either Just (const Nothing) r
+    withAsync (run sc server) $ \_ -> do
+        waitS
+        _ <- Timeout.timeout 500000 $ C.run cc $ \conn ->
+            waitEstablished conn >> threadDelay 10000000
+        r <- Timeout.timeout 3000000 $ takeMVar ended
+        case r of
+            Just (Just (ConnectionIsClosed _)) -> return ()
             _ -> expectationFailure $ show r
 
 -- | The client returns with data still queued for a server gone silent.
