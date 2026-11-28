@@ -24,6 +24,10 @@ module Network.QUIC.Internal (
     newRecvQDict,
     lookupInsertRecvQDict,
     deleteRecvQDict,
+    newDispatch,
+    clearDispatch,
+    forkCloserOn,
+    waitClosers,
 ) where
 
 import Network.QUIC.Client.Reader (
@@ -50,9 +54,13 @@ import Network.QUIC.Receiver (
 import Network.QUIC.Recovery
 import Network.QUIC.Sender (adjustForRetransmit, sendOutput)
 import Network.QUIC.Server.Reader (
+    clearDispatch,
     deleteRecvQDict,
+    forkCloserOn,
     lookupInsertRecvQDict,
+    newDispatch,
     newRecvQDict,
+    waitClosers,
  )
 import Network.QUIC.Socket
 import Network.QUIC.Stream

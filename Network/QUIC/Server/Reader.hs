@@ -81,6 +81,8 @@ data Dispatch = Dispatch
     , closerThreads :: T.ThreadManager
     -- ^ The closers, which send on the listening sockets for 3 PTO after
     -- their connections have ended.
+    , closerDeadline :: IORef TimeMicrosecond
+    -- ^ When the last of the closers forked so far is to have ended.
     }
 
 newDispatch :: ServerConfig -> IO () -> IO Dispatch
@@ -96,6 +98,7 @@ newDispatch ServerConfig{..} stopNow =
         <*> pure stopNow
         <*> newTVarIO 0
         <*> T.newThreadManager
+        <*> (getTimeMicrosecond >>= newIORef)
   where
     conf =
         CT.defaultConfig
@@ -158,27 +161,43 @@ releaseConnection Dispatch{..} = atomically $ modifyTVar' connectionCount (subtr
 waitNoConnection :: Dispatch -> Int -> IO Bool
 waitNoConnection Dispatch{..} = T.waitUntilAllGoneFor connectionThreads
 
--- | Running a dispatcher on a thread of its own.
 -- | Forking a closer as a thread of the server's, so that the server can
---   wait for it before the caller closes the sockets.  The final action
---   is run however the closer ends.
-forkCloserOn :: Dispatch -> IO () -> IO () -> IO ()
-forkCloserOn Dispatch{..} body final =
+--   wait for it before the caller closes the sockets.  It is to end within
+--   the time given, which moves 'closerDeadline'.  The final action is run
+--   however the closer ends.
+forkCloserOn :: Dispatch -> Microseconds -> IO () -> IO () -> IO ()
+forkCloserOn Dispatch{..} span' body final = do
+    end <- getFutureTimeMicrosecond span'
+    atomicModifyIORef' closerDeadline $ \d -> (max d end, ())
     void $ T.forkManagedFinally closerThreads "QUIC closer" body final
 
--- | Waiting for the closers, which end within 3 PTO, for at most
---   'closerWait'.  Those left then are stopped, and their final actions
---   waited for.
+-- | Waiting for the closers until the last of them is to have ended, for
+--   at least 'minCloserWait' and at most 'maxCloserWait'.  Those left then
+--   are stopped, and their final actions waited for.  One forked while
+--   waiting moves the deadline.
 waitClosers :: Dispatch -> IO ()
 waitClosers Dispatch{..} = do
-    done <- T.waitUntilAllGoneFor closerThreads closerWait
+    started <- getTimeMicrosecond
+    let loop = do
+            left <- readIORef closerDeadline >>= getTimeoutInMicrosecond
+            spent <- getElapsedTimeMicrosecond started
+            let us = min (max left (minCloserWait - spent)) (maxCloserWait - spent)
+            done <- T.waitUntilAllGoneFor closerThreads $ toDelay (max 0 us)
+            if done || us <= 0 then return done else loop
+    done <- loop
     unless done $ do
         T.stopAfter closerThreads (return ()) $ \_ -> return ()
         T.waitUntilAllGone closerThreads
 
--- | How long the server waits for its closers (microseconds).
-closerWait :: Int
-closerWait = 3000000
+-- | The shortest the server waits for its closers, however small their
+--   PTO: a closer also calls 'onCloseCompleted', which takes what it takes.
+minCloserWait :: Microseconds
+minCloserWait = Microseconds 3000000
+
+-- | The longest the server waits for its closers, however
+--   large their PTO: a peer can make its RTT seem as long as it likes.
+maxCloserWait :: Microseconds
+maxCloserWait = Microseconds 10000000
 
 spawnDispatcher :: Dispatch -> IO () -> IO ()
 spawnDispatcher Dispatch{..} = T.forkManaged dispatcherThreads "QUIC dispatcher"

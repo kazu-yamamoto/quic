@@ -182,7 +182,9 @@ closure'' conn ldcc frame = do
       -- It outlives the connection, for 3 PTO at most.
       writeIORef (connCloserOwnsSocket conn) True
       forkCloser <- readIORef $ connForkCloser conn
+      -- Three rounds of at most 1.5 PTO each, and a margin.
       forkCloser
+          (5 * pto)
           ( do
               labelMe "QUIC closer"
               e <- E.try $ restore $ closer conn pto send recvWithin hook
